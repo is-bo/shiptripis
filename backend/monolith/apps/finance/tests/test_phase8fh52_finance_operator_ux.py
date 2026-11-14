@@ -44,6 +44,7 @@ from apps.finance.models import FinanceHold, Payout
 from .payout_execution_harness import H3_SETTINGS, build_stripe_payout
 from .test_phase8fh4_manual import build_manual, configured_h4  # noqa: F401
 from .test_phase8fh5_control_plane import no_provider_network  # noqa: F401
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 pytestmark = [
     pytest.mark.django_db(transaction=True),
@@ -112,7 +113,7 @@ def staff(role, prefix):
 def signed_in(user, role="finance"):
     assign_admin_roles(user, [role], elevate_super_admin=role == "super_admin")
     client = Client()
-    client.force_login(user)
+    staff_login(client, user)
     return client
 
 

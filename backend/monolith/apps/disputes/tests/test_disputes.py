@@ -24,6 +24,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from apps.admin_panel.tests.two_step_helpers import staff_login
 from apps.deals.models import Deal, DealEvent
 from apps.deals.tests.phase4_factories import (
     confirm_pickup,
@@ -50,6 +51,14 @@ from apps.finance.settlement import assert_deal_reconciles, read_deal_money
 def client_for(user) -> APIClient:
     client = APIClient()
     client.force_authenticate(user=user)
+    return client
+
+
+def staff_client_for(user) -> APIClient:
+    """A staff API client: a console session past the second step (L14)."""
+
+    client = APIClient()
+    staff_login(client, user)
     return client
 
 
@@ -561,11 +570,11 @@ class DisputeApiTests(TestCase):
         assert blocked.status_code in (403, 404)
 
     def test_the_admin_queue_requires_the_named_permission(self):
-        plain = client_for(self.scenario.outsider)
+        plain = staff_client_for(self.scenario.outsider)
         assert plain.get(reverse("disputes-admin-list")).status_code in (403, 401)
 
         support = grant(self.scenario.outsider, "Support")
-        allowed = client_for(support).get(reverse("disputes-admin-list"))
+        allowed = staff_client_for(support).get(reverse("disputes-admin-list"))
         assert allowed.status_code == 200
 
     def test_resolving_requires_more_than_the_viewing_permission(self):
@@ -576,7 +585,7 @@ class DisputeApiTests(TestCase):
             reason_text="Something went wrong.",
         )
         support = grant(self.scenario.outsider, "Support")
-        refused = client_for(support).post(
+        refused = staff_client_for(support).post(
             reverse("disputes-admin-resolve", args=[dispute.pk]),
             {"resolution": Dispute.Resolution.FULL_TRAVELER_PAYOUT},
             format="json",
@@ -584,7 +593,7 @@ class DisputeApiTests(TestCase):
         assert refused.status_code == 403
 
         finance = grant(self.scenario.admin, "Finance")
-        allowed = client_for(finance).post(
+        allowed = staff_client_for(finance).post(
             reverse("disputes-admin-resolve", args=[dispute.pk]),
             {"resolution": Dispute.Resolution.FULL_TRAVELER_PAYOUT},
             format="json",
@@ -596,7 +605,7 @@ class DisputeApiTests(TestCase):
         scenario = fund_scenario(self.client, prefix="dapi-ns")
         record_recipient(scenario)
         support = grant(scenario.outsider, "Support")
-        refused = client_for(support).post(
+        refused = staff_client_for(support).post(
             reverse("deals-admin-no-show", args=[scenario.deal.pk]),
             {"party": Deal.NoShowParty.TRAVELER},
             format="json",
@@ -604,7 +613,7 @@ class DisputeApiTests(TestCase):
         assert refused.status_code == 403
 
         ops = grant(scenario.admin, "Ops")
-        allowed = client_for(ops).post(
+        allowed = staff_client_for(ops).post(
             reverse("deals-admin-no-show", args=[scenario.deal.pk]),
             {"party": Deal.NoShowParty.TRAVELER},
             format="json",

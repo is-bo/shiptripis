@@ -1,0 +1,21 @@
+{% extends "admin/two_step/base.html" %}
+
+{% block eyebrow %}Step 2 of 2{% endblock %}
+
+{% block card %}
+<p>Enter one of the recovery codes you saved when you set up two-step sign-in. Each code works once.</p>
+<form method="post" novalidate>{% csrf_token %}
+  <input type="hidden" name="next" value="{{ next_url }}">
+  <div class="form-row">
+    <label for="{{ form.code.id_for_label }}">{{ form.code.label }}</label>
+    {{ form.code }}
+    {% for err in form.code.errors %}<p class="st-field-error">{{ err }}</p>{% endfor %}
+  </div>
+  <div class="submit-row"><input type="submit" value="Continue"></div>
+</form>
+<p class="st-muted">No codes left? A Super Admin can reset your two-step sign-in from the Staff page, and you set it up again at your next sign-in.</p>
+{% endblock %}
+
+{% block foot_links %}
+<a href="{% url 'admin_console:two-step-verify' %}?next={{ next_url|urlencode }}">Use your authenticator app</a>
+{% endblock %}

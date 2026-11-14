@@ -3,7 +3,6 @@
 from django.contrib import admin
 from django.test import Client, TestCase, override_settings
 from rest_framework.test import APIClient
-from rest_framework_simplejwt.tokens import AccessToken
 
 from apps.accounts.models import User
 
@@ -14,6 +13,7 @@ from ..permissions import (
     has_admin_permission,
     has_all_admin_permissions,
 )
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 
 @override_settings(
@@ -50,17 +50,17 @@ class BannedAdminAccessTests(TestCase):
                     elevate_super_admin=role == AdminRole.SUPER_ADMIN,
                 )
                 browser = Client()
-                browser.force_login(user)
+                staff_login(browser, user)
+                # Since L14 the staff API answers only inside a console session
+                # past the second step; a bearer token opens no staff route.
                 api = APIClient()
-                api.credentials(
-                    HTTP_AUTHORIZATION=f"Bearer {AccessToken.for_user(user)}"
-                )
+                staff_login(api, user)
 
                 self.assertTrue(has_admin_permission(user, "view_dashboard"))
                 self.assertEqual(browser.get("/admin/").status_code, 200)
                 self.assertEqual(api.get(api_url).status_code, 200)
 
-                # The live session and JWT were established before the ban.
+                # The live sessions were established before the ban.
                 User.objects.filter(pk=user.pk).update(is_banned=True)
                 user.refresh_from_db()
                 self.assertFalse(has_admin_access(user))

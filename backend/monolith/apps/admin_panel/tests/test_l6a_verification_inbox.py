@@ -42,6 +42,7 @@ from apps.trips.proofs import STATE_REJECTED, leg_proof_satisfied, leg_proof_sta
 from apps.trips.tests.sea_world import FLIGHT, SEA
 
 from .test_l3b_console import ConsoleWorld
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 ASK = inbox.RESUBMISSION_REQUESTED
 
@@ -166,7 +167,7 @@ class InboxCountTests(InboxWorld, TestCase):
         )
 
     def test_a_role_with_neither_capability_cannot_open_the_inbox(self):
-        self.client.force_login(self.ops)
+        staff_login(self.client, self.ops)
         self.assertEqual(self.client.get(reverse("admin_console:verification")).status_code, 403)
 
     def test_the_tabs_open_exactly_what_they_count(self):
@@ -178,7 +179,7 @@ class InboxCountTests(InboxWorld, TestCase):
 
     def test_opening_verification_lands_on_the_first_tab_with_work(self):
         landing = reverse("admin_console:verification")
-        self.client.force_login(self.trust)
+        staff_login(self.client, self.trust)
         self.assertRedirects(
             self.client.get(landing),
             "/admin/verification/kyc/?status=pending",
@@ -200,7 +201,7 @@ class InboxCountTests(InboxWorld, TestCase):
         )
 
     def test_a_tickets_only_role_lands_on_tickets(self):
-        self.client.force_login(self.tickets_only)
+        staff_login(self.client, self.tickets_only)
         self.assertRedirects(
             self.client.get(reverse("admin_console:verification")),
             "/admin/verification/flight-proofs/?status=pending",
@@ -228,7 +229,7 @@ class InboxCountTests(InboxWorld, TestCase):
 
     def test_the_queue_page_costs_the_same_however_many_rows_wait(self):
         def cost() -> int:
-            self.client.force_login(self.trust)
+            staff_login(self.client, self.trust)
             url = reverse("admin_console:kyc-queue")
             with CaptureQueriesContext(connection) as queries:
                 self.client.get(url, {"status": "pending"})
@@ -381,7 +382,7 @@ class DecisionTests(InboxWorld, TestCase):
 
     def test_the_api_takes_the_same_three_decisions(self):
         api = APIClient()
-        api.force_authenticate(self.trust)
+        staff_login(api, self.trust)
         submission = self.submission(self.applicant)
         url = reverse("admin-kyc-review", args=(submission.pk,))
 

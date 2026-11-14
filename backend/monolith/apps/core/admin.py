@@ -47,8 +47,9 @@ class BusinessSettingsVersionAdmin(admin.ModelAdmin):
 
     Creating and activating a revision used to be possible from this page, and
     should not have been. Phase 6A makes settings activation a named,
-    least-privilege capability: `POST /api/admin/settings` checks
-    `CanManageSettings`, validates the policy through
+    least-privilege capability: the console's Business settings page (and
+    `POST /api/admin/settings`, inside a two-step-verified console session)
+    checks `manage_settings`, validates the policy through
     `AdminSettingsCreateSerializer`, requires a written reason, and records the
     change in the immutable admin audit stream in the same transaction.
 

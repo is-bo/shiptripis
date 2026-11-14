@@ -29,6 +29,7 @@ from apps.finance.operations import (
 from apps.notifications.models import OutboundMessage
 
 from .factories import build_scenario, open_mock_checkout
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 
 LOCAL_STATIC = override_settings(
@@ -228,7 +229,7 @@ class FinanceOperationsTests(TestCase):
             is_unapplied=True,
         )
         assign_admin_roles(self.scenario.admin, (AdminRole.FINANCE,))
-        self.client.force_login(self.scenario.admin)
+        staff_login(self.client, self.scenario.admin)
 
         body = self.client.get(
             f"/admin/finance/payments/{self.attempt.pk}/"
@@ -350,7 +351,7 @@ class OperationsConsoleRecoveryTests(TestCase):
         )
 
     def post_as(self, user, path, data):
-        self.client.force_login(user)
+        staff_login(self.client, user)
         return self.client.post(path, data)
 
     def test_retry_requires_confirmation_and_is_audited(self):
@@ -425,7 +426,7 @@ class OperationsConsoleRecoveryTests(TestCase):
             resolved_at=timezone.now(),
             resolution_reason="Reviewed",
         )
-        self.client.force_login(self.owner)
+        staff_login(self.client, self.owner)
         overview = self.client.get("/admin/").content.decode()
         self.assertIn("Background jobs needing attention", overview)
         response = self.client.get("/admin/system/jobs/?status=failed")

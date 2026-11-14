@@ -1,0 +1,24 @@
+{% extends "admin/two_step/base.html" %}
+
+{% block eyebrow %}{% if confirming %}Fresh code needed{% else %}Step 2 of 2{% endif %}{% endblock %}
+
+{% block card %}
+{% if confirming %}
+<p>This change needs a code entered in the last {{ fresh_minutes }} minutes. Open your authenticator app and enter the code it shows now.</p>
+{% else %}
+<p>Open your authenticator app and enter the code it shows for Wassla Operations.</p>
+{% endif %}
+<form method="post" novalidate>{% csrf_token %}
+  <input type="hidden" name="next" value="{{ next_url }}">
+  <div class="form-row">
+    <label for="{{ form.code.id_for_label }}">{{ form.code.label }}</label>
+    {{ form.code }}
+    {% for err in form.code.errors %}<p class="st-field-error">{{ err }}</p>{% endfor %}
+  </div>
+  <div class="submit-row"><input type="submit" value="{% if confirming %}Confirm{% else %}Continue{% endif %}"></div>
+</form>
+{% endblock %}
+
+{% block foot_links %}
+<a href="{% url 'admin_console:two-step-recovery' %}?next={{ next_url|urlencode }}">Lost your phone? Use a recovery code</a>
+{% endblock %}

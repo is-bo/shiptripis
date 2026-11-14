@@ -52,6 +52,11 @@ PROD_BOOT_ENV = {
     # boot without one that is long enough and distinct from SECRET_KEY.
     "HANDOVER_CODE_SECRET": "h" * 48,
     "TRANSACTIONAL_EMAIL_SECRET": "e" * 48,
+    # L14: staff two-step keys are sealed with the payout keyring, so
+    # production refuses to start without a valid one.
+    "PAYOUT_DATA_KEYRING": '{"k1": "' + base64.b64encode(b"k" * 32).decode() + '"}',
+    "PAYOUT_DATA_ACTIVE_KEY_ID": "k1",
+    "PAYOUT_ACCOUNT_FINGERPRINT_KEY": base64.b64encode(b"f" * 32).decode(),
 }
 
 

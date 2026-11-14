@@ -43,6 +43,7 @@ from apps.ratings.moderation import (
     decide,
 )
 from apps.ratings.public import SIDE_TRAVELER, countable
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 
 class ReviewsWorld(DiscoveryWorld):
@@ -662,7 +663,7 @@ class ConsoleTests(ReviewsWorld, TestCase):
         self.quiet = self.rate(comment="Lovely")
         self.report(self.quiet, reason=RatingReport.Reason.UNRELATED)
         self.moderate(self.quiet, ACTION_DISMISS)
-        self.client.force_login(self.staff)
+        staff_login(self.client, self.staff)
 
     def test_the_queue_lists_open_reports_first_with_reasons(self):
         response = self.client.get(reverse("admin_console:reviews"))

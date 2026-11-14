@@ -138,7 +138,7 @@ payment/payout encryption secrets from Go services and internal gateway children
 | `S3_ACCESS_KEY`, `S3_SECRET_KEY` | Scoped media/evidence storage credentials from provider. |
 | `KYC_S3_ACCESS_KEY`, `KYC_S3_SECRET_KEY` | Separately scoped private KYC credentials. |
 | `PAYOUT_S3_ACCESS_KEY`, `PAYOUT_S3_SECRET_KEY` | Optional payout-evidence credentials, separate scope. |
-| `PAYOUT_DATA_KEYRING`, `PAYOUT_DATA_ACTIVE_KEY_ID`, `PAYOUT_ACCOUNT_FINGERPRINT_KEY` | Existing payout encryption keyring/active key/fingerprint root; preserve all historical keys. Keyring is a JSON string inside the secret JSON. See existing payout runbooks before generating new keys. |
+| `PAYOUT_DATA_KEYRING`, `PAYOUT_DATA_ACTIVE_KEY_ID`, `PAYOUT_ACCOUNT_FINGERPRINT_KEY` | Required: production refuses to start without them, because staff two-step keys are sealed with them (L14). Existing payout encryption keyring/active key/fingerprint root; preserve all historical keys. Keyring is a JSON string inside the secret JSON. See existing payout runbooks before generating new keys. |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Optional matching TEST platform credential/signing pair; omit while inactive. Never LIVE. |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Optional distinct Connect destination signature secret, not platform webhook secret. |
 | `CHARGILY_SECRET_KEY`, `CHARGILY_WEBHOOK_SECRET` | Optional TEST key; webhook override must follow existing signing contract. |

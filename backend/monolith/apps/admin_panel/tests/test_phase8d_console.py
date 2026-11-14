@@ -34,6 +34,7 @@ from apps.kyc.models import KycSubmission
 from apps.locations.models import Country, GeographyCatalogueImport, Place
 from apps.notifications.models import OutboundMessage
 from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 
 def _reachable_store(*, readable: bool = True) -> Mock:
@@ -67,7 +68,7 @@ UNHASHED_STATIC = override_settings(
 
 class ConsoleHttpMixin:
     def dispatch(self, path, method="get", data=None, user=None):
-        self.client.force_login(user or self.owner)
+        staff_login(self.client, user or self.owner)
         return getattr(self.client, method)(path, data or {})
 
     def staff_user(self, role, prefix="operator"):
@@ -87,7 +88,7 @@ class ConsoleAccessTests(ConsoleHttpMixin, TestCase):
             email="owner-console@example.com",
             password="Sup3rStrong!",
         )
-        self.client.force_login(self.owner)
+        staff_login(self.client, self.owner)
 
     def test_owner_lands_on_actionable_overview_and_can_reach_core_areas(self):
         response = self.dispatch("/admin/")
@@ -106,7 +107,7 @@ class ConsoleAccessTests(ConsoleHttpMixin, TestCase):
             password="Sup3rStrong!",
         )
         assign_admin_roles(support, (AdminRole.SUPPORT,))
-        self.client.force_login(support)
+        staff_login(self.client, support)
         body = self.dispatch("/admin/", user=support).content.decode()
         self.assertIn("Users", body)
         self.assertIn("Disputes", body)
@@ -122,7 +123,7 @@ class ConsoleAccessTests(ConsoleHttpMixin, TestCase):
         self.client.logout()
         self.assertEqual(self.client.get("/admin/").status_code, 302)
         client = Client(enforce_csrf_checks=True)
-        client.force_login(self.owner)
+        staff_login(client, self.owner)
         self.assertEqual(
             client.post("/admin/staff/", {"email": "no-csrf@example.com"}).status_code,
             403,
@@ -169,7 +170,7 @@ class ConsoleVerificationTests(ConsoleHttpMixin, TestCase):
             selfie_image_key="kyc/private/selfie.jpg",
             status=KycSubmission.Status.PENDING,
         )
-        self.client.force_login(self.owner)
+        staff_login(self.client, self.owner)
 
     @patch("apps.admin_panel.console_views.storage_for")
     def test_kyc_detail_has_evidence_action_and_reject_requires_reason(
@@ -441,7 +442,7 @@ class ConsoleOwnerWorkflowTests(ConsoleHttpMixin, TestCase):
             email="owner-workflow@example.com",
             password="Sup3rStrong!",
         )
-        self.client.force_login(self.owner)
+        staff_login(self.client, self.owner)
 
     def test_owner_can_reach_operational_queues_and_safe_system_view(self):
         surfaces = (

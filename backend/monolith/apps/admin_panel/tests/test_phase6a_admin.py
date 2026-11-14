@@ -10,6 +10,7 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
+from apps.admin_panel.tests.two_step_helpers import staff_login
 from apps.accounts.models import User
 from apps.locations.models import Location
 from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
@@ -239,7 +240,7 @@ class AdminEndpointAuthorizationTests(APITestCase):
                     (role,),
                     elevate_super_admin=role == AdminRole.SUPER_ADMIN,
                 )
-                self.client.force_authenticate(user)
+                staff_login(self.client, user)
                 for endpoint, expected in endpoints.items():
                     with self.subTest(role=role, endpoint=endpoint):
                         response = self.client.get(endpoint)
@@ -248,20 +249,20 @@ class AdminEndpointAuthorizationTests(APITestCase):
     def test_dashboard_requires_named_admin_permission(self):
         user = make_user("ops-endpoint@example.test", staff=True)
         assign_admin_roles(user, (AdminRole.OPS,))
-        self.client.force_authenticate(user)
+        staff_login(self.client, user)
         response = self.client.get("/api/admin/dashboard")
         assert response.status_code == 200
         assert "users" in response.data
 
         ordinary = make_user("ordinary@example.test")
-        self.client.force_authenticate(ordinary)
+        staff_login(self.client, ordinary)
         assert self.client.get("/api/admin/dashboard").status_code == 403
 
     def test_user_detail_exposes_reliability_but_not_sensitive_contact_to_support(self):
         support = make_user("support-endpoint@example.test", staff=True)
         assign_admin_roles(support, (AdminRole.SUPPORT,))
         target = make_user("target@example.test")
-        self.client.force_authenticate(support)
+        staff_login(self.client, support)
 
         response = self.client.get(f"/api/admin/users/{target.pk}")
         assert response.status_code == 200
@@ -324,7 +325,7 @@ class AdminJourneyContractTests(APITestCase):
             reviewed_at=timezone.now(),
         )
 
-        self.client.force_authenticate(operator)
+        staff_login(self.client, operator)
         response = self.client.get("/api/admin/journeys")
 
         assert response.status_code == 200

@@ -86,6 +86,9 @@ def _is_https_origin(value: str) -> bool:
 
 if DEBUG:  # noqa: F405
     raise RuntimeError("DJANGO_DEBUG must be false in production.")
+# Spec 19.1: staff two-step sign-in cannot be switched off in production.
+if not ADMIN_TWO_STEP_REQUIRED:  # noqa: F405
+    raise RuntimeError("ADMIN_TWO_STEP_REQUIRED must be true in production.")
 if SHIPTRIP_ENVIRONMENT != "production":  # noqa: F405
     raise RuntimeError("SHIPTRIP_ENVIRONMENT must equal 'production'.")
 if len(SECRET_KEY) < 32 or SECRET_KEY.startswith("insecure-"):  # noqa: F405

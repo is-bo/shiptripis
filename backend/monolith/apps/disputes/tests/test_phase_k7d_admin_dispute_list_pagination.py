@@ -14,9 +14,11 @@ from django.test import TestCase
 from django.urls import resolve, reverse
 from rest_framework.test import APIRequestFactory, force_authenticate
 
+from apps.admin_panel.tests.two_step_helpers import verified_session_value
+from apps.admin_panel.two_step import SESSION_KEY
 from apps.deals.tests.phase4_factories import fund_scenario
 from apps.disputes.models import Dispute
-from apps.disputes.tests.test_disputes import client_for, grant
+from apps.disputes.tests.test_disputes import grant, staff_client_for
 from apps.disputes.views import AdminDisputeListView
 
 CLOSED = 104
@@ -48,7 +50,7 @@ class AdminDisputeListReachabilityTests(TestCase):
         self.support = grant(self.scenario.outsider, "Support")
 
     def test_the_served_endpoint_reaches_every_dispute(self):
-        client = client_for(self.support)
+        client = staff_client_for(self.support)
         seen: list[int] = []
         url = reverse("admin-dispute-list")
         while url:
@@ -69,6 +71,8 @@ class AdminDisputeListReachabilityTests(TestCase):
         def get(query=""):
             request = factory.get(f"/api/admin/disputes{query}")
             force_authenticate(request, user=self.support)
+            # A staff route answers a session past the second step (L14).
+            request.session = {SESSION_KEY: verified_session_value(self.support)}
             response = view(request)
             response.render()
             return response

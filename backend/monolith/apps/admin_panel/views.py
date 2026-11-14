@@ -70,7 +70,8 @@ from apps.ratings.public import countable
 from apps.routing.providers import route_provider_status
 from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
 
-from . import tracking_search
+from . import tracking_search, two_step
+from .staff_api import StaffAPIView
 from .models import AdminAuditLog, AdminInvitation
 from .ops_serializers import (
     AdminBoostSerializer,
@@ -261,7 +262,7 @@ def _provider_health() -> dict:
     return result
 
 
-class DashboardView(APIView):
+class DashboardView(StaffAPIView):
     permission_classes = (CanViewDashboard,)
 
     def get(self, request):
@@ -415,7 +416,7 @@ class DashboardView(APIView):
         return Response(payload)
 
 
-class AdminUserListView(APIView):
+class AdminUserListView(StaffAPIView):
     permission_classes = (CanViewUsers,)
 
     def get(self, request):
@@ -435,7 +436,7 @@ class AdminUserListView(APIView):
         return _paginate(request, queryset, AdminUserSerializer)
 
 
-class AdminUserDetailView(APIView):
+class AdminUserDetailView(StaffAPIView):
     permission_classes = (CanViewUsers,)
 
     def get(self, request, pk):
@@ -479,7 +480,7 @@ class AdminUserDetailView(APIView):
         )
 
 
-class AdminKycListView(APIView):
+class AdminKycListView(StaffAPIView):
     permission_classes = (CanViewKyc,)
 
     def get(self, request):
@@ -493,7 +494,7 @@ class AdminKycListView(APIView):
         return _paginate(request, queryset, AdminKycSerializer)
 
 
-class AdminKycReviewView(APIView):
+class AdminKycReviewView(StaffAPIView):
     permission_classes = (CanReviewKyc,)
 
     def post(self, request, pk):
@@ -512,7 +513,7 @@ class AdminKycReviewView(APIView):
         )
 
 
-class AdminFlightProofListView(APIView):
+class AdminFlightProofListView(StaffAPIView):
     permission_classes = (CanViewFlightProofs,)
 
     def get(self, request):
@@ -527,7 +528,7 @@ class AdminFlightProofListView(APIView):
         return _paginate(request, queryset, AdminFlightProofSerializer)
 
 
-class AdminFlightProofReviewView(APIView):
+class AdminFlightProofReviewView(StaffAPIView):
     permission_classes = (CanReviewFlightProof,)
 
     def post(self, request, pk):
@@ -546,7 +547,7 @@ class AdminFlightProofReviewView(APIView):
         )
 
 
-class AdminRequestListView(APIView):
+class AdminRequestListView(StaffAPIView):
     permission_classes = (CanViewRequests,)
 
     def get(self, request):
@@ -579,7 +580,7 @@ class AdminRequestListView(APIView):
         return _paginate(request, queryset, AdminRequestSerializer)
 
 
-class AdminJourneyListView(APIView):
+class AdminJourneyListView(StaffAPIView):
     permission_classes = (CanViewJourneys,)
 
     def get(self, request):
@@ -608,7 +609,7 @@ class AdminJourneyListView(APIView):
         return _paginate(request, queryset, AdminJourneySerializer)
 
 
-class AdminMatchListView(APIView):
+class AdminMatchListView(StaffAPIView):
     permission_classes = (CanViewMatches,)
 
     def get(self, request):
@@ -627,7 +628,7 @@ class AdminMatchListView(APIView):
         return _paginate(request, queryset, AdminMatchSerializer)
 
 
-class AdminOfferListView(APIView):
+class AdminOfferListView(StaffAPIView):
     permission_classes = (CanViewMatches,)
 
     def get(self, request):
@@ -639,7 +640,7 @@ class AdminOfferListView(APIView):
         return _paginate(request, queryset, AdminOfferSerializer)
 
 
-class AdminDealListView(APIView):
+class AdminDealListView(StaffAPIView):
     permission_classes = (CanViewDeals,)
 
     def get(self, request):
@@ -663,7 +664,7 @@ class AdminDealListView(APIView):
         return _paginate(request, queryset, AdminDealSerializer)
 
 
-class AdminDealDetailView(APIView):
+class AdminDealDetailView(StaffAPIView):
     permission_classes = (CanViewDeals,)
 
     def get(self, request, pk):
@@ -683,7 +684,7 @@ class AdminDealDetailView(APIView):
         )
 
 
-class AdminDisputeListView(APIView):
+class AdminDisputeListView(StaffAPIView):
     permission_classes = (CanViewDisputes,)
 
     def get(self, request):
@@ -705,7 +706,7 @@ class AdminDisputeListView(APIView):
         return _paginate(request, queryset, AdminDisputeSerializer)
 
 
-class AdminDisputeStatusView(APIView):
+class AdminDisputeStatusView(StaffAPIView):
     permission_classes = (CanManageDisputes,)
 
     def post(self, request, pk):
@@ -735,7 +736,7 @@ class AdminDisputeStatusView(APIView):
         )
 
 
-class AdminDisputeResolveView(APIView):
+class AdminDisputeResolveView(StaffAPIView):
     permission_classes = (CanResolveDisputes,)
 
     def post(self, request, pk):
@@ -770,7 +771,7 @@ class AdminDisputeResolveView(APIView):
         )
 
 
-class AdminDealNoShowView(APIView):
+class AdminDealNoShowView(StaffAPIView):
     permission_classes = (CanRecordNoShow,)
 
     def post(self, request, pk):
@@ -786,7 +787,7 @@ class AdminDealNoShowView(APIView):
         return Response(result)
 
 
-class AdminPaymentOrderListView(APIView):
+class AdminPaymentOrderListView(StaffAPIView):
     permission_classes = (CanViewPaymentOrders,)
 
     def get(self, request):
@@ -808,7 +809,7 @@ class AdminPaymentOrderListView(APIView):
         return _paginate(request, queryset, AdminPaymentOrderSerializer)
 
 
-class AdminPaymentAttemptListView(APIView):
+class AdminPaymentAttemptListView(StaffAPIView):
     permission_classes = (CanViewPaymentAttempts,)
 
     def get(self, request):
@@ -830,7 +831,7 @@ class AdminPaymentAttemptListView(APIView):
         return _paginate(request, queryset, AdminPaymentAttemptSerializer)
 
 
-class AdminProviderEventListView(APIView):
+class AdminProviderEventListView(StaffAPIView):
     permission_classes = (CanViewProviderEvents,)
 
     def get(self, request):
@@ -842,7 +843,7 @@ class AdminProviderEventListView(APIView):
         return _paginate(request, queryset, AdminProviderEventSerializer)
 
 
-class AdminRefundListView(APIView):
+class AdminRefundListView(StaffAPIView):
     permission_classes = (CanViewRefunds,)
 
     def get(self, request):
@@ -860,7 +861,7 @@ class AdminRefundListView(APIView):
         return _paginate(request, queryset, AdminRefundSerializer)
 
 
-class AdminRefundRequestView(APIView):
+class AdminRefundRequestView(StaffAPIView):
     permission_classes = (CanIssueRefunds,)
 
     def post(self, request):
@@ -894,7 +895,7 @@ class AdminRefundRequestView(APIView):
         )
 
 
-class AdminRefundSettleView(APIView):
+class AdminRefundSettleView(StaffAPIView):
     permission_classes = (CanSettleManualRefunds,)
 
     def post(self, request, pk):
@@ -919,7 +920,7 @@ class AdminRefundSettleView(APIView):
         return Response(AdminRefundSerializer(refund).data)
 
 
-class AdminPayoutListView(APIView):
+class AdminPayoutListView(StaffAPIView):
     permission_classes = (CanViewPayouts,)
 
     def get(self, request):
@@ -935,7 +936,7 @@ class AdminPayoutListView(APIView):
         return _paginate(request, queryset, AdminPayoutSerializer)
 
 
-class AdminPayoutCompleteView(APIView):
+class AdminPayoutCompleteView(StaffAPIView):
     permission_classes = (CanSettlePayouts,)
 
     def post(self, request, pk):
@@ -966,7 +967,7 @@ class AdminPayoutCompleteView(APIView):
         return Response(AdminPayoutSerializer(payout).data)
 
 
-class AdminScheduledJobListView(APIView):
+class AdminScheduledJobListView(StaffAPIView):
     permission_classes = (CanViewScheduledJobs,)
 
     def get(self, request):
@@ -987,7 +988,7 @@ class AdminScheduledJobListView(APIView):
         return _paginate(request, queryset, AdminScheduledJobSerializer)
 
 
-class AdminRatingListView(APIView):
+class AdminRatingListView(StaffAPIView):
     permission_classes = (CanViewRatings,)
 
     def get(self, request):
@@ -1003,7 +1004,7 @@ class AdminRatingListView(APIView):
         return _paginate(request, queryset, AdminRatingSerializer)
 
 
-class AdminBoostListView(APIView):
+class AdminBoostListView(StaffAPIView):
     permission_classes = (CanViewBoosts,)
 
     def get(self, request):
@@ -1014,7 +1015,7 @@ class AdminBoostListView(APIView):
         )
 
 
-class AdminProviderHealthView(APIView):
+class AdminProviderHealthView(StaffAPIView):
     permission_classes = (CanViewProviderHealth,)
 
     def get(self, request):
@@ -1022,7 +1023,7 @@ class AdminProviderHealthView(APIView):
         return Response(_provider_health())
 
 
-class AdminSettingsView(APIView):
+class AdminSettingsView(StaffAPIView):
     def get_permissions(self):
         return (
             [CanManageSettings()]
@@ -1078,7 +1079,7 @@ class AdminSettingsView(APIView):
         )
 
 
-class AdminRoleMatrixView(APIView):
+class AdminRoleMatrixView(StaffAPIView):
     permission_classes = (CanManagePermissions,)
 
     def get(self, request):
@@ -1100,7 +1101,7 @@ class AdminRoleMatrixView(APIView):
         )
 
 
-class AdminAccountListView(APIView):
+class AdminAccountListView(StaffAPIView):
     permission_classes = (CanManageAdmins,)
 
     def get(self, request):
@@ -1114,10 +1115,21 @@ class AdminAccountListView(APIView):
         return _paginate(request, queryset, AdminUserSerializer)
 
 
-class AdminAccountRoleView(APIView):
+class AdminAccountRoleView(StaffAPIView):
     permission_classes = (CanManagePermissions,)
 
     def post(self, request, pk):
+        # Spec 19.1: a role change needs a code entered in the last ten
+        # minutes, through the console's code page.
+        if not two_step.fresh_two_step(request):
+            return Response(
+                {
+                    "code": two_step.FRESH_TWO_STEP_REQUIRED_CODE,
+                    "detail": "Enter a code from your authenticator app in the "
+                    "console, then make the change again.",
+                },
+                status=http.HTTP_403_FORBIDDEN,
+            )
         serializer = AdminRoleChangeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -1131,7 +1143,7 @@ class AdminAccountRoleView(APIView):
         return Response(AdminUserSerializer(user, context={"request": request}).data)
 
 
-class AdminInvitationListCreateView(APIView):
+class AdminInvitationListCreateView(StaffAPIView):
     permission_classes = (CanManageAdmins,)
     throttle_classes = (ScopedRateThrottle,)
     throttle_scope = "admin_invitation"
@@ -1195,7 +1207,7 @@ class AdminInvitationAcceptView(APIView):
         )
 
 
-class AdminInvitationRevokeView(APIView):
+class AdminInvitationRevokeView(StaffAPIView):
     permission_classes = (CanManageAdmins,)
 
     def post(self, request, pk):
@@ -1206,7 +1218,7 @@ class AdminInvitationRevokeView(APIView):
         return Response(AdminInvitationSerializer(invitation).data)
 
 
-class AdminAuditLogListView(APIView):
+class AdminAuditLogListView(StaffAPIView):
     permission_classes = (CanViewAuditLog,)
 
     def get(self, request):

@@ -361,10 +361,11 @@ def _world() -> dict:
 def cmd_search(args) -> None:
     world = _world()
     admin = world["admins"][0]
+    # The seeded session already passed the second step (seed `_admin_session`);
+    # since L14 the staff API answers only inside such a session, so the API
+    # read goes through the same console client.
     console = Client()
     console.cookies["sessionid"] = admin["sessionid"]
-    api = Client()
-    bearer = {"HTTP_AUTHORIZATION": f"Bearer {admin['token']}"}
     # A realistic hit and a miss (the miss is the worst case: nothing stops the
     # scan early, and the paginator's COUNT scans everything either way).
     terms = {"hit": "benali", "miss": MISS}
@@ -391,7 +392,7 @@ def cmd_search(args) -> None:
         for label, term in terms.items():
             surfaces = [
                 (console, f"/admin/users/?q={term}", {}),
-                (api, f"/api/admin/users?q={term}", bearer),
+                (console, f"/api/admin/users?q={term}", {}),
                 (console, f"/admin/verification/kyc/?q={term}", {}),
                 (console, f"/admin/system/jobs/?q={term}", {}),
                 (console, f"/admin/system/email/?q={term}", {}),

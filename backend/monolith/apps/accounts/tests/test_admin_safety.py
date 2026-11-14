@@ -24,6 +24,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from apps.finance.models import ScheduledJob
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 User = get_user_model()
 
@@ -45,7 +46,7 @@ class BanConfirmationTests(TestCase):
             email="ban-ops@example.com",
             password="Sup3rStrong!",
         )
-        self.client.force_login(self.operator)
+        staff_login(self.client, self.operator)
         self.target = User.objects.create_user(
             username="traveler@example.com",
             email="traveler@example.com",
@@ -113,7 +114,7 @@ class ScheduledJobSafetyTests(TestCase):
             email="job-ops@example.com",
             password="Sup3rStrong!",
         )
-        self.client.force_login(self.operator)
+        staff_login(self.client, self.operator)
         self.job = ScheduledJob.objects.create(
             key="safety-payout-release",
             kind=ScheduledJob.Kind.PAYOUT_RELEASE_CHECK,

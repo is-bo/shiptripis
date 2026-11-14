@@ -28,6 +28,7 @@ from apps.deals.tests.phase4_factories import (
 )
 from apps.disputes.models import Dispute
 from apps.finance.models import PaymentOrder, Payout
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 User = get_user_model()
 
@@ -73,7 +74,7 @@ class DisputeMoneyPositionTests(TestCase):
             reason_text="One corner is crushed.",
             payout_frozen=True,
         )
-        self.client.force_login(self.operator)
+        staff_login(self.client, self.operator)
 
     def _body(self):
         response = self.client.get(f"/admin/disputes/dispute/{self.dispute.pk}/change/")
@@ -101,9 +102,11 @@ class DisputeMoneyPositionTests(TestCase):
         assert "already settled" in body.replace("\n", " ")
         assert "reconciled by hand" in body.replace("\n", " ")
 
-    def test_the_page_points_at_the_audited_endpoint_and_cannot_resolve(self):
+    def test_the_page_points_at_the_console_and_cannot_resolve(self):
         body = self._body()
-        assert "/api/admin/disputes/" in body
+        # L14: staff are sent to the console page, never to a staff API route.
+        assert 'href="/admin/disputes/"' in body
+        assert "/api/admin/" not in body
         assert "this page cannot" in body.replace("\n", " ")
         # No save row: the dispute admin is registered read-only.
         assert 'name="_save"' not in body
@@ -172,7 +175,7 @@ class DisputeEvidenceDigestTests(TestCase):
             size_bytes=1024,
             content_sha256=digest,
         )
-        self.client.force_login(operator)
+        staff_login(self.client, operator)
         body = self.client.get(
             f"/admin/disputes/dispute/{dispute.pk}/change/"
         ).content.decode()

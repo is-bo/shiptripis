@@ -30,6 +30,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from apps.admin_panel.tests.two_step_helpers import staff_login
 from apps.admin_panel.permissions import assign_admin_roles
 from apps.chat.models import ChatMessage
 from apps.deals.models import Deal
@@ -181,7 +182,7 @@ def _profile(world: _Marketplace, finance) -> dict[str, dict]:
 
     operator = Client()
     assign_admin_roles(scenario.admin, ["super_admin"], elevate_super_admin=True)
-    operator.force_login(scenario.admin)
+    staff_login(operator, scenario.admin)
     kyc = KycSubmission.objects.filter(user=scenario.traveler).first()
 
     rows = {

@@ -371,6 +371,11 @@ jobs:
           PAYMENTS_PUBLIC_BASE_URL: https://api.shiptrip.invalid
           HANDOVER_CODE_SECRET: ci-hand-6Yp3-Lm9-Qr2-Vx7-Nk4-Ts8-Wa1-He5
           TRANSACTIONAL_EMAIL_SECRET: ci-mail-9Tr2-Vk7-Qp4-Nx8-Hm1-Ws6-Za3-Le5
+          # L14: production refuses to start without the payout keyring, which
+          # seals staff two-step keys. CI-only values.
+          PAYOUT_DATA_KEYRING: '{"ci": "Y2ktb25seS1wYXlvdXQta2V5cmluZy0zMi1ieXRlcyE="}'
+          PAYOUT_DATA_ACTIVE_KEY_ID: ci
+          PAYOUT_ACCOUNT_FINGERPRINT_KEY: Y2ktb25seS1maW5nZXJwcmludC1rZXktMzJieXRlcyE=
         run: python manage.py check --deploy --fail-level WARNING
 
       - name: Static routes, links, and CSP compatibility

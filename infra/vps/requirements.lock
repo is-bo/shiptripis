@@ -109,6 +109,8 @@ ruff==0.8.4
     # via -r backend/monolith/requirements.txt
 s3transfer==0.10.4
     # via boto3
+segno==1.6.6
+    # via -r backend/monolith/requirements.txt
 sentry-sdk==2.19.2
     # via -r backend/monolith/requirements.txt
 setuptools==84.0.0

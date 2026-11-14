@@ -228,6 +228,13 @@ NAVIGATION = (
                 ("view_finance_summary",),
                 ("finance-reconciliation", "finance-rows"),
             ),
+            # L14, spec 19.2. Not flag-gated: it reads stored rows directly.
+            (
+                "Exports",
+                "admin_console:finance-exports",
+                ("export_finance",),
+                ("finance-exports",),
+            ),
             (
                 "Payments",
                 "admin_console:payments",
@@ -264,7 +271,13 @@ NAVIGATION = (
                 "Staff & access",
                 "admin_console:staff",
                 ("manage_admins",),
-                ("staff", "staff-role", "staff-access", "staff-invitation-action"),
+                (
+                    "staff",
+                    "staff-role",
+                    "staff-access",
+                    "staff-two-step-reset",
+                    "staff-invitation-action",
+                ),
             ),
         ),
     ),

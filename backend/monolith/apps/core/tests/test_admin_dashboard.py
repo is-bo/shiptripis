@@ -29,6 +29,7 @@ from apps.disputes.models import Dispute
 from apps.finance.models import ScheduledJob
 from apps.kyc.models import KycSubmission
 from apps.notifications.models import OutboundMessage
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 User = get_user_model()
 
@@ -48,7 +49,7 @@ class QueuePanelTests(TestCase):
         self.operator = User.objects.create_superuser(
             username="ops@example.com", email="ops@example.com", password="Sup3rStrong!"
         )
-        self.client.force_login(self.operator)
+        staff_login(self.client, self.operator)
 
     def test_an_empty_system_says_so_rather_than_showing_nothing(self):
         response = self.client.get("/admin/")
@@ -131,7 +132,7 @@ class QueuePanelTests(TestCase):
         limited.user_permissions.add(
             Permission.objects.get(codename="view_kycsubmission")
         )
-        self.client.force_login(limited)
+        staff_login(self.client, limited)
         body = self.client.get("/admin/").content.decode()
         assert "Needs attention" not in body
 
@@ -162,7 +163,7 @@ class DisputeQueueCountTests(TestCase):
             resolved_at=timezone.now(),
             resolved_by=admin_user,
         )
-        self.client.force_login(admin_user)
+        staff_login(self.client, admin_user)
         body = self.client.get("/admin/").content.decode()
         assert "Every queue is empty right now." in body
 
@@ -249,7 +250,7 @@ class SettingsPageTests(TestCase):
             email="settings@example.com",
             password="Sup3rStrong!",
         )
-        self.client.force_login(operator)
+        staff_login(self.client, operator)
         revision = (
             BusinessSettingsVersion.objects.filter(status="active")
             .order_by("-version")

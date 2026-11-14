@@ -19,7 +19,7 @@ The header is filtered to the signed-in staff member's capabilities:
 - **Marketplace** contains Delivery requests, ordered Journeys and Deals.
 - **Disputes** keeps the case, evidence, participants, protection and money in
   one review flow.
-- **Finance** contains Payments, Refunds, Payouts and Ledger/reconciliation.
+- **Finance** contains Exports, Payments, Refunds, Payouts and Ledger/reconciliation.
 - **Staff** is for fixed-role invitations and access changes.
 - **Settings** groups pricing, deposit, FX and provider availability in human
   units.
@@ -142,6 +142,72 @@ one-time invitation is sent through the durable email queue; its token is never
 shown in the browser. Owners can see pending invitations, revoke/replace them,
 change an existing role and disable sign-in. Self-disable and Super Admin
 guardrails are enforced by the service layer.
+
+## Two-step sign-in (L14)
+
+Every staff sign-in has two steps: the password, then a 6-digit code from an
+authenticator app. Nothing in the console, the technical records or the staff
+API opens before the second step.
+
+**First sign-in.** After the password, the console shows a QR code. Scan it
+with an authenticator app (Google Authenticator, Microsoft Authenticator,
+1Password or similar); if the phone cannot scan, type the key shown under it.
+Enter the code the app shows. The console then shows **ten recovery codes,
+once**. Save them in a password manager: each one replaces a code from the app
+for a single sign-in if the phone is lost. They are never shown again.
+
+**Every sign-in after that.** Enter the code the app shows. A code works once;
+if it is refused, check that the phone sets its time automatically and use the
+newest code. Five wrong codes lock the second step for 15 minutes (recovery
+codes count too); the lock is written to the audit log. Signing out, or signing
+in again on any browser, asks for a code again.
+
+**Lost phone.** On the code page choose **Lost your phone? Use a recovery
+code**. After using one, the console says how many are left. With three or
+fewer left, ask a Super Admin to reset your two-step sign-in so you can set it
+up again with a new phone and ten new codes.
+
+**Changes that need a recent code.** Changing someone's role and resetting
+someone's two-step sign-in need a code entered in the last 10 minutes. If yours
+is older, the console asks for one and brings you back to the page; make the
+change again. The Staff page shows until when your code counts.
+
+**Reset (Super Admin).** On **Staff**, open the person's row, **Change role,
+access or two-step**, write the reason (it goes in the audit log), tick the
+confirmation and choose **Reset two-step**. Their app key and recovery codes
+are deleted and they are signed out everywhere; at their next sign-in they set
+it up again. Nobody can reset their own, and only a Super Admin can reset a
+Super Admin.
+
+**The last Super Admin.** When no other Super Admin can sign in, the technical
+team resets it on the server:
+`python manage.py reset_admin_two_step <email> --reason "<why>"`. It writes
+the same audit row, marked as done from the server.
+
+## Finance exports (L14)
+
+**Finance → Exports** (Finance and Super Admin only) downloads what was
+recorded as a CSV file that opens in Excel:
+
+- **Transactions:** one line per captured payment and one per refund. A
+  payment the order could not absorb (it will be refunded automatically) is
+  listed with the status `succeeded_unapplied`.
+- **Commissions:** one line per funded delivery: the traveler reward, the
+  Wassla fee, the sender total, what was refunded to the sender and the fee
+  Wassla kept.
+- **Payouts:** one line per traveler payout, with its eligible and paid dates
+  and any failure reason.
+
+Choose the money (live, test, or unknown for older records; they never share a
+file) and a range of at most 366 days. Dates are whole UTC days, both included,
+and each line belongs to the range by its own date (a payment by when it was
+captured, a refund by when it was requested, a commission by when its delivery
+was funded, a payout by when it was created). Amounts are the stored ones in
+euros with two decimals, plus the dinar amount where the Algerian rail was used;
+nothing is recalculated. People appear by their Wassla id and name only.
+
+Every download writes one audit row (who, kind, money, range and number of
+lines) before the file is sent; the page lists the ten most recent.
 
 ## Approving a Traveler's DZD payout method
 

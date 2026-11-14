@@ -7,6 +7,7 @@ import pytest
 from django.test import Client, override_settings
 from django.urls import reverse
 
+from apps.admin_panel.tests.two_step_helpers import staff_login
 from apps.admin_panel.finance_operations import _payout_detail_url
 
 from .test_phase8fh4_manual import (  # noqa: F401
@@ -58,7 +59,7 @@ def test_manual_queue_detail_link_carries_only_known_cohort():
 def test_prepare_release_begin_and_receipt_keep_payout_context(configured_h4):  # noqa: F811
     scenario, payout, _profile = build_manual(prefix="k2-flow")
     client = Client()
-    client.force_login(scenario.admin)
+    staff_login(client, scenario.admin)
     url = _url(payout)
 
     prepared = client.post(
@@ -102,7 +103,7 @@ def test_prepare_release_begin_and_receipt_keep_payout_context(configured_h4):  
 def test_review_hold_and_clear_hold_keep_relevant_sections(configured_h4):  # noqa: F811
     scenario, payout, _profile = build_manual(prefix="k2-sections")
     client = Client()
-    client.force_login(scenario.admin)
+    staff_login(client, scenario.admin)
     url = _url(payout)
 
     with patch("apps.admin_panel.console_manual_payout.review_profile"):
@@ -128,7 +129,7 @@ def test_review_hold_and_clear_hold_keep_relevant_sections(configured_h4):  # no
 def test_invalid_cohort_is_dropped_and_reveal_remains_request_scoped(configured_h4):  # noqa: F811
     scenario, payout, _profile = build_manual(prefix="k2-allowlist")
     client = Client()
-    client.force_login(scenario.admin)
+    staff_login(client, scenario.admin)
 
     held = client.post(_url(payout, "https://evil.test"), {"action": "hold"})
     assert held.status_code == 302

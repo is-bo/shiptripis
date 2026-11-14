@@ -25,6 +25,7 @@ from apps.deals.tests.phase4_factories import (
     release_delivery_code,
 )
 from apps.notifications.models import OutboundMessage
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 User = get_user_model()
 
@@ -44,7 +45,7 @@ class OutboxAdminTests(TestCase):
         self.operator = User.objects.create_superuser(
             username="obx@example.com", email="obx@example.com", password="Sup3rStrong!"
         )
-        self.client.force_login(self.operator)
+        staff_login(self.client, self.operator)
         self.scenario = fund_scenario(self.client, prefix="obxadm")
         record_recipient(self.scenario)
         confirm_pickup(self.scenario)
@@ -55,7 +56,7 @@ class OutboxAdminTests(TestCase):
             deal_id=self.scenario.deal.pk,
             kind=OutboundMessage.Kind.RECIPIENT_DELIVERY_CODE,
         )
-        self.client.force_login(self.operator)
+        staff_login(self.client, self.operator)
 
     def test_the_changelist_never_renders_a_delivery_code(self):
         response = self.client.get("/admin/notifications/outboundmessage/")

@@ -132,6 +132,7 @@ from .console_forms import (
     ReviewDecisionForm,
     RoleChangeForm,
     StaffAccessForm,
+    TwoStepResetForm,
 )
 from .console_presenters import (
     age_label,
@@ -156,11 +157,13 @@ from .console_presenters import (
     text_cell,
 )
 from . import tracking_search
+from . import two_step
 from . import verification_inbox as inbox
+from .console_two_step import require_fresh_two_step
 from .console_journey_pause import pause_state
 from .console_sea import crossing_rows, may_manage_crossings, sea_switch_state
 from .health import storage_health
-from .models import AdminAuditLog, AdminInvitation
+from .models import AdminAuditLog, AdminInvitation, AdminTwoStep
 from .ops_serializers import AdminSettingsCreateSerializer
 from .people_links import may_open_people, person_href
 from .permissions import (
@@ -3337,7 +3340,13 @@ def staff(request):
     staff_users = list(
         User.objects.filter(is_staff=True).prefetch_related("groups").order_by("email")
     )
+    enrolled = set(
+        AdminTwoStep.objects.filter(
+            user__in=staff_users, confirmed_at__isnull=False
+        ).values_list("user_id", flat=True)
+    )
     for member in staff_users:
+        member.two_step_enrolled = member.pk in enrolled
         roles = (
             (AdminRole.SUPER_ADMIN,)
             if member.is_superuser
@@ -3358,6 +3367,11 @@ def staff(request):
             "form": form,
             "staff_users": staff_users,
             "invitations": invitations,
+            # Spec 19.1: role changes and resets need a code from the last
+            # ten minutes. The page says whether one is open, and until when.
+            "fresh_until": two_step.fresh_until(request),
+            "fresh_minutes": two_step.FRESH_MINUTES,
+            "two_step_required": two_step.required(),
             "roles": [
                 {
                     "slug": slug,
@@ -3376,6 +3390,14 @@ def staff_role(request, pk: int):
     member = get_object_or_404(User, pk=pk, is_staff=True)
     if request.method != "POST":
         return redirect("admin_console:staff")
+    back = admin_url(
+        request,
+        "admin_console:staff",
+        fragment=f"staff-{member.pk}",
+        preserve_query={"edit": {str(member.pk)}},
+    )
+    if (refused := require_fresh_two_step(request, back)) is not None:
+        return refused
     form = RoleChangeForm(request.POST)
     if form.is_valid():
         try:
@@ -3423,6 +3445,41 @@ def staff_access(request, pk: int):
         fragment=f"staff-{member.pk}",
         preserve_query={"edit": {str(member.pk)}},
     )
+
+
+@capability_required("manage_admins")
+def staff_two_step_reset(request, pk: int):
+    """Spec 19.1: remove someone's second step; they enrol again at sign-in."""
+
+    member = get_object_or_404(User, pk=pk, is_staff=True)
+    if request.method != "POST":
+        return redirect("admin_console:staff")
+    back = admin_url(
+        request,
+        "admin_console:staff",
+        fragment=f"staff-{member.pk}",
+        preserve_query={"edit": {str(member.pk)}},
+    )
+    if (refused := require_fresh_two_step(request, back)) is not None:
+        return refused
+    form = TwoStepResetForm(request.POST)
+    if form.is_valid():
+        try:
+            result = two_step.reset(
+                actor=request.user, target=member, reason=form.cleaned_data["reason"]
+            )
+            ended = result["sessions_ended"]
+            messages.success(
+                request,
+                f"{member.email}'s two-step sign-in was reset and audited. "
+                f"{ended} session{'s' if ended != 1 else ''} ended; they set it up "
+                "again at their next sign-in.",
+            )
+        except (PermissionDenied, ValidationError) as exc:
+            messages.error(request, " ".join(getattr(exc, "messages", [str(exc)])))
+    else:
+        messages.error(request, "Give a reason and confirm the reset, then try again.")
+    return HttpResponseRedirect(back)
 
 
 @capability_required("manage_admins")

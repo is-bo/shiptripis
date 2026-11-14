@@ -33,6 +33,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle, ScopedRateThrottle
 from rest_framework.views import APIView
+from apps.admin_panel.staff_api import StaffAPIView
 
 from apps.core.business_settings import NoActiveBusinessSettings
 from apps.core.pagination import paginated_array_response
@@ -652,7 +653,7 @@ class PayoutDetailView(APIView):
         return response
 
 
-class AdminManualPayoutView(APIView):
+class AdminManualPayoutView(StaffAPIView):
     """Record an operator settlement. Refused until Phase 4 releases the payout."""
 
     permission_classes = (CanSettlePayouts,)
@@ -682,7 +683,7 @@ class AdminManualPayoutView(APIView):
         return Response(PayoutSerializer(payout).data)
 
 
-class AdminRefundView(APIView):
+class AdminRefundView(StaffAPIView):
     """Administrative refund against one captured attempt."""
 
     permission_classes = (CanIssueRefunds,)
@@ -737,7 +738,7 @@ class AdminRefundView(APIView):
         )
 
 
-class AdminRefundSettleView(APIView):
+class AdminRefundSettleView(StaffAPIView):
     """Record an operator settlement of a refund the provider cannot make.
 
     Chargily has no refund API, so its refunds leave the platform as bank

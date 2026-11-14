@@ -318,8 +318,8 @@ class LedgerEntryAdmin(_ReadOnlyAdmin):
 class PayoutAdmin(_ReadOnlyAdmin):
     """Read-only on purpose.
 
-    A payout is settled through `POST /api/admin/payouts/<id>/complete`, which
-    refuses unless Phase 4 has released it and which records the actor,
+    A payout is settled from its page in the console (Finance, Payouts), whose
+    service refuses unless Phase 4 has released it and records the actor,
     reference, currency, amount and rate. Editing the row here would let an
     operator mark money as sent with no evidence, which the
     `fin_payout_paid_requires_evidence` constraint exists to prevent.

@@ -19,6 +19,7 @@ from apps.core.marketplace_policy import (
 from apps.core.models import BusinessSettingsVersion
 
 from .support import STATIC_STORES
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 
 class DefaultsTests(SimpleTestCase):
@@ -166,7 +167,7 @@ class MarketplaceFormTests(TestCase):
         assign_admin_roles(self.admin, [role])
 
     def _post(self, **fields):
-        self.client.force_login(self.admin)
+        staff_login(self.client, self.admin)
         data = {
             "action": "marketplace",
             "listings_enabled": "on",
@@ -249,7 +250,7 @@ class MarketplaceFormTests(TestCase):
 
     def test_the_settings_page_warns_what_sea_legs_enables(self):
         self._grant("super_admin")
-        self.client.force_login(self.admin)
+        staff_login(self.client, self.admin)
 
         body = self.client.get(reverse("admin_console:settings")).content.decode()
 
@@ -271,7 +272,7 @@ class MarketplaceFormTests(TestCase):
 
     def test_the_settings_page_shows_the_form(self):
         self._grant("super_admin")
-        self.client.force_login(self.admin)
+        staff_login(self.client, self.admin)
 
         response = self.client.get(reverse("admin_console:settings"))
 

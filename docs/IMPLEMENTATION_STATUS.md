@@ -1,5 +1,22 @@
 # Waçla V1 Implementation Status
 
+## Wassla L14 — Staff two-step sign-in and finance exports (2026-11-14)
+
+Backend and console only; one additive migration (`admin_panel/0007`); `main` untouched.
+
+- **Two-step sign-in:** every staff sign-in needs a 6-digit code from an authenticator app (RFC 6238,
+  standard library, replay refused, five wrong codes lock it for 15 minutes). First sign-in shows a QR
+  code and ten one-time recovery codes. Nothing under `/admin/` and no `/api/admin/` route answers
+  before the second step, except `invitations/accept`. The staff API is now session-only with CSRF;
+  a bearer token opens no staff route. Role changes and resets need a code from the last 10 minutes.
+  Super Admins reset it on Staff; `manage.py reset_admin_two_step` covers the last Super Admin.
+  Production refuses to start with `ADMIN_TWO_STEP_REQUIRED=false` or without the payout keyring.
+- **Finance exports:** Finance → Exports (`export_finance`, Finance and Super Admin) streams
+  transactions, commissions or payouts as an Excel-safe CSV for one money mode and up to 366 UTC days,
+  stored amounts only, people by id and name only, one audit row per download.
+
+Detail: `docs/PHASE_L14_ADMIN_SECURITY_EXPORTS.md`. Staff guide: `docs/ADMIN_OPERATIONS.md`.
+
 ## Wassla L13B — Reviews, mobile (2026-11-14)
 
 The Reviews screen (person and trip), reached by tapping the rating on the Person page, Trip preview

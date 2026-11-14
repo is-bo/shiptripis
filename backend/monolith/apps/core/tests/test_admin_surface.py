@@ -34,6 +34,7 @@ from apps.core.admin_display import (
     tone_for,
 )
 from apps.core.models import BusinessSettingsVersion
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 User = get_user_model()
 
@@ -132,7 +133,7 @@ class BusinessSettingsAdminIsInspectionOnlyTests(TestCase):
         assert "7.50%" in rendered
 
     def test_the_changelist_says_activation_only_affects_new_snapshots(self):
-        self.client.force_login(self.superuser)
+        staff_login(self.client, self.superuser)
         response = self.client.get("/admin/core/businesssettingsversion/")
         assert response.status_code == 200
         body = response.content.decode()
@@ -149,7 +150,7 @@ class AdminShellTests(TestCase):
         )
 
     def test_the_operations_shell_is_branded_and_loads_its_stylesheet(self):
-        self.client.force_login(self.superuser)
+        staff_login(self.client, self.superuser)
         response = self.client.get("/admin/")
         assert response.status_code == 200
         body = response.content.decode()

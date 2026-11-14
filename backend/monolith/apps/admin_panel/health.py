@@ -10,7 +10,6 @@ from django.db import connection
 from django.db.models import F
 from django.utils import timezone
 from rest_framework.response import Response
-from rest_framework.views import APIView
 
 from apps.core.ops_snapshot import stream_backlog
 from apps.core.storage import storage_for
@@ -19,6 +18,7 @@ from apps.finance.providers import ChargilyGateway, StripeGateway
 from apps.notifications.models import OutboundMessage, PushDevice
 
 from .permissions import CanViewOperationalIncidents
+from .staff_api import StaffAPIView
 
 #: Logical storage classes reported to operators, in reading order.
 STORAGE_CLASSES_REPORTED = ("parcel", "proof", "dispute", "kyc")
@@ -74,7 +74,7 @@ def storage_health() -> dict:
     return report
 
 
-class AdminDeepHealthView(APIView):
+class AdminDeepHealthView(StaffAPIView):
     permission_classes = (CanViewOperationalIncidents,)
 
     def get(self, request):

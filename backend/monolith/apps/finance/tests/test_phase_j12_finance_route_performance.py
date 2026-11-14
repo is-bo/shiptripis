@@ -43,6 +43,7 @@ from apps.finance.payout_profiles import (
 
 from .factories import build_scenario
 from .test_phase8fh4_manual import configured_h4, image_upload  # noqa: F401
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 SECRET_CCP = "0000000000"
 SECRET_RIP = "0" * 20
@@ -107,7 +108,7 @@ def build_profile(prefix, *, attested=True):
 
 def finance_client(scenario):
     client = Client()
-    client.force_login(scenario.admin)
+    staff_login(client, scenario.admin)
     return client
 
 
@@ -306,7 +307,7 @@ def test_only_finance_and_super_reach_the_review_surface(role, configured_h4):  
     scenario, profile = build_profile(f"j12-role-{role}")
     assign_admin_roles(scenario.outsider, [role])
     client = Client()
-    client.force_login(scenario.outsider)
+    staff_login(client, scenario.outsider)
 
     for url in (
         reverse("admin_console:payout-reviews"),
@@ -327,7 +328,7 @@ def test_super_admin_reaches_it(configured_h4):  # noqa: F811
     scenario, profile = build_profile("j12-super")
     assign_admin_roles(scenario.outsider, ["super_admin"])
     client = Client()
-    client.force_login(scenario.outsider)
+    staff_login(client, scenario.outsider)
     assert client.get(reverse("admin_console:payout-reviews")).status_code == 200
     assert client.get(detail_url(profile)).status_code == 200
 

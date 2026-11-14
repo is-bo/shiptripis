@@ -52,11 +52,12 @@ from .test_phase_j12_finance_route_performance import (
     detail_url,
     finance_client,
 )
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 
 def client_for(user):
     client = Client()
-    client.force_login(user)
+    staff_login(client, user)
     return client
 
 

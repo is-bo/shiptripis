@@ -3,6 +3,7 @@ from unittest.mock import patch
 from django.test import TestCase
 from rest_framework.test import APIClient
 
+from apps.admin_panel.tests.two_step_helpers import staff_login
 from apps.accounts.models import User
 
 from ..permissions import AdminRole, assign_admin_roles
@@ -18,7 +19,7 @@ class AdminDeepHealthTests(TestCase):
         )
         assign_admin_roles(self.user, (AdminRole.OPS,))
         self.client = APIClient()
-        self.client.force_authenticate(self.user)
+        staff_login(self.client, self.user)
 
     @patch("apps.admin_panel.health.redis.Redis.from_url")
     def test_deep_health_is_permissioned_and_contains_safe_aggregates(self, from_url):
@@ -41,7 +42,7 @@ class AdminDeepHealthTests(TestCase):
             password="Test-password-123!",
             full_name="Ordinary",
         )
-        self.client.force_authenticate(ordinary)
+        staff_login(self.client, ordinary)
 
         response = self.client.get("/api/admin/health/deep")
 

@@ -753,12 +753,50 @@ Detail: `docs/PHASE_L13A_REVIEWS.md`. Screenshots: `/mnt/project-files/l-series-
 
 ### L14. Staff two-step sign-in and finance exports
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+Detail: `docs/PHASE_L14_ADMIN_SECURITY_EXPORTS.md` (route inventory, columns, recovery procedure).
+Screenshots: `/mnt/project-files/l-series-screens/L14/` (console EN, names in the phase doc).
+
+- Contract as built (names that differ from the plan): `apps/admin_panel/two_step.py`
+  (`two_step_satisfied`, `fresh_two_step`, `mark_verified`, `reset`, `end_sessions`), models
+  `AdminTwoStep`, `AdminRecoveryCode` (`admin_panel/0007`, which also grants `export_finance`),
+  `AdminTwoStepMiddleware`, `apps/admin_panel/staff_api.py` (`StaffAPIView`, `StaffSessionMixin`,
+  `OPEN_STAFF_API_ROUTES = {"admin-invitation-accept"}`), `IsVerifiedStaff` for the payout views
+  outside `HasAdminPermission`. Refusal codes `admin_two_step_required` and
+  `admin_fresh_two_step_required` (role change API). Test helper
+  `apps/admin_panel/tests/two_step_helpers.py` (`staff_login`, `verify_session`,
+  `verified_session_value`). Exports: `apps/admin_panel/exports.py`, page
+  `apps/admin_panel/console_exports.py`, route `finance-exports`, audit
+  `finance.export_downloaded`.
+- Callers of `/api/admin/` (listed per the plan): the data-scale probe and DEPLOYMENT_RUNBOOK step 8,
+  both now through a verified console session. **How the probe does it:** `backend/loadtest/seed.py`
+  writes the verification into the seeded console session in-process with
+  `verified_session_value`; nothing outside the process can.
+- Left for a later package: L15 adds the helper routes to `OPEN_STAFF_API_ROUTES` and calls
+  `fresh_two_step` before creating a key. Cleanup candidate: the shadowed, unreachable duplicate staff
+  routes in `apps/disputes/urls.py` (4) and `finance` `admin/payouts/<pk>/complete`.
+- Switches added and their defaults: `ADMIN_TWO_STEP_REQUIRED` (true; production refuses false).
+- Deviations from the plan (what, why, approved by): staff API session-only and gate placement
+  **settled by the advisor on 2026-11-14** (plan commit `b3d7eed`), built as written. Judgment calls,
+  not reviewed by Ismail: (1) the export page has a money choice (live, test, unknown), the
+  dashboard's split, so live and test money never share a file; (2) refunds are positive amounts with
+  a Type column (`payment`/`refund`); (3) a capture the order could not absorb is listed as
+  `succeeded_unapplied`; (4) row dates: refund by request time, payout by creation time, commission by
+  funding time; (5) the audit row is written before streaming and membership is capped at the export's
+  start, so the count is the lines sent; (6) production refuses to start without a valid payout
+  keyring, since enrolment seals with it (VPS environment doc and secrets example updated);
+  (7) the formula guard leaves plain numbers such as `-12.50` alone so they stay summable;
+  (8) wrong recovery codes count toward the same five-attempt lock; (9) the fresh-code detour does not
+  replay the POST; (10) a server without the keyring shows a "not available" page at enrolment
+  instead of an error; (11) recovery codes are 80-bit random and hashed with SHA-256 (no slow hash
+  needed at that entropy); (12) nobody resets their own two-step, and only a Super Admin resets a
+  Super Admin.
+- Tests (before and after counts): Django 2,990 before, 3,046 after (+39 `test_l14_two_step.py`,
+  +17 `test_l14_exports.py`); about 40 existing staff test files moved onto `staff_login`. ruff and
+  `makemigrations --check` clean, `schema.sql` re-exported (two tables added, nothing else). New
+  dependency `segno==1.6.6`. No Go or mobile change.
+- Known limits: the verification lasts for the Django session (default two weeks); a local machine
+  needs the keyring (or `ADMIN_TWO_STEP_REQUIRED=false`); a row committed by a transaction already
+  open when an export starts can be in the file but not in its audit count; console English only.
 
 ### L15. AI helper: keys and read access
 
