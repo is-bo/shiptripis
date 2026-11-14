@@ -24,7 +24,7 @@ from apps.kyc.models import KycSubmission
 from apps.locations.models import Location
 from apps.matching.models import Match, Offer
 from apps.parcels import tracking
-from apps.ratings.models import Rating
+from apps.ratings.models import Rating, RatingModeration
 from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
 
 from .permissions import ROLE_GROUP_NAMES, has_admin_permission, user_admin_roles
@@ -775,6 +775,10 @@ class AdminScheduledJobSerializer(serializers.ModelSerializer):
 
 
 class AdminRatingSerializer(serializers.ModelSerializer):
+    #: Staff's standing decision (L13A): `null`, `comment_hidden` or `removed`.
+    #: The list selects `moderation`, so this reads no extra row.
+    moderation = serializers.SerializerMethodField()
+
     class Meta:
         model = Rating
         fields = (
@@ -788,9 +792,16 @@ class AdminRatingSerializer(serializers.ModelSerializer):
             "comment",
             "review_window_ends_at",
             "revealed_at",
+            "moderation",
             "created_at",
         )
         read_only_fields = fields
+
+    def get_moderation(self, obj: Rating) -> str | None:
+        try:
+            return obj.moderation.state
+        except RatingModeration.DoesNotExist:
+            return None
 
 
 class AdminBoostSerializer(serializers.ModelSerializer):

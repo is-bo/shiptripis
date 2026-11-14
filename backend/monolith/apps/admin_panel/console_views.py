@@ -685,6 +685,18 @@ def _attention_items(request, *, provider_rows=()) -> list[dict]:
             "admin_console:problems",
             "attention=1",
         )
+    # L13A, spec 18. Reviews with an open report wait for a Trust decision.
+    if has_admin_permission(user, "moderate_ratings"):
+        from .console_reviews import waiting_count as reviews_waiting
+
+        add(
+            "moderate_ratings",
+            "Reported reviews",
+            "Members reported these reviews. Dismiss, hide the comment or remove the rating.",
+            reviews_waiting(),
+            "admin_console:reviews",
+            "status=open",
+        )
     # J6.4. A submitted DZD payout method is operational work, not a Finance
     # metric, so it belongs here as well as on the Finance Overview. Both read
     # `awaiting_review_count`, so the two pages cannot disagree, and the count

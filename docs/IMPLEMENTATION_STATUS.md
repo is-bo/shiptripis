@@ -1,8 +1,27 @@
 # Waçla V1 Implementation Status
 
+## Wassla L13A — Reviews, reports and moderation, backend (2026-11-14)
+
+Status: **in review** (PR into `feature/discovery-professional-delivery`). Backend and console; two
+additive migrations; `main` untouched.
+
+- **Reviews:** wherever a card shows a rating, its reviews can be read: score, tags, comment, month and
+  which side wrote it, never the author. `GET /api/discovery/people/<id>/reviews` (both sides) and
+  `GET /api/discovery/trips/<id>/reviews` (as a traveler; from Find Travelers the app passes its own
+  request, checked by the matching engine, so it works while listings are off).
+- **One rule:** every public average, count and list is computed over `apps.ratings.public.countable`
+  (revealed and not removed), including `trust_signals`, so a removed rating leaves every card.
+- **Reports:** `POST /api/ratings/<id>/reports`, once per person, five reasons and a note; the reporter
+  sees "received" then "reviewed". "My ratings" marks staff decisions and the user's own report.
+- **Staff:** "Reported reviews" queue and review page (`moderate_ratings`, Trust / Verification and
+  Super Admin): dismiss, hide the comment, remove the rating, lift a decision, each with an audited
+  reason; each closes all open reports. Overview item "Reported reviews".
+
+Detail: `docs/PHASE_L13A_REVIEWS.md`.
+
 ## Wassla L12B — Proposal deadline and trip-fit alerts, mobile (2026-11-14)
 
-Status: **in review** (PR into `feature/discovery-professional-delivery`). No backend change; `main` untouched.
+Status: **merged** into `feature/discovery-professional-delivery` (PR #40, `8f81454`). No backend change; `main` untouched.
 
 - Proposal screen, Open offers and a request's proposals show "Answer by" or "Waiting for an answer until",
   and a calm countdown in the last hour. An expired proposal is a designed state: nothing was reserved, and

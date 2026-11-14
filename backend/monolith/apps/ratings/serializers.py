@@ -18,7 +18,8 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
-from .models import Rating
+from .models import Rating, RatingReport
+from .public import report_state
 from .services import is_revealed
 
 
@@ -79,3 +80,50 @@ class RatingSerializer(serializers.ModelSerializer):
 
     def get_is_revealed(self, obj: Rating) -> bool:
         return is_revealed(obj, deal=obj.deal, at=self.context.get("at"))
+
+
+class MyRatingSerializer(RatingSerializer):
+    """A rating the caller received, as "My ratings" lists it (L13A).
+
+    `moderation` is staff's standing decision: `null`, `comment_hidden` (the
+    public no longer reads the comment; the score still counts) or `removed`
+    (not counted anywhere, shown here as "Removed by Wassla, not counted").
+    The rated person keeps reading their own rating as written. `my_report` is
+    their own report on it: `null`, `received` or `reviewed`.
+
+    Reads the `moderation_state` and `my_report_status` annotations
+    `apps.ratings.views.MyRatingsView` puts on the queryset.
+    """
+
+    moderation = serializers.CharField(source="moderation_state", allow_null=True)
+    my_report = serializers.SerializerMethodField()
+
+    class Meta(RatingSerializer.Meta):
+        fields = (*RatingSerializer.Meta.fields, "moderation", "my_report")
+        read_only_fields = fields
+
+    def get_my_report(self, obj: Rating) -> str | None:
+        return report_state(obj.my_report_status)
+
+
+class ReportCreateSerializer(serializers.Serializer):
+    """A member's report on one review (spec 18).
+
+    `journey` and `request` are the Find Travelers context, sent only from a
+    candidate's reviews: with them, a sender may report a traveler's review
+    they reached through their own open request while public listings are off.
+    """
+
+    reason = serializers.ChoiceField(choices=RatingReport.Reason.choices)
+    note = serializers.CharField(
+        required=False, allow_blank=True, max_length=500, trim_whitespace=True
+    )
+    journey = serializers.IntegerField(min_value=1, required=False)
+    request = serializers.IntegerField(min_value=1, required=False)
+
+    def validate(self, attrs):
+        if ("journey" in attrs) != ("request" in attrs):
+            raise serializers.ValidationError(
+                "Send both journey and request, or neither."
+            )
+        return attrs

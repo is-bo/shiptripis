@@ -28,6 +28,12 @@ class ListingQuerySerializer(_PageSerializer):
     departing_after = serializers.DateTimeField(required=False)
 
 
+class ReviewsQuerySerializer(_PageSerializer):
+    """A page of reviews (L13A). `request` is the Find Travelers context."""
+
+    request = serializers.IntegerField(min_value=1, required=False)
+
+
 class MatchesQuerySerializer(serializers.Serializer):
     role = serializers.ChoiceField(choices=ROLE_CHOICES)
 

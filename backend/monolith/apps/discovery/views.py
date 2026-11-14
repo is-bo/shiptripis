@@ -29,6 +29,13 @@ from apps.matching.discovery import phase2_policy
 from apps.matching.find_travelers import TRUST_AS_TRAVELER, trust_signals
 from apps.matching.policy import InvalidPhase2Policy
 from apps.matching.pricing import PricingError
+from apps.ratings.public import (
+    ACCESS_DISABLED,
+    ACCESS_OK,
+    SIDE_TRAVELER,
+    public_reviews,
+    trip_reviews_access,
+)
 
 from . import alerts as alert_service
 from .errors import DiscoveryError
@@ -65,6 +72,7 @@ from .serializers import (
     MatchesQuerySerializer,
     PeopleQuerySerializer,
     ProfileUpdateSerializer,
+    ReviewsQuerySerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -318,6 +326,99 @@ class PersonView(_DiscoveryView):
                 "trips": trips,
                 "requests": requests,
             }
+        )
+
+
+def _reviews_page(subject_id: int, *, side, viewer_id: int, values: dict, at) -> dict:
+    """One page of a person's reviews, with the rating their card shows.
+
+    The summary is `trust_signals` itself, so the number above the list is the
+    number on the card: both are computed over `apps.ratings.public.countable`.
+    """
+
+    trust = trust_signals([subject_id], at=at, side=side)[subject_id]
+    rows, next_offset = public_reviews(
+        subject_id,
+        side=side,
+        viewer_id=viewer_id,
+        at=at,
+        limit=values["limit"],
+        offset=values["offset"],
+    )
+    return {**_page(rows, next_offset), "rating": trust["rating"]}
+
+
+_DISABLED_REVIEWS = {**_DISABLED_PAGE, "rating": None}
+
+
+class PersonReviewsView(_DiscoveryView):
+    """`GET /api/discovery/people/<public id>/reviews`: both sides, like the profile card."""
+
+    def get(self, request: Request, public_id) -> Response:
+        query = ReviewsQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        at = timezone.now()
+        try:
+            policy = marketplace_policy()
+        except _UNAVAILABLE as exc:
+            return _refusal(exc)
+        if not policy.discovery.profiles_enabled:
+            return Response(_DISABLED_REVIEWS)
+        profile = visible_profiles().filter(public_id=public_id).only("user_id").first()
+        if profile is None:
+            return Response(
+                {"code": "profile_not_found", "detail": "This profile is not available."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(
+            _reviews_page(
+                profile.user_id,
+                side=None,
+                viewer_id=request.user.pk,
+                values=query.validated_data,
+                at=at,
+            )
+        )
+
+
+class TripReviewsView(_DiscoveryView):
+    """`GET /api/discovery/trips/<journey id>/reviews[?request=<id>]`.
+
+    The traveler's ratings as a traveler, like the trip card and Find
+    Travelers. Who may read them is `apps.ratings.public.trip_reviews_access`:
+    the listings switch closes only the public path, and a sender coming from
+    Find Travelers names their own open request (settled by the advisor on
+    2026-11-14).
+    """
+
+    def get(self, request: Request, pk: int) -> Response:
+        query = ReviewsQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        values = query.validated_data
+        at = timezone.now()
+        try:
+            policy = marketplace_policy()
+            access, owner_id = trip_reviews_access(
+                viewer_id=request.user.pk,
+                journey_id=pk,
+                request_id=values.get("request"),
+                at=at,
+                listings_enabled=policy.discovery.listings_enabled,
+                sea_legs_enabled=policy.sea_legs_enabled,
+            )
+        except _UNAVAILABLE as exc:
+            return _refusal(exc)
+        if access == ACCESS_DISABLED:
+            return Response(_DISABLED_REVIEWS)
+        if access != ACCESS_OK:
+            return Response(
+                {"code": "trip_not_found", "detail": "This trip is not available."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(
+            _reviews_page(
+                owner_id, side=SIDE_TRAVELER, viewer_id=request.user.pk, values=values, at=at
+            )
         )
 
 
