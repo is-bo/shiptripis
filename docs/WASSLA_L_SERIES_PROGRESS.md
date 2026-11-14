@@ -807,12 +807,59 @@ Screenshots: `/mnt/project-files/l-series-screens/L14/` (console EN, names in th
 
 ### L15. AI helper: keys and read access
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+Detail: `docs/PHASE_L15_ADMIN_HELPER_READ.md` (contract, fields per type, curl, screenshots).
+Screenshots: `/mnt/project-files/l-series-screens/L15/` (console EN and 390 px, keys redacted).
+
+- Contract as built (names that differ from the plan): app `apps.admin_helper` (`0001`), models
+  `AdminHelperKey` (adds `revoked_reason`) and `AdminHelperCall`; `keys.py` (`issue_key`,
+  `resolve_key`, `stop_key`, `stop_all_keys`, `stop_keys_if_switched_off`), `policy.py`, `api.py`
+  (`HelperKeyAuthentication`, `HelperKeyThrottle`, `HelperView`), `resources.py` (`REGISTRY`, 11
+  types), `tasks.py` (38 tasks, `NO_TASK`), `calls.py`, `console.py`. Routes `admin-helper-guide`,
+  `-briefing`, `-queue`, `-record`, `-search`, `-tasks`; console `ai-helper`, `ai-helper-create`,
+  `ai-helper-stop`. Job kind `admin_helper_call_prune` (`finance/0031`). Work list:
+  `apps/admin_panel/worklist.py` (`work_items`, `work_item`, `rows`, `visible`, `sees_providers`);
+  `WorkItem.permission` is a tuple (the console page's gate). Audit actions `ai_helper.key_created`,
+  `ai_helper.key_stopped`, `ai_helper.keys_stopped` (switch off, one row with the count);
+  `admin.two_step_reset` gains `helper_keys_stopped`, and `two_step.reset` returns it.
+- **Staff API open list:** the six helper route names (`HELPER_API_ROUTES` in
+  `apps/admin_panel/staff_api.py`) were added to L14's `OPEN_STAFF_API_ROUTES`, which is now exactly
+  `admin-invitation-accept` plus those six. Nothing else was added (tested in L14's and L15's suites).
+- **For L16:** the review actions target the **Rating id** (`records/review_report/<rating id>`, the
+  same id the console's review page uses). `issue_key` already takes `kind="change"` (`wslw_`,
+  `change_key_minutes`); the card offers only the read key, and the change key button is not stubbed.
+  `HelperView.http_method_names` is GET and HEAD; `guide.actions` is `[]`, `tasks[].action` is `null`
+  and the guide's second rule says the key reads only: L16 makes these depend on the key's kind. New
+  helper routes go into `HELPER_API_ROUTES` and the frozen route inventory of `test_l14_two_step.py`.
+  The policy fields `change_key_minutes` and `prepared_action_valid_hours` and their form fields
+  exist (hint "not offered yet").
+- Switches added and their defaults: none outside the policy; `admin_helper.enabled` is `true`
+  (ships ON).
+- Deviations from the plan (what, why, approved by): the seven judgment calls of the phase doc
+  section 11 were **accepted by the advisor on 2026-11-14** (plan commit `d4c562f`): work item gate =
+  console page gate (Ops now sees the jobs item); switch off stops every key for good, in the
+  activation's transaction, one audit row with the count; a two-step reset (console and server
+  command) stops the admin's keys; the `person` record adds account state, member since (month and
+  year) and activity counts, frozen by a test; count and link only for the four document reviews,
+  email and providers; `review_report` keyed by the Rating id, bare links and search omissions for
+  types the admin may not open. **For Ismail's end review: the severity thresholds** (tickets urgent
+  after 2 h, ID checks and payouts after 24 h, payout methods and payout identity after 48 h, reported
+  reviews after 72 h, email always today, the rest always urgent). Smaller calls (phase doc 8 to 15):
+  digits search a person id first; helper pages gated like Overview; call log without query string;
+  no key hint in the guide; the one-time line only in the POST's own response.
+- Tests (before and after counts): Django 3,046 before, 3,123 after (+77 in
+  `apps/admin_helper/tests/`: privacy walk, authority matrix, keys, API; the full local run passed at
+  3,118 before the second review's fixes added five). Two L14 tests updated for
+  `helper_keys_stopped` and the open list. ruff and `makemigrations --check` clean, `schema.sql`
+  re-exported (the two helper tables and pg_dump's `\restrict` line, nothing else). No Go or mobile
+  change.
+- Second review (plan 1.6) found three races and leaks, all fixed in the PR: DRF's browsable page
+  (it printed the admin's email) is never served and an odd `Accept` keeps the 401; a key created
+  while a two-step reset runs is refused (the reset locks the admin row first, the creation checks
+  its session still exists); a key created while the switch goes off is refused (the creation locks
+  the active settings revision and reads the switch again).
+- Known limits: the throttle counts per clock minute (up to twice the limit across a minute's edge);
+  a call already past the key check finishes after a stop; refused keys leave no call row; `from` and `to` can be `null` when a place has no locality; console
+  English only.
 
 ### L16. AI helper: changes
 

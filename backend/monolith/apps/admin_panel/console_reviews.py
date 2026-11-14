@@ -88,17 +88,6 @@ def _open_reports():
     )
 
 
-def waiting_count() -> int:
-    """Reviews with at least one open report: what staff still have to decide."""
-
-    return (
-        RatingReport.objects.filter(status=RatingReport.Status.OPEN)
-        .values("rating_id")
-        .distinct()
-        .count()
-    )
-
-
 def _queue(request):
     from .console_views import _search
 

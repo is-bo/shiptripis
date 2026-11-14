@@ -8,7 +8,9 @@ audited domain services remain authoritative.
 
 The header is filtered to the signed-in staff member's capabilities:
 
-- **Overview** answers “what needs attention?” with live queue counts.
+- **Overview** answers “what needs attention?” with live queue counts, most
+  urgent first (rules below, under “AI helper (L15)”), and holds the AI helper
+  card.
 - **People** opens one complete profile per user: identity, requests, journeys,
   offers, Deals, payments, payout setup and payouts, disputes, revealed ratings,
   notifications and audit history, each section gated on the capability that
@@ -177,12 +179,14 @@ access or two-step**, write the reason (it goes in the audit log), tick the
 confirmation and choose **Reset two-step**. Their app key and recovery codes
 are deleted and they are signed out everywhere; at their next sign-in they set
 it up again. Nobody can reset their own, and only a Super Admin can reset a
-Super Admin.
+Super Admin. Their AI helper keys stop too (they were created behind the
+second step being reset).
 
 **The last Super Admin.** When no other Super Admin can sign in, the technical
 team resets it on the server:
-`python manage.py reset_admin_two_step <email> --reason "<why>"`. It writes
-the same audit row, marked as done from the server.
+`python manage.py reset_admin_two_step <email> --reason "<why>"`. It does the
+same reset, AI helper keys included, and writes the same audit row, marked as
+done from the server.
 
 ## Finance exports (L14)
 
@@ -208,6 +212,68 @@ nothing is recalculated. People appear by their Wassla id and name only.
 
 Every download writes one audit row (who, kind, money, range and number of
 lines) before the file is sent; the page lists the ten most recent.
+
+## AI helper (L15)
+
+An admin can connect an AI assistant they use (for example Claude Code) to read
+their own work list and records. The assistant acts as that admin, with that
+admin's rights at the moment of each call, and **reads only**: it changes
+nothing, and it never sees documents, contact details, addresses, payout or
+bank details, codes, chat or keys. Document reviews (ID, tickets, payout
+methods, payout identity) reach it as a count and a link to the console.
+
+**Create a key.** On **Overview**, the **AI helper** card, choose **Create read
+key (8 hours)**. If you have not entered a two-step code in the last 10 minutes
+the console asks for one first. The card then shows one line,
+`/wassla <address> <key>`, with a **Copy** button: paste it into your assistant
+as your first message. **It is shown once**; Wassla keeps only a scrambled form
+of it. If you lose it, create a new one. Each admin has one read key at a time:
+creating a new one stops the old one. A key lasts the hours set in Business
+settings at the moment it was created (1 to 8) and is never extended by use.
+
+**Stop a key.** **Stop key** on the card, or on **Overview → AI helper** (the
+page linked from the card as “Keys and recent calls”). That page also lists
+every call your keys made in the last 30 days: the time, the key's last four
+characters, the address asked for and the result. What was searched for is
+not kept. A Super Admin also sees every other admin's live keys there (never a
+key itself, only its last four characters) and can stop one with a reason,
+which goes to the audit log.
+
+**What stops every key at once.** Switching the helper off in **Settings → AI
+helper** stops every live key for good, with one audit row giving the number of
+keys stopped; switching it back on does not bring them back. A two-step reset
+stops that admin's keys. A key also stops working at once, without being
+stopped, when its admin is banned, deactivated or loses staff access, and it
+answers only what their current role opens.
+
+**Settings → AI helper** (`manage_settings`): on or off, read key hours (1 to
+8), change key minutes (5 to 60) and prepared change validity (1 to 72 hours),
+which L16 uses, and calls per key per minute (10 to 300; over it the assistant
+is told to wait a minute). Saved as one audited settings revision with a reason.
+
+**How the Overview orders work.** Raised items are shown most urgent first,
+then by the longest wait. The urgency is a fixed rule per item, the same in the
+console and for the assistant; it is never a guess:
+
+| Item | Urgency |
+| --- | --- |
+| Open disputes | Always urgent (money is frozen and two people are waiting) |
+| Problems to look at | Always urgent (a parcel may be moving now) |
+| Payments needing finance review | Always urgent (money taken that no order absorbed) |
+| Refunds requiring operator action | Always urgent (a person is owed money) |
+| Background jobs needing attention | Always urgent (promised work stopped for good) |
+| Provider configuration warnings | Always urgent (payments or email may fail for everyone) |
+| Tickets to review | Today; urgent once the oldest waited over 2 hours (trips are mostly the same day) |
+| ID checks to review | Today; urgent once the oldest waited over 24 hours |
+| Payouts requiring action | Today; urgent once the oldest waited over 24 hours |
+| Payout methods awaiting approval | Today; urgent once the oldest waited over 48 hours |
+| Payout identity checks assigned to you | Today; urgent once the oldest waited over 48 hours |
+| Reported reviews | Today; urgent once the oldest waited over 72 hours |
+| Failed transactional email | Today |
+
+An item with nothing waiting is not raised. Each item shows only to an admin
+who can open the page it links to. These thresholds are a judgment call kept
+for the owner's end review.
 
 ## Approving a Traveler's DZD payout method
 

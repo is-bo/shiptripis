@@ -1394,6 +1394,8 @@ class ScheduledJob(models.Model):
         # --- L12A proposal deadlines ---
         OFFER_RESPONSE_REMINDER = "offer_response_reminder", "Offer response reminder"
         OFFER_EXPIRY = "offer_expiry", "Offer expiry"
+        # --- L15 AI helper ---
+        ADMIN_HELPER_CALL_PRUNE = "admin_helper_call_prune", "AI helper call log pruning"
 
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"

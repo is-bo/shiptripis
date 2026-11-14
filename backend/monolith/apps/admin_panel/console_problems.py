@@ -56,12 +56,10 @@ _URGENCY = Case(
 )
 
 
-def waiting_count() -> int:
-    """Reports in front of staff that nobody has picked up yet."""
+def waiting():
+    """Reports in front of staff that nobody has picked up yet (the work list)."""
 
-    return ShipmentProblem.objects.filter(
-        status=ShipmentProblem.Status.ESCALATED
-    ).count()
+    return ShipmentProblem.objects.filter(status=ShipmentProblem.Status.ESCALATED)
 
 
 class ProblemReasonForm(ConsoleForm):

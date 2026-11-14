@@ -7,7 +7,7 @@ on every write, and never by a bearer token: a token from the mobile sign-in
 proves a password, not the second step. The second-step gate itself is in
 `HasAdminPermission`, which every staff view uses.
 
-The only staff API route that answers without the second step is listed in
+The staff API routes that answer without the second step are listed in
 `OPEN_STAFF_API_ROUTES`; the route inventory test holds the API to that list.
 """
 
@@ -22,8 +22,19 @@ STAFF_API_AUTHENTICATION = (SessionAuthentication,)
 #: Staff API routes, by URL name, that answer without a verified session.
 #: ``admin-invitation-accept`` creates the account an invitation names, before
 #: anything can be enrolled, and returns nothing that opens another route.
-#: L15 adds the AI helper's routes, which take a helper key and no session.
-OPEN_STAFF_API_ROUTES = frozenset({"admin-invitation-accept"})
+#: The AI helper's routes (L15) take a helper key and refuse every session
+#: and member token; a key is created behind a fresh second step instead.
+HELPER_API_ROUTES = frozenset(
+    {
+        "admin-helper-guide",
+        "admin-helper-briefing",
+        "admin-helper-queue",
+        "admin-helper-record",
+        "admin-helper-search",
+        "admin-helper-tasks",
+    }
+)
+OPEN_STAFF_API_ROUTES = frozenset({"admin-invitation-accept", *HELPER_API_ROUTES})
 
 
 class StaffSessionMixin:

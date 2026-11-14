@@ -3,8 +3,8 @@
 For the last Super Admin, who has nobody to reset it for them from the staff
 page. The account enrols again at its next sign-in. The reset is the same as
 the console's (`apps.admin_panel.two_step.reset`): the two-step rows are
-deleted, every session of the account is ended and one audit row is written,
-with no actor and ``via: manage.py``.
+deleted, every session and AI helper key of the account is ended and one
+audit row is written, with no actor and ``via: manage.py``.
 
     python manage.py reset_admin_two_step owner@example.com --reason "lost phone"
 """
@@ -43,7 +43,8 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.SUCCESS(
                 f"Two-step sign-in reset for {user.email}; "
-                f"{result['sessions_ended']} session(s) ended. "
+                f"{result['sessions_ended']} session(s) and "
+                f"{result['helper_keys_stopped']} AI helper key(s) ended. "
                 "They set it up again at their next sign-in."
             )
         )

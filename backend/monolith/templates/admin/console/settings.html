@@ -112,6 +112,17 @@
     </form>
   </section>
 
+  <section class="st-card" id="st-settings-helper">
+    <p class="st-eyebrow">AI helper</p>
+    <h2>Admins' own AI assistants</h2>
+    <p>Each admin can connect an AI assistant of their own with a key from the AI helper card on the Overview. It reads that admin's work with their rights at the moment of each call, and never sees documents, contact details or payout details. Turning it off stops every key at once.</p>
+    <form method="post" action="#st-settings-helper" class="st-form">{% csrf_token %}
+      <input type="hidden" name="action" value="admin_helper">
+      {{ helper_form.as_p }}
+      {% if may_manage %}<div class="st-split-actions"><button type="submit">Save AI helper settings</button></div>{% endif %}
+    </form>
+  </section>
+
   <div class="st-grid st-grid-2">
     <section class="st-card" id="st-settings-boost">
       <p class="st-eyebrow">Protection &amp; handover</p>

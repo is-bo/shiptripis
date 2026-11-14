@@ -513,7 +513,8 @@ def reset(*, actor, target, reason: str, via: str = "console") -> dict:
 
     ``actor`` is the Super Admin doing it from the staff page, or ``None`` for
     `manage.py reset_admin_two_step` (the last Super Admin's way back in). The
-    target's rows are deleted, their sessions ended and one audit row written.
+    target's rows are deleted, their sessions and AI helper keys ended, and one
+    audit row written.
     """
 
     from .services import record_admin_action
@@ -533,12 +534,21 @@ def reset(*, actor, target, reason: str, via: str = "console") -> dict:
                 "You cannot reset your own second step.", code="own_account"
             )
     with transaction.atomic():
+        # The lock `issue_key` takes too, so no helper key is created while
+        # this reset runs (L15).
+        type(target).objects.select_for_update().only("pk").get(pk=target.pk)
         was_enrolled = AdminTwoStep.objects.filter(
             user_id=target.pk, confirmed_at__isnull=False
         ).exists()
         AdminTwoStep.objects.filter(user_id=target.pk).delete()
         AdminRecoveryCode.objects.filter(user_id=target.pk).delete()
         ended = end_sessions(target.pk)
+        # A helper key was created behind the second step being reset, so it
+        # stops with it (L15).
+        from apps.admin_helper.keys import stop_all_keys
+        from apps.admin_helper.models import AdminHelperKey
+
+        keys_stopped = stop_all_keys(target, reason=AdminHelperKey.StopReason.TWO_STEP_RESET)
         record_admin_action(
             actor=actor,
             action="admin.two_step_reset",
@@ -546,6 +556,6 @@ def reset(*, actor, target, reason: str, via: str = "console") -> dict:
             before={"enrolled": was_enrolled},
             after={"enrolled": False},
             reason=reason,
-            metadata={"via": via, "sessions_ended": ended},
+            metadata={"via": via, "sessions_ended": ended, "helper_keys_stopped": keys_stopped},
         )
-    return {"was_enrolled": was_enrolled, "sessions_ended": ended}
+    return {"was_enrolled": was_enrolled, "sessions_ended": ended, "helper_keys_stopped": keys_stopped}

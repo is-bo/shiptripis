@@ -71,6 +71,9 @@ urlpatterns = [
     # The Phase 6A least-privilege operations surface owns every /api/admin/*
     # route. Mount it before historical domain compatibility routes so a
     # duplicate legacy path can never shadow granular permissions/auditing.
+    # L15. The AI helper's read API: a helper key in the Authorization header
+    # and nothing else (no session, no member token), on these routes only.
+    path("api/admin/helper/v1/", include("apps.admin_helper.urls")),
     path("api/", include("apps.admin_panel.urls")),
     path("api/", include("apps.trips.urls")),
     path("api/", include("apps.locations.urls")),
