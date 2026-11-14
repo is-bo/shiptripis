@@ -36,7 +36,7 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L12A | Proposal deadline and trip-fit alerts, backend | Opus | high | merged | `claude/project-thread-ef7f2z` | #39 | `05ab258` | `docs/PHASE_L12A_PROPOSAL_DEADLINE_TRIP_FIT.md` |
 | L12B | Proposal deadline and trip-fit alerts, mobile | Sonnet | medium | merged | `claude/project-thread-y6l5b8` | #40 | `8f81454` | `docs/PHASE_L12B_PROPOSAL_DEADLINE_MOBILE.md` |
 | L13A | Reviews, reports and moderation, backend | Opus | high | merged | `claude/project-thread-aa9nb5` | #41 | `2624cdf` | `docs/PHASE_L13A_REVIEWS.md` |
-| L13B | Reviews, mobile | Sonnet | medium | not_started | | | | |
+| L13B | Reviews, mobile | Sonnet | medium | merged | `claude/project-thread-j3f6qz` | #42 | `c5ec718` | `docs/PHASE_L13B_REVIEWS_MOBILE.md` |
 | L14 | Staff two-step sign-in and finance exports | Opus | high | not_started | | | | |
 | L15 | AI helper: keys and read access | Opus | xhigh | not_started | | | | |
 | L16 | AI helper: changes | Opus | xhigh | not_started | | | | |
@@ -64,7 +64,7 @@ L16, L17, and L10 last. These rows were changed by the plan thread on Ismail's i
 L9B (spec 12, 16 to 20; plan 5.1b), then L4C and the new order (plan 5.1d). **The order of the
 board table is the order of work, as in plan section 3.**
 
-**Next package:** L13B (Sonnet, medium effort; reviews, mobile). Section 3 order.
+**Next package:** L14 (Opus, high effort; staff two-step sign-in and finance exports). Section 3 order.
 
 **L12B judgment calls (accepted at the gate, for Ismail's end review):** (1) no endpoint returns one request card, so Browse reads the public list on (up to 8 pages) to find the parcel a trip-fit alert names; `GET /api/discovery/requests/<id>` would be exact and is a backend change left to Codex if wanted; (2) the "no longer listed" notice also covers a trip named by a route alert, which used to miss silently; (3) the expired proposal screen hides the deadline line, because its notice says it. The gate's first CI run failed every job in about a second with no logs (a runner or account fault, not the code); after re-runs on 2026-11-14 all ten checks passed.
 
@@ -826,3 +826,4 @@ Detail: `docs/PHASE_L13A_REVIEWS.md`. Screenshots: `/mnt/project-files/l-series-
 | 2026-11-14 | L12B merged (PR #40, `8f81454`): proposal deadline line and last-hour countdown, expired state with next step, reminder and trip-fit alert in the bell, push and live updates, parcel preview for the named trip. Next: L13A. |
 | 2026-11-14 | Advisor answer for L13A, written into plan L13A and L13B: on the trip reviews endpoint the listings switch closes only the public path; the owner, a viewer with a shared match, and a Find Travelers viewer (who passes `?request=<id>`, checked with `explain_candidate`) still read the reviews, so no rating becomes a dead tap. |
 | 2026-11-14 | L13A merged (PR #41, `2624cdf`): public reviews on person and trip, one `countable` rule for every average and count (incl. `trust_signals`), reports once per person, staff dismiss/hide/remove/lift with audited reasons, console "Reported reviews". Next: L13B. |
+| 2026-11-14 | L13B merged (PR #42, `c5ec718`): Reviews screen from the rating on a person, a trip preview and a Find Travelers trip, report sheet, reported state, My ratings with removed and hidden marks. Also fixed person cards reading `rating` as a number (every card showed "New"). All ten checks green. Next: L14. |
