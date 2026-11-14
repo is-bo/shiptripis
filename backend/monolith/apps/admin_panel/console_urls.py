@@ -4,8 +4,10 @@ from apps.locations.sea_crossings import MANAGE_CROSSINGS_PERMISSION
 from apps.problems.services import VIEW_PROBLEMS_PERMISSION
 from apps.ratings.moderation import MODERATE_PERMISSION
 
+from . import console_two_step as two_step
 from . import console_views as views
 from .console_discovery import profile_visibility
+from .console_exports import finance_exports
 from .console_identity_checks import identity_check_detail, identity_checks
 from .console_journey_pause import journey_pause_action
 from .console_people import person_profile
@@ -31,6 +33,17 @@ from .finance_operations import (
 app_name = "admin_console"
 
 urlpatterns = [
+    # L14, spec 19.1. The second step after the password. The middleware keeps
+    # this prefix open, and only this prefix, so the pages can be reached.
+    path("two-step/", two_step.start, name="two-step"),
+    path("two-step/enrol/", two_step.enrol, name="two-step-enrol"),
+    path(
+        "two-step/recovery-codes/",
+        two_step.recovery_codes,
+        name="two-step-recovery-codes",
+    ),
+    path("two-step/verify/", two_step.verify, name="two-step-verify"),
+    path("two-step/recovery/", two_step.recovery, name="two-step-recovery"),
     path("finance/control-plane/", finance_control_plane, name="finance-control-plane"),
     # `finance-dashboard` stays the name of the Finance landing page through the
     # H5.2 redesign. The route is what the feature flag, the navigation and
@@ -45,6 +58,8 @@ urlpatterns = [
         name="finance-reconciliation",
     ),
     path("finance/dashboard/rows/", finance_rows, name="finance-rows"),
+    # L14, spec 19.2. Streamed CSV downloads, `export_finance` only.
+    path("finance/exports/", finance_exports, name="finance-exports"),
     path("", views.overview, name="overview"),
     path("users/", views.users, name="users"),
     # J6.4. The Person profile replaces the old four-count user page at the same
@@ -188,6 +203,11 @@ urlpatterns = [
     path("staff/", views.staff, name="staff"),
     path("staff/<int:pk>/role/", views.staff_role, name="staff-role"),
     path("staff/<int:pk>/access/", views.staff_access, name="staff-access"),
+    path(
+        "staff/<int:pk>/two-step-reset/",
+        views.staff_two_step_reset,
+        name="staff-two-step-reset",
+    ),
     path(
         "staff/invitations/<uuid:pk>/<slug:action>/",
         views.staff_invitation_action,

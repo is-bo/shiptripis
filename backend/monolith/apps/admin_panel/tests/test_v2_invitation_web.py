@@ -11,6 +11,7 @@ from apps.admin_panel.models import AdminInvitation
 from apps.admin_panel.services import create_admin_invitation
 from apps.notifications.models import OutboundMessage
 from apps.notifications.outbox import render_parts
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 URL = "/admin/invitations/accept?language=fr"
 
@@ -113,7 +114,7 @@ def test_authenticated_other_account_cannot_accept_for_someone_else(client):
     other = User.objects.create_user(
         username="other", email="other@example.invalid", password=None
     )
-    client.force_login(other)
+    staff_login(client, other)
     assert (
         client.post(
             URL, {"token": token, "password": "Existing-secure-482!"}

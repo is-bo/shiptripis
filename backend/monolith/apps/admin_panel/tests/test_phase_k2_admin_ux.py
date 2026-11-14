@@ -20,6 +20,7 @@ from apps.disputes.models import Dispute
 from apps.disputes.services import open_dispute
 from apps.kyc.models import KycSubmission
 from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 User = get_user_model()
 
@@ -145,7 +146,7 @@ def test_kyc_decision_preserves_valid_queue_context(decision):
         status=KycSubmission.Status.PENDING,
     )
     client = Client()
-    client.force_login(trust)
+    staff_login(client, trust)
     response = client.post(
         f"{reverse('admin_console:kyc-detail', args=(submission.pk,))}"
         "?status=pending&page=2&q=Amina&next=https://evil.test",
@@ -189,7 +190,7 @@ def test_flight_proof_decision_preserves_valid_queue_context(decision):
         object_key="journeys/k2/proof.jpg",
     )
     client = Client()
-    client.force_login(trust)
+    staff_login(client, trust)
     response = client.post(
         f"{reverse('admin_console:proof-detail', args=(proof.pk,))}"
         "?status=pending&page=3&q=AH1006&unsafe=drop-me",
@@ -225,7 +226,7 @@ def test_dispute_preview_stays_at_resolution_and_execute_redirects_there():
         category=Dispute.Category.DAMAGED,
         reason_text="Synthetic damaged parcel evidence.",
     )
-    client.force_login(owner)
+    staff_login(client, owner)
     url = (
         reverse("admin_console:dispute-detail", args=(dispute.pk,))
         + "?status=open&page=2&q=synthetic"
@@ -266,7 +267,7 @@ def test_dispute_preview_stays_at_resolution_and_execute_redirects_there():
 def test_console_permission_denied_is_friendly_and_remains_403():
     support = _staff(AdminRole.SUPPORT, "friendly-403")
     client = Client(raise_request_exception=False)
-    client.force_login(support)
+    staff_login(client, support)
     response = client.get(reverse("admin_console:settings"))
     assert response.status_code == 403
     body = response.content.decode()
@@ -284,7 +285,7 @@ def test_staff_role_return_keeps_the_edited_row_open():
     )
     member = _staff(AdminRole.SUPPORT, "staff-member")
     client = Client()
-    client.force_login(owner)
+    staff_login(client, owner)
     response = client.post(
         reverse("admin_console:staff-role", args=(member.pk,))
         + f"?edit={member.pk}&next=https://evil.test",

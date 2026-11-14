@@ -19,6 +19,7 @@ from apps.locations.models import SeaCrossing
 from apps.locations.sea_crossings import great_circle_meters
 from apps.trips.models import Journey, JourneyLegProof
 from apps.trips.tests.sea_world import DRIVE, FLIGHT, SEA, SeaWorld
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 
 class ConsoleWorld(SeaWorld):
@@ -38,11 +39,11 @@ class ConsoleWorld(SeaWorld):
         return user
 
     def get(self, user, url, **query):
-        self.client.force_login(user)
+        staff_login(self.client, user)
         return self.client.get(url, query)
 
     def post(self, user, url, data):
-        self.client.force_login(user)
+        staff_login(self.client, user)
         return self.client.post(url, data)
 
     def body(self, response) -> str:

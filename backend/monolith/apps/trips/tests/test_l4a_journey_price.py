@@ -25,6 +25,7 @@ from apps.trips.services import cancel_journey
 
 from .sea_world import DRIVE, SeaWorld
 from .test_l3a_routes import RouteApiMixin, client_for
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 
 def first(value):
@@ -373,7 +374,7 @@ class ConsolePriceTests(PricedRouteMixin, TestCase):
         )
         assign_admin_roles(self.admin, ["super_admin"])
         self.console = Client()
-        self.console.force_login(self.admin)
+        staff_login(self.console, self.admin)
 
     def test_staff_switch_pricing_off_and_set_the_bounds(self):
         response = self.console.post(

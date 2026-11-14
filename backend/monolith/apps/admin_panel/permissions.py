@@ -14,6 +14,7 @@ from collections.abc import Iterable
 from django.contrib.auth.decorators import user_passes_test
 from django.contrib.auth.models import Group
 from django.db.models import Q
+from rest_framework.exceptions import PermissionDenied as APIPermissionDenied
 from rest_framework.permissions import BasePermission
 
 
@@ -106,6 +107,9 @@ ADMIN_PERMISSION_CODES: tuple[str, ...] = (
     # L13A, spec 18: decide reported reviews (dismiss, hide the comment,
     # remove the rating, lift a decision).
     "moderate_ratings",
+    # L14, spec 19.2: download the finance exports (transactions,
+    # commissions, payouts).
+    "export_finance",
 )
 
 # Explicit least-privilege matrix.  ``super_admin`` receives every code in the
@@ -151,6 +155,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     ),
     AdminRole.FINANCE: frozenset(
         {
+            "export_finance",
             "view_finance_summary",
             "view_payout_sensitive",
             "view_payout_evidence",
@@ -366,18 +371,44 @@ class HasAdminPermission(BasePermission):
     OR gate).  ``is_superuser`` remains the explicit blanket override; all
     other users must be staff and hold the named permission through a seeded
     role group.
+
+    L14, plan 2.12: this is also the staff API's second-step gate. Nothing is
+    answered, not even a refusal about the capability, until the request comes
+    from a console session that passed the second step; a bearer token alone
+    never does (the staff views authenticate by session only, `staff_api`).
     """
 
     required_admin_permission: str | tuple[str, ...] = ""
     message = "You do not have permission to perform this administrative operation."
 
     def has_permission(self, request, view) -> bool:
+        from .two_step import TWO_STEP_REQUIRED_CODE, two_step_satisfied
+
+        if not two_step_satisfied(request):
+            raise APIPermissionDenied(
+                {
+                    "code": TWO_STEP_REQUIRED_CODE,
+                    "detail": "Sign in to the Wassla console and pass the second "
+                    "step; the staff API answers only inside that session.",
+                }
+            )
+        return self.capability_held(request, view)
+
+    def capability_held(self, request, view) -> bool:
         required = getattr(
             view, "required_admin_permission", self.required_admin_permission
         )
         if isinstance(required, str):
             required = (required,)
         return any(has_admin_permission(request.user, code) for code in required)
+
+
+class IsVerifiedStaff(HasAdminPermission):
+    """Any staff member past the second step, for a staff route whose domain
+    service checks the precise capability itself (the H4 payout commands)."""
+
+    def capability_held(self, request, view) -> bool:
+        return has_admin_access(request.user)
 
 
 def _permission_class(name: str, *codes: str):

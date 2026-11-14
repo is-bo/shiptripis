@@ -1,0 +1,36 @@
+{% extends "admin/base_site.html" %}
+{% comment %}
+L14, spec 19.1. The two-step pages sit between the password and the console,
+so they wear the sign-in card rather than the console shell: no navigation,
+nothing to open until the second step is passed.
+{% endcomment %}
+
+{% block bodyclass %}{{ block.super }} login st-two-step{% endblock %}
+{% block usertools %}{% endblock %}
+{% block nav-global %}{% endblock %}
+{% block nav-sidebar %}{% endblock %}
+{% block content_title %}{% endblock %}
+{% block nav-breadcrumbs %}{% endblock %}
+{% block messages %}{% endblock %}
+
+{% block content %}
+<div id="content-main" class="st-two-step-card">
+  <p class="st-eyebrow">{% block eyebrow %}Two-step sign-in{% endblock %}</p>
+  <h1>{{ title }}</h1>
+  {% if messages %}
+  <ul class="st-two-step-messages">{% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% if locked_until %}
+  <p class="errornote" role="alert">Too many wrong codes. Two-step sign-in is locked until {{ locked_until|date:"H:i" }} ({{ locked_until|date:"e" }}). Wait, then try again, or ask a Super Admin for help.</p>
+  {% elif error %}
+  <p class="errornote" role="alert">{{ error }}</p>
+  {% endif %}
+  {% block card %}{% endblock %}
+  <div class="st-two-step-foot">
+    {% block foot_links %}{% endblock %}
+    <form method="post" action="{% url 'admin:logout' %}">{% csrf_token %}
+      <button type="submit" class="st-link-button">Sign out</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

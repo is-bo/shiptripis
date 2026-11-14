@@ -50,6 +50,7 @@ from apps.finance.payout_profiles import set_preference
 from apps.finance.providers.base import ProviderCheckoutRejected, ProviderError, ProviderUnavailable
 from apps.finance.providers.stripe_connect import ConnectedAccountSnapshot
 from .factories import make_user
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 PLATFORM = "acct_1TESTplatform"
 
@@ -991,7 +992,7 @@ class TestAdminVisibility:
             is_staff=True,
         )
         assign_admin_roles(staff, [role])
-        django_client.force_login(staff)
+        staff_login(django_client, staff)
         with self.STATIC:
             return django_client.get("/admin/finance/payout-accounts/")
 

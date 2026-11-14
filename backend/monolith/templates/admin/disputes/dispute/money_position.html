@@ -37,8 +37,8 @@
 
 <p class="st-keyvalues-note">
   Every value is read from the stored row as it stands. Nothing is summed or
-  netted here. A dispute is resolved through
-  <code>POST /api/admin/disputes/&lt;id&gt;/resolve</code>, which writes the three
-  amounts under the deal lock and has to reconcile with what was collected;
-  this page cannot resolve anything.
+  netted here. A dispute is resolved from its page in the console
+  (<a href="{% url 'admin_console:disputes' %}">Disputes</a>, then the dispute),
+  which writes the three amounts under the deal lock and has to reconcile with
+  what was collected; this page cannot resolve anything.
 </p>

@@ -35,6 +35,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
+from apps.admin_panel.staff_api import StaffAPIView
 
 from apps.core.business_settings import NoActiveBusinessSettings
 from apps.core.permissions import (
@@ -303,7 +304,7 @@ class DisputeEvidenceUrlView(APIView):
 # --- operations surface ------------------------------------------------------
 
 
-class AdminDisputeListView(APIView):
+class AdminDisputeListView(StaffAPIView):
     """The review queue, newest first, optionally narrowed to one status."""
 
     permission_classes = (CanViewDisputes,)
@@ -323,7 +324,7 @@ class AdminDisputeListView(APIView):
         )
 
 
-class AdminDisputeStatusView(APIView):
+class AdminDisputeStatusView(StaffAPIView):
     """Move a live dispute between open, awaiting evidence and under review."""
 
     permission_classes = (CanManageDisputes,)
@@ -362,7 +363,7 @@ class AdminDisputeStatusView(APIView):
         )
 
 
-class AdminDisputeResolveView(APIView):
+class AdminDisputeResolveView(StaffAPIView):
     """Decide a dispute and settle its money.
 
     A separate permission from viewing the queue: reading a dispute and moving
@@ -398,7 +399,7 @@ class AdminDisputeResolveView(APIView):
         )
 
 
-class AdminDealNoShowView(APIView):
+class AdminDealNoShowView(StaffAPIView):
     """Record an admin-reviewed no-show, and settle it when it is the traveler's.
 
     Manual on purpose at launch: no heuristic decides who failed to appear. What

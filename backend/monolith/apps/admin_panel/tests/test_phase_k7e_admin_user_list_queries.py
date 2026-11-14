@@ -14,6 +14,7 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APITestCase
 
+from apps.admin_panel.tests.two_step_helpers import staff_login
 from apps.accounts.models import User
 
 from ..permissions import AdminRole, assign_admin_roles, user_admin_roles
@@ -35,7 +36,7 @@ class AdminUserListQueryCountTests(APITestCase):
         )
         # A group that is not a Phase 6A role must never surface as one.
         self.unrelated_group = Group.objects.create(name="K7-E newsletter")
-        self.client.force_authenticate(self.actor)
+        staff_login(self.client, self.actor)
         self.created = 0
 
     def grow_to(self, total: int) -> None:

@@ -13,6 +13,9 @@ from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
+from apps.admin_panel.permissions import IsVerifiedStaff
+from apps.admin_panel.staff_api import StaffSessionMixin
+
 from .models import TravelerPayoutMethod, PayoutIdentityReviewAssignment
 from .payout_accounts import (
     CountryUnsupported,
@@ -256,7 +259,9 @@ class DzdProfileView(ProfileView):
         )
 
 
-class PayoutIdentityReviewView(ProfileView):
+class PayoutIdentityReviewView(StaffSessionMixin, ProfileView):
+    permission_classes = [IsVerifiedStaff]
+
     def _assignment(self, request, reference):
         require_capabilities(request.user, "attest_payout_identity")
         assignment = PayoutIdentityReviewAssignment.objects.filter(

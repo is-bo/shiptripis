@@ -28,6 +28,7 @@ from apps.finance.payout_domain import open_hold
 from apps.finance.services import reconcile_attempt
 from .factories import build_scenario
 from .test_phase8fh1_foundations import KEYS
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 
 def image_upload():
@@ -325,7 +326,7 @@ def test_console_and_profile_replacement(configured_h4):
 
     s, payout, profile = build_manual()
     client = Client()
-    client.force_login(s.admin)
+    staff_login(client, s.admin)
     url = reverse("admin_console:payout-detail", args=[payout.pk])
     response = client.get(url)
     assert response.status_code == 200
@@ -375,7 +376,7 @@ def test_console_and_profile_replacement(configured_h4):
     )
     for role in ("support", "ops", "trust_verification"):
         assign_admin_roles(s.outsider, [role])
-        client.force_login(s.outsider)
+        staff_login(client, s.outsider)
         assert client.get(url).status_code == 403
 
 
@@ -393,14 +394,14 @@ def test_api_upload_and_object_isolation(configured_h4):
     assert set(response.data) == {"reference", "labels"}
     for role in ("support", "ops", "trust_verification"):
         assign_admin_roles(s.outsider, [role])
-        client.force_authenticate(s.outsider)
+        staff_login(client, s.outsider)
         assert (
             client.get(
                 f"/api/admin/payouts/evidence/{profile.evidence.public_reference}"
             ).status_code
             == 403
         )
-    client.force_authenticate(s.admin)
+    staff_login(client, s.admin)
     evidence = client.get(
         f"/api/admin/payouts/evidence/{profile.evidence.public_reference}"
     )

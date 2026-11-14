@@ -1,0 +1,6 @@
+{% extends "admin/two_step/base.html" %}
+
+{% block card %}
+<p class="errornote" role="alert">This server cannot set up two-step sign-in yet: the encryption keys that protect each person's authenticator key are not configured.</p>
+<p>Ask the technical team to add the payout encryption keyring to this server's settings, then sign in again. On a development machine, see the local setup notes in the admin operations guide.</p>
+{% endblock %}

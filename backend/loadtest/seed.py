@@ -211,10 +211,18 @@ def _request(sender, *, pickup, delivery, depart, title):
 
 
 def _admin_session(user: User) -> str:
+    # L14: the console and the staff API answer only after the second step. The
+    # seed runs in-process with database access, so it marks the session
+    # verified with the same helper the tests use; nothing outside the process
+    # can (no setting, header, parameter or route does it).
+    from apps.admin_panel.tests.two_step_helpers import verified_session_value
+    from apps.admin_panel.two_step import SESSION_KEY as TWO_STEP_SESSION_KEY
+
     session = SessionStore()
     session[SESSION_KEY] = str(user.pk)
     session[BACKEND_SESSION_KEY] = "django.contrib.auth.backends.ModelBackend"
     session[HASH_SESSION_KEY] = user.get_session_auth_hash()
+    session[TWO_STEP_SESSION_KEY] = verified_session_value(user)
     session.set_expiry(86_400)
     session.create()
     return session.session_key
@@ -475,7 +483,7 @@ def seed_world(args: argparse.Namespace) -> int:
             for traveler in travelers
         ],
         "admins": [
-            {"id": admin.pk, "token": token(admin), "sessionid": _admin_session(admin)}
+            {"id": admin.pk, "sessionid": _admin_session(admin)}
             for admin in admins
         ],
         "sample_deal_ids": [deal.pk for deal in deals[:200]],

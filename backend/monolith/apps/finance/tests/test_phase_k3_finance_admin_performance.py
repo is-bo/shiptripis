@@ -38,6 +38,7 @@ from .test_phase_j12_finance_route_performance import (
     console_staticfiles,  # noqa: F401
     detail_url,
 )
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 pytestmark = [
     pytest.mark.django_db(transaction=True),
@@ -105,7 +106,7 @@ def test_finance_and_admin_routes_have_explicit_query_ceilings(configured_h4):  
     )
     assign_admin_roles(scenario.admin, ["super_admin"], elevate_super_admin=True)
     client = Client()
-    client.force_login(scenario.admin)
+    staff_login(client, scenario.admin)
 
     surfaces = {
         "Finance Overview": (
@@ -171,7 +172,7 @@ def test_payout_review_detail_cost_does_not_grow_with_reviewer_population(
 ):
     scenario, profile = build_profile("k3-reviewers", attested=False)
     client = Client()
-    client.force_login(scenario.admin)
+    staff_login(client, scenario.admin)
 
     _response, small, _queries = measured_get(client, detail_url(profile))
     for index in range(24):
@@ -278,7 +279,7 @@ def test_people_counts_do_not_form_a_cartesian_join(configured_h4):  # noqa: F81
     scenario, _payout, _profile = build_manual(prefix="k3-people")
     assign_admin_roles(scenario.admin, ["super_admin"], elevate_super_admin=True)
     client = Client()
-    client.force_login(scenario.admin)
+    staff_login(client, scenario.admin)
     url = reverse("admin_console:users")
 
     _response, small, _queries = measured_get(client, url)

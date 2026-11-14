@@ -16,6 +16,7 @@ from django.forms.models import model_to_dict
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from rest_framework.test import APIClient
 
 from apps.admin_panel.models import AdminAuditLog
 from apps.admin_panel.permissions import assign_admin_roles
@@ -32,6 +33,7 @@ from apps.problems.services import (
     close_problem,
 )
 from apps.trips.tests.test_l5a_progress import ProgressWorld, client_for
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 Kind = ShipmentProblem.Kind
 Status = ShipmentProblem.Status
@@ -361,7 +363,7 @@ class StaffTests(ProblemWorld, TestCase):
 
     def test_the_queue_lists_escalated_reports_first(self):
         self.report(self.traveler_client, Kind.CUSTOMS_DELAY)
-        self.client.force_login(self.support)
+        staff_login(self.client, self.support)
         response = self.client.get(reverse("admin_console:problems"))
         html = response.content.decode()
 
@@ -376,7 +378,7 @@ class StaffTests(ProblemWorld, TestCase):
         assert "Problems to look at" in overview
 
     def test_the_queue_finds_a_report_by_tracking_number(self):
-        self.client.force_login(self.support)
+        staff_login(self.client, self.support)
         number = tracking.for_deal(self.deal)
         found = self.client.get(
             reverse("admin_console:problems"), {"q": number.lower()}
@@ -384,14 +386,14 @@ class StaffTests(ProblemWorld, TestCase):
         assert "The traveler did not come" in found.content.decode()
 
     def test_the_no_show_link_carries_the_deal_and_the_party_and_nothing_else(self):
-        self.client.force_login(self.ops)
+        staff_login(self.client, self.ops)
         html = self.client.get(
             reverse("admin_console:problem-detail", args=(self.problem.pk,))
         ).content.decode()
         expected = f"{reverse('admin_console:deal-no-show', args=(self.deal.pk,))}?party=traveler"
         assert f'href="{expected}"' in html
         # Support cannot record a no-show, so it is not offered a link.
-        self.client.force_login(self.support)
+        staff_login(self.client, self.support)
         html = self.client.get(
             reverse("admin_console:problem-detail", args=(self.problem.pk,))
         ).content.decode()
@@ -399,7 +401,7 @@ class StaffTests(ProblemWorld, TestCase):
         assert 'value="acknowledge"' not in html
 
     def test_the_console_acknowledges_with_a_reason(self):
-        self.client.force_login(self.ops)
+        staff_login(self.client, self.ops)
         url = reverse("admin_console:problem-detail", args=(self.problem.pk,))
         missing = self.client.post(
             url, {"action": "acknowledge", "acknowledge-reason": ""}
@@ -415,13 +417,13 @@ class StaffTests(ProblemWorld, TestCase):
         self.problem.refresh_from_db()
         assert self.problem.status == Status.ACKNOWLEDGED
         # Support may read the report but not change it.
-        self.client.force_login(self.support)
+        staff_login(self.client, self.support)
         refused = self.client.post(url, {"action": "close", "close-reason": "No"})
         assert refused.status_code == 403
 
     def test_recording_the_no_show_closes_the_report_with_its_audit_row(self):
         self.report(self.traveler_client, Kind.SENDER_UNAVAILABLE)
-        self.client.force_login(self.ops)
+        staff_login(self.client, self.ops)
         page = reverse("admin_console:deal-no-show", args=(self.deal.pk,))
         form = self.client.get(page, {"party": "traveler"}).content.decode()
         assert 'value="traveler" required id="id_party_1" checked' in form
@@ -440,7 +442,8 @@ class StaffTests(ProblemWorld, TestCase):
     def test_the_api_no_show_closes_reports_too_and_a_replay_writes_no_second_audit(
         self,
     ):
-        api = client_for(self.ops)
+        api = APIClient()
+        staff_login(api, self.ops)
         url = reverse("admin-deal-no-show", args=(self.deal.pk,))
         first = api.post(url, {"party": "traveler", "note": "Checked"}, format="json")
         again = api.post(url, {"party": "traveler", "note": "Checked"}, format="json")
@@ -452,7 +455,7 @@ class StaffTests(ProblemWorld, TestCase):
         assert self.problem.status == Status.CLOSED
 
     def test_the_deal_page_lists_problems(self):
-        self.client.force_login(self.ops)
+        staff_login(self.client, self.ops)
         html = self.client.get(
             reverse("admin_console:deal-detail", args=(self.deal.pk,))
         ).content.decode()

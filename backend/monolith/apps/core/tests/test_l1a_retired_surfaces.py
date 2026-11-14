@@ -17,6 +17,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient, APITestCase
 
+from apps.admin_panel.tests.two_step_helpers import staff_login
 from apps.accounts.models import User
 from apps.matching.models import Match, Offer
 from apps.parcels.models import ParcelRequest, ProductRequest
@@ -234,7 +235,7 @@ class HistoricalAdminTests(APITestCase):
                 assert not model_admin.get_actions(request)
 
     def test_the_changelist_still_renders_for_staff(self):
-        self.client.force_login(self.staff)
+        staff_login(self.client, self.staff)
         for app_label, model_name in self.LEGACY_MODELS:
             with self.subTest(model=f"{app_label}.{model_name}"):
                 response = self.client.get(

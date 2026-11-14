@@ -3039,6 +3039,186 @@ body.login .errornote {
   font-weight: 650;
 }
 
+/* -- Two-step sign-in (L14, spec 19.1) ------------------------------------
+   The step after the password wears the same card as sign-in: nothing to
+   navigate to until it is passed. The enrolment card is wider than the sign-in
+   one, because the QR code and the key have to be legible at arm's length. */
+
+/* Django's login.css, which lifts the 980px floor and the full-height column
+   of base.css, is not on these pages, so both are lifted here. */
+body.login.st-two-step #container {
+  width: min(460px, calc(100% - var(--st-4) * 2));
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+}
+.st-two-step-card h1 {
+  margin: var(--st-1) 0 var(--st-3);
+  font-family: var(--st-serif);
+  font-size: var(--st-fs-h1);
+  line-height: var(--st-lh-tight);
+}
+.st-two-step-card > p,
+.st-two-step-card li { color: var(--st-ink-2); font-size: var(--st-fs-body); line-height: var(--st-lh-body); }
+.st-two-step-card .st-eyebrow { margin: 0; }
+.st-two-step-steps { margin: 0 0 var(--st-4); padding-inline-start: 1.25em; }
+.st-two-step-steps li + li { margin-top: var(--st-1); }
+.st-two-step-qr {
+  display: grid;
+  justify-items: center;
+  gap: var(--st-3);
+  margin: 0 0 var(--st-5);
+  padding: var(--st-4);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface-2);
+}
+.st-two-step-qr svg {
+  display: block;
+  width: min(220px, 100%);
+  height: auto;
+  border-radius: var(--st-r-1);
+  background: #fff;
+}
+.st-two-step-qr figcaption {
+  display: grid;
+  gap: var(--st-1);
+  justify-items: center;
+  text-align: center;
+  color: var(--st-ink-3);
+  font-size: var(--st-fs-xs);
+}
+.st-two-step-key {
+  padding: var(--st-1) var(--st-2);
+  border-radius: var(--st-r-1);
+  background: var(--st-surface);
+  color: var(--st-ink);
+  font-family: var(--st-mono);
+  font-size: var(--st-fs-sm);
+  letter-spacing: .06em;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+body.login .form-row input.st-code-input {
+  font-family: var(--st-mono);
+  font-size: 1.25rem;
+  letter-spacing: .18em;
+  text-align: center;
+}
+.st-field-error { margin: 6px 0 0; color: var(--st-bad); font-size: var(--st-fs-xs); font-weight: 650; }
+.st-recovery-codes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--st-2);
+  margin: 0 0 var(--st-4);
+  padding: var(--st-4);
+  border: 1px dashed var(--st-line-2);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface-2);
+  list-style: none;
+}
+.st-recovery-codes code { font-family: var(--st-mono); font-size: var(--st-fs-sm); color: var(--st-ink); }
+.st-two-step-continue {
+  display: block;
+  padding: 11px 14px;
+  border-radius: var(--st-r-2);
+  background: var(--st-btn);
+  color: var(--st-btn-fg) !important;
+  font-size: var(--st-fs-sm);
+  font-weight: 650;
+  text-align: center;
+  text-decoration: none;
+}
+.st-two-step-continue:hover { background: var(--st-btn-hover); }
+.st-two-step-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--st-3);
+  margin-top: var(--st-5);
+  padding-top: var(--st-4);
+  border-top: 1px solid var(--st-line);
+  font-size: var(--st-fs-xs);
+}
+.st-two-step-foot form { margin: 0 0 0 auto; }
+.st-link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--st-ink-2);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.st-two-step-messages { margin: 0 0 var(--st-4); padding: 0; list-style: none; }
+.st-two-step-messages li {
+  padding: var(--st-3) var(--st-4);
+  border: 1px solid var(--st-info-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-info-bg);
+  color: var(--st-info);
+  font-size: var(--st-fs-sm);
+}
+@media (max-width: 380px) {
+  .st-recovery-codes { grid-template-columns: 1fr; }
+}
+
+/* Staff page: whether a fresh code is open for role changes and resets. */
+.st-fresh-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--st-3);
+  margin: 0 0 var(--st-4);
+  padding: var(--st-3) var(--st-4);
+  border: 1px solid var(--st-wait-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-wait-bg);
+  color: var(--st-wait);
+  font-size: var(--st-fs-sm);
+}
+.st-fresh-note p { margin: 0; }
+.st-fresh-note.is-open { border-color: var(--st-ok-line); background: var(--st-ok-bg); color: var(--st-ok); }
+
+/* Finance exports (L14, spec 19.2). */
+.st-export-kinds { margin: 0 0 var(--st-4); padding: 0; border: 0; }
+.st-export-kinds legend { margin-bottom: 6px; color: var(--st-ink); font-size: var(--st-fs-xs); font-weight: 650; }
+.st-export-kind {
+  display: flex !important;
+  align-items: flex-start;
+  gap: var(--st-2);
+  margin: 0 0 var(--st-2) !important;
+  padding: var(--st-3);
+  border: 1px solid var(--st-line);
+  border-radius: var(--st-r-2);
+  background: var(--st-surface-2);
+  color: var(--st-ink) !important;
+  font-size: var(--st-fs-sm) !important;
+  font-weight: 500 !important;
+  cursor: pointer;
+}
+.st-export-kind:has(input:checked) { border-color: var(--st-focus); background: var(--st-info-bg); }
+.st-export-kind input { margin-top: 2px; }
+.st-export-dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--st-3); }
+.st-export-recent { margin-top: var(--st-5); }
+.st-form-errors {
+  margin: 0 0 var(--st-4);
+  padding: var(--st-3) var(--st-4);
+  border: 1px solid var(--st-bad-line);
+  border-left-width: 3px;
+  border-radius: var(--st-r-2);
+  background: var(--st-bad-bg);
+  color: var(--st-bad);
+  font-size: var(--st-fs-sm);
+  font-weight: 650;
+}
+.st-form-errors p { margin: 0; }
+@media (max-width: 520px) {
+  .st-export-dates { grid-template-columns: 1fr; }
+}
+
 .module { border: 1px solid var(--st-line); border-radius: var(--st-r-2); }
 .module caption, .module h2 { letter-spacing: .02em; }
 #content h1 { font-family: var(--st-serif); font-weight: 600; letter-spacing: -.01em; }

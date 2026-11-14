@@ -53,6 +53,7 @@ from apps.trips.models import JourneyLeg
 
 from .test_phase8dr_offer_locks import REWARD_EUR_CENTS, CanonicalOfferFixture
 from .test_v1_matching import _client
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 UNTOUCHED_MODELS = (
     Deal,
@@ -658,7 +659,7 @@ class ConsoleFormTests(TestCase):
             is_staff=True,
         )
         assign_admin_roles(self.admin, ["super_admin"])
-        self.client.force_login(self.admin)
+        staff_login(self.client, self.admin)
 
     def _post(self, **fields):
         data = {

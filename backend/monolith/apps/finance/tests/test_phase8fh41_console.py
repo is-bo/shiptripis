@@ -27,6 +27,7 @@ from apps.finance.payout_evidence import CHEQUE_LABELS, RECEIPT_LABELS
 from apps.finance.payout_evidence import upload_evidence
 from apps.finance.payout_manual import prepare, begin, confirm
 from .test_phase8fh4_manual import configured_h4, build_manual, image_upload  # noqa: F401
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 SECRET_CCP = "0000000000"
 SECRET_RIP = "0" * 20
@@ -54,7 +55,7 @@ def detail_url(payout):
 def test_detail_reads_as_an_instruction_and_never_offers_mark_paid(configured_h4):  # noqa: F811
     s, payout, profile = build_manual(prefix="h41-read")
     client = Client()
-    client.force_login(s.admin)
+    staff_login(client, s.admin)
     body = client.get(detail_url(payout)).content.decode()
 
     # The exact approved wording, in the three languages it is approved in, for
@@ -83,7 +84,7 @@ def test_detail_reads_as_an_instruction_and_never_offers_mark_paid(configured_h4
 def test_masked_by_default_and_revealed_only_on_purpose(configured_h4):  # noqa: F811
     s, payout, profile = build_manual(prefix="h41-mask")
     client = Client()
-    client.force_login(s.admin)
+    staff_login(client, s.admin)
     url = detail_url(payout)
 
     masked = client.get(url)
@@ -113,7 +114,7 @@ def test_evidence_is_scoped_to_its_own_payout(configured_h4):  # noqa: F811
     s, payout, profile = build_manual(prefix="h41-ev1")
     other_s, other_payout, other_profile = build_manual(prefix="h41-ev2")
     client = Client()
-    client.force_login(s.admin)
+    staff_login(client, s.admin)
 
     mine = reverse(
         "admin_console:payout-evidence",
@@ -146,13 +147,13 @@ def test_only_finance_and_super_reach_the_screen_or_the_evidence(configured_h4):
     )
     for role in ("support", "ops", "trust_verification"):
         assign_admin_roles(s.outsider, [role])
-        client.force_login(s.outsider)
+        staff_login(client, s.outsider)
         assert client.get(detail_url(payout)).status_code == 403
         assert client.get(evidence).status_code == 403
         assert client.post(detail_url(payout), {"action": "reveal"}).status_code == 403
 
     assign_admin_roles(s.outsider, ["super_admin"])
-    client.force_login(s.outsider)
+    staff_login(client, s.outsider)
     assert client.get(detail_url(payout)).status_code == 200
     assert client.get(evidence).status_code == 200
 
@@ -161,7 +162,7 @@ def test_only_finance_and_super_reach_the_screen_or_the_evidence(configured_h4):
 def test_a_hold_names_itself_and_removes_the_controls(configured_h4):  # noqa: F811
     s, payout, profile = build_manual(prefix="h41-hold")
     client = Client()
-    client.force_login(s.admin)
+    staff_login(client, s.admin)
     assert (
         "Claim and prepare transfer" in client.get(detail_url(payout)).content.decode()
     )
@@ -196,7 +197,7 @@ def test_a_hold_names_itself_and_removes_the_controls(configured_h4):  # noqa: F
 def test_a_claim_is_visible_to_the_operator_who_does_not_own_it(configured_h4):  # noqa: F811
     s, payout, profile = build_manual(prefix="h41-claim")
     client = Client()
-    client.force_login(s.admin)
+    staff_login(client, s.admin)
     assert "Available for processing" in client.get(detail_url(payout)).content.decode()
 
     prepare(
@@ -207,7 +208,7 @@ def test_a_claim_is_visible_to_the_operator_who_does_not_own_it(configured_h4): 
     assert "Start the transfer" in mine and "Release the claim" in mine
 
     assign_admin_roles(s.outsider, ["finance"])
-    client.force_login(s.outsider)
+    staff_login(client, s.outsider)
     theirs = client.get(detail_url(payout)).content.decode()
     assert "Being processed by" in theirs
     assert "Do not send a second transfer." in theirs
@@ -218,7 +219,7 @@ def test_a_claim_is_visible_to_the_operator_who_does_not_own_it(configured_h4): 
 def test_sent_and_paid_are_never_the_same_state(configured_h4):  # noqa: F811
     s, payout, profile = build_manual(prefix="h41-states")
     client = Client()
-    client.force_login(s.admin)
+    staff_login(client, s.admin)
     prepare(
         actor=s.admin, payout_id=payout.pk, expected_state_version=payout.state_version
     )
@@ -285,7 +286,7 @@ def test_a_newer_profile_is_context_and_never_an_alternative(configured_h4):  # 
         proof_reference=proof.public_reference,
     )
     client = Client()
-    client.force_login(s.admin)
+    staff_login(client, s.admin)
     body = client.get(detail_url(payout)).content.decode()
 
     assert "The Traveler has since changed their payout details." in body
@@ -302,7 +303,7 @@ def test_a_newer_profile_is_context_and_never_an_alternative(configured_h4):  # 
 def test_a_refusal_says_which_condition_failed(configured_h4):  # noqa: F811
     s, payout, profile = build_manual(prefix="h41-refuse")
     client = Client()
-    client.force_login(s.admin)
+    staff_login(client, s.admin)
     # A stale state version is the ordinary two-tabs-open case.
     body = client.post(
         detail_url(payout), {"action": "prepare", "state_version": 9999}
@@ -316,7 +317,7 @@ def test_a_refusal_says_which_condition_failed(configured_h4):  # noqa: F811
 def test_the_queue_shows_the_settlement_amount_and_what_it_waits_on(configured_h4):  # noqa: F811
     s, payout, profile = build_manual(prefix="h41-queue")
     client = Client()
-    client.force_login(s.admin)
+    staff_login(client, s.admin)
     body = client.get(reverse("admin_console:payouts")).content.decode()
 
     assert "Manual DZD transfer" in body

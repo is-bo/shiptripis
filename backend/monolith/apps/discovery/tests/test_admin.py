@@ -13,6 +13,7 @@ from apps.discovery.models import PublicProfile, RouteAlert, TravelerInterest
 from apps.notifications.push import _PUSH_SPECS
 
 from .support import STATIC_STORES, DiscoveryWorld, client_for
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 
 @override_settings(STORAGES=STATIC_STORES)
@@ -29,7 +30,7 @@ class ProfileVisibilityConsoleTests(DiscoveryWorld, TestCase):
 
     def login(self, role):
         assign_admin_roles(self.staff, [role])
-        self.client.force_login(self.staff)
+        staff_login(self.client, self.staff)
 
     def post(self, reason="Reported as a scam profile"):
         return self.client.post(

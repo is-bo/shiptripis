@@ -36,6 +36,7 @@ from apps.parcels.models import DeliveryRequest, ParcelRequest
 from apps.ratings.models import Rating
 from apps.ratings.services import submit_rating
 from apps.trips.models import Journey, JourneyLeg
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 TABS = (
     "overview", "identity", "activity", "deliveries", "payments", "payouts", "trust", "discovery", "audit"
@@ -70,7 +71,7 @@ def staff(email, role):
 
 def client_for(user):
     client = Client()
-    client.force_login(user)
+    staff_login(client, user)
     return client
 
 

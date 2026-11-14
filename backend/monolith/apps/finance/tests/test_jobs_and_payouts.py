@@ -21,6 +21,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.admin_panel.tests.two_step_helpers import staff_login
 from apps.core.business_settings import get_active_business_settings
 from apps.core.models import BusinessSettingsVersion
 from apps.deals.models import Deal, DealLegAllocation
@@ -662,7 +663,7 @@ class ManualRefundSettlementTests(TestCase):
         from rest_framework.test import APIClient
 
         client = APIClient()
-        client.force_authenticate(user=user)
+        staff_login(client, user)
         return client
 
     def _pending_refund(self) -> PaymentRefund:

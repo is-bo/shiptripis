@@ -1,0 +1,27 @@
+{% extends "admin/two_step/base.html" %}
+
+{% block eyebrow %}First sign-in · Step 2 of 2{% endblock %}
+
+{% block card %}
+<p>Wassla asks for a code from an authenticator app every time you sign in. Set it up once:</p>
+<ol class="st-two-step-steps">
+  <li>Open an authenticator app on your phone (for example Google Authenticator, Microsoft Authenticator or 1Password).</li>
+  <li>Scan this code with it.</li>
+</ol>
+<figure class="st-two-step-qr">
+  <div role="img" aria-label="QR code for your authenticator app">{{ qr_svg|safe }}</div>
+  <figcaption>
+    <span>Can't scan it? Type this key into the app instead:</span>
+    <code class="st-two-step-key" dir="ltr">{{ secret_grouped }}</code>
+  </figcaption>
+</figure>
+<form method="post" novalidate>{% csrf_token %}
+  <input type="hidden" name="next" value="{{ next_url }}">
+  <div class="form-row">
+    <label for="{{ form.code.id_for_label }}">3. Enter the 6-digit code the app shows</label>
+    {{ form.code }}
+    {% for err in form.code.errors %}<p class="st-field-error">{{ err }}</p>{% endfor %}
+  </div>
+  <div class="submit-row"><input type="submit" value="Confirm and continue"></div>
+</form>
+{% endblock %}

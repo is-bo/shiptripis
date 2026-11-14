@@ -41,6 +41,7 @@ from apps.notifications import outbox
 from apps.notifications.models import OutboundMessage
 from apps.parcels import tracking
 from apps.parcels.models import DeliveryRequest, ParcelRequest
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 NUMBER = re.compile(r"^WSL-[23456789ABCDEFGHJKMNPQRSTVWXYZ]{8}$")
 
@@ -667,7 +668,7 @@ class StaffSearchTests(TestCase):
         self.operator = _staff(self.scenario.admin)
 
     def test_every_console_list_finds_a_parcel_by_its_typed_number(self):
-        self.client.force_login(self.operator)
+        staff_login(self.client, self.operator)
         for name in ("requests", "deals", "disputes", "payments", "refunds", "payouts"):
             with self.subTest(name):
                 url = reverse(f"admin_console:{name}")
@@ -681,7 +682,7 @@ class StaffSearchTests(TestCase):
                 assert self.number not in partial, name
 
     def test_detail_pages_name_the_parcel_in_their_heading(self):
-        self.client.force_login(self.operator)
+        staff_login(self.client, self.operator)
         dispute = Dispute.objects.get(deal=self.deal)
         payment = PaymentAttempt.objects.filter(order__deal=self.deal).first()
         for url in (
@@ -700,7 +701,8 @@ class StaffSearchTests(TestCase):
                 assert self.number in header, url
 
     def test_every_admin_api_list_accepts_the_same_search(self):
-        client = _client(self.operator)
+        client = APIClient()
+        staff_login(client, self.operator)
         for name in (
             "admin-request-list",
             "admin-match-list",

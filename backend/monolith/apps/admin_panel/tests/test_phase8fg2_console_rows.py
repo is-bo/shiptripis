@@ -33,6 +33,7 @@ from apps.admin_panel.permissions import AdminRole, assign_admin_roles
 from apps.finance.models import ScheduledJob
 from apps.kyc.models import KycSubmission
 from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 User = get_user_model()
 
@@ -121,10 +122,10 @@ class ConsoleRowsMixin:
             email="g2-owner@example.com",
             password="Sup3rStrong!",
         )
-        self.client.force_login(self.owner)
+        staff_login(self.client, self.owner)
 
     def html(self, path, user=None):
-        self.client.force_login(user or self.owner)
+        staff_login(self.client, user or self.owner)
         response = self.client.get(path)
         self.assertEqual(response.status_code, 200)
         return response.content.decode()
@@ -459,7 +460,7 @@ class RowScopeTests(ConsoleRowsMixin, TestCase):
         assign_admin_roles(self.support, (AdminRole.SUPPORT,))
 
     def test_support_still_cannot_open_the_kyc_queue_at_all(self):
-        self.client.force_login(self.support)
+        staff_login(self.client, self.support)
         response = self.client.get(reverse("admin_console:kyc-queue"))
         self.assertEqual(response.status_code, 403)
 

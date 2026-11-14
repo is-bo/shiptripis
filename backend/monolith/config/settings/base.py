@@ -120,7 +120,16 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # L14, spec 19.1: no page under /admin/ answers before the second step.
+    "apps.admin_panel.two_step_middleware.AdminTwoStepMiddleware",
 ]
+
+#: Spec 19.1. Every staff session passes a code from an authenticator app
+#: before any console page, technical admin page or staff API answers. Only a
+#: local development server may relax it; `config.settings.prod` refuses to
+#: start with it false. No test turns it off: tests mark a session verified
+#: with `apps.admin_panel.tests.two_step_helpers`.
+ADMIN_TWO_STEP_REQUIRED = env.bool("ADMIN_TWO_STEP_REQUIRED", default=True)
 
 ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"

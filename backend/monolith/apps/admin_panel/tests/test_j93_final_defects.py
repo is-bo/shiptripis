@@ -11,6 +11,7 @@ from django.urls import reverse
 from apps.accounts.models import User
 from apps.admin_panel.permissions import AdminRole, assign_admin_roles
 from apps.finance.control_plane import snapshot
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 
 STATIC_STORES = {
@@ -39,7 +40,7 @@ def _admin(role, suffix):
 class PayoutReviewFeatureFlagTests(TestCase):
     def _get(self, user, url):
         client = Client()
-        client.force_login(user)
+        staff_login(client, user)
         return client.get(url)
 
     @override_settings(PAYOUT_PROFILES_ENABLED=True)
@@ -92,7 +93,7 @@ class PayoutReviewFeatureFlagTests(TestCase):
 class FinanceSnapshotUnavailableTests(TestCase):
     def setUp(self):
         self.client = Client()
-        self.client.force_login(_admin(AdminRole.FINANCE, "finance-snapshot"))
+        staff_login(self.client, _admin(AdminRole.FINANCE, "finance-snapshot"))
 
     def _dashboard_with(self, connection_state):
         with patch.object(snapshot, "connection", connection_state):

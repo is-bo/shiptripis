@@ -44,6 +44,12 @@ def main():
         "HANDOVER_CODE_SECRET", "TRANSACTIONAL_EMAIL_SECRET", "S3_ACCESS_KEY", "S3_SECRET_KEY",
         "KYC_S3_ACCESS_KEY", "KYC_S3_SECRET_KEY",
     )}
+    # L14: production refuses to start without the payout keyring, which seals
+    # staff two-step keys.
+    import base64
+    payload["PAYOUT_DATA_KEYRING"] = json.dumps({"k1": base64.b64encode(secrets.token_bytes(32)).decode()})
+    payload["PAYOUT_DATA_ACTIVE_KEY_ID"] = "k1"
+    payload["PAYOUT_ACCOUNT_FINGERPRINT_KEY"] = base64.b64encode(secrets.token_bytes(32)).decode()
     (private / "app.json").write_text(json.dumps(payload))
     pg_password, redis_password = secrets.token_hex(32), secrets.token_hex(32)
     for name, value in (("postgres-password", pg_password), ("redis-password", redis_password),

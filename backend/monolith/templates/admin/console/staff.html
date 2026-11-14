@@ -44,19 +44,30 @@
       <div><p class="st-eyebrow">Current access</p><h2 id="st-staff-head">People who can sign in</h2></div>
       <span class="st-muted">{{ staff_users|length }} shown</span>
     </div>
+    {% if two_step_required %}
+    <div class="st-fresh-note{% if fresh_until %} is-open{% endif %}" id="st-fresh-note">
+      {% if fresh_until %}
+      <p><strong>Confirmed with a code.</strong> Role changes and two-step resets are open until {{ fresh_until|date:"H:i" }} ({{ fresh_until|date:"e" }}).</p>
+      {% else %}
+      <p>Changing a role or resetting someone's two-step sign-in needs a code entered in the last {{ fresh_minutes }} minutes.</p>
+      <a class="button" href="{% url 'admin_console:two-step-verify' %}?next={{ request.get_full_path|urlencode }}">Enter a code</a>
+      {% endif %}
+    </div>
+    {% endif %}
     <div class="st-table-scroll">
       <table class="st-data-table">
-        <thead><tr><th scope="col">Person</th><th scope="col">Role</th><th scope="col">Sign-in</th><th scope="col">Joined</th><th scope="col">Change</th></tr></thead>
+        <thead><tr><th scope="col">Person</th><th scope="col">Role</th><th scope="col">Sign-in</th><th scope="col">Two-step</th><th scope="col">Joined</th><th scope="col">Change</th></tr></thead>
         <tbody>
         {% for member in staff_users %}
         <tr id="staff-{{ member.pk }}">
           <td><strong>{{ member.full_name|default:"Name not provided" }}</strong><small>{{ member.email }}</small></td>
           <td>{% if member.is_superuser %}<span class="st-chip st-info">Super Admin</span>{% else %}{% for group in member.groups.all %}<span class="st-chip st-info">{{ group.name }}</span>{% empty %}<span class="st-chip st-mute">No fixed role</span>{% endfor %}{% endif %}</td>
           <td><span class="st-chip {% if member.is_active %}st-ok">Enabled{% else %}st-bad">Blocked{% endif %}</span></td>
+          <td>{% if member.two_step_enrolled %}<span class="st-chip st-ok">Set up</span>{% else %}<span class="st-chip st-wait">At next sign-in</span>{% endif %}</td>
           <td>{{ member.date_joined|date:"d M Y" }}</td>
           <td>
             <details class="st-disclosure"{% if member.console_open %} open{% endif %}>
-              <summary>Change role or access</summary>
+              <summary>Change role, access or two-step</summary>
               <div class="st-staff-actions">
                 <form method="post" action="{% url 'admin_console:staff-role' member.pk %}?edit={{ member.pk }}#staff-{{ member.pk }}" class="st-form">{% csrf_token %}
                   <label for="role-{{ member.pk }}">Role</label>
@@ -69,12 +80,20 @@
                   <div class="st-check"><input id="confirm-access-{{ member.pk }}" type="checkbox" name="confirm" required><label for="confirm-access-{{ member.pk }}">{% if member.is_active %}Block this person from signing in.{% else %}Let this person sign in again.{% endif %}</label></div>
                   <div class="st-split-actions"><button type="submit"{% if member.is_active %} class="st-button-danger"{% endif %}{% if member.pk == request.user.pk and member.is_active %} disabled title="You cannot block your own account"{% endif %}>{% if member.is_active %}Block sign-in{% else %}Restore sign-in{% endif %}</button></div>
                 </form>
+                {% if member.pk != request.user.pk %}
+                <form method="post" action="{% url 'admin_console:staff-two-step-reset' member.pk %}?edit={{ member.pk }}#staff-{{ member.pk }}" class="st-form">{% csrf_token %}
+                  <label for="reset-reason-{{ member.pk }}">Reset two-step sign-in</label>
+                  <textarea id="reset-reason-{{ member.pk }}" name="reason" rows="2" maxlength="500" required placeholder="Reason, saved in the audit log"></textarea>
+                  <div class="st-check"><input id="confirm-reset-{{ member.pk }}" type="checkbox" name="confirm" required><label for="confirm-reset-{{ member.pk }}">Sign this person out everywhere; they set up two-step sign-in again.</label></div>
+                  <div class="st-split-actions"><button type="submit" class="st-button-danger">Reset two-step</button></div>
+                </form>
+                {% endif %}
               </div>
             </details>
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="5">No staff accounts yet.</td></tr>
+        <tr><td colspan="6">No staff accounts yet.</td></tr>
         {% endfor %}
         </tbody>
       </table>

@@ -4,6 +4,9 @@ from django.http import HttpResponse
 from rest_framework import serializers
 from rest_framework.response import Response
 
+from apps.admin_panel.permissions import IsVerifiedStaff
+from apps.admin_panel.staff_api import StaffSessionMixin
+
 from .models import Payout
 from .payout_profile_api import ProfileView, StrictInput
 from .payout_profiles import require_capabilities
@@ -39,7 +42,7 @@ class EvidenceUploadView(ProfileView):
         )
 
 
-class ReceiptUploadView(EvidenceUploadView):
+class ReceiptUploadView(StaffSessionMixin, EvidenceUploadView):
     """Finance's own proof of the outgoing transfer, never the Traveler's cheque.
 
     It echoes the transfer-receipt label rather than the crossed-cheque one so a
@@ -47,11 +50,14 @@ class ReceiptUploadView(EvidenceUploadView):
     asks for their bank document.
     """
 
+    permission_classes = [IsVerifiedStaff]
     purpose = "transfer_receipt"
     labels = RECEIPT_LABELS
 
 
-class EvidenceReadView(ProfileView):
+class EvidenceReadView(StaffSessionMixin, ProfileView):
+    permission_classes = [IsVerifiedStaff]
+
     def get(self, request, reference):
         body, mime = read_evidence(actor=request.user, reference=reference)
         response = HttpResponse(body, content_type=mime)
@@ -61,7 +67,9 @@ class EvidenceReadView(ProfileView):
         return response
 
 
-class RevealView(ProfileView):
+class RevealView(StaffSessionMixin, ProfileView):
+    permission_classes = [IsVerifiedStaff]
+
     def post(self, request, reference):
         data = StrictInput(data=request.data)
         data.is_valid(raise_exception=True)
@@ -91,7 +99,9 @@ class ReviewInput(StrictInput):
         return attrs
 
 
-class ReviewView(ProfileView):
+class ReviewView(StaffSessionMixin, ProfileView):
+    permission_classes = [IsVerifiedStaff]
+
     def post(self, request, reference):
         data = ReviewInput(data=request.data)
         data.is_valid(raise_exception=True)
@@ -154,7 +164,9 @@ class ConfirmInput(InstructionInput):
     confirmed = serializers.BooleanField()
 
 
-class ManualDetailView(ProfileView):
+class ManualDetailView(StaffSessionMixin, ProfileView):
+    permission_classes = [IsVerifiedStaff]
+
     def get(self, request, pk):
         require_capabilities(
             request.user,

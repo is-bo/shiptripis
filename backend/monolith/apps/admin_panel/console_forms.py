@@ -204,6 +204,26 @@ class StaffAccessForm(ConsoleForm):
     )
 
 
+class TwoStepResetForm(ConsoleForm):
+    """Spec 19.1: a Super Admin removes someone's second step, with a reason."""
+
+    reason = forms.CharField(
+        label="Reason",
+        max_length=500,
+        widget=forms.Textarea(attrs={"rows": 2}),
+        help_text="Saved in the audit log, for example \"lost phone, confirmed by call\".",
+    )
+    confirm = forms.BooleanField(
+        label="Sign this person out everywhere; they set up two-step sign-in again."
+    )
+
+    def clean_reason(self):
+        reason = self.cleaned_data["reason"].strip()
+        if not reason:
+            raise forms.ValidationError("A reason is required.")
+        return reason
+
+
 class BoostEconomicsSettingsForm(ConsoleForm):
     """Wassla's commission on the Boost portion of a delivery.
 

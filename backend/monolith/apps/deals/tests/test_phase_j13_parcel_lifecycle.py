@@ -7,6 +7,7 @@ from django.test import RequestFactory, TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from apps.admin_panel.tests.two_step_helpers import staff_login
 from apps.core.financial_locks import lock_deal_lifecycle
 from apps.deals import lifecycle
 from apps.deals.activity import activity_state
@@ -281,7 +282,7 @@ class ParcelLifecycleTests(TestCase):
             )
         self.scenario.base.admin.is_superuser = True
         self.scenario.base.admin.save(update_fields=["is_superuser"])
-        self.client.force_authenticate(self.scenario.base.admin)
+        staff_login(self.client, self.scenario.base.admin)
         response = self.client.get("/api/admin/requests", {"status": "delivered"})
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data["results"][0]["status"], "delivered")

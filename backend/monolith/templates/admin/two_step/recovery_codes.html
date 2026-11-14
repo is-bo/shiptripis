@@ -1,0 +1,11 @@
+{% extends "admin/two_step/base.html" %}
+
+{% block eyebrow %}Two-step sign-in is set up{% endblock %}
+
+{% block card %}
+<p>If you lose your phone, each of these codes lets you sign in once instead of a code from the app. <strong>This is the only time they are shown.</strong> Save them somewhere safe, such as a password manager.</p>
+<ol class="st-recovery-codes" dir="ltr" aria-label="Recovery codes">
+  {% for code in codes %}<li><code>{{ code }}</code></li>{% endfor %}
+</ol>
+<div class="submit-row"><a class="st-two-step-continue" href="{{ next_url }}">I've saved them. Continue</a></div>
+{% endblock %}

@@ -1,0 +1,82 @@
+{% extends "admin/base_site.html" %}
+{% load shiptrip_admin %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; Finance &rsaquo; Exports</div>{% endblock %}
+
+{% block content %}
+<main class="st-console">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">Finance</p>
+      <h1>Finance exports</h1>
+      <p>Download what was recorded as a spreadsheet file that opens in Excel. Amounts are the stored ones, in euros with two decimals, with the dinar amount where the Algerian rail was used. Nothing is recalculated.</p>
+    </div>
+  </header>
+
+  <div class="st-grid st-grid-2">
+    <section class="st-card" aria-labelledby="st-export-head">
+      <p class="st-eyebrow">New export</p>
+      <h2 id="st-export-head">Choose what and when</h2>
+      {% if form.non_field_errors %}
+      <div class="st-form-errors" role="alert">{% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}</div>
+      {% endif %}
+      <form method="post" class="st-form st-export-form" novalidate>{% csrf_token %}
+        <fieldset class="st-export-kinds">
+          <legend>{{ form.kind.label }}</legend>
+          {% for choice in form.kind %}
+          <label class="st-export-kind" for="{{ choice.id_for_label }}">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>
+          {% endfor %}
+          {% for error in form.kind.errors %}<p class="st-field-error">{{ error }}</p>{% endfor %}
+        </fieldset>
+        <p>{{ form.mode.label_tag }} {{ form.mode }}<small class="helptext">{{ form.mode.help_text }}</small>{% for error in form.mode.errors %}<span class="st-field-error">{{ error }}</span>{% endfor %}</p>
+        <div class="st-export-dates">
+          <p>{{ form.start.label_tag }} {{ form.start }}{% for error in form.start.errors %}<span class="st-field-error">{{ error }}</span>{% endfor %}</p>
+          <p>{{ form.end.label_tag }} {{ form.end }}{% for error in form.end.errors %}<span class="st-field-error">{{ error }}</span>{% endfor %}</p>
+        </div>
+        <p class="st-muted">Dates are whole days in UTC, both included, at most {{ max_days }} days. Every download is written to the audit log with its range and number of lines.</p>
+        <div class="st-split-actions"><button type="submit">Download CSV</button></div>
+      </form>
+    </section>
+
+    <section class="st-card" aria-labelledby="st-export-columns">
+      <p class="st-eyebrow">What each file holds</p>
+      <h2 id="st-export-columns">Columns</h2>
+      <p>People appear by their Wassla id and name only. No email, phone, address, bank detail or document data is ever in a file.</p>
+      <div class="st-role-list">
+        {% for label, names in columns %}
+        <details>
+          <summary><strong>{{ label }}</strong><span>{{ names|length }} columns</span></summary>
+          <p>{{ names|join:", " }}</p>
+        </details>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+
+  <section class="st-card st-export-recent" aria-labelledby="st-export-recent">
+    <div class="st-card-head">
+      <div><p class="st-eyebrow">Audit log</p><h2 id="st-export-recent">Recent downloads</h2></div>
+    </div>
+    {% if recent %}
+    <div class="st-table-scroll">
+      <table class="st-data-table">
+        <thead><tr><th scope="col">When</th><th scope="col">Who</th><th scope="col">Export</th><th scope="col">Range</th><th scope="col">Lines</th></tr></thead>
+        <tbody>
+        {% for row in recent %}
+        <tr>
+          <td>{{ row.created_at|date:"d M Y, H:i" }}</td>
+          <td>{{ row.actor.full_name|default:row.actor.email|default:"—" }}</td>
+          <td>{{ row.after.kind|capfirst }} <small>{{ row.mode_label }}</small></td>
+          <td>{{ row.after.from }} to {{ row.after.to }}</td>
+          <td class="st-num">{{ row.after.lines }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="st-muted">No finance export has been downloaded yet.</p>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}

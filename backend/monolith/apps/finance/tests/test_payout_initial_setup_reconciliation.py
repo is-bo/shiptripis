@@ -34,6 +34,7 @@ from apps.finance.services import reconcile_attempt
 from apps.finance.settlement import apply_settlement, plan_settlement, read_deal_money
 from .factories import build_scenario
 from .test_phase8fh4_manual import build_manual, configured_h4, image_upload  # noqa: F401
+from apps.admin_panel.tests.two_step_helpers import staff_login
 
 
 pytestmark = [pytest.mark.django_db, pytest.mark.usefixtures("configured_h4")]
@@ -177,7 +178,7 @@ def test_admin_detail_distinguishes_current_method_from_frozen_instruction(setti
     scenario, payout, method = funded_placeholder("initial-detail")
     profile = submit_initial(scenario, method)
     client = Client()
-    client.force_login(scenario.admin)
+    staff_login(client, scenario.admin)
     url = reverse("admin_console:payout-detail", args=[payout.pk])
     with override_settings(
         STORAGES={

@@ -21,6 +21,7 @@ from django.db.models import Sum
 from django.test import TestCase
 from django.urls import reverse
 
+from apps.admin_panel.tests.two_step_helpers import staff_login
 from apps.core.business_settings import get_active_business_settings
 from apps.core.models import BusinessSettingsVersion
 from apps.deals.models import Deal, DealLegAllocation
@@ -605,7 +606,7 @@ class PayoutGateTests(TestCase):
         from rest_framework.test import APIClient
 
         client = APIClient()
-        client.force_authenticate(user=self.scenario.admin)
+        staff_login(client, self.scenario.admin)
         response = client.post(
             reverse("finance-admin-payout-complete", args=[self.payout.pk]),
             {
@@ -630,7 +631,7 @@ class PayoutGateTests(TestCase):
         from rest_framework.test import APIClient
 
         client = APIClient()
-        client.force_authenticate(user=self._grant_settle_payout())
+        staff_login(client, self._grant_settle_payout())
 
         response = client.post(
             reverse("finance-admin-payout-complete", args=[self.payout.pk]),

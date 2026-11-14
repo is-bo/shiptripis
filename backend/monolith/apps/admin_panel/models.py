@@ -203,3 +203,58 @@ class AdminInvitation(models.Model):
             self.revoked_at = at or timezone.now()
             self.save(update_fields=("revoked_at",))
         return True
+
+
+class AdminTwoStep(models.Model):
+    """One staff member's authenticator-app second step (spec 19.1, L14).
+
+    ``secret`` is the envelope from `apps.finance.sensitive_data`, bound to
+    this row's ``id``, which is known before the row is inserted. A row with no
+    ``confirmed_at`` is an enrolment in progress: its key has been shown but no
+    code has proved the app holds it yet. `apps.admin_panel.two_step` is the
+    only writer.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="admin_two_step",
+    )
+    secret = models.TextField(editable=False)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    #: The highest 30-second step a code was accepted for. A code for this
+    #: step or an earlier one is refused, so no code works twice.
+    last_accepted_step = models.BigIntegerField(default=0)
+    failed_attempts = models.PositiveSmallIntegerField(default=0)
+    locked_until = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "admin_panel_two_step"
+
+    def __str__(self) -> str:
+        state = "confirmed" if self.confirmed_at else "enrolling"
+        return f"Two-step sign-in for user {self.user_id} ({state})"
+
+
+class AdminRecoveryCode(models.Model):
+    """A one-time recovery code, kept only as its SHA-256 digest."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="admin_recovery_codes",
+    )
+    code_hash = models.CharField(max_length=64, unique=True, editable=False)
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "admin_panel_recovery_code"
+        indexes = [
+            models.Index(fields=("user", "used_at"), name="admin_recovery_user_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"Recovery code for user {self.user_id}"
