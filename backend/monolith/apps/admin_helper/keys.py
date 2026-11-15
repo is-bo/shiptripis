@@ -285,8 +285,11 @@ def stop_key(*, actor, key_id, reason: str = "") -> AdminHelperKey:
 
 
 def _stop_live(keys, *, reason: str, at: datetime) -> tuple[list[AdminHelperKey], int]:
-    """Stop every live key in ``keys`` (locked first), and expire their waiting
-    changes (L16). Returns the keys and how many changes expired."""
+    """Stop every live key in ``keys`` (locked first), and expire every
+    waiting change any key in ``keys`` prepared (L16), a replaced key's
+    included: a two-step reset or the switch going off ends all of it, so
+    switching back on revives nothing. Returns the stopped keys and how many
+    changes expired."""
 
     from .prepared import expire_for_keys
 
@@ -294,7 +297,7 @@ def _stop_live(keys, *, reason: str, at: datetime) -> tuple[list[AdminHelperKey]
     AdminHelperKey.objects.filter(pk__in=[key.pk for key in live]).update(
         revoked_at=at, revoked_reason=reason
     )
-    return live, expire_for_keys([key.pk for key in live], at=at)
+    return live, expire_for_keys(keys.values_list("pk", flat=True), at=at)
 
 
 def stop_all_keys(admin, *, reason: str) -> int:
@@ -321,8 +324,9 @@ def stop_keys_if_switched_off(settings_version) -> int:
     way a revision becomes active (the console form, the staff API) stops the
     keys at the moment the switch goes off, or not at all if the activation
     rolls back (spec 20.8). A revision the helper cannot read counts as off,
-    the safe side. One audit row says how many keys stopped; none is written
-    when there was no live key. `resolve_key` still reads the switch on every
+    the safe side. One audit row says how many keys stopped and how many
+    prepared changes expired; none is written when there was neither.
+    `resolve_key` still reads the switch on every
     call, so a key could not act while off even without this.
     """
 
@@ -337,7 +341,7 @@ def stop_keys_if_switched_off(settings_version) -> int:
         reason=AdminHelperKey.StopReason.SWITCHED_OFF,
         at=timezone.now(),
     )
-    if live:
+    if live or expired:
         record_admin_action(
             actor=settings_version.created_by,
             action=SWITCHED_OFF_ACTION,

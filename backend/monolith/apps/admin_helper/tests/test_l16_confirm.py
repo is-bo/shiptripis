@@ -19,7 +19,7 @@ from apps.admin_panel.permissions import AdminRole, assign_admin_roles
 from apps.admin_panel.tests.two_step_helpers import staff_login
 from apps.disputes.models import Dispute
 from apps.disputes.services import set_dispute_status
-from apps.finance.jobs import HANDLERS
+from apps.finance.jobs import HANDLERS, JobDeferred
 from apps.finance.models import ScheduledJob
 from apps.trips.models import Journey
 
@@ -69,6 +69,48 @@ class ConfirmTests(TestCase):
         page = self.console.get(change_url(change)).content.decode()
         assert "This change is already decided: confirmed." in page
         assert 'name="decision" value="confirm"' not in page
+
+    def test_confirming_locks_the_change_and_never_a_key(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        change = self.prepare("refund.request", "payment", self.world.payment.pk,
+                              {"amount_eur_cents": 250, "refund_reason": "admin"})
+        with CaptureQueriesContext(connection) as seen:
+            confirm(self.console, change)
+        change.refresh_from_db()
+        assert change.status == PreparedAction.Status.CONFIRMED, change.outcome
+        locks = [query["sql"] for query in seen.captured_queries if " FOR " in query["sql"] and "UPDATE" in query["sql"]]
+        assert locks[0].startswith('SELECT "admin_helper_prepared_action"')
+        assert locks[0].endswith('FOR UPDATE OF "admin_helper_prepared_action"')
+        assert not any('"admin_helper_key"' in sql for sql in locks)
+        # The payment the basis reads is locked before the basis is compared.
+        assert 'FROM "finance_payment_attempt"' in locks[1] and locks[1].endswith("FOR NO KEY UPDATE")
+
+    def test_a_refund_for_a_reason_already_used_is_refused(self):
+        from apps.finance.services import request_refund
+
+        attempt = self.world.payment
+        request_refund(order_id=attempt.order_id, attempt_id=attempt.pk, amount_eur_cents=100,
+                       reason="sender_cancelled", requested_by_id=self.owner.pk)
+        response = post_action(self.plain, "refund.request", "payment", attempt.pk,
+                               {"amount_eur_cents": 300, "refund_reason": "sender_cancelled"})
+        assert response.status_code == 409, response.json()
+        assert response.json()["code"] == "admin_helper_action_not_offered"
+        assert "already has a refund for this reason (€1.00" in response.json()["detail"]
+        assert not PreparedAction.objects.filter(action="refund.request").exists()
+
+    def test_a_finance_refusal_while_running_is_failed_not_an_error(self):
+        from apps.finance.operations import FinanceOperationsError
+
+        change = self.prepare("job.retry", "job", self.world.job.pk)
+        with mock.patch("apps.finance.operations.retry_failed_job",
+                        side_effect=FinanceOperationsError("The job changed.", code="job_not_failed")):
+            response = confirm(self.console, change)
+        assert response.status_code == 302
+        change.refresh_from_db()
+        assert change.status == PreparedAction.Status.FAILED
+        assert change.outcome["message"] == "This no longer applies: the job changed."
 
     def test_the_reason_is_the_admins_own_and_required(self):
         change = self.prepare()
@@ -207,7 +249,9 @@ class ConfirmTests(TestCase):
         change = self.prepare()
         job = ScheduledJob.objects.get(kind=ScheduledJob.Kind.ADMIN_HELPER_ACTION_EXPIRY)
         handler = HANDLERS[ScheduledJob.Kind.ADMIN_HELPER_ACTION_EXPIRY]
-        assert handler(job.payload) == "not_due"
+        with self.assertRaises(JobDeferred) as early:
+            handler(job.payload)
+        assert early.exception.code == "prepared_action_not_due" and early.exception.delay > timedelta(hours=23)
         past(change.pk)
         assert handler(job.payload) == "expired"
         assert handler(job.payload) == "already_closed"
@@ -241,16 +285,25 @@ class ConfirmTests(TestCase):
 
         trust = make_staff("confirm-trust@example.test", AdminRole.TRUST)
         change = self.prepare("review.dismiss_report", "review_report", self.world.rating.pk, plain=change_key(trust))
+        change_key(trust)  # replaced: its change would stay, but a reset ends everything
         reset(actor=self.owner, target=trust, reason="Lost phone.")
         change.refresh_from_db()
         assert change.status == PreparedAction.Status.EXPIRED
 
         mine = self.prepare()
+        change_key(self.owner)  # replaced, and then no live key at all
+        keys.stop_all_keys(self.owner, reason=AdminHelperKey.StopReason.STOPPED)
+        PreparedAction.objects.filter(pk=mine.pk).update(status=PreparedAction.Status.WAITING,
+                                                         decided_at=None, outcome={})
         revision = set_helper_policy(enabled=False)
         mine.refresh_from_db()
         assert mine.status == PreparedAction.Status.EXPIRED
+        # Switching back on revives nothing.
+        set_helper_policy(enabled=True)
+        mine.refresh_from_db()
+        assert mine.status == PreparedAction.Status.EXPIRED
         audit = AdminAuditLog.objects.get(action=keys.SWITCHED_OFF_ACTION, target_id=str(revision.pk))
-        assert audit.metadata["changes_expired"] == 1
+        assert audit.metadata == {**audit.metadata, "keys_stopped": 0, "changes_expired": 1}
 
     def test_with_the_switch_off_the_list_is_read_only(self):
         change = self.prepare()
@@ -264,10 +317,12 @@ class ConfirmTests(TestCase):
         assert "The list is read only." in page and "Review and confirm" not in page
         detail = self.console.get(change_url(change)).content.decode()
         assert 'name="decision"' not in detail
-        assert "The AI helper is switched off, so nothing it prepared can be confirmed." in detail
+        assert "The AI helper is switched off, so nothing it prepared can be confirmed or rejected." in detail
         confirm(self.console, change)
+        reject(self.console, change)
         change.refresh_from_db()
         assert change.status == PreparedAction.Status.WAITING and self.journey().paused_at is None
+        assert not AdminAuditLog.objects.filter(action="ai_helper.action_rejected").exists()
 
     # --- the console pages -----------------------------------------------------------------------
 

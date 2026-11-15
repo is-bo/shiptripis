@@ -185,7 +185,7 @@ class SameAsTheConsoleTests(TestCase):
     def test_user_ban(self):
         person = self.world.sender
         self.assert_same(
-            self.by_console(reverse("admin_console:user-ban", args=(person.pk,)), {"reason": REASON}),
+            self.by_console(reverse("admin_console:user-ban", args=(person.pk,)), {"intent": "ban", "reason": REASON}),
             self.by_helper("user.ban", "person", person.pk),
         )
 
@@ -193,7 +193,9 @@ class SameAsTheConsoleTests(TestCase):
         person = self.world.sender
         staff_actions.set_account_ban(actor=self.owner, user_id=person.pk, banned=True, reason="Earlier ban.")
         self.assert_same(
-            self.by_console(reverse("admin_console:user-ban", args=(person.pk,)), {"reason": REASON}),
+            self.by_console(
+                reverse("admin_console:user-ban", args=(person.pk,)), {"intent": "restore", "reason": REASON}
+            ),
             self.by_helper("user.unban", "person", person.pk),
         )
 

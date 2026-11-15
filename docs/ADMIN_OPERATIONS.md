@@ -251,9 +251,10 @@ which goes to the audit log.
 **What stops every key at once.** Switching the helper off in **Settings → AI
 helper** stops every live key for good, with one audit row giving the number of
 keys stopped; switching it back on does not bring them back. A two-step reset
-stops that admin's keys. Stopping a change key early, in any of these ways,
-also expires the changes it prepared; a key that was replaced or simply ran
-out leaves them for you to decide. A key also stops working at once, without
+stops that admin's keys. Stopping a change key early also expires the changes
+it prepared; a key that was replaced or simply ran out leaves them for you to
+decide. A two-step reset expires every change waiting for that admin, and
+switching the helper off every waiting change, whichever key prepared them. A key also stops working at once, without
 being stopped, when its admin is banned, deactivated or loses staff access, and
 it answers only what their current role opens.
 
@@ -273,7 +274,8 @@ the same audit row marked as via the AI helper. If anything differs it says
 you can confirm the changes your keys prepared, only once, and only from a
 console session that passed the second step. A change you do not decide
 expires after the hours set in Business settings (24 by default). With the
-helper switched off, the list stays readable but nothing can be confirmed.
+helper switched off, the list stays readable but nothing can be confirmed or
+rejected.
 
 What a change key can never do or prepare: staff, roles and invitations;
 settings; helper keys; two-step sign-in; identity, ticket, payout-method and

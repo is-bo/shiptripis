@@ -53,7 +53,7 @@ console's own action as the signed-in admin after checking everything again.
   <section class="st-card" aria-labelledby="st-change-done">
     <h2 id="st-change-done">{% if waiting %}Read only{% else %}{{ status }}{% endif %}</h2>
     {% if waiting and switched_off %}
-    <p>The AI helper is switched off, so nothing it prepared can be confirmed.</p>
+    <p>The AI helper is switched off, so nothing it prepared can be confirmed or rejected.</p>
     {% elif outcome %}
     <p>{{ outcome }}</p>
     {% else %}

@@ -151,12 +151,15 @@ identical, and the one new job is the expiry (tested).
   waiting change past its time is closed as expired first.
 - `basis` and `params` are stored as normalised JSON; the basis never leaves the server.
 
-**Confirming** (`prepared.confirm`, from the console only) locks the change row, then checks in
-order: it is this admin's (otherwise 404); the session passed the second step (L14's
+**Confirming** (`prepared.confirm`, from the console only) locks the change row alone (`FOR UPDATE
+OF` its table: never the key, so a confirm cannot deadlock with a key stop or a prepare), then checks
+in order: it is this admin's (otherwise 404); the session passed the second step (L14's
 `two_step_satisfied`, in the service as well as the console middleware; a fresh code is not needed,
 spec 19.1); it still waits and has not expired (an expired one is closed now); the helper is on;
-then `_assess`: the gate fresh, the record still exists, the per-record rule, the console's form
-with the admin's reason, and the basis compared with the record now. The first that fails closes the
+then `_assess`: the gate fresh, the record still exists (for `refund.request`, the payment is
+locked first, with the refund service's own first lock, so its refunds cannot change between the
+comparison and the run), the per-record rule, the console's form with the admin's reason, and the
+basis compared with the record now. The first that fails closes the
 change as **failed** with "This no longer applies: <why>" and writes `ai_helper.action_failed`.
 Otherwise `run` executes inside `audit_via(marker)` and a savepoint; a domain refusal from `run` is
 also "This no longer applies". A confirmed change keeps `{"code": "done", "message", "reason"}`.
@@ -167,22 +170,30 @@ also "This no longer applies". A confirmed change keeps `{"code": "done", "messa
 - **Once**: a decided change answers "This change is already decided"; the row lock makes a double
   click run once.
 - **Reject** needs no reason, writes `ai_helper.action_rejected` ("Rejected on the console.") and
-  does nothing else.
+  does nothing else. With the switch off it is refused like Confirm.
+- `refund.request` is refused (`admin_helper_action_not_offered`) when the payment already has a
+  refund for the same reason: the refund service answers a repeated payment and reason with the
+  refund it has, whatever the amount, so the helper would report an amount that never moves. The
+  result sentence is built from the refund the service returned.
 
 **Expiry.** A waiting change expires after `prepared_action_valid_hours` (1 to 72, default 24). Its
 `admin_helper_action_expiry` job (key `admin_helper_action_expiry:<uuid>`) closes it when due
 (`expired`, outcome "Nobody confirmed it in time."); a re-run, or a run for a change already
-decided, does nothing. Until the job runs, every reader treats a waiting change past its time as
+decided, does nothing; a run before its time is deferred (`JobDeferred`, code
+`prepared_action_not_due`), so the job is never counted done early. Until the job runs, every reader treats a waiting change past its time as
 expired. An expiry writes no audit row (nothing was decided).
 
-**Key stops.** A key stopped early (by its admin, a Super Admin, a two-step reset, or the switch
-going off) expires its waiting changes at once, in the same transaction, outcome `key_stopped`;
-the stop's audit row gains `changes_expired`. A **replaced** key, or one that simply ran out, leaves
-them for the console click.
+**Key stops.** A key stopped early by its admin or a Super Admin expires its waiting changes at
+once, in the same transaction, outcome `key_stopped`; the stop's audit row gains
+`changes_expired`. A **replaced** key, or one that simply ran out, leaves them for the console
+click. A **two-step reset** expires every waiting change of that admin, and **switching the helper
+off** every waiting change of every admin, whichever key prepared them (a replaced key's included),
+so switching back on revives nothing; the switch-off audit row gives `keys_stopped` and
+`changes_expired` and is written when either is not zero.
 
 **Switch off.** No key works (L15), nothing can be prepared, and the waiting list and every change
 page are **read only**: they say "The AI helper is switched off, so nothing it prepared can be
-confirmed." and offer no Confirm or Reject.
+confirmed or rejected." and offer no Confirm or Reject; the service refuses both too.
 
 ## 7. Audit
 
@@ -331,7 +342,7 @@ curl -sS -X POST -H "Authorization: Bearer wslr_…" -H "Content-Type: applicati
 
 ## 11. Tests
 
-Django 3,123 before, 3,196 after (+74 new in five files, −1 in `test_admin_safety.py`).
+Django 3,123 before, 3,200 after (+78 new in five files, −1 in `test_admin_safety.py`).
 
 - `apps/admin_helper/tests/test_l16_equivalence.py` (22): for every registry entry, the console POST
   and the helper's prepare-and-confirm run from the same starting point and are compared **row for
@@ -345,18 +356,22 @@ Django 3,123 before, 3,196 after (+74 new in five files, −1 in `test_admin_saf
   cannot run through any helper endpoint with any key; the scripted client that obeys an instruction
   planted in a dispute description and ends with only a `waiting` row; a change key at 29 min 59 s
   and at 30 min; `GET actions` and its filter; guide and tasks per key; switch off.
-- `test_l16_confirm.py` (21): confirm and its audit; the reason rules; another admin (404); no
-  second step; twice; expired; the record changed; no longer offered; a different fresh dispute
-  preview; a role downgrade; a service refusal; no marker on the next console action; reject; the
-  expiry job and its re-run; key stops (own, Super Admin, two-step reset, switch) against replaced
-  and naturally expired keys; read only when switched off; page content; work list item; change key
-  creation behind a fresh code.
+- `test_l16_confirm.py` (24): confirm and its audit; confirm locks the change row and never a key,
+  and a refund's payment before its basis (the SQL is checked); the reason rules; another admin
+  (404); no second step; twice; expired; the record changed; no longer offered; a different fresh
+  dispute preview; a role downgrade; a service refusal and a finance refusal (failed, not an
+  error); a refund reason already used; no marker on the next console action; reject; the expiry
+  job, deferred when early, and its re-run; key stops (own, Super Admin, two-step reset, switch,
+  a replaced key's changes included for the last two, nothing revived when switched back on)
+  against replaced and naturally expired keys; read only when switched off, reject included; page
+  content; work list item; change key creation behind a fresh code.
 - `test_l16_coverage.py` (4): every console POST route is in `CONSOLE_POSTS` or `NEVER`, with no
   overlap and no stale name; every registry code is on a console page; no `check` or `run` calls a
   model's `save` or `update`; every entry has a task.
-- `apps/admin_panel/tests/test_l16_notes_and_ban.py` (8): notes on each page, audited, append only,
+- `apps/admin_panel/tests/test_l16_notes_and_ban.py` (9): notes on each page, audited, append only,
   validated, gated by the page permission, never in a member payload; ban and restore with a reason,
-  nothing else changed, tokens refused; staff and oneself refused; only `manage_users`.
+  nothing else changed, tokens refused; a ban page left open never does the opposite; staff and
+  oneself refused; only `manage_users`.
 
 Rewritten tests (each named in the pull request):
 
@@ -409,7 +424,35 @@ constraints and indexes, and pg_dump's `\restrict` lines, nothing else).
 
 ## 13. Second review (plan 1.6)
 
-Pending: recorded here and in the gate review comment on the pull request once the pass is done.
+An independent reviewer (a fresh session that had not written the code) read the whole diff for
+races, authorization, idempotency and money. Nothing was found in authorization (every query is
+the admin's own, permission fresh at prepare and confirm, two-step on confirm, read key refused,
+no helper route to confirm), in the dispute money preview (computed under the deal lock inside the
+confirm), in payout retry (`state_version` enforced), in the audit marker's reset, in member text
+(it can only reach the two direct actions) or in scope. Its findings, all fixed in this pull
+request with a test each:
+
+1. **Deadlock between confirm or reject and a key stop** (should fix). The change row was locked
+   with `select_related("key")`, so Postgres locked the key row too, in the opposite order to key
+   stops and prepares. Now `FOR UPDATE OF` the change's table only (the SQL is asserted).
+2. **A ban page left open could do the opposite** (should fix). The page decided ban or restore
+   from the state at POST time: a colleague's ban first, or a double submit, restored the account
+   with the ban's reason. The page now posts what it offered and the service refuses it unchanged.
+3. **A refund for a reason already used reported an amount that never moved** (should fix). The
+   refund service answers a repeated payment and reason with its existing refund (and revives a
+   failed one). The helper now refuses that case and reports the refund the service returned. The
+   console's own refund form keeps this older behaviour (section 15).
+4. **Reject worked with the switch off** (minor): now refused like Confirm.
+5. **A replaced key's changes survived a switch-off or a two-step reset** (minor): both now expire
+   every waiting change in their scope, so switching back on revives nothing.
+6. **An expiry job run early counted as done** (minor): it is now deferred (`JobDeferred`), the
+   project's convention for early runs.
+7. **A finance refusal while confirming a job decision was a 500** (minor):
+   `FinanceOperationsError` is now a domain refusal, so the change is marked failed.
+8. **A refund's basis was read before the payment was locked** (minor): confirm now takes the
+   refund service's first lock (the payment) before comparing the basis.
+9. **Direct actions are not idempotent** (minor): a retried `note.add` adds a second note. Kept as
+   a known limit (section 15).
 
 ## 14. Judgment calls
 
@@ -452,9 +495,22 @@ Smaller calls made while building, kept for Ismail's end review:
     keeps the overview within its query budget of 22).
 18. The change page's heading is the first clause of the registry's description ("Ban a member's
     account"); the server's summary below it says the rest.
+19. A two-step reset or a switch-off expires every waiting change in its scope, a replaced key's
+    included (second review, item 5); only a stop of one key by its admin or a Super Admin is
+    limited to that key's changes, and a replacement or natural expiry leaves them.
+20. `refund.request` is refused when the payment already has a refund for the same reason, instead
+    of reporting an amount the service would not move (second review, item 3).
+21. With the switch off, Reject is refused like Confirm (the list is read only).
+22. The ban page posts the state it offered; a page left open while someone else banned or restored
+    the person changes nothing and says so.
 
 ## 15. Known limits
 
+- A direct action is not idempotent: an assistant that retries `note.add` after a lost answer adds
+  the note twice (notes are append only; the audit log shows both).
+- The console's own refund form, asked twice for the same payment and reason, answers with the
+  refund that exists (reviving a failed one) and shows success. This predates L16 and the console
+  form was moved unchanged; the helper refuses that case instead. A finding for the end review.
 - A direct action already past the key check when its key is stopped finishes (as L15's reads do);
   preparing re-checks the key under its lock.
 - A change whose target was deleted can only be rejected or left to expire; confirming it fails with

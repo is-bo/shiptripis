@@ -77,6 +77,7 @@ def _domain_errors() -> tuple[type[BaseException], ...]:
     from apps.deals.cancellation import CancellationError
     from apps.discovery.errors import DiscoveryError
     from apps.disputes.services import DisputeError
+    from apps.finance.operations import FinanceOperationsError
     from apps.finance.payout_execution import PayoutExecutionError
     from apps.finance.providers import ProviderConfigurationInvalid
     from apps.finance.services import FinanceError
@@ -90,6 +91,7 @@ def _domain_errors() -> tuple[type[BaseException], ...]:
         CancellationError,
         DiscoveryError,
         DisputeError,
+        FinanceOperationsError,
         PayoutExecutionError,
         ProviderConfigurationInvalid,
         FinanceError,
@@ -218,6 +220,10 @@ class Action:
     #: reason code; a bank payout retry has none), so the admin's typed
     #: reason is kept in the audit metadata as ``confirmed_reason``.
     reason_in_metadata: bool = False
+    #: Locks, at confirm, the rows ``basis`` reads, in the same order the
+    #: console's function locks them, so the record cannot change between the
+    #: comparison and the run. ``None``: the function's own locks suffice.
+    lock: Callable[[object], None] | None = None
     #: The task in `tasks.TASKS` that explains the same thing.
     task: str = ""
     #: Who may decide which records, when the capability alone does not say.
@@ -353,7 +359,7 @@ def _live_refunds(attempt) -> list[list]:
 def _refund_check(admin, attempt, params, reason):
     from apps.admin_panel.console_forms import RefundRequestForm
     from apps.admin_panel.console_views import refund_offered
-    from apps.finance.services import refund_capacity_refusal
+    from apps.finance.services import refund_capacity_refusal, refund_key
 
     _form(
         RefundRequestForm,
@@ -368,7 +374,24 @@ def _refund_check(admin, attempt, params, reason):
     exceeded = refund_capacity_refusal(attempt, params["amount_eur_cents"])
     if exceeded is not None:
         raise Refused(exceeded.code, str(exceeded))
+    earlier = PaymentRefund.objects.filter(
+        idempotency_key=refund_key(attempt.pk, params["refund_reason"])
+    ).first()
+    if earlier is not None:
+        # The refund service answers the same payment and reason with the
+        # refund it already has, whatever the amount: the helper would report
+        # an amount that never moves.
+        raise Refused(
+            NOT_OFFERED,
+            f"This payment already has a refund for this reason ({format_eur(earlier.amount_eur_cents)}, "
+            f"{earlier.get_status_display().lower()}). Open it on the console.",
+        )
     return dict(params)
+
+
+def _lock_payment(attempt) -> None:
+    # The refund service's first lock, taken earlier in the same transaction.
+    list(PaymentAttempt.objects.select_for_update(no_key=True).filter(pk=attempt.pk).values_list("pk"))
 
 
 def _refund_basis(attempt, cleaned):
@@ -407,14 +430,15 @@ def _refund_details(attempt, cleaned):
 
 
 def _refund_run(admin, attempt, cleaned, reason, basis):
-    staff_actions.request_refund(
+    refund = staff_actions.request_refund(
         actor=admin,
         attempt_id=attempt.pk,
         amount_eur_cents=cleaned["amount_eur_cents"],
         reason=cleaned["refund_reason"],
     )
+    # What the service did, not what was asked.
     return (
-        f"The refund of {format_eur(cleaned['amount_eur_cents'])} is requested. "
+        f"The refund of {format_eur(refund.amount_eur_cents)} is requested. "
         "It is listed under Finance, then Refunds."
     )
 
@@ -559,7 +583,7 @@ def _ban_check(banned: bool):
     def check(admin, person, params, reason):
         from apps.admin_panel.console_account import AccountBanForm
 
-        _form(AccountBanForm, {"reason": reason})
+        _form(AccountBanForm, {"intent": "ban" if banned else "restore", "reason": reason})
         refusal = staff_actions.ban_refusal(admin, person, banned=banned)
         if refusal is not None:
             raise Refused(refusal.code, str(refusal))
@@ -912,6 +936,7 @@ def _entries() -> tuple[Action, ...]:
             summary=_refund_summary,
             details=_refund_details,
             run=_refund_run,
+            lock=_lock_payment,
             reason_in_metadata=True,
             task="request_refund",
         ),

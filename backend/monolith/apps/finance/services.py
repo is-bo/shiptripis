@@ -2232,6 +2232,13 @@ def refund_capacity_refusal(
     return None
 
 
+def refund_key(attempt_id: int, reason: str) -> str:
+    """The idempotency key of a refund asked for without one: one per payment
+    and reason, so asking again answers the refund that exists."""
+
+    return f"refund:attempt:{attempt_id}:{reason}"
+
+
 def request_refund(
     *,
     order_id: int,
@@ -2250,7 +2257,7 @@ def request_refund(
     """
 
     amount_eur_cents = require_positive_cents(amount_eur_cents)
-    key = idempotency_key or f"refund:attempt:{attempt_id}:{reason}"
+    key = idempotency_key or refund_key(attempt_id, reason)
 
     existing = PaymentRefund.objects.filter(idempotency_key=key).first()
     from .mode_safety import require_object_mode

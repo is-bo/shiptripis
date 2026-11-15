@@ -766,9 +766,14 @@ def handle_admin_helper_call_prune(payload: dict) -> str:
 def handle_admin_helper_action_expiry(payload: dict) -> str:
     """L16: a prepared change nobody confirmed in time stops waiting."""
 
+    from apps.admin_helper.prepared import NotDue
     from apps.admin_helper.prepared import handle_expiry_job as run
 
-    return run(payload)
+    try:
+        return run(payload)
+    except NotDue as early:
+        # Fired early: keep the obligation, like every other early handler.
+        raise JobDeferred(str(early), code="prepared_action_not_due", delay=early.delay) from None
 
 
 HANDLERS = {

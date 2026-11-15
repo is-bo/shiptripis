@@ -14,10 +14,12 @@
   early) close the ones that may no longer be confirmed.
 
 Lock order. Preparing locks the key row, then the waiting change. Stopping a
-key locks the key rows, then updates their waiting changes. Confirming locks
-only the change row, then whatever the console's function locks; it never
-locks a key, so it cannot deadlock with a stop. A stop that waits on a
-confirmation sees the change confirmed and leaves it.
+key locks the key rows, then updates their waiting changes. Confirming and
+rejecting lock only the change row (``FOR UPDATE OF`` that table alone), then,
+for a refund, the payment its basis reads, then whatever the console's
+function locks; they never lock a key, so they cannot deadlock with a stop or
+a prepare. A stop that waits on a confirmation sees the change confirmed and
+leaves it.
 
 Audit. Direct and confirmed actions write the console action's own rows, with
 ``{"via": "ai_helper", "key", "prepared_action"}`` merged in by
@@ -57,6 +59,7 @@ CHANGED = "admin_helper_action_changed"
 
 #: What the assistant and the admin read when a change cannot run any more.
 NO_LONGER_APPLIES = "This no longer applies"
+SWITCHED_OFF = "The AI helper is switched off, so nothing it prepared can be confirmed or rejected."
 
 
 def _json(value) -> object:
@@ -316,13 +319,13 @@ def _close(prepared: PreparedAction, status: str, outcome: dict, *, at: datetime
 
 
 def expire_for_keys(key_ids, *, at: datetime | None = None) -> int:
-    """Close the waiting changes of keys that stopped early; return how many.
+    """Close the waiting changes of these keys (ids or a subquery); return how many.
 
-    Called inside the stop's transaction, after its key rows are locked.
+    Called inside a stop's transaction, after its key rows are locked.
     """
 
     return PreparedAction.objects.filter(
-        key_id__in=list(key_ids), status=PreparedAction.Status.WAITING
+        key_id__in=key_ids, status=PreparedAction.Status.WAITING
     ).update(
         status=PreparedAction.Status.EXPIRED,
         decided_at=at or timezone.now(),
@@ -330,8 +333,20 @@ def expire_for_keys(key_ids, *, at: datetime | None = None) -> int:
     )
 
 
+class NotDue(Exception):
+    """The expiry job ran before the change's time; try again after ``delay``."""
+
+    def __init__(self, delay: timedelta):
+        super().__init__("The prepared change has not expired yet.")
+        self.delay = delay
+
+
 def handle_expiry_job(payload: dict) -> str:
-    """The ``admin_helper_action_expiry`` job: close one change past its time."""
+    """The ``admin_helper_action_expiry`` job: close one change past its time.
+
+    Run early (a manual retry, clock skew), it raises `NotDue` so the job
+    runner keeps the job and tries again, instead of counting it done.
+    """
 
     with transaction.atomic():
         prepared = (
@@ -343,7 +358,7 @@ def handle_expiry_job(payload: dict) -> str:
         if prepared is None or prepared.status != PreparedAction.Status.WAITING:
             return "already_closed"
         if prepared.expires_at > now:
-            return "not_due"
+            raise NotDue(prepared.expires_at - now)
         _close(prepared, PreparedAction.Status.EXPIRED, _expired_outcome(), at=now)
     return "expired"
 
@@ -372,9 +387,9 @@ class Decision:
 
 
 def _own_locked(request, action_id) -> PreparedAction | None:
+    # The change row only: never the key (see "Lock order" above).
     return (
-        PreparedAction.objects.select_for_update()
-        .select_related("key")
+        PreparedAction.objects.select_for_update(of=("self",))
         .filter(pk=action_id, admin=request.user)
         .first()
     )
@@ -413,18 +428,23 @@ class _Stale(Exception):
         self.why = why
 
 
-def _assess(admin, prepared: PreparedAction, reason: str):
+def _assess(admin, prepared: PreparedAction, reason: str, *, confirming: bool = False):
     """``(entry, record, cleaned)`` when the change may run now as ``admin``.
 
     The permission (fresh), the record, the per-record rule, the console's
     own validation with ``reason``, then the stored basis: the first that
-    fails raises `_Stale` with why, in words.
+    fails raises `_Stale` with why, in words. When ``confirming``, an entry
+    with a ``lock`` first locks what its basis reads, so nothing changes
+    between the comparison and the run.
     """
 
     entry = actions.get(prepared.action)
     if entry is None or not entry.permitted(admin, prepared.target_type):
         raise _Stale(FORBIDDEN, "your role no longer allows this change.")
     obj = entry.load(prepared.target_type, prepared.target_id)
+    if obj is not None and confirming and entry.lock is not None:
+        entry.lock(obj)
+        obj = entry.load(prepared.target_type, prepared.target_id)
     if obj is None:
         raise _Stale(TARGET_NOT_FOUND, "the record no longer exists.")
     if entry.allowed is not None and not entry.allowed(admin, obj):
@@ -492,9 +512,9 @@ def confirm(*, request, action_id, reason: str) -> Decision | None:
             return closed
         policy = current_policy()
         if policy is None or not policy.enabled:
-            raise NotDecidable("The AI helper is switched off, so nothing it prepared can be confirmed.")
+            raise NotDecidable(SWITCHED_OFF)
         try:
-            entry, obj, cleaned = _assess(request.user, prepared, reason)
+            entry, obj, cleaned = _assess(request.user, prepared, reason, confirming=True)
         except _Stale as stale:
             return _fail(prepared, stale.code, stale.why, reason=reason, at=now)
         extra = {"confirmed_reason": reason} if entry.reason_in_metadata else {}
@@ -523,7 +543,11 @@ def _sentence(message: str) -> str:
 
 
 def reject(*, request, action_id) -> Decision | None:
-    """Close one waiting change without running it. No reason is asked."""
+    """Close one waiting change without running it. No reason is asked.
+
+    With the helper switched off the list is read only: nothing is decided,
+    rejections included (spec 20.8).
+    """
 
     with transaction.atomic():
         prepared = _own_locked(request, action_id)
@@ -533,6 +557,9 @@ def reject(*, request, action_id) -> Decision | None:
         closed = _decidable(prepared, now)
         if closed is not None:
             return closed
+        policy = current_policy()
+        if policy is None or not policy.enabled:
+            raise NotDecidable(SWITCHED_OFF)
         _close(prepared, PreparedAction.Status.REJECTED,
                {"code": "rejected", "message": "You rejected it on the console."}, at=now)
         record_admin_action(

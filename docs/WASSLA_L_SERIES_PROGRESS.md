@@ -912,17 +912,26 @@ Screenshots: `/mnt/project-files/l-series-screens/L16/` (console EN and 390 px, 
   fresh dispute preview compared at confirm; repeat and 409; early key stops expire changes;
   console actions moved unchanged into `staff_actions.py`; audit context reset after each run;
   refund's typed reason in metadata; `problem.acknowledge` on `manage_disputes`. Smaller calls for
-  Ismail's end review: phase doc section 14, items 1 to 18 (among them: a refused confirm marks the
+  Ismail's end review: phase doc section 14, items 1 to 22 (among them: a refused confirm marks the
   change failed and is audited, an expiry is not; a repeat answers 200; notes through the helper also
   need a reason; the never lists; waiting changes not repeated on the card).
-- Tests (before and after counts): Django 3,123 before, 3,196 after (+74 in five L16 files, −1 in
+- Tests (before and after counts): Django 3,123 before, 3,200 after (+78 in five L16 files, −1 in
   `test_admin_safety.py`, whose bulk-ban tests were rewritten because the action was removed). Also
   rewritten: two `test_l15_api.py` assertions (`helper_changes` queue, `tasks[].actions`), one
   `test_l15_keys.py` card test (both keys offered), L14's route inventory. ruff and
   `makemigrations --check` clean, `schema.sql` re-exported (two tables and their constraints).
-- Second review (plan 1.6): pending (recorded before merge).
-- Known limits: a direct action already past the key check when its key is stopped finishes; a change
-  whose record was deleted can only be rejected or expire; console English only.
+- Second review (plan 1.6, phase doc section 13): three should-fix and six minor findings, all fixed
+  in the PR with tests except one kept as a known limit: confirm and reject locked the key row
+  (deadlock with a key stop), now `FOR UPDATE OF` the change only; a ban page left open could
+  restore instead of ban, now it posts what it offered; a refund for a reason already used reported
+  an amount that never moved, now refused; reject with the switch off, a replaced key's changes
+  surviving a reset or switch-off, an early expiry job counted done, a finance refusal as a 500,
+  and the refund basis read before its lock, all fixed. Kept: a retried `note.add` adds a second
+  note. Found, not changed (console behaviour from before L16): the console refund form answers a
+  repeated payment and reason with the existing refund.
+- Known limits: a direct action is not idempotent (a retried note is added twice); a direct action
+  already past the key check when its key is stopped finishes; a change whose record was deleted can
+  only be rejected or expire; console English only.
 
 ### L17. AI helper skill
 

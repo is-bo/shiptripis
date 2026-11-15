@@ -125,11 +125,11 @@ class AccountBanTests(TestCase):
         deal_status = Deal.objects.get(pk=self.world.deal.pk).status
         payment_status = PaymentAttempt.objects.get(pk=self.world.payment.pk).status
 
-        assert self.client.post(self.ban_url(), {"reason": ""}).status_code == 200
+        assert self.client.post(self.ban_url(), {"intent": "ban", "reason": ""}).status_code == 200
         self.person.refresh_from_db()
         assert not self.person.is_banned
 
-        response = self.client.post(self.ban_url(), {"reason": "Threatened the traveler in chat."})
+        response = self.client.post(self.ban_url(), {"intent": "ban", "reason": "Threatened the traveler in chat."})
         assert response.status_code == 302
         self.person.refresh_from_db()
         assert self.person.is_banned and not self.person.is_active
@@ -145,10 +145,23 @@ class AccountBanTests(TestCase):
 
         page = self.client.get(reverse("admin_console:user-detail", args=(self.person.pk,))).content.decode()
         assert "Restore account" in page
-        self.client.post(self.ban_url(), {"reason": "Apologised; agreed with the traveler."})
+        self.client.post(self.ban_url(), {"intent": "restore", "reason": "Apologised; agreed with the traveler."})
         self.person.refresh_from_db()
         assert not self.person.is_banned and self.person.is_active
         assert AdminAuditLog.objects.get(action="account.restored").after == {"is_banned": False, "is_active": True}
+
+    def test_a_page_left_open_never_does_the_opposite(self):
+        """Opened to ban; a colleague bans first; the stale page must not restore."""
+
+        page = self.client.get(self.ban_url()).content.decode()
+        assert 'name="intent" value="ban"' in page
+        staff_actions.set_account_ban(actor=self.owner, user_id=self.person.pk, banned=True, reason="Banned first.")
+        response = self.client.post(self.ban_url(), {"intent": "ban", "reason": "Threatened the traveler."}, follow=True)
+        self.person.refresh_from_db()
+        assert self.person.is_banned and not self.person.is_active
+        assert not AdminAuditLog.objects.filter(action="account.restored").exists()
+        shown = response.content.decode()
+        assert "This account is already banned. Nothing was changed." in shown and "Restore account" in shown
 
     def test_staff_and_ones_own_account_are_refused(self):
         colleague = make_staff("ban-colleague@example.test", AdminRole.OPS)
@@ -156,7 +169,7 @@ class AccountBanTests(TestCase):
                               (self.owner, "You cannot ban or restore your own account.")):
             page = self.client.get(self.ban_url(person)).content.decode()
             assert words in page and 'name="reason"' not in page
-            self.client.post(self.ban_url(person), {"reason": "Testing."})
+            self.client.post(self.ban_url(person), {"intent": "ban", "reason": "Testing."})
             person.refresh_from_db()
             assert not person.is_banned and person.is_active
         with self.assertRaises(staff_actions.StaffActionError):
@@ -168,7 +181,7 @@ class AccountBanTests(TestCase):
             staff = make_staff(f"ban-{role}@example.test", role)
             client = Client()
             staff_login(client, staff)
-            assert client.post(self.ban_url(), {"reason": "No."}).status_code == 403, role
+            assert client.post(self.ban_url(), {"intent": "ban", "reason": "No."}).status_code == 403, role
             with self.assertRaises(PermissionDenied):
                 staff_actions.set_account_ban(actor=staff, user_id=self.person.pk, banned=True, reason="No.")
         self.person.refresh_from_db()

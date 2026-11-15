@@ -23,6 +23,9 @@ User = get_user_model()
 
 
 class AccountBanForm(ConsoleForm):
+    #: What the page offered when it was opened. A page left open while a
+    #: colleague banned the person must not restore them, and the reverse.
+    intent = forms.ChoiceField(choices=(("ban", "ban"), ("restore", "restore")), widget=forms.HiddenInput)
     reason = forms.CharField(
         max_length=500,
         label="Reason",
@@ -46,31 +49,33 @@ def header_action(request, person) -> dict | None:
 
 
 def account_ban(request, pk: int):
-    from .console_views import _operation_error, _render
+    from .console_views import _render
 
     person = get_object_or_404(User, pk=pk)
     banning = not person.is_banned
     refusal = ban_refusal(request.user, person, banned=banning)
-    form = AccountBanForm(request.POST or None)
+    form = AccountBanForm(request.POST or None, initial={"intent": "ban" if banning else "restore"})
     back = reverse("admin_console:user-detail", args=(person.pk,))
     if request.method == "POST" and refusal is None and form.is_valid():
+        wanted = form.cleaned_data["intent"] == "ban"
         try:
             set_account_ban(
                 actor=request.user,
                 user_id=person.pk,
-                banned=banning,
+                banned=wanted,
                 reason=form.cleaned_data["reason"],
             )
         except StaffActionError as exc:
-            _operation_error(request, "Changing the account", exc)
-        else:
-            messages.success(
-                request,
-                "The account is banned. The person is signed out and cannot sign in."
-                if banning
-                else "The account is restored. The person can sign in again.",
-            )
-            return redirect(back)
+            # Someone else changed it first: show the page as it is now.
+            messages.error(request, f"{exc} Nothing was changed.")
+            return redirect(request.path)
+        messages.success(
+            request,
+            "The account is banned. The person is signed out and cannot sign in."
+            if wanted
+            else "The account is restored. The person can sign in again.",
+        )
+        return redirect(back)
     who = f"{display_name(person)} (person {person.pk})"
     if refusal is not None:
         description = str(refusal)

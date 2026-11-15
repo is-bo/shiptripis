@@ -18,7 +18,7 @@
   <section class="st-card st-helper-changes" id="st-helper-waiting" aria-labelledby="st-helper-waiting-title">
     <p class="st-eyebrow">Your decision</p>
     <h2 id="st-helper-waiting-title">Waiting for your confirmation</h2>
-    {% if not may_decide and waiting %}<p class="st-helper-off"><span class="st-chip st-mute">Switched off</span> The AI helper is switched off, so nothing it prepared can be confirmed. The list is read only.</p>{% endif %}
+    {% if not may_decide and waiting %}<p class="st-helper-off"><span class="st-chip st-mute">Switched off</span> The AI helper is switched off, so nothing it prepared can be confirmed or rejected. The list is read only.</p>{% endif %}
     {% if waiting %}
     <ol class="st-change-list">
       {% for row in waiting %}
