@@ -236,7 +236,7 @@ def _stop(key: AdminHelperKey, *, actor, reason: str, note: str, at: datetime) -
     key.revoked_at = at
     key.revoked_reason = reason
     key.save(update_fields=("revoked_at", "revoked_reason"))
-    expired = 0 if reason == AdminHelperKey.StopReason.REPLACED else expire_for_keys([key.pk], at=at)
+    expired = 0 if reason == AdminHelperKey.StopReason.REPLACED else expire_for_keys([key.pk], reason=reason, at=at)
     record_admin_action(
         actor=actor,
         action="ai_helper.key_stopped",
@@ -297,7 +297,7 @@ def _stop_live(keys, *, reason: str, at: datetime) -> tuple[list[AdminHelperKey]
     AdminHelperKey.objects.filter(pk__in=[key.pk for key in live]).update(
         revoked_at=at, revoked_reason=reason
     )
-    return live, expire_for_keys(keys.values_list("pk", flat=True), at=at)
+    return live, expire_for_keys(keys.values_list("pk", flat=True), reason=reason, at=at)
 
 
 def stop_all_keys(admin, *, reason: str) -> int:

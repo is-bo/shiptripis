@@ -268,7 +268,8 @@ class ConfirmTests(TestCase):
         change = self.prepare()
         keys.stop_key(actor=self.owner, key_id=self.key_row(self.plain).pk)
         change.refresh_from_db()
-        assert change.status == PreparedAction.Status.EXPIRED and change.outcome["code"] == "key_stopped"
+        assert change.status == PreparedAction.Status.EXPIRED
+        assert change.outcome == {"code": "key_stopped", "message": "The key that prepared it was stopped."}
         stopped = AdminAuditLog.objects.get(action="ai_helper.key_stopped")
         assert stopped.metadata["changes_expired"] == 1
 
@@ -289,6 +290,7 @@ class ConfirmTests(TestCase):
         reset(actor=self.owner, target=trust, reason="Lost phone.")
         change.refresh_from_db()
         assert change.status == PreparedAction.Status.EXPIRED
+        assert change.outcome["message"] == "Your two-step sign-in was reset, which stopped the key that prepared it."
 
         mine = self.prepare()
         change_key(self.owner)  # replaced, and then no live key at all
@@ -298,6 +300,7 @@ class ConfirmTests(TestCase):
         revision = set_helper_policy(enabled=False)
         mine.refresh_from_db()
         assert mine.status == PreparedAction.Status.EXPIRED
+        assert mine.outcome["message"] == "The AI helper was switched off."
         # Switching back on revives nothing.
         set_helper_policy(enabled=True)
         mine.refresh_from_db()

@@ -318,10 +318,22 @@ def _close(prepared: PreparedAction, status: str, outcome: dict, *, at: datetime
     prepared.save(update_fields=("status", "decided_at", "outcome"))
 
 
-def expire_for_keys(key_ids, *, at: datetime | None = None) -> int:
+#: What the admin reads on a change that expired because its key stopped early.
+_STOPPED_BECAUSE = {
+    AdminHelperKey.StopReason.STOPPED_BY_SUPER_ADMIN: "A Super Admin stopped the key that prepared it.",
+    AdminHelperKey.StopReason.TWO_STEP_RESET: (
+        "Your two-step sign-in was reset, which stopped the key that prepared it."
+    ),
+    AdminHelperKey.StopReason.SWITCHED_OFF: "The AI helper was switched off.",
+}
+_STOPPED = "The key that prepared it was stopped."
+
+
+def expire_for_keys(key_ids, *, reason: str, at: datetime | None = None) -> int:
     """Close the waiting changes of these keys (ids or a subquery); return how many.
 
-    Called inside a stop's transaction, after its key rows are locked.
+    Called inside a stop's transaction, after its key rows are locked, with
+    the stop's reason, which the admin reads on each change.
     """
 
     return PreparedAction.objects.filter(
@@ -329,7 +341,7 @@ def expire_for_keys(key_ids, *, at: datetime | None = None) -> int:
     ).update(
         status=PreparedAction.Status.EXPIRED,
         decided_at=at or timezone.now(),
-        outcome={"code": "key_stopped", "message": "The key that prepared it was stopped."},
+        outcome={"code": "key_stopped", "message": _STOPPED_BECAUSE.get(reason, _STOPPED)},
     )
 
 

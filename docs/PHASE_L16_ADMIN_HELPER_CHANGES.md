@@ -189,7 +189,9 @@ once, in the same transaction, outcome `key_stopped`; the stop's audit row gains
 click. A **two-step reset** expires every waiting change of that admin, and **switching the helper
 off** every waiting change of every admin, whichever key prepared them (a replaced key's included),
 so switching back on revives nothing; the switch-off audit row gives `keys_stopped` and
-`changes_expired` and is written when either is not zero.
+`changes_expired` and is written when either is not zero. The change page names why it expired: the key
+was stopped, a Super Admin stopped it, the admin's two-step sign-in was reset, or the helper was
+switched off.
 
 **Switch off.** No key works (L15), nothing can be prepared, and the waiting list and every change
 page are **read only**: they say "The AI helper is switched off, so nothing it prepared can be
@@ -411,8 +413,8 @@ constraints and indexes, and pg_dump's `\restrict` lines, nothing else).
 - `change-journey-confirm-done-en.png`: right after Confirm: the message, the outcome and the admin's
   reason.
 - `change-job-confirmed-en.png`, `change-review-rejected-en.png`: decided changes, read only.
-- `ai-helper-page-off-en.png`, `change-refund-off-en.png`: the helper switched off: the list and the
-  change page are read only, keys shown as stopped by the switch.
+- `ai-helper-page-off-en.png`, `change-refund-off-en.png`: the helper switched off: every waiting
+  change expired with "The AI helper was switched off.", keys shown as stopped by the switch.
 - `deal-notes-default-en.png`, `deal-notes-narrow-en.png`, `dispute-notes-default-en.png`,
   `person-notes-default-en.png`: internal notes on each page, one marked "Added by their AI helper",
   and the form.
