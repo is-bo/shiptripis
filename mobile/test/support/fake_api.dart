@@ -65,7 +65,13 @@ typedef FakeHandler = FutureOr<FakeResponse> Function(RecordedRequest request);
 
 class FakeBackend {
   final List<RecordedRequest> requests = <RecordedRequest>[];
-  final Map<String, FakeHandler> _routes = <String, FakeHandler>{};
+  final Map<String, FakeHandler> _routes = <String, FakeHandler>{
+    // Answers every screen that offers "contact support" (none set) and the
+    // Profile rating (no ratings), so a test about something else need not.
+    'GET /api/support': (_) => const FakeResponse(200, {'email': null}),
+    'GET /api/users/me/ratings/summary': (_) =>
+        const FakeResponse(200, {'state': 'new', 'average': null, 'count': 0}),
+  };
 
   /// Answers any request no route claims. Null keeps the default: an unrouted
   /// call is a loud failure. A whole-app test that boots every tab sets this

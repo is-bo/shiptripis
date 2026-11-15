@@ -39,6 +39,7 @@ import '../../domain/delivery_request.dart' show ItemCategory;
 import '../../domain/discovery.dart';
 import '../../domain/journey.dart';
 import '../../l10n/app_localizations.dart';
+import '../common/contact_support.dart';
 import '../common/formatters.dart';
 import '../common/status_copy.dart';
 import '../common/traveler_candidate_card.dart' show modeAccentColor;
@@ -693,7 +694,7 @@ class _Route extends StatelessWidget {
 /// A traveller's own pause has a Resume button. A staff pause does not, and
 /// never says why: the reason stays with staff, and the traveller is told to
 /// contact support.
-class _PausedBanner extends StatelessWidget {
+class _PausedBanner extends ConsumerWidget {
   const _PausedBanner({
     required this.journey,
     required this.busy,
@@ -705,17 +706,32 @@ class _PausedBanner extends StatelessWidget {
   final VoidCallback onResume;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l = L.of(context);
     final byStaff = journey.isPausedByStaff;
+    final supportEmail = supportEmailOf(ref);
 
+    // Only support can resume a staff pause, so the banner offers the way to
+    // reach support, or says nothing about it while the server has no address.
     return InfoNotice(
       title: l.journeyPausedBannerTitle,
-      message: byStaff ? l.journeyPausedStaffBody : l.journeyPausedBannerBody,
+      message: !byStaff
+          ? l.journeyPausedBannerBody
+          : supportEmail == null
+          ? l.journeyPausedStaffBodyNoContact
+          : l.journeyPausedStaffBody,
       tone: StatusTone.waiting,
       icon: Icons.pause_circle_outline_rounded,
-      actionLabel: byStaff ? null : l.journeyResumeAction,
-      onAction: byStaff || busy ? null : onResume,
+      actionLabel: byStaff
+          ? (supportEmail == null ? null : l.actionContactSupport)
+          : l.journeyResumeAction,
+      onAction: byStaff
+          ? (supportEmail == null
+                ? null
+                : () => openSupportEmail(context, supportEmail))
+          : busy
+          ? null
+          : onResume,
     );
   }
 }

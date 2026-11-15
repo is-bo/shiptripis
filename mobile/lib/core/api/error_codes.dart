@@ -32,6 +32,11 @@ class ApiErrorCode {
   // ---------------------------------------------------------------------------
   static const notAuthorized = ApiErrorCode('not_authorized');
 
+  /// Posting a parcel and changing payout setup need a confirmed email.
+  static const emailVerificationRequired = ApiErrorCode(
+    'email_verification_required',
+  );
+
   // ---------------------------------------------------------------------------
   // Retired V1 surfaces. Reaching one of these means the client called
   // something that no longer exists — a bug in the app, not a user problem.

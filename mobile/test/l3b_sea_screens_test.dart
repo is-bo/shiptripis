@@ -728,7 +728,10 @@ void main() {
       final l = _l(tester);
 
       expect(find.text(l.journeyPausedBannerTitle), findsOneWidget);
-      expect(find.text(l.journeyPausedStaffBody), findsOneWidget);
+      // No support address from the server: no word about contacting anyone
+      // and no button for it.
+      expect(find.text(l.journeyPausedStaffBodyNoContact), findsOneWidget);
+      expect(find.text(l.actionContactSupport), findsNothing);
       expect(find.text(l.journeyResumeAction), findsNothing);
       expect(find.text(l.journeyPauseAction), findsNothing);
     });

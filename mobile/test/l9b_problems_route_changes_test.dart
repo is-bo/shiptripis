@@ -167,14 +167,18 @@ Future<void> _pumpDeal(
   WidgetTester tester,
   FakeBackend backend, {
   Locale locale = const Locale('en'),
-}) => pumpDiscovery(
-  tester,
-  const DealScreen(dealId: 7),
-  backend,
-  locale: locale,
-  device: _tall,
-  extraRoutes: [marker('deal-schedule-change', '/deals/:id/schedule-change')],
-);
+}) async {
+  await pumpDiscovery(
+    tester,
+    const DealScreen(dealId: 7),
+    backend,
+    locale: locale,
+    device: _tall,
+    extraRoutes: [marker('deal-schedule-change', '/deals/:id/schedule-change')],
+  );
+  // The support address is read once the problems section is on screen.
+  await tester.pumpAndSettle();
+}
 
 L _l(WidgetTester tester) => L.of(tester.element(find.byType(Scaffold).first));
 

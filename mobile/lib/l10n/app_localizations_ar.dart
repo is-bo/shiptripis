@@ -1947,7 +1947,7 @@ class LAr extends L {
 
   @override
   String get disputeWindowClosedBody =>
-      'يمكن فتح النزاعات خلال 48 ساعة بعد التوصيل. تواصل مع الدعم إذا كنت لا تزال بحاجة إلى مساعدة.';
+      'يمكن فتح النزاعات خلال 48 ساعة بعد التوصيل.';
 
   @override
   String get cancelTitle => 'إلغاء هذا التوصيل';
@@ -2114,9 +2114,6 @@ class LAr extends L {
 
   @override
   String get profileCompletedDeliveries => 'مكتملة';
-
-  @override
-  String get profileRecentRating => 'التقييم الأخير';
 
   @override
   String get profileRoles => 'ما تقوم به';
@@ -2624,7 +2621,8 @@ class LAr extends L {
   String get authNewPassword => 'كلمة المرور الجديدة';
 
   @override
-  String get authResetDone => 'تم تغيير كلمة المرور. يمكنك تسجيل الدخول الآن.';
+  String get authResetDone =>
+      'تم تغيير كلمة المرور. تم تسجيل خروجك من كل مكان. سجّل الدخول بكلمة المرور الجديدة.';
 
   @override
   String get authSendCode => 'إرسال الرمز';
@@ -2641,7 +2639,7 @@ class LAr extends L {
 
   @override
   String get authVerifyNoCode =>
-      'لم يصلك شيء؟ تحقق من مجلد الرسائل غير المرغوب فيها. إذا لم تجده هناك أيضًا، تواصل مع الدعم وسنحل الأمر.';
+      'لم يصلك شيء؟ تحقق من مجلد الرسائل غير المرغوب فيها، ثم اطلب رمزًا جديدًا. الرمز في أحدث رسالة فقط هو الذي يعمل.';
 
   @override
   String get kycDocIdCard => 'بطاقة التعريف الوطنية';
@@ -3347,7 +3345,7 @@ class LAr extends L {
   String get benefitsChapterThreeStamp => 'موثّق';
 
   @override
-  String get benefitsHandoverCaption => 'التسليم · 6 رموز';
+  String get benefitsHandoverCaption => 'رمز التسليم';
 
   @override
   String get benefitsKilosFree => 'كغ\nمتاح';
@@ -6082,4 +6080,34 @@ class LAr extends L {
   @override
   String get ratingCommentHiddenByWassla =>
       'أخفت Wassla التعليق عن الآخرين. ما زالت الدرجة محتسبة.';
+
+  @override
+  String get supportEmailSubject => 'مساعدة بخصوص Wassla';
+
+  @override
+  String supportEmailSubjectDelivery(String tracking) {
+    return 'مساعدة بخصوص توصيل Wassla $tracking';
+  }
+
+  @override
+  String supportEmailFailed(String email) {
+    return 'لم يُفتح أي تطبيق بريد. اكتب إلى $email.';
+  }
+
+  @override
+  String get journeyPausedStaffBodyNoContact =>
+      'أوقفت Wassla هذه الرحلة مؤقتًا.';
+
+  @override
+  String get authVerifyResent =>
+      'أرسلنا رمزًا جديدًا. استخدم الرمز في أحدث رسالة.';
+
+  @override
+  String get authVerifyResend => 'إرسال الرمز مرة أخرى';
+
+  @override
+  String get profileVerifyEmail => 'تأكيد البريد الإلكتروني';
+
+  @override
+  String get profileRating => 'التقييم';
 }

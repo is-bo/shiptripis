@@ -24,6 +24,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../common/contact_support.dart';
 import '../../app/app_state.dart' show cancelOnDispose;
 import '../../core/api/api_exception.dart';
 import '../../core/format/locale_formats.dart';
@@ -225,6 +226,7 @@ class _DisputeDetailScreenState extends ConsumerState<DisputeDetailScreen> {
             padding: AppScrollPadding.page(context),
             children: [
               _Header(dispute: data),
+              ContactSupportButton(trackingNumber: data.trackingNumber),
               const SizedBox(height: AppSpace.xl),
 
               if (data.hasResolution) ...[

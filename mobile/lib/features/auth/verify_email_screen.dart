@@ -34,7 +34,33 @@ class VerifyEmailScreen extends ConsumerStatefulWidget {
 class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
   final _code = TextEditingController();
   bool _busy = false;
+  bool _resending = false;
   String? _error;
+
+  /// The address on the account when the route carries none (Profile and the
+  /// refused-posting flow open this screen for the signed-in person).
+  String get _email {
+    if (widget.email.isNotEmpty) return widget.email;
+    return ref.read(accountProvider)?.email ?? '';
+  }
+
+  Future<void> _resend() async {
+    if (_resending || _busy) return;
+    final l = L.of(context);
+    setState(() => _resending = true);
+    try {
+      await ref.read(authRepositoryProvider).resendVerifyEmail();
+      if (!mounted) return;
+      _code.clear();
+      setState(() => _error = null);
+      AppSnack.success(context, l.authVerifyResent);
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      AppSnack.failure(context, error);
+    } finally {
+      if (mounted) setState(() => _resending = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -57,12 +83,13 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
     try {
       await ref
           .read(authRepositoryProvider)
-          .verifyEmail(email: widget.email, code: _code.text);
+          .verifyEmail(email: _email, code: _code.text);
       // The account row changed server-side; re-read it rather than assuming.
       await ref.read(sessionProvider.notifier).refreshAccount();
       if (!mounted) return;
       AppSnack.success(context, l.authVerifyDone);
-      context.pop();
+      // `true` tells whoever sent the person here that the email is confirmed.
+      context.pop(true);
     } on ApiException catch (error) {
       if (!mounted) return;
       setState(
@@ -92,7 +119,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
               stampColor: context.colors.brandInk,
             ),
             InfoNotice(
-              message: l.authVerifyEmailBody(widget.email),
+              message: l.authVerifyEmailBody(_email),
               tone: StatusTone.progress,
               icon: Icons.mark_email_read_outlined,
             ),
@@ -106,14 +133,19 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
               onSubmitted: (_) => _submit(),
             ),
             const SizedBox(height: AppSpace.md),
-            // There is no resend endpoint in the V1 contract, so this screen
-            // does not offer a button that would quietly do nothing. It says
-            // what the user can actually try instead.
             Text(
               l.authVerifyNoCode,
               style: Theme.of(
                 context,
               ).textTheme.bodySmall?.copyWith(color: c.textTertiary),
+            ),
+            const SizedBox(height: AppSpace.md),
+            AppButton(
+              label: l.authVerifyResend,
+              icon: Icons.refresh_rounded,
+              variant: AppButtonVariant.tertiary,
+              isLoading: _resending,
+              onPressed: _busy ? null : _resend,
             ),
           ],
         ),

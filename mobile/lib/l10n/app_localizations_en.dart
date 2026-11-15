@@ -1952,7 +1952,7 @@ class LEn extends L {
 
   @override
   String get disputeWindowClosedBody =>
-      'Disputes can be opened for 48 hours after delivery. Contact support if you still need help.';
+      'Disputes can be opened for 48 hours after delivery.';
 
   @override
   String get cancelTitle => 'Cancel this delivery';
@@ -2115,9 +2115,6 @@ class LEn extends L {
 
   @override
   String get profileCompletedDeliveries => 'Completed';
-
-  @override
-  String get profileRecentRating => 'Recent rating';
 
   @override
   String get profileRoles => 'What you do';
@@ -2621,7 +2618,8 @@ class LEn extends L {
   String get authNewPassword => 'New password';
 
   @override
-  String get authResetDone => 'Password changed. You can sign in now.';
+  String get authResetDone =>
+      'Password changed. You were signed out everywhere. Sign in with the new password.';
 
   @override
   String get authSendCode => 'Send code';
@@ -2638,7 +2636,7 @@ class LEn extends L {
 
   @override
   String get authVerifyNoCode =>
-      'Nothing arrived? Check your spam folder. If it still isn\'t there, contact support and we\'ll sort it out.';
+      'Nothing arrived? Check your spam folder, then ask for a new code. Only the code in the newest email works.';
 
   @override
   String get kycDocIdCard => 'National ID card';
@@ -3340,7 +3338,7 @@ class LEn extends L {
   String get benefitsChapterThreeStamp => 'Verified';
 
   @override
-  String get benefitsHandoverCaption => 'HANDOVER · 6 CHARACTERS';
+  String get benefitsHandoverCaption => 'HANDOVER CODE';
 
   @override
   String get benefitsKilosFree => 'KG\nFREE';
@@ -6094,4 +6092,33 @@ class LEn extends L {
   @override
   String get ratingCommentHiddenByWassla =>
       'Wassla hid the comment from others. The score still counts.';
+
+  @override
+  String get supportEmailSubject => 'Help with Wassla';
+
+  @override
+  String supportEmailSubjectDelivery(String tracking) {
+    return 'Help with Wassla delivery $tracking';
+  }
+
+  @override
+  String supportEmailFailed(String email) {
+    return 'No email app opened. Write to $email.';
+  }
+
+  @override
+  String get journeyPausedStaffBodyNoContact => 'Wassla paused this journey.';
+
+  @override
+  String get authVerifyResent =>
+      'We sent a new code. Use the code in the newest email.';
+
+  @override
+  String get authVerifyResend => 'Send the code again';
+
+  @override
+  String get profileVerifyEmail => 'Verify email';
+
+  @override
+  String get profileRating => 'Rating';
 }

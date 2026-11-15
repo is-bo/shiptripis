@@ -1966,7 +1966,7 @@ class LFr extends L {
 
   @override
   String get disputeWindowClosedBody =>
-      'Les litiges peuvent être ouverts pendant 48 heures après la livraison. Contactez le support si vous avez encore besoin d’aide.';
+      'Les litiges peuvent être ouverts pendant 48 heures après la livraison.';
 
   @override
   String get cancelTitle => 'Annuler cette livraison';
@@ -2132,9 +2132,6 @@ class LFr extends L {
 
   @override
   String get profileCompletedDeliveries => 'Terminées';
-
-  @override
-  String get profileRecentRating => 'Note récente';
 
   @override
   String get profileRoles => 'Votre activité';
@@ -2638,7 +2635,7 @@ class LFr extends L {
 
   @override
   String get authResetDone =>
-      'Mot de passe modifié. Vous pouvez maintenant vous connecter.';
+      'Mot de passe modifié. Vous avez été déconnecté partout. Connectez-vous avec le nouveau mot de passe.';
 
   @override
   String get authSendCode => 'Envoyer le code';
@@ -2655,7 +2652,7 @@ class LFr extends L {
 
   @override
   String get authVerifyNoCode =>
-      'Rien reçu ? Vérifiez votre dossier spam. S’il n’y est toujours pas, contactez le support et nous réglerons cela.';
+      'Rien reçu ? Vérifiez votre dossier spam, puis demandez un nouveau code. Seul le code du dernier e-mail fonctionne.';
 
   @override
   String get kycDocIdCard => 'Carte d’identité nationale';
@@ -3371,7 +3368,7 @@ class LFr extends L {
   String get benefitsChapterThreeStamp => 'Vérifié';
 
   @override
-  String get benefitsHandoverCaption => 'REMISE · 6 CARACTÈRES';
+  String get benefitsHandoverCaption => 'CODE DE REMISE';
 
   @override
   String get benefitsKilosFree => 'KG\nLIBRES';
@@ -6167,4 +6164,34 @@ class LFr extends L {
   @override
   String get ratingCommentHiddenByWassla =>
       'Wassla a masqué le commentaire pour les autres. La note compte toujours.';
+
+  @override
+  String get supportEmailSubject => 'Aide avec Wassla';
+
+  @override
+  String supportEmailSubjectDelivery(String tracking) {
+    return 'Aide avec la livraison Wassla $tracking';
+  }
+
+  @override
+  String supportEmailFailed(String email) {
+    return 'Aucune application de messagerie ne s’est ouverte. Écrivez à $email.';
+  }
+
+  @override
+  String get journeyPausedStaffBodyNoContact =>
+      'Wassla a mis ce trajet en pause.';
+
+  @override
+  String get authVerifyResent =>
+      'Nous avons envoyé un nouveau code. Utilisez le code du dernier e-mail.';
+
+  @override
+  String get authVerifyResend => 'Renvoyer le code';
+
+  @override
+  String get profileVerifyEmail => 'Vérifier l’e-mail';
+
+  @override
+  String get profileRating => 'Note';
 }

@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/router.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/session/session.dart';
 import '../../design/components/codes.dart';
@@ -100,8 +101,10 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
             newPassword: _newPassword.text,
           );
       if (!mounted) return;
+      // The server ended every session on every device, so the only place to
+      // go is sign-in.
       AppSnack.success(context, l.authResetDone);
-      context.pop();
+      context.goNamed(Routes.signIn);
     } on ApiException catch (error) {
       if (!mounted) return;
       // Every failure here is indistinguishable by design. Showing the same

@@ -1891,6 +1891,17 @@ class RatingRepository {
         .toList(growable: false);
   }
 
+  /// My own rating as the server counts it: the all-time figure on my public
+  /// card, with ratings staff removed already left out. The app does no
+  /// arithmetic of its own.
+  Future<TravelerRating> ownSummary({CancelToken? cancelToken}) async =>
+      TravelerRating.fromJson(
+        await _api.getObject(
+          '/api/users/me/ratings/summary',
+          cancelToken: cancelToken,
+        ),
+      );
+
   /// Reports a review. A second report of the same review is answered with the
   /// first one's state, so a double tap or a retry is harmless.
   ///
@@ -1916,6 +1927,25 @@ class RatingRepository {
       },
     ),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Support
+// ---------------------------------------------------------------------------
+
+class SupportRepository {
+  const SupportRepository(this._api);
+
+  final ApiClient _api;
+
+  /// The address the emails already use, or null while the server has none.
+  /// A null answer means no support action is shown anywhere.
+  Future<String?> email({CancelToken? cancelToken}) async {
+    final json = await _api.getObject('/api/support', cancelToken: cancelToken);
+    final raw = json['email'];
+    final value = raw is String ? raw.trim() : '';
+    return value.isEmpty ? null : value;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2245,6 +2275,10 @@ final disputeRepositoryProvider = Provider<DisputeRepository>(
 
 final ratingRepositoryProvider = Provider<RatingRepository>(
   (ref) => RatingRepository(ref.watch(apiClientProvider)),
+);
+
+final supportRepositoryProvider = Provider<SupportRepository>(
+  (ref) => SupportRepository(ref.watch(apiClientProvider)),
 );
 
 final notificationRepositoryProvider = Provider<NotificationRepository>(

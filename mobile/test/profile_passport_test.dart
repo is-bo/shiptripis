@@ -7,6 +7,7 @@ import 'package:shiptrip/app/app_state.dart';
 import 'package:shiptrip/core/session/session.dart';
 import 'package:shiptrip/domain/account.dart';
 import 'package:shiptrip/domain/communication_language.dart';
+import 'package:shiptrip/domain/find_travelers.dart';
 import 'package:shiptrip/domain/rating.dart';
 import 'package:shiptrip/features/profile/profile_screen.dart';
 
@@ -44,7 +45,10 @@ ProviderContainer _container({
     completedDealsCountProvider.overrideWith(
       (ref) => AsyncData(completedDeals),
     ),
-    receivedRatingsProvider.overrideWith((ref) => AsyncData(ratings)),
+    ownRatingSummaryProvider.overrideWith(
+      (ref) => AsyncData(_summary(ratings)),
+    ),
+    supportEmailProvider.overrideWith((ref) async => null),
     unreadNotificationsProvider.overrideWith((ref) => const AsyncData(0)),
   ],
 );
@@ -136,3 +140,16 @@ Future<void> _waitFor(bool Function() condition) async {
   }
   throw StateError('Provider did not settle.');
 }
+
+/// What the server's own-rating summary says for [ratings] (the test states
+/// the figure; the app does no arithmetic).
+TravelerRating _summary(List<Rating> ratings) => ratings.isEmpty
+    ? const TravelerRating(state: TravelerRatingState.unrated, count: 0)
+    : TravelerRating(
+        state: TravelerRatingState.rated,
+        count: ratings.length,
+        average: double.parse(
+          (ratings.fold<int>(0, (a, r) => a + r.score) / ratings.length)
+              .toStringAsFixed(1),
+        ),
+      );

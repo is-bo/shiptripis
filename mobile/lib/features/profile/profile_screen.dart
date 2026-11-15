@@ -30,10 +30,12 @@ import '../../design/identity.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../domain/account.dart';
-import '../../domain/rating.dart';
+import '../../domain/find_travelers.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/formatters.dart';
 import '../shell/app_shell.dart';
+import '../auth/email_gate.dart';
+import '../common/contact_support.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -43,7 +45,8 @@ class ProfileScreen extends ConsumerWidget {
     final l = L.of(context);
     final account = ref.watch(accountProvider);
     final completedDeals = ref.watch(completedDealsCountProvider);
-    final ratings = ref.watch(receivedRatingsProvider);
+    final rating = ref.watch(ownRatingSummaryProvider);
+    final supportEmail = supportEmailOf(ref);
 
     if (account == null) {
       return const AppScaffold(
@@ -67,11 +70,24 @@ class ProfileScreen extends ConsumerWidget {
             _PassportCard(
               account: account,
               completedDeals: completedDeals,
-              ratings: ratings,
+              rating: rating,
             ),
             const SizedBox(height: AppSpace.xl),
 
             _VerificationCard(account: account),
+            if (!account.isEmailVerified) ...[
+              const SizedBox(height: AppSpace.sm),
+              _Row(
+                icon: Icons.mark_email_unread_outlined,
+                label: l.profileVerifyEmail,
+                onTap: () async {
+                  final confirmed = await openVerifyEmail(context);
+                  if (confirmed) {
+                    await ref.read(sessionProvider.notifier).refreshAccount();
+                  }
+                },
+              ),
+            ],
             const SizedBox(height: AppSpace.xl),
 
             SectionHeader(title: l.profilePayments),
@@ -133,6 +149,12 @@ class ProfileScreen extends ConsumerWidget {
               label: l.profilePrivacy,
               onTap: () => _openLegalUrl(context, '/privacy'),
             ),
+            if (supportEmail != null)
+              _Row(
+                icon: Icons.mail_outline_rounded,
+                label: l.actionContactSupport,
+                onTap: () => openSupportEmail(context, supportEmail),
+              ),
             const SizedBox(height: AppSpace.xxl),
 
             AppButton(
@@ -234,12 +256,12 @@ class _PassportCard extends StatelessWidget {
   const _PassportCard({
     required this.account,
     required this.completedDeals,
-    required this.ratings,
+    required this.rating,
   });
 
   final Account account;
   final AsyncValue<int> completedDeals;
-  final AsyncValue<List<Rating>> ratings;
+  final AsyncValue<TravelerRating> rating;
 
   @override
   Widget build(BuildContext context) {
@@ -252,11 +274,7 @@ class _PassportCard extends StatelessWidget {
         ? account.email
         : account.fullName;
     final completed = completedDeals.value;
-    final revealedRatings = ratings.value ?? const <Rating>[];
-    final average = revealedRatings.isEmpty
-        ? null
-        : revealedRatings.fold<int>(0, (sum, rating) => sum + rating.score) /
-              revealedRatings.length;
+    final summary = rating.value;
 
     return Semantics(
       container: true,
@@ -368,12 +386,13 @@ class _PassportCard extends StatelessWidget {
                             ),
                             _PassportFact(
                               width: width,
-                              label: l.profileRecentRating,
-                              value: !ratings.hasValue
+                              label: l.profileRating,
+                              // The server's figure, as on my public card.
+                              value: summary == null
                                   ? '—'
-                                  : average == null
-                                  ? l.discoveryNoRatingsYet
-                                  : '${average.toStringAsFixed(1)} ★',
+                                  : summary.hasScore
+                                  ? '${summary.average!.toStringAsFixed(1)} ★'
+                                  : l.discoveryNoRatingsYet,
                             ),
                           ],
                         );
