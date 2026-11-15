@@ -38,9 +38,14 @@ V1 specification, "Sender launch verification is email-only".
   Constant `apps.parcels.views.EMAIL_VERIFICATION_REQUIRED`.
 - Nothing else is gated: the price quote, photo staging, journeys, offers, Profile, everything else.
   No identity check is added for senders.
-- A Google account is created verified (unchanged). **New:** signing in with Google on an existing
-  password account whose email matches the verified Google email marks it verified (before, linking
-  left it unverified, which the gate would have turned into a dead end).
+- A Google account is created verified (unchanged). **New:** when Google sign-in links to an existing
+  account that never confirmed its email, Google's proof wins (`_claim_unverified_account`): the
+  password is made unusable, every refresh token is blacklisted, and the account becomes verified.
+  Whoever chose that password never proved they own the address (anyone can sign up with someone
+  else's email), so keeping it would leave a stranger inside a verified account; the owner can set a
+  password again through the reset email. A verified account is linked as before and keeps its
+  password. Found by the second review pass: linking already existed, and marking such an account
+  verified without this would have made it worse.
 
 ### The resend endpoint (advisor, 2026-11-15)
 
@@ -103,15 +108,17 @@ No switch was added.
 
 ## 7. Tests
 
-Django: **3,212 before, 3,236 after** (collected), +24.
+Django: **3,212 before, 3,238 after**, +26.
 
 New:
 
-- `apps/disputes/tests/test_l18a_removed_paths.py` (2): a search of `apps/` and `config/` proves
-  `as_admin` and `close_dispute` have no definition and no caller; `open_dispute` takes no staff switch.
-- `apps/parcels/tests/test_l18a_email_gate.py` (7): unverified refused with the code and every request,
+- `apps/disputes/tests/test_l18a_removed_paths.py` (2): a search of `apps/` and `config/` Python and
+  the helper's knowledge notes proves `as_admin` and `close_dispute` have no definition, caller or
+  mention; `open_dispute` takes no staff switch.
+- `apps/parcels/tests/test_l18a_email_gate.py` (9): unverified refused with the code and every request,
   order and attached-photo table untouched; refused before validation; verified passes; verifying opens
-  the door; a Google account posts; Google sign-in verifies an unconfirmed password account; quote,
+  the door; a Google account posts; Google sign-in verifies an unconfirmed password account; the
+  stranger's password and refresh token stop working; a verified account keeps its password; quote,
   account and list stay open.
 - `apps/accounts/tests/test_l18a_verify_email_resend.py` (5): sign-in required; a fresh code replaces
   the old one, which no longer verifies; the waiting sign-up email is withdrawn; a verified account is
@@ -166,8 +173,9 @@ L18B (resend button, Profile figure, support action) are marked as coming in L18
 1. The resend endpoint (advisor, 2026-11-15).
 2. Keep the `payout_already_settled` branch; rewrite the tests that reached it through `as_admin`
    (advisor, 2026-11-15).
-3. Google sign-in on an existing unconfirmed password account with the same email marks it verified,
-   so the gate is no dead end for someone who first signed up with a password and then used Google.
+3. Google sign-in on an existing unconfirmed account with the same email claims it for the Google
+   owner (unusable password, sessions revoked, verified) rather than leaving it unverified or
+   verifying it with a stranger's password still on it.
 4. The three `CLOSED` guards became `not dispute.is_active` rather than being deleted, because the
    status value stays in the model.
 5. The email gate answers 403 (a refusal about the account, like `journey_not_owned`), before the
@@ -177,6 +185,13 @@ L18B (resend button, Profile figure, support action) are marked as coming in L18
 7. The own-rating summary is the profile card's whole-person figure; L18B labels it "Rating".
 
 ## 10. Known limits
+
+- For L18B (second review): a resend cannot withdraw an email already being sent, so a member may
+  receive an older code that no longer works; the copy should say to use the newest email. An
+  unverified sender can fill the whole form before the refusal; the app should check
+  `me.is_email_verified` before the posting flow starts.
+- For Codex (older, not L18A's): `NUM_PROXIES` is not set, so DRF's IP-keyed throttles (the new
+  `support_contact`, the existing `email_verify` and others) trust `X-Forwarded-For` as sent.
 
 - Whether staff should be able to open a dispute is an open decision for Ismail (5.1f).
 - The support address and the website's placeholder mailboxes are Ismail's to supply ("Before real

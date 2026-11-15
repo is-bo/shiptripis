@@ -116,6 +116,29 @@ class SignOutView(APIView):
         return Response(status=status.HTTP_205_RESET_CONTENT)
 
 
+def _claim_unverified_account(user: User) -> None:
+    """Hand an unconfirmed password account to the Google owner of its email (L18A).
+
+    Google has just proved who owns the address; nobody ever proved that the
+    person who chose the password did. Anyone can sign up with someone else's
+    email, so keeping that password (or its sessions) on an account that is now
+    verified would leave a stranger inside it. The password is made unusable,
+    every refresh token is revoked, and the account becomes verified. The real
+    owner can set a password again through the reset email.
+    """
+
+    from rest_framework_simplejwt.token_blacklist.models import (
+        BlacklistedToken,
+        OutstandingToken,
+    )
+
+    for token in OutstandingToken.objects.filter(user=user):
+        BlacklistedToken.objects.get_or_create(token=token)
+    user.set_unusable_password()
+    user.is_email_verified = True
+    user.save(update_fields=("password", "is_email_verified"))
+
+
 class GoogleSignInView(APIView):
     permission_classes = (AllowAny,)
     throttle_classes = (ScopedRateThrottle,)
@@ -164,6 +187,8 @@ class GoogleSignInView(APIView):
             user = identity.user
         else:
             user = User.objects.filter(email__iexact=email).first()
+            if user is not None and not user.is_email_verified:
+                _claim_unverified_account(user)
             if user is None:
                 user = User.objects.create(
                     username=email,
@@ -182,13 +207,6 @@ class GoogleSignInView(APIView):
                 subject=sub,
                 email_at_link=email,
             )
-
-        # Google has just vouched for this address, so an account created with
-        # a password and never confirmed counts as verified once it signs in
-        # with Google under the same email (L18A: posting needs it).
-        if not user.is_email_verified and user.email.lower().strip() == email:
-            user.is_email_verified = True
-            user.save(update_fields=("is_email_verified",))
 
         return Response({"user": MeSerializer(user).data, **_tokens_for_user(user)})
 

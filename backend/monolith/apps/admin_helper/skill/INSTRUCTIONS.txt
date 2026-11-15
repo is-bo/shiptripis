@@ -162,7 +162,7 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 - Email and password. Wrong details: "Incorrect email or password." Limit 10 tries per minute.
 - Google sign-in: the server has a Google sign-in endpoint, but no screen in the app offers it today. Rules of the endpoint:
   - Google must say the email is verified, else "Google account email is not verified."
-  - If the email already has an account, the Google identity is linked to it. If not, a new account is made with a password nobody can use, and the email is marked verified.
+  - If the email already has an account, the Google identity is linked to it. If that account never confirmed its email, Google's proof wins: its password stops working, every signed-in session is ended, and the account becomes verified (the owner can set a password again with "reset password"), because whoever chose that password never proved they own the address. If no account exists, a new one is made with a password nobody can use, and the email is marked verified.
   - Phone, region and language can be sent when it creates a new account.
   - If Google cannot be reached: a retryable "unavailable" answer (503). Limit 10 per minute.
   - It does not check for a ban before giving tokens, but the server refuses an inactive (banned or disabled) account on every request, so a banned person still cannot use the app.
@@ -179,7 +179,7 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 - A signed-in member can ask for a new code: `POST /api/auth/verify-email/resend` (limit 5 per hour, server setting `DRF_EMAIL_VERIFY_RESEND_THROTTLE_RATE`). It always answers "done". A verified account is sent nothing; otherwise every older unused code stops working, its email is withdrawn if still waiting, and a fresh code is emailed. The app's code screen gets its "send the code again" button in L18B; until then it says to check the spam folder and contact support.
 - Any wrong code or unknown email gives the same answer: "Invalid code." (so nobody can find out which emails exist).
 - Correct code sets "Email verified". Doing it again for a verified account is fine.
-- Posting a parcel needs a verified email (V1 specification: sender verification is email-only). Until then creating a delivery request is refused with `email_verification_required` "Verify your email address before posting a parcel." Nothing else checks the tick: browsing, pricing, travelling and everything else stay open. Google sign-up and invited staff accounts are marked verified automatically, and signing in with Google on an unconfirmed password account with the same email marks it verified.
+- Posting a parcel needs a verified email (V1 specification: sender verification is email-only). Until then creating a delivery request is refused with `email_verification_required` "Verify your email address before posting a parcel." Nothing else checks the tick: browsing, pricing, travelling and everything else stay open. Google sign-up and invited staff accounts are marked verified automatically; signing in with Google on an unconfirmed account with the same email verifies it (see Google sign-in above).
 - Staff see "Email verified" or "Email not verified" on the person page.
 
 ## What if a user forgets the password?
@@ -1080,7 +1080,7 @@ flowchart TD
 ```
 - Problem reports can be filed only while the deal is `funded`, `pickup_ready`, `picked_up`, `in_transit` or `delivery_ready`.
 - A dispute's three review states can be set by staff with the manage right in any order. `resolved` is reached only through a resolution, which moves the money. A resolved dispute cannot be reopened.
-- A `closed` dispute status exists in the code (it would file a dispute away without moving money), but no console page or staff API offers it today.
+- A `closed` dispute status still exists in the data model, but nothing sets it: the uncalled close step was removed in L18A, so every dispute ends `resolved`.
 - Who may act: Ops, Trust and Super Admin can change a dispute's review state; Finance and Super Admin can resolve; Support can only view (admin-console.md).
 - Problem kinds and dispute categories: see problems-and-disputes.md and overview-and-glossary.md.
 ## How do the staff console and the AI helper work together?

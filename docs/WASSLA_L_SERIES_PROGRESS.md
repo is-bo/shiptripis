@@ -995,13 +995,17 @@ Screenshots: `/mnt/project-files/l-series-screens/L16/` (console EN and 390 px, 
   (`support-contact`, no authentication at all, scope `support_contact` 30/min) answers
   `{"email": EMAIL_SUPPORT_ADDR or null}`. Table: phase doc section 6.
 - Left for a later package: L18B (the app half); the knowledge notes' app-side lines marked "L18B".
+  For L18B: check `me.is_email_verified` before the posting flow starts, and tell the member to use
+  the newest code email after a resend. For Codex: `NUM_PROXIES` unset (IP throttles trust
+  `X-Forwarded-For`), older than L18A.
 - Switches added and their defaults: none. Throttle settings `DRF_EMAIL_VERIFY_RESEND_THROTTLE_RATE`
   (5/hour) and `DRF_SUPPORT_CONTACT_THROTTLE_RATE` (30/min).
 - Deviations from the plan (what, why, approved by): the resend endpoint (advisor, 2026-11-15, plan
   `54cbd9c`); the `payout_already_settled` branch kept and the tests that reached it through
   `as_admin` rewritten, two dropped (advisor, same day; each listed in phase doc section 7); Google
-  sign-in now verifies an existing unconfirmed password account with the same email (judgment call 3).
-- Tests (before and after counts): Django 3,212 before, 3,236 after (+24).
+  sign-in on an existing unconfirmed account with the same email now claims it for the Google owner:
+  password made unusable, refresh tokens revoked, verified (second review finding; judgment call 3).
+- Tests (before and after counts): Django 3,212 before, 3,238 after (+26).
 - Known limits: whether staff may open a dispute is Ismail's open decision; the support address is
   Ismail's to set (null until then).
 

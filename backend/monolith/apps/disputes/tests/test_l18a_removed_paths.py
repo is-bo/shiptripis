@@ -3,7 +3,8 @@
 `open_dispute(as_admin=True)` skipped the party check and the window, and
 `close_dispute` would have ended a dispute without a resolution, leaving the
 payout frozen. Neither had a console page, staff API route or helper action.
-This search proves neither has a definition or a caller left in the code.
+This search proves neither has a definition or a caller left in the code, and
+that the helper's knowledge notes no longer name them.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from django.test import SimpleTestCase
 from apps.disputes import services
 
 THIS_FILE = Path(__file__).resolve()
-SEARCHED = ("apps", "config")
+SEARCHED = (("apps", "*.py"), ("config", "*.py"), ("apps/admin_helper/skill", "*.md"))
 PATTERN = re.compile(r"\bas_admin\b|\bclose_dispute\b")
 
 
@@ -26,8 +27,8 @@ class RemovedDisputePathsTests(SimpleTestCase):
     def test_no_definition_or_caller_remains(self):
         root = Path(settings.BASE_DIR)
         hits = []
-        for folder in SEARCHED:
-            for path in (root / folder).rglob("*.py"):
+        for folder, pattern in SEARCHED:
+            for path in (root / folder).rglob(pattern):
                 if path.resolve() == THIS_FILE:
                     continue
                 for number, line in enumerate(path.read_text().splitlines(), 1):
