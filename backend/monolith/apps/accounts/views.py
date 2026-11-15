@@ -18,6 +18,7 @@ from apps.notifications.push import unregister_push_device
 
 from .google import GoogleAuthError, GoogleAuthUnavailable, verify_id_token
 from .models import EmailVerificationCode, OAuthIdentity, PasswordResetCode, User
+from .sessions import end_all_sessions
 from .serializers import (
     GoogleSignInSerializer,
     MeSerializer,
@@ -116,27 +117,37 @@ class SignOutView(APIView):
         return Response(status=status.HTTP_205_RESET_CONTENT)
 
 
-def _claim_unverified_account(user: User) -> None:
-    """Hand an unconfirmed password account to the Google owner of its email (L18A).
+def _claim_unconfirmed_account(user: User, *, name: str, data: dict) -> None:
+    """Hand an unconfirmed account to the Google owner of its email (L18A, item 5).
 
     Google has just proved who owns the address; nobody ever proved that the
-    person who chose the password did. Anyone can sign up with someone else's
-    email, so keeping that password (or its sessions) on an account that is now
-    verified would leave a stranger inside it. The password is made unusable,
-    every refresh token is revoked, and the account becomes verified. The real
-    owner can set a password again through the reset email.
+    person who opened the account did, and anyone can sign up with someone
+    else's email. So the prover gets the account as if it were new: the
+    password stops working, every session and push device ends, and what the
+    unproven person typed is replaced (the name from Google; phone, wilaya and
+    language from this sign-in; the phone flag cleared). The owner can set a
+    password again through the reset email.
     """
 
-    from rest_framework_simplejwt.token_blacklist.models import (
-        BlacklistedToken,
-        OutstandingToken,
-    )
-
-    for token in OutstandingToken.objects.filter(user=user):
-        BlacklistedToken.objects.get_or_create(token=token)
+    end_all_sessions(user)
     user.set_unusable_password()
+    user.full_name = name
+    user.phone = data.get("phone", "")
+    user.wilaya = data.get("wilaya", "")
+    user.preferred_language = data["preferred_language"]
+    user.is_phone_verified = False
     user.is_email_verified = True
-    user.save(update_fields=("password", "is_email_verified"))
+    user.save(
+        update_fields=(
+            "password",
+            "full_name",
+            "phone",
+            "wilaya",
+            "preferred_language",
+            "is_phone_verified",
+            "is_email_verified",
+        )
+    )
 
 
 class GoogleSignInView(APIView):
@@ -186,29 +197,42 @@ class GoogleSignInView(APIView):
         if identity is not None:
             user = identity.user
         else:
-            user = User.objects.filter(email__iexact=email).first()
-            if user is not None and not user.is_email_verified:
-                _claim_unverified_account(user)
-            if user is None:
-                user = User.objects.create(
-                    username=email,
-                    email=email,
-                    full_name=name,
-                    phone=s.validated_data.get("phone", ""),
-                    wilaya=s.validated_data.get("wilaya", ""),
-                    preferred_language=s.validated_data["preferred_language"],
-                    is_email_verified=bool(payload.get("email_verified")),
-                )
-                user.set_unusable_password()
-                user.save(update_fields=("password",))
-            OAuthIdentity.objects.create(
-                user=user,
-                provider=OAuthIdentity.Provider.GOOGLE,
-                subject=sub,
-                email_at_link=email,
-            )
+            with transaction.atomic():
+                user = self._link(sub=sub, email=email, name=name, data=s.validated_data)
 
         return Response({"user": MeSerializer(user).data, **_tokens_for_user(user)})
+
+    @staticmethod
+    def _link(*, sub: str, email: str, name: str, data: dict) -> User:
+        """Link this Google identity to the account with its email, or make one.
+
+        The account row is locked, so a claim and a concurrent sign-in or reset
+        on it serialize.
+        """
+
+        user = User.objects.select_for_update().filter(email__iexact=email).first()
+        if user is not None and not user.is_email_verified:
+            _claim_unconfirmed_account(user, name=name, data=data)
+        if user is None:
+            # Google said the email is verified, or the view refused earlier.
+            user = User.objects.create(
+                username=email,
+                email=email,
+                full_name=name,
+                phone=data.get("phone", ""),
+                wilaya=data.get("wilaya", ""),
+                preferred_language=data["preferred_language"],
+                is_email_verified=True,
+            )
+            user.set_unusable_password()
+            user.save(update_fields=("password",))
+        OAuthIdentity.objects.create(
+            user=user,
+            provider=OAuthIdentity.Provider.GOOGLE,
+            subject=sub,
+            email_at_link=email,
+        )
+        return user
 
 
 class PasswordResetRequestView(APIView):
@@ -265,8 +289,13 @@ class PasswordResetConfirmView(APIView):
                     {"detail": "Invalid code."}, status=status.HTTP_400_BAD_REQUEST
                 )
 
+            # The code went to the address, so this proves the email (L18A,
+            # item 5): the new password, the end of every older session and
+            # the confirmed flag land together.
             user.set_password(new_password)
-            user.save(update_fields=("password",))
+            user.is_email_verified = True
+            user.save(update_fields=("password", "is_email_verified"))
+            end_all_sessions(user)
             from apps.notifications.outbox import enqueue_message
 
             enqueue_message(

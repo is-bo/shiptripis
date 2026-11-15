@@ -11,6 +11,13 @@ Status: **in review** (PR into `feature/discovery-professional-delivery`). No mi
 - **Own rating from the server**: `GET /api/users/me/ratings/summary`, the public profile card's
   numbers through `countable` (one average, `rating_summaries`).
 - **Support contact**: `GET /api/support` answers `EMAIL_SUPPORT_ADDR` or `null`.
+- **Proving the email ends what an unproven person held**: one `end_all_sessions` (refresh tokens
+  revoked, push devices off). A Google claim of an unconfirmed account replaces its password and
+  profile fields as for a new account; a completed password reset ends every session and confirms
+  the email, for every account.
+- **Payout setup needs a confirmed email**: every member payout write answers
+  `email_verification_required` (403) through the same `EmailVerifiedToWrite` permission as posting;
+  reads and staff routes unchanged.
 
 Detail and the L18B contract: `docs/PHASE_L18A_LOOSE_ENDS_BACKEND.md`.
 

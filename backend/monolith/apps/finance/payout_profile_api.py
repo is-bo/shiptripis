@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
+from apps.accounts.permissions import EmailVerifiedToWrite
 from apps.admin_panel.permissions import IsVerifiedStaff
 from apps.admin_panel.staff_api import StaffSessionMixin
 
@@ -133,7 +134,10 @@ def method_projection(method):
 
 @method_decorator(sensitive_post_parameters("__ALL__"), name="dispatch")
 class ProfileView(APIView):
-    permission_classes = [IsAuthenticated]
+    # Writing payout setup needs a confirmed email (L18A): a stranger who
+    # opened the account under someone else's address must not leave a payout
+    # method behind for the owner to inherit. Staff views set their own.
+    permission_classes = [IsAuthenticated, EmailVerifiedToWrite]
     throttle_classes = [ProfileThrottle]
 
     def finalize_response(self, request, response, *args, **kwargs):

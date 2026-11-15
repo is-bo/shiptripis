@@ -63,7 +63,7 @@ def preference(client, value, *, eur=0, dzd=0, country="FR", **extra):
 def test_preference_contract_and_future_route(value):
     from apps.finance.payout_snapshots import choose_method
 
-    user = make_user(f"{value}@h6a.test")
+    user = make_user(f"{value}@h6a.test", is_email_verified=True)
     client = client_for(user)
     initial = client.get("/api/payouts/methods").json()
     assert initial["preference"] is None and initial["preference_required"]
@@ -85,7 +85,7 @@ def test_preference_contract_and_future_route(value):
 
 
 def test_preference_invalid_country_revision_and_authority_rollback():
-    user = make_user("invalid@h6a.test")
+    user = make_user("invalid@h6a.test", is_email_verified=True)
     client = client_for(user)
     assert preference(client, "both", country="DZ").data["code"] == "payout_country_unsupported"
     assert not TravelerPayoutMethod.objects.filter(traveler=user).exists()
@@ -139,7 +139,7 @@ def test_eur_method_states(changes, expected):
 
 
 def test_onboarding_resume_manage_refresh_and_owner_isolation(monkeypatch):
-    user, other = make_user("setup@h6a.test"), make_user("other@h6a.test")
+    user, other = make_user("setup@h6a.test", is_email_verified=True), make_user("other@h6a.test", is_email_verified=True)
     client = client_for(user)
     assert preference(client, "eur_only").status_code == 200
     gateway = FakeGateway(create=snapshot())

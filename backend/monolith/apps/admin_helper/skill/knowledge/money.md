@@ -141,6 +141,7 @@ Traveler-app wording: Awaiting delivery, Protection period, Awaiting release, Pa
 <!-- src: payout_snapshots.py, payout_execution.py, console_manual_presenter.py BLOCK_REASONS/HOLD_REASONS -->
 
 ## How does the EUR payout (Stripe Connect) work?
+- Changing payout setup (choosing a payout method, the DZD profile and its proof, Stripe onboarding, refresh and dashboard) needs a confirmed email since L18A: otherwise `email_verification_required`, nothing saved. Reading it does not. Reason: someone who opened an account under another person's email must not leave a payout method behind for the real owner to inherit.
 - Traveler sets up a Stripe connected account (Profile, Payout methods, "Set up EUR payouts"), declares the legal country of the account. Allowed countries are FR, DE, ES at most, and only those the deployment lists as enabled (empty by default). Algeria is deliberately not allowed; those travelers use DZD ("If your country is not listed, use DZD payouts.").
 - Two steps: (1) platform Transfer moves EUR into the traveler's Stripe account; (2) Stripe bank payout to their IBAN. Traveler counts as paid only when the bank payout is `paid`. A failed bank payout is retried by creating another bank payout, never a new Transfer.
 - Automatic execution needs ALL: deployment flags (payout profiles, Stripe Connect, Connect payouts on) AND the setting `payments.payout.auto_stripe_enabled` (seeded false). Otherwise payouts wait (checked every 6 h). No manual "Pay" button exists on this rail.

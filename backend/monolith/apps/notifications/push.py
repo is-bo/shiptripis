@@ -654,6 +654,20 @@ def unregister_push_device(*, user, installation_id: UUID) -> bool:
     )
 
 
+def deactivate_all_push_devices(*, user) -> int:
+    """Switch off every active installation of ``user`` (L18A, ending sessions).
+
+    Used when the account changes hands: a device left on would keep delivering
+    the owner's notifications to a phone that is no longer theirs. The app
+    registers again on its next sign-in.
+    """
+
+    now = timezone.now()
+    return PushDevice.objects.filter(user=user, active=True).update(
+        active=False, last_seen_at=now, updated_at=now
+    )
+
+
 def _preference_allows(
     user_id: int, category: str, preferences: dict[int, NotificationPreference]
 ) -> bool:

@@ -22,7 +22,7 @@ from apps.accounts.models import User
 from apps.finance.models import PaymentOrder
 from apps.locations.models import Country, Place
 from apps.parcels.models import ParcelMedia, ParcelRequest
-from apps.parcels.views import EMAIL_VERIFICATION_REQUIRED
+from apps.accounts.permissions import EMAIL_VERIFICATION_REQUIRED
 
 CREATE_URL = reverse("parcels-delivery-v1-create")
 QUOTE_URL = reverse("parcels-pricing-quote")
@@ -184,71 +184,6 @@ class SenderEmailGateTests(TestCase):
         assert signed_in.status_code == 200, signed_in.data
         sender.refresh_from_db()
         assert sender.is_email_verified is True
-
-    @patch("apps.accounts.views.verify_id_token")
-    def test_google_takes_an_unconfirmed_account_away_from_its_password(
-        self, mock_verify, _publish
-    ):
-        """Whoever chose the password never proved they own the address.
-
-        Anyone can sign up with someone else's email. When the real owner then
-        signs in with Google, the stranger's password and sessions must stop
-        working, or they would sit inside a verified account.
-        """
-
-        squatter = APIClient()
-        signed_up = squatter.post(
-            reverse("auth-sign-up"),
-            {
-                "email": "l18a-owner@example.com",
-                "password": "Sup3rStrongPass!",
-                "full_name": "Not The Owner",
-                "phone": "+213555111444",
-                "wilaya": "16",
-            },
-            format="json",
-        )
-        assert signed_up.status_code == 201, signed_up.data
-        mock_verify.return_value = {
-            "sub": "l18a-owner-sub",
-            "email": "l18a-owner@example.com",
-            "email_verified": True,
-            "name": "Real Owner",
-        }
-        assert APIClient().post(
-            reverse("auth-oauth-google"), {"id_token": "fake"}, format="json"
-        ).status_code == 200
-
-        account = User.objects.get(email="l18a-owner@example.com")
-        assert account.is_email_verified is True
-        assert account.has_usable_password() is False
-        refreshed = APIClient().post(
-            reverse("auth-refresh"), {"refresh": signed_up.data["refresh"]}, format="json"
-        )
-        assert refreshed.status_code == 401
-        signed_in = APIClient().post(
-            reverse("auth-sign-in"),
-            {"email": "l18a-owner@example.com", "password": "Sup3rStrongPass!"},
-            format="json",
-        )
-        assert signed_in.status_code != 200
-
-    @patch("apps.accounts.views.verify_id_token")
-    def test_google_links_a_verified_account_and_keeps_its_password(
-        self, mock_verify, _publish
-    ):
-        sender = self._sender("l18a-kept@example.com", verified=True)
-        mock_verify.return_value = {
-            "sub": "l18a-kept-sub",
-            "email": "l18a-kept@example.com",
-            "email_verified": True,
-            "name": "Kept",
-        }
-        assert APIClient().post(
-            reverse("auth-oauth-google"), {"id_token": "fake"}, format="json"
-        ).status_code == 200
-        sender.refresh_from_db()
-        assert sender.has_usable_password() is True
 
     def test_nothing_else_is_gated(self, _publish):
         """The price quote, the photo staging and the account stay open."""

@@ -149,9 +149,9 @@ def build_scenario(*, prefix: str = "fin", open_request: bool = True) -> Scenari
     """
 
     at = timezone.now()
-    # A sender posts only with a verified email (L18A).
+    # Posting and payout setup need a verified email (L18A).
     sender = make_user(f"{prefix}-sender@example.com", is_email_verified=True)
-    traveler = make_user(f"{prefix}-traveler@example.com")
+    traveler = make_user(f"{prefix}-traveler@example.com", is_email_verified=True)
     outsider = make_user(f"{prefix}-outsider@example.com")
     admin = make_user(f"{prefix}-admin@example.com", is_staff=True)
     approve_kyc(traveler, f"{prefix}-traveler")

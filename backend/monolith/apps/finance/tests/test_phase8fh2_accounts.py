@@ -193,7 +193,7 @@ def h2():
 
 @pytest.fixture
 def traveler(db, h2):
-    user = make_user("h2-traveler@example.com")
+    user = make_user("h2-traveler@example.com", is_email_verified=True)
     set_preference(
         actor=user, currency="EUR", enabled=True, country="FR", expected_revision=0
     )
@@ -259,7 +259,7 @@ def bind_version(user, account):
 
 class TestCountryEligibility:
     def test_algeria_is_never_an_eligible_stripe_eur_account_country(self, db, h2):
-        user = make_user("h2-dz@example.com")
+        user = make_user("h2-dz@example.com", is_email_verified=True)
         with pytest.raises(CountryUnsupported):
             set_preference(
                 actor=user,
@@ -272,7 +272,7 @@ class TestCountryEligibility:
     def test_the_dz_refusal_names_the_dzd_rail_instead_of_failing_generically(
         self, db, h2
     ):
-        user = make_user("h2-dz-api@example.com")
+        user = make_user("h2-dz-api@example.com", is_email_verified=True)
         client = APIClient()
         client.force_authenticate(user)
         response = client.post(
@@ -291,14 +291,14 @@ class TestCountryEligibility:
         assert response.json()["alternative"] == {"currency": "DZD", "rail": "manual"}
 
     def test_a_dz_traveler_still_has_the_dzd_setup_path(self, db, h2):
-        user = make_user("h2-dz-alt@example.com")
+        user = make_user("h2-dz-alt@example.com", is_email_verified=True)
         method = set_preference(
             actor=user, currency="DZD", enabled=True, expected_revision=0
         )
         assert method.enabled and method.currency == "DZD"
 
     def test_a_country_outside_the_deployment_allowlist_is_refused(self, db, h2):
-        user = make_user("h2-de@example.com")
+        user = make_user("h2-de@example.com", is_email_verified=True)
         with pytest.raises(CountryUnsupported):
             set_preference(
                 actor=user,
@@ -704,7 +704,7 @@ class TestOwnershipAndMode:
     def test_an_account_belonging_to_another_traveler_is_never_adopted(
         self, db, h2, traveler
     ):
-        other = make_user("h2-other@example.com")
+        other = make_user("h2-other@example.com", is_email_verified=True)
         make_account(other)
         gateway = FakeGateway()
         with pytest.raises(ValidationError):
@@ -724,7 +724,7 @@ class TestOwnershipAndMode:
     ):
         account = make_account(traveler)
         bind_version(traveler, account)
-        intruder = make_user("h2-intruder@example.com")
+        intruder = make_user("h2-intruder@example.com", is_email_verified=True)
         set_preference(
             actor=intruder,
             currency="EUR",

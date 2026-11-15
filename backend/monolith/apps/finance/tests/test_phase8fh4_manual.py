@@ -257,7 +257,7 @@ def test_claim_hold_release_and_proof_authority(configured_h4):
 def test_invalid_image_is_not_stored(configured_h4):
     from .factories import make_user
 
-    user = make_user("qa-proof@example.invalid")
+    user = make_user("qa-proof@example.invalid", is_email_verified=True)
     user.role = "traveler"
     user.save(update_fields=["role"])
     with pytest.raises(ValidationError):
@@ -279,7 +279,7 @@ def test_traveler_cannot_supply_authoritative_fields(configured_h4, field):
     from rest_framework.test import APIClient
     from .factories import make_user
 
-    user = make_user("qa-input@example.invalid")
+    user = make_user("qa-input@example.invalid", is_email_verified=True)
     client = APIClient()
     client.force_authenticate(user)
     response = client.post(
@@ -429,7 +429,7 @@ def test_image_validation(configured_h4, invalid):
     from .factories import make_user
     from apps.finance.payout_evidence import MAX_BYTES
 
-    user = make_user("qa-image@example.invalid")
+    user = make_user("qa-image@example.invalid", is_email_verified=True)
     user.role = "traveler"
     user.save(update_fields=["role"])
     upload = image_upload()

@@ -66,7 +66,7 @@ def h2():
 
 @pytest.fixture
 def traveler(db, h2):
-    user = make_user("h26-traveler@example.com")
+    user = make_user("h26-traveler@example.com", is_email_verified=True)
     set_preference(
         actor=user, currency="EUR", enabled=True, country="FR", expected_revision=0
     )
@@ -377,7 +377,7 @@ class TestNoRegression:
     def test_algeria_remains_unsupported_for_stripe_eur_payouts(self, db, h2):
         from apps.finance.payout_accounts import CountryUnsupported
 
-        user = make_user("h26-dz@example.com")
+        user = make_user("h26-dz@example.com", is_email_verified=True)
         with pytest.raises(CountryUnsupported):
             set_preference(
                 actor=user,
