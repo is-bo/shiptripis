@@ -1619,7 +1619,8 @@ path (1.2).
 2. **A sender verifies their email** (V1 specification, "Sender launch verification is email-only";
    the flag and the code screen exist, nothing enforces them). Creating a delivery request is refused
    with the stable code `email_verification_required` while `is_email_verified` is false. A Google
-   account is already verified. Nothing else is gated, and no identity check is added for senders.
+   account is already verified. Payout setup is gated the same way (item 6); nothing else is, and no
+   identity check is added for senders.
    Test helpers that create a sender set the flag; no assertion is weakened, and the pull request
    lists the helpers changed. Because a code was sent only at sign-up and expires, the gate needs a
    way back: `POST /api/auth/verify-email/resend`, signed in, with its own throttle scope. It answers
@@ -1631,6 +1632,31 @@ path (1.2).
 4. **Support contact.** `GET /api/support` (no sign-in needed, throttled) answers
    `{"email": <EMAIL_SUPPORT_ADDR> | null}`, from the server setting the emails already use. No new
    setting, and no address is invented: it is `null` until Ismail sets one.
+5. **Proving the email ends what an unproven person held** (found by this package's review, advisor,
+   2026-11-15). Anyone can sign up with someone else's address, and from item 2 on the confirmed flag
+   opens doors, so the moment the address is proved must put the prover alone in the account.
+   - One function, `end_all_sessions(user)`, in `apps/accounts` (not private to a view): every
+     outstanding refresh token is revoked and every active push device of the account is switched
+     off, the second through one function in `apps/notifications/push.py`. A device left on would
+     keep delivering the owner's notifications to the stranger's phone.
+   - **Google sign-in on an existing unconfirmed account with the same email** claims it: password
+     made unusable, `end_all_sessions`, confirmed. What the unproven person typed is replaced as for
+     a new account: the name from Google; phone, wilaya and language from the sign-in request; the
+     phone flag false. A confirmed account links as before and nothing of it changes.
+   - **A completed password reset** does the same for every account, confirmed or not: the code went
+     to the address, so the new password is set, `end_all_sessions` runs and the email is confirmed,
+     in the same transaction. A reset that leaves older sessions alive protects nobody.
+   - Known limit, written in the phase doc: an access token already issued lives to its expiry
+     (`JWT_ACCESS_TTL_SECONDS`, 300 by default). No change.
+6. **Payout setup needs a confirmed email.** Every member route that writes payout setup (the
+   `ProfileView` and `ConnectView` families in `apps/finance/payout_profile_api.py` and
+   `payout_account_api.py`, unsafe methods only) refuses with `email_verification_required` while the
+   flag is false. Reads and staff routes are unchanged. One permission class, used on those base
+   views, not a check per view. Without it a stranger could attach their own payout method to an
+   account opened under someone else's address and wait for the owner to claim it and earn. ID
+   submission is **not** gated: it lives in the Go service, staff review every document, and an ID
+   sent by an unproven person exposes only that person. Test helpers that set up a payout set the
+   flag, as in item 2.
 
 **Not touched, on purpose (5.1f):** the deal statuses `offer_accepted` and `payment_failed` and the
 journey status `pending_verification`, which nothing sets.
@@ -1638,7 +1664,11 @@ journey status `pending_verification`, which nothing sets.
 **Tests.** A search proving `as_admin` and `close_dispute` have no caller and no definition. The
 email gate: unverified refused, verified and Google accounts pass, the request tables untouched by a
 refusal. The summary equals the public card's numbers before and after a staff removal. The support
-endpoint with and without the setting.
+endpoint with and without the setting. Item 5: after a Google claim and after a reset, the earlier
+refresh token is refused, the earlier push device is inactive, the old password fails and the flag is
+true; a confirmed account that links Google keeps its password, sessions, devices and profile. Item
+6: each payout write route refused for an unconfirmed account with no row written, and its read
+route still answering.
 
 **Done when.** `docs/PHASE_L18A_LOOSE_ENDS_BACKEND.md` holds the contract for L18B.
 
@@ -1654,7 +1684,9 @@ endpoint with and without the setting.
    answers `null` the action is absent: no label without a button anywhere.
 4. **Email not verified.** On `email_verification_required` the app opens the existing verify-email
    screen with "send the code again", then returns to the request form with what was typed. Profile
-   offers "Verify email" while the flag is false.
+   offers "Verify email" while the flag is false. Payout setup answers the same code (L18A item 6)
+   and gets the same handling: one shared handler, not a second flow. After a password reset the app
+   is signed out on every device, so the reset screen ends on sign-in.
 5. States, RTL, 360 px, zero untranslated keys, kept screenshots (1.6).
 
 ### L10. Final acceptance (Opus, high effort)
@@ -1674,7 +1706,9 @@ never reviews its own fixes.
    after its reminder, and one that expires at the pickup time because that came first; a trip-fit alert leading to "I can carry this" and a proposal; a no-show report
    recorded by staff; a review reported, hidden, then removed and the average changing; a staff
    sign-in with enrolment, a wrong code, a recovery code and a reset; the three exports reconciled
-   with the finance dashboard; the eight AI helper conversations of L17 run again on the final build.
+   with the finance dashboard; an account opened with someone else's email and then claimed, once by
+   Google sign-in and once by a password reset, with the first person signed out and their device
+   silent; the eight AI helper conversations of L17 run again on the final build.
 3. Invariant proofs, as greps recorded in the report: no proof decision outside `apps/trips/proofs.py`;
    no write to `Deal.status` outside `apps/deals`; no listed-price arithmetic outside
    `apps/matching/listed_price.py`; every public discovery serializer has a privacy test; every new
@@ -1699,7 +1733,7 @@ never reviews its own fixes.
 9. Hand Ismail the report, the list of switches that are still off, and the open decisions. The
    report has a section "Before real users" (the support address in `EMAIL_SUPPORT_ADDR`, the
    placeholder mailboxes in `web/support.html`, the terms page and the final prohibited-items list of
-   5.1d) and lists the open decisions of 5.1f. **No merge
+   5.1d, and the proxy note of 5.1f) and lists the open decisions of 5.1f. **No merge
    into `main` and no deployment without his explicit approval.**
 
 ---
@@ -1814,6 +1848,22 @@ advisor. Decided, for his end review:
 
 They are one pair of packages, L18A and L18B, **before** L10, so that final acceptance tests the code
 that ships and changes nothing itself.
+
+**Found by L18A's own review, decided the same day (advisor).**
+
+- *Google sign-in linked to an unconfirmed account with the same email and left the first person's
+  password and sessions in it.* L18A's fix stands and is widened (L18A item 5): push devices are
+  switched off too, the profile fields are replaced, and a completed password reset does the same
+  for every account. Choice for Ismail's end review: **payout setup now needs a confirmed email**
+  (L18A item 6), so that an unproven person can leave no payout method behind. ID submission is not
+  gated.
+- *Per-address limits and `X-Forwarded-For`.* **No change, no package.** The web server in front
+  (`infra/vps/Caddyfile`) replaces that header with the address it really received the connection
+  from, and the app publishes no port of its own, so a client cannot forge its address today and
+  setting `NUM_PROXIES` would change nothing. **Before real users:** if a CDN or any other proxy is
+  ever put in front of the web server, every visitor would arrive from that proxy's address; the
+  web server's trusted-proxy setting and the per-address limits (Django and the Go ID upload) must
+  be set for it first.
 
 ### 5.1c Choices the planner made inside those additions (not individually confirmed)
 
