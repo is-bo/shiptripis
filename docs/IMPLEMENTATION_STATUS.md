@@ -1,5 +1,21 @@
 # Waçla V1 Implementation Status
 
+## Wassla L17 — AI helper skill (2026-11-15)
+
+Status: **in review** (PR into `feature/discovery-professional-delivery`). No migration; `main` untouched.
+
+- **One skill, `wassla`**: a 139-line core file (briefing, "how do I ...?", changes, rules) and 14 notes
+  files read from the code that answer any question about the app: pricing, money, deliveries, trips,
+  disputes, reviews, verification, messages, the walkthrough, the console and roles, settings, the
+  helper itself, the structure with ASCII and mermaid diagrams, and the questions an outsider asks.
+  Written for the Super Admin. Fact-checked against the code; where the code is silent the notes say so.
+- **Console card**: "Download the skill" (zip) and "Copy the instructions" (generated text), served from
+  the files; `manage.py build_helper_instructions` regenerates the text, a test fails when stale.
+- **Helper**: the deal record now lists its `payments` (needed to prepare a refund).
+- **Proof**: eleven conversations with the smallest model, transcripts in the phase doc.
+
+Detail: `docs/PHASE_L17_ADMIN_HELPER_SKILL.md`. Staff guide: `docs/ADMIN_OPERATIONS.md` (Using the AI helper).
+
 ## Wassla L16 — AI helper, changes (2026-11-14)
 
 Status: **merged** into `feature/discovery-professional-delivery` (PR #45, `a3449e1`). Backend and

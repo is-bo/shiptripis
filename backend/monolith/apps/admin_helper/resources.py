@@ -388,6 +388,11 @@ def _deal_fields(deal, ctx: Context) -> dict:
             for problem in deal.problems.order_by("pk")
         ],
         "payout": ctx.link("payout", payout.pk, payout.get_status_display()) if payout else None,
+        # L17: the assistant needs the payment to prepare a refund on it.
+        "payments": [
+            ctx.link("payment", attempt.pk, attempt.get_status_display())
+            for attempt in PaymentAttempt.objects.filter(order__deal=deal).order_by("pk")
+        ],
     }
 
 

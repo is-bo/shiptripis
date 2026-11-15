@@ -26,18 +26,19 @@ from datetime import datetime, timedelta
 from django import forms
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
-from django.http import Http404
+from django.http import Http404, HttpResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
 from apps.admin_panel.console_forms import ConsoleForm
 from apps.admin_panel.permissions import has_admin_permission
 
 from . import policy as helper_policy
 from . import prepared as changes
+from . import skill as helper_skill
 from .keys import (
     STOP_ANY_PERMISSION,
     HelperKeyError,
@@ -268,6 +269,24 @@ def _back(request) -> str:
         if request.POST.get("from") == "page"
         else f"{reverse('admin_console:overview')}#st-ai-helper"
     )
+
+
+@never_cache
+@require_GET
+def skill_download(request):
+    """The skill folder as a zip (plan L17), built from the skill files. No key in it."""
+
+    response = HttpResponse(helper_skill.skill_zip(), content_type="application/zip")
+    response["Content-Disposition"] = 'attachment; filename="wassla-skill.zip"'
+    return response
+
+
+@never_cache
+@require_GET
+def skill_instructions(request):
+    """The same skill as one pasted text (plan L17). No key in it."""
+
+    return HttpResponse(helper_skill.instructions_text(), content_type="text/plain; charset=utf-8")
 
 
 @never_cache
