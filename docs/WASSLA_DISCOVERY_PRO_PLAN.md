@@ -1611,13 +1611,20 @@ path (1.2).
    whole of `close_dispute`, with its tests. No console page, staff API route or helper action calls
    either; one skips every check and the other would leave a payout frozen with no resolution. The
    `closed` status value and the `closed_at` column stay (1.5 rule 5). Every existing dispute test
-   passes unchanged.
+   passes unchanged, except those that used `as_admin=True`. The branch of `open_dispute` that
+   records `payout_already_settled` when `freeze_payout` answers `PAID` **stays**: it is the complete
+   handling of that function's answers in a money path, not a second rule. Tests that used the staff
+   path only to reach that state are rewritten to build the state directly, so the branch stays
+   covered; tests whose subject was the staff path itself are dropped. The pull request lists each.
 2. **A sender verifies their email** (V1 specification, "Sender launch verification is email-only";
    the flag and the code screen exist, nothing enforces them). Creating a delivery request is refused
    with the stable code `email_verification_required` while `is_email_verified` is false. A Google
    account is already verified. Nothing else is gated, and no identity check is added for senders.
    Test helpers that create a sender set the flag; no assertion is weakened, and the pull request
-   lists the helpers changed.
+   lists the helpers changed. Because a code was sent only at sign-up and expires, the gate needs a
+   way back: `POST /api/auth/verify-email/resend`, signed in, with its own throttle scope. It answers
+   204 whether or not anything was sent; an already verified account gets no email; otherwise unused
+   codes are retired and a fresh one goes out through the same outbox path as at sign-up.
 3. **The user's own rating comes from the server.** `GET /api/users/me/ratings/summary` answers the
    same average and count the user's public cards show, computed through `countable` in
    `apps/ratings/public.py`. No second average is written (L13A's rule). Fixed query count.
