@@ -1652,8 +1652,9 @@ endpoint with and without the setting.
 
 ### L10. Final acceptance (Opus, high effort)
 
-L10 runs last, after L18B. It builds nothing: a fault it finds goes back to the coordinator as a
-package of its own, so that acceptance never reviews its own changes.
+L10 runs last, after L18B. It changes no product code (it writes tests, the gallery and the
+report): a fault it finds goes back to the coordinator as a package of its own, so that acceptance
+never reviews its own fixes.
 
 1. Whole suites on PostgreSQL, Go with race detection, and Flutter. Counts recorded against the
    baseline (Django 2,529 passed, Flutter 1,083 passed at `dd7f820`).
