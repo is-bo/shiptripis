@@ -1,10 +1,11 @@
 """Two operator-safety properties of the account and job admins.
 
-**Banning asks first.** `ban_users` is a bulk action reached from a dropdown
-next to a select-all checkbox, and it sets `is_active=False`, which signs the
-person out of an account they may be mid-delivery on. One mis-selection and one
-Go is not enough distance from that, so the action now shows who it is about to
-act on and waits for a second, deliberate click.
+**Banning is not here.** The account admin had bulk "ban" and "unban"
+actions that changed `is_banned` and `is_active` with no reason and no audit
+row. Plan L16 removed them (advisor, 2026-11-14): an account is banned or
+restored on its console person page, with a required reason, audited
+(`staff_actions.set_account_ban`). These tests were rewritten to that rule;
+they used to prove the bulk action asked for a second click.
 
 **A scheduled job moves only through its action.** The finance module's own
 docstring says the one mutation offered on a job is `requeue`. The change form
@@ -39,7 +40,7 @@ UNHASHED_STATIC = override_settings(
 
 
 @UNHASHED_STATIC
-class BanConfirmationTests(TestCase):
+class NoUnauditedBanTests(TestCase):
     def setUp(self):
         self.operator = User.objects.create_superuser(
             username="ban-ops@example.com",
@@ -60,38 +61,22 @@ class BanConfirmationTests(TestCase):
             follow=True,
         )
 
-    def test_choosing_ban_shows_who_it_would_affect_and_bans_nobody_yet(self):
+    def test_the_account_admin_offers_no_ban_action(self):
         response = self._post("ban_users")
         body = response.content.decode()
-        assert response.status_code == 200
-        assert "Ban these accounts?" in body
-        assert "traveler@example.com" in body
-        # The consequence is stated before the click, not after it.
-        assert "signs the person out immediately" in body.replace("\n", " ")
         self.target.refresh_from_db()
         assert self.target.is_banned is False
         assert self.target.is_active is True
+        assert "Ban selected users" not in body
+        assert "Unban selected users" not in body
 
-    def test_confirming_bans_and_deactivates(self):
-        self._post("ban_users", st_confirm="ban")
-        self.target.refresh_from_db()
-        assert self.target.is_banned is True
-        assert self.target.is_active is False
-
-    def test_unbanning_also_asks_first_and_then_restores(self):
-        self.target.is_banned = True
-        self.target.is_active = False
-        self.target.save()
-
-        body = self._post("unban_users").content.decode()
-        assert "Restore these accounts?" in body
-        self.target.refresh_from_db()
-        assert self.target.is_banned is True
-
-        self._post("unban_users", st_confirm="unban")
-        self.target.refresh_from_db()
-        assert self.target.is_banned is False
-        assert self.target.is_active is True
+    def test_the_ban_flag_is_read_only_and_points_to_the_person_page(self):
+        model_admin = admin.site._registry[User]
+        request = self.client.get(f"/admin/accounts/user/{self.target.pk}/change/").wsgi_request
+        form = model_admin.get_form(request, self.target)
+        assert "is_banned" not in form.base_fields
+        body = self.client.get(f"/admin/accounts/user/{self.target.pk}/change/").content.decode()
+        assert "Ban or restore an account on its person page" in body
 
     def test_the_queue_reads_words_rather_than_a_red_cross_that_means_good(self):
         """`is_banned=False` and `is_kyc_verified=False` are opposite news.

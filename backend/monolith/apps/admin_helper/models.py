@@ -116,3 +116,98 @@ class AdminHelperCall(models.Model):
 
     def __str__(self) -> str:
         return f"{self.method} {self.path} {self.status}"
+
+
+class PreparedAction(models.Model):
+    """A change the helper prepared for its admin to confirm (spec 20.4, plan L16).
+
+    Nothing happens when the helper prepares it. The admin opens it on the
+    console, reads the server's summary and confirms; only then does the
+    console's own action run, as that admin, with their rights at that moment
+    (`apps.admin_helper.prepared.confirm`). It can be confirmed once, by the
+    admin whose key prepared it, while it waits and before it expires.
+
+    ``basis`` is what the target looked like when the change was prepared. It
+    never leaves the server: confirming compares it with the target now, and
+    any difference is "This no longer applies".
+    """
+
+    class Status(models.TextChoices):
+        WAITING = "waiting", "Waiting for confirmation"
+        CONFIRMED = "confirmed", "Confirmed"
+        REJECTED = "rejected", "Rejected"
+        EXPIRED = "expired", "Expired"
+        FAILED = "failed", "No longer applied"
+
+    REASON_MAX_LENGTH = 500
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    admin = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="helper_prepared_actions",
+    )
+    key = models.ForeignKey(
+        AdminHelperKey, on_delete=models.PROTECT, related_name="prepared_actions"
+    )
+    #: The registry code (`apps.admin_helper.actions.registry`).
+    action = models.CharField(max_length=40)
+    target_type = models.CharField(max_length=16)
+    target_id = models.PositiveBigIntegerField()
+    #: The parameters as the registry cleaned them.
+    params = models.JSONField(default=dict, blank=True)
+    #: Why the helper prepared it, as the assistant wrote it. Shown on the
+    #: console in a box marked as written by the AI helper.
+    helper_reason = models.CharField(max_length=REASON_MAX_LENGTH)
+    #: The server's own one-line description, written at preparation.
+    summary = models.CharField(max_length=500)
+    basis = models.JSONField(default=dict, blank=True)
+    status = models.CharField(
+        max_length=12, choices=Status.choices, default=Status.WAITING, db_index=True
+    )
+    created_at = models.DateTimeField()
+    expires_at = models.DateTimeField()
+    decided_at = models.DateTimeField(null=True, blank=True)
+    #: What happened: ``{"code", "message"}`` and, once confirmed, the
+    #: admin's own reason.
+    outcome = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "admin_helper_prepared_action"
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(
+                fields=("admin", "status", "-created_at"),
+                name="admin_helper_action_admin_idx",
+            ),
+        ]
+        constraints = [
+            # One waiting change per admin, action and target: a repeat with
+            # the same parameters answers the waiting one again; different
+            # parameters are refused until it is decided.
+            models.UniqueConstraint(
+                fields=("admin", "action", "target_type", "target_id"),
+                condition=Q(status="waiting"),
+                name="admin_helper_one_waiting_action",
+            ),
+            models.CheckConstraint(
+                condition=Q(
+                    status__in=("waiting", "confirmed", "rejected", "expired", "failed")
+                ),
+                name="admin_helper_action_status_valid",
+            ),
+            models.CheckConstraint(
+                condition=Q(expires_at__gt=models.F("created_at")),
+                name="admin_helper_action_expires_after_creation",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(status="waiting", decided_at__isnull=True)
+                    | (~Q(status="waiting") & Q(decided_at__isnull=False))
+                ),
+                name="admin_helper_action_decided_when_not_waiting",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.action} on {self.target_type} {self.target_id} ({self.status})"

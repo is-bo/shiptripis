@@ -282,6 +282,8 @@ STAFF_API_ROUTES = frozenset(
         "api/admin/helper/v1/records/<slug:record_type>/<int:pk>",
         "api/admin/helper/v1/search",
         "api/admin/helper/v1/tasks",
+        # L16. The helper's one change endpoint: a change key only.
+        "api/admin/helper/v1/actions",
     }
 )
 
@@ -311,6 +313,7 @@ class StaffApiGateTests(TestCase):
             "admin-helper-record",
             "admin-helper-search",
             "admin-helper-tasks",
+            "admin-helper-actions",
         }
 
     def _assert_refused(self, client, path, **extra):

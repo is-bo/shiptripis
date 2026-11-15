@@ -1,5 +1,33 @@
 # Waçla V1 Implementation Status
 
+## Wassla L16 — AI helper, changes (2026-11-14)
+
+Status: **in review** on `claude/project-thread-3u61hb`, into `feature/discovery-professional-delivery`.
+Backend and console only; three additive migrations (`admin_helper/0002`, `admin_panel/0008`,
+`finance/0032`); `main` untouched.
+
+- **Change key:** each admin creates their own on the AI helper card ("Create change key (30
+  minutes)", behind a fresh two-step code). With it the assistant adds internal notes and acknowledges
+  problem reports directly, and **prepares** every other listed change: refund request, dispute status
+  and resolution, no-show, ban and restore, profile hide and show, journey pause and resume, sea
+  crossing on and off, job retry and resolve, bank payout retry, and the four review decisions.
+- **Nothing prepared happens until the admin confirms it** on the console, from a two-step-verified
+  session, once. Confirm checks the admin's rights now, the console's own form and offer rule, and
+  that the record is as it was when prepared (for a dispute resolution, the same amounts); otherwise
+  "This no longer applies". It then runs the console's own function as the admin, and the audit row
+  is the console's, marked as via the AI helper. Proven row for row against the console for every
+  action.
+- **The registry is the complete list**: a test holds every console POST to it or to the "never"
+  list (staff, settings, keys, two-step, document reviews, payout details, manual dinar steps,
+  payment reconcile and resolve, refund settlement, exports).
+- **Internal notes** on deliveries, disputes and people (append only, audited, never in a member or
+  helper read payload), and an **audited account ban** on the person page replacing the technical
+  admin's unaudited bulk action.
+- Changes expire after 24 hours (setting), and at once when their key is stopped early or the helper
+  is switched off; switched off, the waiting list is read only.
+
+Detail: `docs/PHASE_L16_ADMIN_HELPER_CHANGES.md`. Staff guide: `docs/ADMIN_OPERATIONS.md` (AI helper).
+
 ## Wassla L15 — AI helper, keys and read access (2026-11-14)
 
 Status: **merged** into `feature/discovery-professional-delivery` (PR #44, `db32121`). Backend and

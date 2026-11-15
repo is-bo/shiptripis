@@ -103,10 +103,16 @@ class _FreshRequest:
         self.session.create()
 
 
-def new_key(admin, *, at=None) -> str:
-    """Create ``admin``'s read key the way the console does; return it plain."""
+def new_key(admin, *, at=None, kind: str = AdminHelperKey.Kind.READ) -> str:
+    """Create ``admin``'s key of ``kind`` the way the console does; return it plain."""
 
-    return issue_key(admin=admin, kind=AdminHelperKey.Kind.READ, request=_FreshRequest(admin, at=at)).plain
+    return issue_key(admin=admin, kind=kind, request=_FreshRequest(admin, at=at)).plain
+
+
+def change_key(admin, *, at=None) -> str:
+    """``admin``'s change key (L16), created the way the console does."""
+
+    return new_key(admin, at=at, kind=AdminHelperKey.Kind.CHANGE)
 
 
 def bearer(plain: str) -> dict:

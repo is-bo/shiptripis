@@ -16,8 +16,9 @@ checked" never look the same.
 **The rows are the count.** An item with a queue (`queue_type`) exposes the
 exact rows it counts through `rows(code, admin)`, each annotated with
 ``waiting_since``, so the helper's `queues/<code>` lists what the count counted.
-Items about documents (ID, tickets, payout methods, payout identity) and the
-email queue (it holds recipients' addresses) are a count and a link only.
+Items about documents (ID, tickets, payout methods, payout identity), the
+email queue (it holds recipients' addresses) and the changes waiting for the
+admin's own confirmation (L16) are a count and a link only.
 """
 
 from __future__ import annotations
@@ -219,6 +220,12 @@ def _jobs(admin=None):
     )
 
 
+def _helper_changes(admin):
+    from apps.admin_helper.prepared import waiting_for
+
+    return _since(waiting_for(admin), F("created_at"))
+
+
 #: The work list, in the order equal items are shown. Each severity rule is the
 #: whole rule for its item.
 QUEUES: tuple[_Queue, ...] = (
@@ -373,6 +380,19 @@ QUEUES: tuple[_Queue, ...] = (
         severity=Severity(URGENT),
         rows=_jobs,
         queue_type="job",
+    ),
+    _Queue(
+        code="helper_changes",
+        permission=("view_dashboard",),
+        title="Changes waiting for your confirmation",
+        hint="Your AI helper prepared them. Nothing happens until you confirm one on the console.",
+        next_step="Open AI helper, read each change and confirm or reject it.",
+        route="admin_console:ai-helper",
+        query="#st-helper-waiting",
+        # The admin's own, and they expire on their own: never urgent. A
+        # count and a link only, so the helper cannot list them as work.
+        severity=Severity(TODAY),
+        rows=_helper_changes,
     ),
     _Queue(
         code="providers",

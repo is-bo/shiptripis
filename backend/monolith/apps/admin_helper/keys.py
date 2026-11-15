@@ -228,9 +228,15 @@ def resolve_key(
 
 
 def _stop(key: AdminHelperKey, *, actor, reason: str, note: str, at: datetime) -> None:
+    """Stop one locked key. Stopped early, its waiting changes expire with it
+    (L16); replaced by a new key, they stay for the admin's console click."""
+
+    from .prepared import expire_for_keys
+
     key.revoked_at = at
     key.revoked_reason = reason
     key.save(update_fields=("revoked_at", "revoked_reason"))
+    expired = 0 if reason == AdminHelperKey.StopReason.REPLACED else expire_for_keys([key.pk], reason=reason, at=at)
     record_admin_action(
         actor=actor,
         action="ai_helper.key_stopped",
@@ -238,7 +244,7 @@ def _stop(key: AdminHelperKey, *, actor, reason: str, note: str, at: datetime) -
         before={"state": "live"},
         after={"state": "stopped", "why": reason},
         reason=note,
-        metadata={"admin": key.admin_id, "kind": key.kind, "hint": key.hint},
+        metadata={"admin": key.admin_id, "kind": key.kind, "hint": key.hint, "changes_expired": expired},
     )
 
 
@@ -278,14 +284,20 @@ def stop_key(*, actor, key_id, reason: str = "") -> AdminHelperKey:
     return key
 
 
-def _stop_live(keys, *, reason: str, at: datetime) -> list[AdminHelperKey]:
-    """Stop every live key in ``keys`` (locked first) and return them."""
+def _stop_live(keys, *, reason: str, at: datetime) -> tuple[list[AdminHelperKey], int]:
+    """Stop every live key in ``keys`` (locked first), and expire every
+    waiting change any key in ``keys`` prepared (L16), a replaced key's
+    included: a two-step reset or the switch going off ends all of it, so
+    switching back on revives nothing. Returns the stopped keys and how many
+    changes expired."""
+
+    from .prepared import expire_for_keys
 
     live = list(keys.select_for_update().filter(revoked_at__isnull=True))
     AdminHelperKey.objects.filter(pk__in=[key.pk for key in live]).update(
         revoked_at=at, revoked_reason=reason
     )
-    return live
+    return live, expire_for_keys(keys.values_list("pk", flat=True), reason=reason, at=at)
 
 
 def stop_all_keys(admin, *, reason: str) -> int:
@@ -295,8 +307,10 @@ def stop_all_keys(admin, *, reason: str) -> int:
     records the number, so no row is written here.
     """
 
-    return len(_stop_live(AdminHelperKey.objects.filter(admin=admin), reason=reason,
-                          at=timezone.now()))
+    live, _expired = _stop_live(
+        AdminHelperKey.objects.filter(admin=admin), reason=reason, at=timezone.now()
+    )
+    return len(live)
 
 
 #: The audit action written when switching the helper off stops keys.
@@ -310,8 +324,9 @@ def stop_keys_if_switched_off(settings_version) -> int:
     way a revision becomes active (the console form, the staff API) stops the
     keys at the moment the switch goes off, or not at all if the activation
     rolls back (spec 20.8). A revision the helper cannot read counts as off,
-    the safe side. One audit row says how many keys stopped; none is written
-    when there was no live key. `resolve_key` still reads the switch on every
+    the safe side. One audit row says how many keys stopped and how many
+    prepared changes expired; none is written when there was neither.
+    `resolve_key` still reads the switch on every
     call, so a key could not act while off even without this.
     """
 
@@ -321,12 +336,12 @@ def stop_keys_if_switched_off(settings_version) -> int:
         enabled = False
     if enabled:
         return 0
-    live = _stop_live(
+    live, expired = _stop_live(
         AdminHelperKey.objects.all(),
         reason=AdminHelperKey.StopReason.SWITCHED_OFF,
         at=timezone.now(),
     )
-    if live:
+    if live or expired:
         record_admin_action(
             actor=settings_version.created_by,
             action=SWITCHED_OFF_ACTION,
@@ -336,6 +351,7 @@ def stop_keys_if_switched_off(settings_version) -> int:
             reason=f"The AI helper was switched off (settings version {settings_version.version}).",
             metadata={
                 "keys_stopped": len(live),
+                "changes_expired": expired,
                 "keys": [
                     {"id": str(key.pk), "admin": key.admin_id, "kind": key.kind, "hint": key.hint}
                     for key in live

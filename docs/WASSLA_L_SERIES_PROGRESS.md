@@ -877,12 +877,61 @@ Screenshots: `/mnt/project-files/l-series-screens/L15/` (console EN and 390 px, 
 
 ### L16. AI helper: changes
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+Detail: `docs/PHASE_L16_ADMIN_HELPER_CHANGES.md` (registry as built, never list, API, curl, audit).
+Screenshots: `/mnt/project-files/l-series-screens/L16/` (console EN and 390 px, keys redacted).
+
+- Contract as built (names that differ from the plan): registry `apps/admin_helper/actions.py`
+  (`registry()`, 21 entries; each has `check` = the console form plus the page's "offered" rule,
+  `basis`, `summary`, `details` and `run` = the console's own function; plan's `validate` is
+  `check`), with `CONSOLE_POSTS`, `NEVER` and `NEVER_ON_PAGE`. `apps/admin_helper/prepared.py`
+  (`take`, `prepare`, `confirm`, `reject`, `expire_for_keys`, `handle_expiry_job`, `waiting_for`,
+  `look`). `PreparedAction` (`admin_helper/0002`) adds `basis`; `outcome` is `{code, message,
+  reason}`. `AdminNote` (`admin_panel/0008`, table `admin_panel_note`). Job kind
+  `admin_helper_action_expiry` (`finance/0032`). Shared console actions in
+  `apps/admin_panel/staff_actions.py` (`add_note`, `set_account_ban`, `request_refund`,
+  `set_dispute_status`, `resolve_dispute`, `retry_job`, `resolve_job`). Audit context
+  `services.audit_via`. Routes: API `admin-helper-actions` (on `HELPER_API_ROUTES`, now seven names,
+  and L14's frozen inventory); console `ai-helper-change`, `note-add`, `user-ban`. Error codes
+  `admin_helper_change_key_required`, `admin_helper_action_invalid`, `_unknown`, `_not_offered`,
+  `_already_waiting`, `_failed`. Audit actions `ai_helper.action_prepared`, `_rejected`, `_failed`,
+  `admin_note.added`, `account.banned`, `account.restored`; key stop rows gain `changes_expired`.
+  Work item `helper_changes` (count only, gate `view_dashboard`).
+- **For L17:** the guide's `actions` list is per key (`code`, `mode`, `does`, `target_types`,
+  `params` with `type` text/integer/choice, `reason_max_length`, `who_decides` for jobs); `rules`
+  depend on the key kind. `tasks[].action` is now **`tasks[].actions`** (a list of codes, empty for a
+  read key); tasks `ban_account` and `add_note` added (40 tasks). A prepared change answers `201
+  {"status": "waiting", "id", "summary", "expires_at", "confirm_url", "repeat", "next_step"}`; a
+  repeat answers `200` with `repeat: true`; other values for the same action and record answer `409
+  admin_helper_action_already_waiting` with `id` and `confirm_url`. `GET actions?status=` lists the
+  admin's own. The skill must say a prepared change is not done until the admin confirms it.
+- Left for a later package: none.
+- Switches added and their defaults: none new; the policy's `change_key_minutes` (30) and
+  `prepared_action_valid_hours` (24), added in L15, are now used.
+- Deviations from the plan (what, why, approved by): the advisor's answers of 2026-11-14 (plan commits
+  `b94473e`, `5927e8a`): audited `set_account_ban` replacing the technical admin's bulk ban; basis and
+  fresh dispute preview compared at confirm; repeat and 409; early key stops expire changes;
+  console actions moved unchanged into `staff_actions.py`; audit context reset after each run;
+  refund's typed reason in metadata; `problem.acknowledge` on `manage_disputes`. Smaller calls for
+  Ismail's end review: phase doc section 14, items 1 to 22 (among them: a refused confirm marks the
+  change failed and is audited, an expiry is not; a repeat answers 200; notes through the helper also
+  need a reason; the never lists; waiting changes not repeated on the card).
+- Tests (before and after counts): Django 3,123 before, 3,200 after (+78 in five L16 files, −1 in
+  `test_admin_safety.py`, whose bulk-ban tests were rewritten because the action was removed). Also
+  rewritten: two `test_l15_api.py` assertions (`helper_changes` queue, `tasks[].actions`), one
+  `test_l15_keys.py` card test (both keys offered), L14's route inventory. ruff and
+  `makemigrations --check` clean, `schema.sql` re-exported (two tables and their constraints).
+- Second review (plan 1.6, phase doc section 13): three should-fix and six minor findings, all fixed
+  in the PR with tests except one kept as a known limit: confirm and reject locked the key row
+  (deadlock with a key stop), now `FOR UPDATE OF` the change only; a ban page left open could
+  restore instead of ban, now it posts what it offered; a refund for a reason already used reported
+  an amount that never moved, now refused; reject with the switch off, a replaced key's changes
+  surviving a reset or switch-off, an early expiry job counted done, a finance refusal as a 500,
+  and the refund basis read before its lock, all fixed. Kept: a retried `note.add` adds a second
+  note. Found, not changed (console behaviour from before L16): the console refund form answers a
+  repeated payment and reason with the existing refund.
+- Known limits: a direct action is not idempotent (a retried note is added twice); a direct action
+  already past the key check when its key is stopped finishes; a change whose record was deleted can
+  only be rejected or expire; console English only.
 
 ### L17. AI helper skill
 

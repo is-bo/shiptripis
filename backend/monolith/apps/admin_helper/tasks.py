@@ -9,8 +9,9 @@ Every console route is either covered by a task (`Task.covers`) or named in
 `NO_TASK` with the reason, and a test holds both lists to the console's
 routes, so the how-to cannot fall behind the console.
 
-``action`` is the code of the helper change that does the same thing (L16);
-none exists in L15, so it is ``None`` everywhere.
+The helper changes that do the same thing as a task name it themselves
+(`apps.admin_helper.actions.Action.task`), so the ``tasks`` answer lists them
+without a second list here (L16).
 """
 
 from __future__ import annotations
@@ -35,8 +36,6 @@ class Task:
     #: True when the work means looking at a document: the helper cannot
     #: decide it, only send the admin to it.
     needs_document: bool = False
-    #: The helper change that does the same thing (L16), or ``None``.
-    action: str | None = None
 
 
 TASKS: tuple[Task, ...] = (
@@ -80,6 +79,21 @@ TASKS: tuple[Task, ...] = (
         permission=("manage_users",),
         route="admin_console:users",
         covers=("user-profile-visibility",),
+    ),
+    Task(
+        code="ban_account",
+        title="Ban a member's account, or restore it",
+        asks=("How do I ban this account?", "How do I let a banned member sign in again?"),
+        steps=(
+            "Open the person's page from People, then Users.",
+            "Press Ban account at the top (Restore account on a banned one).",
+            "Write the reason. It stays internal. Then press the same button.",
+            "A ban signs the person out at once. Their deliveries, payments and payouts are not changed: "
+            "handle those on their own pages.",
+        ),
+        permission=("manage_users",),
+        route="admin_console:users",
+        covers=("user-ban",),
     ),
     # --- verification -------------------------------------------------------------
     Task(
@@ -189,6 +203,19 @@ TASKS: tuple[Task, ...] = (
         permission=("view_deals",),
         route="admin_console:deals",
         covers=("deals", "deal-detail"),
+    ),
+    Task(
+        code="add_note",
+        title="Leave an internal note for other staff",
+        asks=("How do I leave a note on this delivery?", "Where do staff write down what they found?"),
+        steps=(
+            "Open the deal, the dispute or the person's page.",
+            "Under Internal notes, write what other staff should know and press Add note.",
+            "Notes are for staff only and cannot be edited or deleted. Members never see them.",
+        ),
+        permission=("view_deals",),
+        route="admin_console:deals",
+        covers=("note-add",),
     ),
     Task(
         code="record_no_show",
@@ -553,6 +580,7 @@ NO_TASK: dict[str, str] = {
     "ai-helper": "The helper's own keys are handled by the admin on the console, never through it.",
     "ai-helper-create": "The helper's own keys are handled by the admin on the console, never through it.",
     "ai-helper-stop": "The helper's own keys are handled by the admin on the console, never through it.",
+    "ai-helper-change": "Confirming what the helper prepared is the admin's own click on the console.",
 }
 
 BY_CODE = {task.code: task for task in TASKS}

@@ -1,0 +1,33 @@
+{% comment %}
+Internal notes on one record (plan L16). `notes` comes from
+`apps.admin_panel.console_notes.notes_panel`. Notes are staff only and append
+only: there is no edit and no delete.
+{% endcomment %}
+<section class="st-card st-notes" id="st-notes" aria-labelledby="st-notes-title">
+  <div class="st-card-head">
+    <div><p class="st-eyebrow">Staff only</p><h2 id="st-notes-title">Internal notes</h2></div>
+  </div>
+  {% if notes.notes %}
+  <ol class="st-note-list">
+    {% for note in notes.notes %}
+    <li>
+      <p class="st-note-meta"><strong>{{ note.author }}</strong> <span>{{ note.at|date:"d M Y, H:i" }}</span>{% if note.via_helper %} <span class="st-chip st-info">Added by their AI helper</span>{% endif %}</p>
+      <p class="st-note-body">{{ note.body|linebreaksbr }}</p>
+    </li>
+    {% endfor %}
+  </ol>
+  {% if notes.more %}<p class="st-muted">Showing the 50 newest notes.</p>{% endif %}
+  {% else %}
+  <p class="st-muted">No staff note on this {{ notes.what }} yet.</p>
+  {% endif %}
+  {% if notes.may_add %}
+  <form method="post" action="{{ notes.action }}" class="st-form st-note-form">{% csrf_token %}
+    <p>
+      <label for="{{ notes.form.body.id_for_label }}">{{ notes.form.body.label }}</label>
+      {{ notes.form.body }}
+      <small>{{ notes.form.body.help_text }}</small>
+    </p>
+    <div class="st-split-actions"><button type="submit">Add note</button></div>
+  </form>
+  {% endif %}
+</section>

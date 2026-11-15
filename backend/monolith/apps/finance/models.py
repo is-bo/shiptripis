@@ -1396,6 +1396,8 @@ class ScheduledJob(models.Model):
         OFFER_EXPIRY = "offer_expiry", "Offer expiry"
         # --- L15 AI helper ---
         ADMIN_HELPER_CALL_PRUNE = "admin_helper_call_prune", "AI helper call log pruning"
+        # --- L16 AI helper changes ---
+        ADMIN_HELPER_ACTION_EXPIRY = "admin_helper_action_expiry", "AI helper prepared change expiry"
 
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"

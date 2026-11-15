@@ -22,8 +22,9 @@ STAFF_API_AUTHENTICATION = (SessionAuthentication,)
 #: Staff API routes, by URL name, that answer without a verified session.
 #: ``admin-invitation-accept`` creates the account an invitation names, before
 #: anything can be enrolled, and returns nothing that opens another route.
-#: The AI helper's routes (L15) take a helper key and refuse every session
-#: and member token; a key is created behind a fresh second step instead.
+#: The AI helper's routes (L15, and L16's ``actions``) take a helper key and
+#: refuse every session and member token; a key is created behind a fresh
+#: second step instead.
 HELPER_API_ROUTES = frozenset(
     {
         "admin-helper-guide",
@@ -32,6 +33,7 @@ HELPER_API_ROUTES = frozenset(
         "admin-helper-record",
         "admin-helper-search",
         "admin-helper-tasks",
+        "admin-helper-actions",
     }
 )
 OPEN_STAFF_API_ROUTES = frozenset({"admin-invitation-accept", *HELPER_API_ROUTES})
