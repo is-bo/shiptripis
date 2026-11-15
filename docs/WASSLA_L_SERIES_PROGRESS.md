@@ -43,7 +43,8 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L17 | AI helper skill | Sonnet | medium | merged | `claude/project-thread-iwy8i6` | #46 | `8b6a4fd` | `docs/PHASE_L17_ADMIN_HELPER_SKILL.md` |
 | L18A | Loose ends before acceptance, backend (added 2026-11-15, plan 5.1f) | Opus | high | merged | `claude/project-thread-bh970p` | #47 | `7ad5f36` | `docs/PHASE_L18A_LOOSE_ENDS_BACKEND.md` |
 | L18B | Loose ends before acceptance, mobile | Sonnet | medium | merged | `claude/project-thread-x6y8b6` | #48 | `1e8bb46` | `docs/PHASE_L18B_LOOSE_ENDS_MOBILE.md` |
-| L10 | Final acceptance (runs last, after L18B) | Opus | high | not_started | | | | |
+| L10 | Final acceptance (runs last, after L18B) | Opus | high | merged | `claude/project-thread-0b81ct` | #49 | `464fe51` | `docs/PHASE_L10_FINAL_ACCEPTANCE.md` |
+| L19 | Findings of final acceptance (added 2026-11-15, plan 5.1g) | Opus | high | paused (Ismail, 2026-11-15) | | | | |
 
 **Parked on 2026-11-13 (Ismail's decision, plan 5.1e).** Wassla now targets fast delivery: urgent
 parcels, mostly on flights and drives made the same day. These packages are not part of this build and
@@ -66,7 +67,7 @@ L16, L17, L18A, L18B, and L10 last. These rows were changed by the plan thread o
 L9B (spec 12, 16 to 20; plan 5.1b), then L4C and the new order (plan 5.1d). **The order of the
 board table is the order of work, as in plan section 3.**
 
-**Next package:** L10 (Opus, high effort; final acceptance, runs last). Read the L18A and L18B handoff blocks first. L10 changes no product code; a fault it finds goes back to the coordinator as a package of its own.
+**Next package:** L19 (Opus, high effort; backend only; plan L19 and 5.1g). **Paused:** on 2026-11-15 Ismail asked for a pause after L10. Do not start L19 until he says. Read the L10 handoff block and release report section 14 first. The release report goes to Ismail (L10 item 9) after L19 is merged.
 
 **L16 judgment calls (for Ismail's end review):** the 22 calls in phase doc section 14. Found, not changed (console behaviour from before
 L16): the console refund form, asked twice for the same payment and reason, answers with the refund
@@ -1045,6 +1046,17 @@ Phase doc: `docs/PHASE_L18B_LOOSE_ENDS_MOBILE.md`.
 - Tests (before and after counts): Flutter 1,521 before, 1,533 after (+12). No backend test changed.
 - Known limits: an older code email may still arrive after a resend (copy says use the newest).
 
+### L19. Findings of final acceptance
+
+Phase doc: (not started; paused by Ismail on 2026-11-15).
+
+- Contract as built (names that differ from the plan):
+- Left for a later package:
+- Switches added and their defaults:
+- Deviations from the plan (what, why, approved by):
+- Tests (before and after counts):
+- Known limits:
+
 ## Questions for Ismail
 
 | Asked | Question | Answer |
@@ -1090,3 +1102,4 @@ Phase doc: `docs/PHASE_L18B_LOOSE_ENDS_MOBILE.md`.
 | 2026-11-15 | L18A merged (PR #47, `7ad5f36`): staff dispute open/close paths nothing called removed; a sender and a payout setup write need a confirmed email (one `EmailVerifiedToWrite`), with `POST /api/auth/verify-email/resend`; one `end_all_sessions` on a Google claim of an unconfirmed account and on every password reset; own rating summary through the public card's rule; `GET /api/support`. No migration. Django 3,212 to 3,248 tests. All 11 checks green. Next: L18B. |
 | 2026-11-15 | Advisor answer for L18B: no notice on the request form about an unconfirmed email. Plan L18B item 4 asks for the refusal handler and the Profile entry only; the form is never left, so what was typed stays, and with the sign-up screen now reachable most senders arrive confirmed. Opening `/auth/verify-email` to signed-in members is accepted as a fix. |
 | 2026-11-15 | L18B merged (PR #48, `1e8bb46`): own rating from the server ("Rating"), welcome caption with no number, one "Contact support" action (absent without a server address), one handler for `email_verification_required` with "Send the code again", Profile "Verify email", reset ends on sign-in, `/auth/verify-email` open to signed-in members, helper notes updated. Flutter 1,521 to 1,533 tests. All 11 checks green. Next: L10. |
+| 2026-11-15 | L10 merged (PR #49, `464fe51`): 22 acceptance tests in four files over one `AcceptanceWorld` (same-day flight, drive and sea runs, marketplace deadlines, alerts, no-show and reviews, staff two-step and exports reconciled with the dashboard, Google and reset claims, the switch matrix); the eleven L17 helper conversations rerun on the final build; release report `docs/WASSLA_L_SERIES_RELEASE_REPORT.md` and gallery in project files. No product code changed. Django 3,248 to 3,270 tests. The second pass tightened three tests (delivery code lock, payout after protection, ledger per account); shard 2 fixed by seeding settings and staff roles in the `TransactionTestCase`. All 11 checks green. Its two findings became L19 (advisor, plan 5.1g). Next: L19, paused by Ismail until he says. |
