@@ -2,7 +2,7 @@
 
 ## Wassla L18A — Loose ends before acceptance, backend (2026-11-15)
 
-Status: **in review** (PR into `feature/discovery-professional-delivery`). No migration; `main` untouched.
+Status: **merged** into `feature/discovery-professional-delivery` (PR #47, `7ad5f36`). No migration; `main` untouched.
 
 - **Removed** the staff dispute paths nothing called: `open_dispute(as_admin=True)` (skipped every
   check) and `close_dispute` (left a payout frozen). Only a party opens a dispute, inside its window.
@@ -23,7 +23,7 @@ Detail and the L18B contract: `docs/PHASE_L18A_LOOSE_ENDS_BACKEND.md`.
 
 ## Wassla L17 — AI helper skill (2026-11-15)
 
-Status: **in review** (PR into `feature/discovery-professional-delivery`). No migration; `main` untouched.
+Status: **merged** into `feature/discovery-professional-delivery` (PR #47, `7ad5f36`). No migration; `main` untouched.
 
 - **One skill, `wassla`**: a 139-line core file (briefing, "how do I ...?", changes, rules) and 14 notes
   files read from the code that answer any question about the app: pricing, money, deliveries, trips,

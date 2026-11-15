@@ -41,7 +41,7 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L15 | AI helper: keys and read access | Opus | xhigh | merged | `claude/project-thread-jm20wy` | #44 | `db32121` | `docs/PHASE_L15_ADMIN_HELPER_READ.md` |
 | L16 | AI helper: changes | Opus | xhigh | merged | `claude/project-thread-3u61hb` | #45 | `a3449e1` | `docs/PHASE_L16_ADMIN_HELPER_CHANGES.md` |
 | L17 | AI helper skill | Sonnet | medium | merged | `claude/project-thread-iwy8i6` | #46 | `8b6a4fd` | `docs/PHASE_L17_ADMIN_HELPER_SKILL.md` |
-| L18A | Loose ends before acceptance, backend (added 2026-11-15, plan 5.1f) | Opus | high | not_started | | | | |
+| L18A | Loose ends before acceptance, backend (added 2026-11-15, plan 5.1f) | Opus | high | merged | `claude/project-thread-bh970p` | #47 | `7ad5f36` | `docs/PHASE_L18A_LOOSE_ENDS_BACKEND.md` |
 | L18B | Loose ends before acceptance, mobile | Sonnet | medium | not_started | | | | |
 | L10 | Final acceptance (runs last, after L18B) | Opus | high | not_started | | | | |
 
@@ -66,14 +66,13 @@ L16, L17, L18A, L18B, and L10 last. These rows were changed by the plan thread o
 L9B (spec 12, 16 to 20; plan 5.1b), then L4C and the new order (plan 5.1d). **The order of the
 board table is the order of work, as in plan section 3.**
 
-**Next package:** L17 (Sonnet, medium effort; AI helper skill). Section 3 order. Read the L16 handoff
-block first ("For L17"): `tasks[].actions` (a list) replaced `tasks[].action`; the guide's `actions`
-and `rules` depend on the key's kind; a prepared change answers 201 (a repeat 200 with
-`repeat: true`) and a different one for the same target 409 `admin_helper_action_already_waiting`
-with its `confirm_url`; internal notes never appear in a read payload. Ismail widened L17 on
-2026-11-14 in the project chat: the skill must also answer any question about the app (how payouts
-work, how members do things, how prices are calculated), not only admin work; his message is attached
-when L17 starts.
+**Next package:** L18B (Sonnet, medium effort; loose ends before acceptance, mobile). Section 3
+order. Read the L18A handoff block first ("Left for a later package") and the contract in
+`docs/PHASE_L18A_LOOSE_ENDS_BACKEND.md` section 6: `email_verification_required` (403) on posting and
+on every payout setup write, `POST /api/auth/verify-email/resend` for "send the code again",
+`GET /api/users/me/ratings/summary` for the Profile figure (label "Rating"), `GET /api/support` (hide
+the action when `email` is `null`), and a refresh answered 401 after a Google claim or a reset means
+"sign in again". L10 runs last.
 
 **L16 judgment calls (for Ismail's end review):** the 22 calls in phase doc section 14. Found, not changed (console behaviour from before
 L16): the console refund form, asked twice for the same payment and reason, answers with the refund
@@ -1070,3 +1069,4 @@ Screenshots: `/mnt/project-files/l-series-screens/L16/` (console EN and 390 px, 
 | 2026-11-15 | L17 merged (PR #46, `8b6a4fd`): one skill `wassla` for the Super Admin: a 139-line core plus 14 code-sourced notes files (any question about the app, structure with diagrams, outsider questions), generated pasted instructions with a stale test, "Download the skill" and "Copy the instructions" on the AI helper card, `payments` on the helper's deal record. Eleven proof conversations with the smallest model in the phase doc. All 11 checks green after a runner-fault re-run. Next: L18A. |
 | 2026-11-15 | Advisor answers for L18A, written into its plan text: add `POST /api/auth/verify-email/resend` so the new email gate is never a dead end; keep the `payout_already_settled` branch of `open_dispute` and rewrite, not drop, the tests that reached it through the removed staff path. |
 | 2026-11-15 | Advisor answers for L18A's review finding, written into plan L18A items 5 and 6, L18B item 4, L10 and 5.1f: the Google claim of an unconfirmed account stands and also switches off the account's push devices and replaces the profile fields; a completed password reset ends every session, switches off push devices and confirms the email, for every account; payout setup refuses `email_verification_required` until the email is confirmed (ID submission is not gated); `NUM_PROXIES` needs no change because the web server replaces `X-Forwarded-For` with the real peer address, and the release report carries a note for the day a CDN is put in front. |
+| 2026-11-15 | L18A merged (PR #47, `7ad5f36`): staff dispute open/close paths nothing called removed; a sender and a payout setup write need a confirmed email (one `EmailVerifiedToWrite`), with `POST /api/auth/verify-email/resend`; one `end_all_sessions` on a Google claim of an unconfirmed account and on every password reset; own rating summary through the public card's rule; `GET /api/support`. No migration. Django 3,212 to 3,248 tests. All 11 checks green. Next: L18B. |
