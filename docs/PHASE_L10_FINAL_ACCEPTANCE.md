@@ -32,6 +32,12 @@ average one). They take about 80 seconds on one worker.
 - With `PAYOUT_PROFILES_ENABLED` off (the test default), a manually settled payout is in provider
   mode `legacy_unknown`. The payout export is downloaded in that mode (finding 2 in the report).
 - Exports refuse an end date in the future, so the test freezes the clock after the last event.
+- `ExportsReconcileTests` is a `TransactionTestCase`, which starts from empty tables when another
+  transaction test ran before it in the same shard. So it seeds the settings revision
+  (`seed_business_settings`, as the finance concurrency tests do) and the staff roles' capabilities
+  (`seed_admin_roles`, from `ROLE_PERMISSIONS`). `serialized_rollback` is not used: after a flush,
+  Django recreates the content types, and the serialized copy then collides with them (first CI run,
+  shard 2).
 - The marketplace switch helper `activate_marketplace(section)` replaces the whole marketplace
   section with a new revision. The reminder job a switch-off consumes is gone, so the "on" and "off"
   runs are separate tests.

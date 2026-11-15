@@ -23,6 +23,8 @@ from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
+from django.contrib.auth.models import Permission
+from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
 from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
@@ -33,9 +35,15 @@ from apps.accounts.models import PasswordResetCode, User
 from apps.admin_panel import two_step
 from apps.admin_panel.console_exports import AUDIT_ACTION
 from apps.admin_panel.models import AdminAuditLog
-from apps.admin_panel.permissions import AdminRole, assign_admin_roles
+from apps.admin_panel.permissions import (
+    ROLE_PERMISSIONS,
+    AdminRole,
+    assign_admin_roles,
+    role_group,
+)
 from apps.admin_panel.tests.two_step_helpers import staff_login
 from apps.core import channels
+from apps.core.tests.business_settings_seed import seed_business_settings
 from apps.deals.tests.phase4_factories import freeze_at
 from apps.discovery.tests.support import STATIC_STORES
 from apps.finance.control_plane.filters import Scope
@@ -166,14 +174,39 @@ class StaffSignInTests(TestCase):
         assert back.redirect_chain[-1][0].startswith(enrol)
 
 
+def seed_admin_roles() -> None:
+    """The role groups and their capabilities, as the admin_panel migrations seed them."""
+
+    holder, _ = ContentType.objects.get_or_create(
+        app_label="admin_panel", model="adminauditlog"
+    )
+    for slug, codes in ROLE_PERMISSIONS.items():
+        role_group(slug).permissions.add(
+            *(
+                Permission.objects.get_or_create(
+                    content_type=holder,
+                    codename=code,
+                    defaults={"name": "Can " + code.replace("_", " ")},
+                )[0]
+                for code in codes
+            )
+        )
+
+
 @override_settings(STORAGES=STATIC_STORES)
 class ExportsReconcileTests(AcceptanceWorld, TransactionTestCase):
-    """A transaction test: the dashboard reads its own standalone snapshot."""
+    """A transaction test: the dashboard reads its own standalone snapshot.
 
-    serialized_rollback = True
+    TransactionTestCase empties every table between tests, so what the
+    migrations seed and this test needs is seeded again here: the active
+    settings revision (as the other transaction tests do) and the staff
+    roles' capabilities.
+    """
 
     def setUp(self):
         cache.clear()
+        seed_business_settings()
+        seed_admin_roles()
         self.build_acceptance_world()
 
     def download(self, client, kind: str, mode: str = "test") -> list[dict]:
