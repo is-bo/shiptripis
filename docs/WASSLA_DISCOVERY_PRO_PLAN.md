@@ -15,7 +15,8 @@ If the plan and the spec disagree, the spec wins and the disagreement is a plan 
 made the same day. Packages L6B, L7A, L7B, L8A and L8B and the professional half of L6A are
 **parked**: their full text is in `docs/parked/WASSLA_PROFESSIONAL_AND_COURIER_PLAN.md`. They are not
 started, and no package leaves a hook for them. What remains, in order: L6A (smaller), L9A, L9B,
-L12A, L12B, L13A, L13B, L14, L15, L16, L17, L18A, L18B (added 2026-11-15, 5.1f), L10.
+L12A, L12B, L13A, L13B, L14, L15, L16, L17, L18A, L18B (added 2026-11-15, 5.1f), L10, and L19
+(added 2026-11-15, 5.1g: the two findings of final acceptance).
 
 ---
 
@@ -416,10 +417,12 @@ steps named in spec 19.1 are behind the second.
 | L18A | Loose ends before acceptance, backend | Opus | high | L17 |
 | L18B | Loose ends before acceptance, mobile | Sonnet | medium | L18A |
 | L10 | Final acceptance | Opus | high | all, L18B included |
+| L19 | Findings of final acceptance (added 2026-11-15, 5.1g) | Opus | high | L10 merged |
 
 L11A to L17 were added on 2026-11-12 (spec 16 to 20). **The order of this table is the order of
 work, not the numbers.** Everything down to L5B is merged. What remains, in order: **L6A, L9A, L9B,
-L12A, L12B, L13A, L13B, L14, L15, L16, L17, L18A, L18B, and L10 last.** The no-show reports of spec 12 are inside
+L12A, L12B, L13A, L13B, L14, L15, L16, L17, L18A, L18B, L10, then L19 (what L10 found).** The no-show
+reports of spec 12 are inside
 L9A and L9B.
 
 **Parked on 2026-11-13** (Ismail, 5.1e), not in this table and not to be started: L6B, L7A, L7B, L8A,
@@ -1734,7 +1737,39 @@ never reviews its own fixes.
    report has a section "Before real users" (the support address in `EMAIL_SUPPORT_ADDR`, the
    placeholder mailboxes in `web/support.html`, the terms page and the final prohibited-items list of
    5.1d, and the proxy note of 5.1f) and lists the open decisions of 5.1f. **No merge
-   into `main` and no deployment without his explicit approval.**
+   into `main` and no deployment without his explicit approval.** The hand-over happens after L19.
+
+### L19. Findings of final acceptance (Opus, high effort)
+
+Added on 2026-11-15 (5.1g). L10 found two low faults (release report, section 14) and, by its own
+rule, fixed neither. This package fixes both, after L10's pull request is merged, so that L10's
+acceptance tests run unchanged on the code that ships. Backend only, no migration. Opus because item
+2 edits `apps/finance` (1.2).
+
+1. **The helper's notes say what the server does.** In
+   `apps/admin_helper/skill/knowledge/architecture-and-diagrams.md` drop the sentence that says the
+   server has a staff-side way to open a dispute (L18A removed it); "Staff cannot open a dispute
+   today" stays. Search the whole skill for any other line that describes `as_admin`, `close_dispute`
+   or a staff path to open a dispute. Regenerate `INSTRUCTIONS.txt`; the stale test passes. Run again
+   the proof conversation that asks whether staff can open a dispute.
+2. **A payout carries the mode of the money that funded it.** With `PAYOUT_PROFILES_ENABLED` off,
+   `ensure_payout_for_deal` creates the payout with no mode, so it defaults to `legacy_unknown` while
+   its funding is `test`, and one deal's traveler balance is split across two modes on the finance
+   dashboard and in the exports. That branch takes the mode from the funding attempt, through the
+   same `funding_attempt(order)` lookup `create_snapshot` uses, and falls back to `legacy_unknown`
+   only when there is no funding attempt. Fixed at the payout row, not in the ledger's mode rule and
+   not by a label. No backfill (no real data). Live mode cannot reach this branch
+   (`config/settings/payments.py` requires payout profiles), and the profile path is not touched.
+
+**Tests.** Profiles off, a deal funded in test mode, delivered and settled by hand: the payout, its
+ledger transaction and the dashboard's traveler outstanding are all in `test`, nothing of the deal
+is in `legacy_unknown`, and the three exports reconcile with the dashboard for that mode. Profiles
+on: every existing test unchanged. Any existing test that asserted `legacy_unknown` for a funded
+legacy payout is listed in the pull request with its new expectation.
+
+**Done when.** L10's 22 acceptance tests and the whole suites are green on this pull request. The
+release report's section 14 marks both findings closed with the commit, and its test counts are
+updated. Then the coordinator hands Ismail the report (L10 item 9).
 
 ---
 
@@ -1864,6 +1899,20 @@ that ships and changes nothing itself.
   ever put in front of the web server, every visitor would arrive from that proxy's address; the
   web server's trusted-proxy setting and the per-address limits (Django and the Go ID upload) must
   be set for it first.
+
+### 5.1g Findings of final acceptance (advisor, 2026-11-15)
+
+L10 reported two low findings that block nothing. Both are fixed in one small package, **L19**
+(Opus, high), after L10 merges; neither is folded into L10 (acceptance does not review its own
+fixes) and neither is left for the report.
+
+- *A line in the helper's notes still describes the staff dispute path L18A removed.* The skill is
+  what the Super Admin asks about the app, so it must not describe code that is gone.
+- *Test and staging only: a payout settled by hand with payout profiles off is stored in mode
+  `legacy_unknown` while its funding is in test mode.* Production cannot reach it, but the shipped
+  example configuration (`infra/vps/stack.env.example`) has profiles off, so a staging server would
+  show one deal's traveler balance split across two modes on the finance dashboard. The payout takes
+  its funding's mode; a label would only explain a wrong number.
 
 ### 5.1c Choices the planner made inside those additions (not individually confirmed)
 
