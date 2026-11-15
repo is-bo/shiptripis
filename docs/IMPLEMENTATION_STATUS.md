@@ -2,8 +2,8 @@
 
 ## Wassla L16 — AI helper, changes (2026-11-14)
 
-Status: **in review** on `claude/project-thread-3u61hb`, into `feature/discovery-professional-delivery`.
-Backend and console only; three additive migrations (`admin_helper/0002`, `admin_panel/0008`,
+Status: **merged** into `feature/discovery-professional-delivery` (PR #45, `a3449e1`). Backend and
+console only; three additive migrations (`admin_helper/0002`, `admin_panel/0008`,
 `finance/0032`); `main` untouched.
 
 - **Change key:** each admin creates their own on the AI helper card ("Create change key (30

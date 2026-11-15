@@ -39,7 +39,7 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L13B | Reviews, mobile | Sonnet | medium | merged | `claude/project-thread-j3f6qz` | #42 | `c5ec718` | `docs/PHASE_L13B_REVIEWS_MOBILE.md` |
 | L14 | Staff two-step sign-in and finance exports | Opus | high | merged | `claude/project-thread-udx9bx` | #43 | `15d5f9e` | `docs/PHASE_L14_ADMIN_SECURITY_EXPORTS.md` |
 | L15 | AI helper: keys and read access | Opus | xhigh | merged | `claude/project-thread-jm20wy` | #44 | `db32121` | `docs/PHASE_L15_ADMIN_HELPER_READ.md` |
-| L16 | AI helper: changes | Opus | xhigh | not_started | | | | |
+| L16 | AI helper: changes | Opus | xhigh | merged | `claude/project-thread-3u61hb` | #45 | `a3449e1` | `docs/PHASE_L16_ADMIN_HELPER_CHANGES.md` |
 | L17 | AI helper skill | Sonnet | medium | not_started | | | | |
 | L10 | Final acceptance (runs last, after L17) | Opus | high | not_started | | | | |
 
@@ -64,11 +64,23 @@ L16, L17, and L10 last. These rows were changed by the plan thread on Ismail's i
 L9B (spec 12, 16 to 20; plan 5.1b), then L4C and the new order (plan 5.1d). **The order of the
 board table is the order of work, as in plan section 3.**
 
-**Next package:** L16 (Opus, xhigh effort; AI helper: changes). Section 3 order. Read the L15 handoff
-block first: the review actions target the Rating id; `issue_key` already takes `kind="change"`; new
-helper routes go into `HELPER_API_ROUTES` and the frozen `STAFF_API_ROUTES` inventory in
-`apps/admin_panel/tests/test_l14_two_step.py`; `guide.actions`, `tasks[].action` and the guide's
-read-only rule become kind-dependent; keep the lock order admin row, settings revision, keys.
+**Next package:** L17 (Sonnet, medium effort; AI helper skill). Section 3 order. Read the L16 handoff
+block first ("For L17"): `tasks[].actions` (a list) replaced `tasks[].action`; the guide's `actions`
+and `rules` depend on the key's kind; a prepared change answers 201 (a repeat 200 with
+`repeat: true`) and a different one for the same target 409 `admin_helper_action_already_waiting`
+with its `confirm_url`; internal notes never appear in a read payload. Ismail widened L17 on
+2026-11-14 in the project chat: the skill must also answer any question about the app (how payouts
+work, how members do things, how prices are calculated), not only admin work; his message is attached
+when L17 starts.
+
+**L16 judgment calls (for Ismail's end review):** the 22 calls in phase doc section 14. Found, not changed (console behaviour from before
+L16): the console refund form, asked twice for the same payment and reason, answers with the refund
+that exists whatever the amount; the helper refuses that case. The second review found three
+should-fix issues (a lock-order deadlock between confirm and a key stop, a ban page left open doing
+the opposite, a reused refund reason reporting money that never moved) and five minor ones, all fixed
+with tests before merge; non-idempotent direct actions are a known limit. The first CI runs failed
+every job in about 2 seconds with no runner (account fault); after Ismail's fix on 2026-11-15 all
+eleven checks passed, Schema drift included.
 
 **L15 judgment calls (accepted by the advisor on 2026-11-14, for Ismail's end review):** the seven
 calls in phase doc section 11 (work item gate = console page gate, so Ops now sees background jobs;
@@ -988,3 +1000,4 @@ Screenshots: `/mnt/project-files/l-series-screens/L16/` (console EN and 390 px, 
 | 2026-11-14 | L15 merged (PR #44, `db32121`): AI helper keys and read API (guide, briefing, queues, records, search, tasks), one work list with severity for the overview and the briefing, console card, page and settings form; helper routes on L14's open staff list. Django 3,046 to 3,123 tests. Next: L16. |
 | 2026-11-14 | Advisor answers for L16 (part 1), written into plan L16: an audited `set_account_ban` service with console buttons replaces the unaudited bulk update (the plan had assumed a console ban action that did not exist); prepared actions store a basis and are refused at confirm when the target changed; a repeated identical prepare answers the waiting one, different parameters answer 409; a key stopped early expires its waiting actions; internal notes never reach the helper. |
 | 2026-11-14 | Advisor answers for L16 (part 2), written into plan L16: inline console actions move into `apps/admin_panel/staff_actions.py` with no behaviour change; the "via AI helper" audit context is reset after each run; a dispute resolution is refused at confirm when the fresh settlement preview differs from the prepared one; the typed confirm reason is kept in audit metadata; `problem.acknowledge` needs `manage_disputes`. |
+| 2026-11-15 | L16 merged (PR #45, `a3449e1`): change key, action registry (21 actions calling the console's own checks and functions), prepared changes confirmed only on the console, expiry job, internal notes, the audited account ban, and the never list over every console POST. Django 3,123 to 3,200 tests. Next: L17. |
