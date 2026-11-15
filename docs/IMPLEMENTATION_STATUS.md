@@ -1,5 +1,28 @@
 # Waçla V1 Implementation Status
 
+## Wassla L10 — Final acceptance of the L-series (2026-11-15)
+
+- No product code changed. 22 acceptance tests in `backend/monolith/apps/core/tests/test_l10_*.py`
+  (world in `l10_world.py`):
+  - the same-day flight with an approved ticket, with the tracking number checked in every email;
+  - the drive with two stops, and the sea leg with the switch on;
+  - both proposal deadlines, the trip-fit alert leading to "I can carry this", a no-show recorded by
+    staff, and a review hidden then removed;
+  - staff two-step sign-in, the three exports reconciled with the dashboard, and both account claims;
+  - the switch matrix.
+- Suites on the final build:
+  - Django 3,248 passed, then 3,270 with L10 (baseline 2,529);
+  - Flutter 1,533 (baseline 1,083);
+  - Go race tests ok.
+- Invariant greps pass, all 27 new migrations are additive, the K-series budgets hold, and the eleven
+  AI helper conversations behave as L17 recorded.
+- The design review on a 320 px phone (FR, AR) and an 834 px tablet (EN, AR) found no overflow.
+- The gallery has 324 images, at `/mnt/project-files/l-series-screens/gallery.html`.
+- Two low findings went to the coordinator.
+
+Report for Ismail (switches still off, "Before real users", open decisions, every package's judgment
+calls): `docs/WASSLA_L_SERIES_RELEASE_REPORT.md`. Detail: `docs/PHASE_L10_FINAL_ACCEPTANCE.md`.
+
 ## Wassla L18B — Loose ends before acceptance, mobile (2026-11-15)
 
 - Own rating from the server ("Rating"), welcome caption with no number, one "Contact support" action

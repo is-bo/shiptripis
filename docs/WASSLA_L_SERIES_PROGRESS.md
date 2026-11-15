@@ -968,12 +968,26 @@ Screenshots: `/mnt/project-files/l-series-screens/L16/` (console EN and 390 px, 
 
 ### L10. Final acceptance
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+Detail: `docs/PHASE_L10_FINAL_ACCEPTANCE.md`. Report for Ismail: `docs/WASSLA_L_SERIES_RELEASE_REPORT.md`.
+Gallery: `/mnt/project-files/l-series-screens/gallery.html` (324 images; L2B, L3B and L10 taken here).
+
+- Contract as built (names that differ from the plan): no product code. Tests only:
+  `apps/core/tests/l10_world.py` (`AcceptanceWorld`, `carry()`) and four `test_l10_*.py` files.
+- Left for a later package (findings for the coordinator, neither blocks a release):
+  (1) the helper note `knowledge/architecture-and-diagrams.md:192` (and `INSTRUCTIONS.txt`) still
+  mentions the staff dispute path L18A removed, though its conclusion is right;
+  (2) in test or staging without payout profiles, a hand-settled payout lands in `legacy_unknown`
+  while its funding is in test mode, so the dashboard splits the traveler's balance across two modes.
+  Production cannot reach this.
+- Switches added and their defaults: none. Still off: sea legs (plan 5.2).
+- Deviations from the plan (what, why, approved by): the plan asks for the eight L17 conversations;
+  all eleven were rerun, because L17 added three. No other deviation.
+- Tests (before and after counts): Django 3,248 on the final build, then 3,270 with L10 (+22;
+  baseline 2,529). Flutter 1,533 (baseline 1,083). Go race tests ok. ruff and
+  `makemigrations --check` clean.
+- Known limits: mock rail in test mode only; the design review is at widget-test level with the real
+  fonts, not on a device; on a tablet every screen is the phone layout at full width (app-wide, no
+  specification asks for more).
 
 ### L18A. Loose ends before acceptance, backend
 
