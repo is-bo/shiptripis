@@ -1020,12 +1020,22 @@ Screenshots: `/mnt/project-files/l-series-screens/L16/` (console EN and 390 px, 
 
 ### L18B. Loose ends before acceptance, mobile
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+Phase doc: `docs/PHASE_L18B_LOOSE_ENDS_MOBILE.md`.
+
+- Contract as built (names that differ from the plan): Profile reads `GET /api/users/me/ratings/summary`
+  (`ownRatingSummaryProvider`) under the label "Rating"; one support action in
+  `features/common/contact_support.dart` over `GET /api/support` (absent on `null` or a failed read);
+  one handler `features/auth/email_gate.dart` for `email_verification_required` (posting a request,
+  `PayoutMethodsScreen`, `DzdSetupScreen`); the verify-email screen resends through
+  `POST /api/auth/verify-email/resend`; `/auth/verify-email` is open to signed-in members; the reset ends
+  on sign-in; the welcome caption is "Handover code". The helper's knowledge notes and
+  `INSTRUCTIONS.txt` were updated for the app as it now is.
+- Left for a later package: nothing. L10 checks the whole.
+- Switches added and their defaults: none.
+- Deviations from the plan (what, why, approved by): no banner on the request form before posting (the
+  403 handler and Profile's "Verify email" cover it; phase doc 7.1, for the advisor to confirm).
+- Tests (before and after counts): Flutter 1,521 before, 1,533 after (+12). No backend test changed.
+- Known limits: an older code email may still arrive after a resend (copy says use the newest).
 
 ## Questions for Ismail
 

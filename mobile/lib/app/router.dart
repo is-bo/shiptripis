@@ -211,6 +211,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Signed in. The auth screens and the splash are no longer valid places
       // to be — but the guest payment link stays reachable, because a signed-in
       // user can perfectly well be paying somebody else's obligation.
+      // The one auth screen a signed-in person needs: confirming their own
+      // email, from sign-up, from Profile, or when posting is refused.
+      if (location == '/auth/verify-email') return null;
       if (location == '/splash' ||
           location.startsWith('/onboarding') ||
           location.startsWith('/auth')) {

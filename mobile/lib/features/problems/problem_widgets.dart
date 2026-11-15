@@ -24,6 +24,7 @@ import '../../design/tokens.dart';
 import '../../domain/deal.dart';
 import '../../domain/problems.dart';
 import '../../l10n/app_localizations.dart';
+import '../common/contact_support.dart';
 
 // ---------------------------------------------------------------------------
 // Words
@@ -233,9 +234,10 @@ class _MyNoShowCard extends StatelessWidget {
 /// Every report on the delivery, and the button for a new one. Hidden when
 /// there is neither.
 class ProblemsSection extends ConsumerWidget {
-  const ProblemsSection({required this.dealId, super.key});
+  const ProblemsSection({required this.dealId, this.trackingNumber, super.key});
 
   final int dealId;
+  final String? trackingNumber;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -273,6 +275,7 @@ class ProblemsSection extends ConsumerWidget {
                   showProblemSheet(context, dealId: dealId, kinds: general),
             ),
           ],
+          ContactSupportButton(trackingNumber: trackingNumber),
         ],
       ),
     );

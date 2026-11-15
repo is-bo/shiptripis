@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../common/contact_support.dart';
 import '../../app/app_state.dart';
 import '../../app/router.dart';
 import '../../core/api/api_exception.dart';
@@ -131,6 +132,7 @@ class _DisputeOpenScreenState extends ConsumerState<DisputeOpenScreen> {
     final locale = Localizations.localeOf(context);
     final validators = Validators.of(context);
     final deal = ref.watch(dealDetailProvider(widget.dealId));
+    final supportEmail = supportEmailOf(ref);
 
     return DismissKeyboardOnTap(
       child: AppScaffold(
@@ -171,7 +173,16 @@ class _DisputeOpenScreenState extends ConsumerState<DisputeOpenScreen> {
                 title: l.disputeWindowClosedTitle,
                 body: l.disputeWindowClosedBody,
                 icon: Icons.lock_clock_rounded,
-                actionLabel: l.actionContactSupport,
+                actionLabel: supportEmail == null
+                    ? null
+                    : l.actionContactSupport,
+                onAction: supportEmail == null
+                    ? null
+                    : () => openSupportEmail(
+                        context,
+                        supportEmail,
+                        trackingNumber: data.trackingNumber,
+                      ),
               );
             }
 

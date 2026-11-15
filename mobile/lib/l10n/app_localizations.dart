@@ -3486,7 +3486,7 @@ abstract class L {
   /// No description provided for @disputeWindowClosedBody.
   ///
   /// In en, this message translates to:
-  /// **'Disputes can be opened for 48 hours after delivery. Contact support if you still need help.'**
+  /// **'Disputes can be opened for 48 hours after delivery.'**
   String get disputeWindowClosedBody;
 
   /// No description provided for @cancelTitle.
@@ -3776,12 +3776,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Completed'**
   String get profileCompletedDeliveries;
-
-  /// No description provided for @profileRecentRating.
-  ///
-  /// In en, this message translates to:
-  /// **'Recent rating'**
-  String get profileRecentRating;
 
   /// No description provided for @profileRoles.
   ///
@@ -4602,7 +4596,7 @@ abstract class L {
   /// No description provided for @authResetDone.
   ///
   /// In en, this message translates to:
-  /// **'Password changed. You can sign in now.'**
+  /// **'Password changed. You were signed out everywhere. Sign in with the new password.'**
   String get authResetDone;
 
   /// No description provided for @authSendCode.
@@ -4632,7 +4626,7 @@ abstract class L {
   /// No description provided for @authVerifyNoCode.
   ///
   /// In en, this message translates to:
-  /// **'Nothing arrived? Check your spam folder. If it still isn\'t there, contact support and we\'ll sort it out.'**
+  /// **'Nothing arrived? Check your spam folder, then ask for a new code. Only the code in the newest email works.'**
   String get authVerifyNoCode;
 
   /// No description provided for @kycDocIdCard.
@@ -5850,7 +5844,7 @@ abstract class L {
   /// No description provided for @benefitsHandoverCaption.
   ///
   /// In en, this message translates to:
-  /// **'HANDOVER · 6 CHARACTERS'**
+  /// **'HANDOVER CODE'**
   String get benefitsHandoverCaption;
 
   /// No description provided for @benefitsKilosFree.
@@ -10520,6 +10514,54 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Wassla hid the comment from others. The score still counts.'**
   String get ratingCommentHiddenByWassla;
+
+  /// No description provided for @supportEmailSubject.
+  ///
+  /// In en, this message translates to:
+  /// **'Help with Wassla'**
+  String get supportEmailSubject;
+
+  /// No description provided for @supportEmailSubjectDelivery.
+  ///
+  /// In en, this message translates to:
+  /// **'Help with Wassla delivery {tracking}'**
+  String supportEmailSubjectDelivery(String tracking);
+
+  /// No description provided for @supportEmailFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'No email app opened. Write to {email}.'**
+  String supportEmailFailed(String email);
+
+  /// No description provided for @journeyPausedStaffBodyNoContact.
+  ///
+  /// In en, this message translates to:
+  /// **'Wassla paused this journey.'**
+  String get journeyPausedStaffBodyNoContact;
+
+  /// No description provided for @authVerifyResent.
+  ///
+  /// In en, this message translates to:
+  /// **'We sent a new code. Use the code in the newest email.'**
+  String get authVerifyResent;
+
+  /// No description provided for @authVerifyResend.
+  ///
+  /// In en, this message translates to:
+  /// **'Send the code again'**
+  String get authVerifyResend;
+
+  /// No description provided for @profileVerifyEmail.
+  ///
+  /// In en, this message translates to:
+  /// **'Verify email'**
+  String get profileVerifyEmail;
+
+  /// No description provided for @profileRating.
+  ///
+  /// In en, this message translates to:
+  /// **'Rating'**
+  String get profileRating;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

@@ -1,5 +1,15 @@
 # Waçla V1 Implementation Status
 
+## Wassla L18B — Loose ends before acceptance, mobile (2026-11-15)
+
+- Own rating from the server ("Rating"), welcome caption with no number, one "Contact support" action
+  (absent without a server address), one handler for "confirm your email first" with "Send the code
+  again", "Verify email" in Profile, password reset ends on sign-in. The verify-email route is now open to
+  signed-in members. Helper knowledge notes updated.
+- Flutter 1,521 to 1,533 tests; analyze clean. Screenshots in `l-series-screens/L18B/`.
+
+Detail: `docs/PHASE_L18B_LOOSE_ENDS_MOBILE.md`.
+
 ## Wassla L18A — Loose ends before acceptance, backend (2026-11-15)
 
 Status: **merged** into `feature/discovery-professional-delivery` (PR #47, `7ad5f36`). No migration; `main` untouched.

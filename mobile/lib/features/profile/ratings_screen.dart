@@ -33,10 +33,10 @@ class RatingsScreen extends ConsumerWidget {
     return AppScaffold(
       topBar: AppTopBar(title: l.profileRatings, showBack: true),
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(receivedRatingsProvider),
+        onRefresh: () async => refreshOwnRatings(ref),
         child: AsyncView<List<Rating>>(
           value: ratings,
-          onRetry: () => ref.invalidate(receivedRatingsProvider),
+          onRetry: () => refreshOwnRatings(ref),
           loading: () => ListView(
             padding: AppScrollPadding.page(context),
             children: const [SkeletonCardList()],
@@ -137,9 +137,9 @@ class _RatingCard extends ConsumerWidget {
     final reported = await showReportReviewSheet(
       context,
       ratingId: rating.id,
-      onStale: () => ref.invalidate(receivedRatingsProvider),
+      onStale: () => refreshOwnRatings(ref),
     );
-    if (reported != null) ref.invalidate(receivedRatingsProvider);
+    if (reported != null) refreshOwnRatings(ref);
   }
 
   @override

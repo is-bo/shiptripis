@@ -884,7 +884,7 @@
   "disputeResolutionTravelerPaid": "Paid to the traveler",
   "disputeResolutionPartial": "Split between both sides",
   "disputeWindowClosedTitle": "The dispute window has closed",
-  "disputeWindowClosedBody": "Disputes can be opened for 48 hours after delivery. Contact support if you still need help.",
+  "disputeWindowClosedBody": "Disputes can be opened for 48 hours after delivery.",
   "cancelTitle": "Cancel this delivery",
   "cancelConfirmAction": "Cancel delivery",
   "cancelKeepAction": "Keep it",
@@ -947,7 +947,6 @@
   "profileAccount": "Account",
   "profilePassportStamp": "Wassla · MEMBER",
   "profileCompletedDeliveries": "Completed",
-  "profileRecentRating": "Recent rating",
   "profileRoles": "What you do",
   "profileVerification": "Verification",
   "profileRatings": "Ratings",
@@ -1337,12 +1336,12 @@
   "authResetCodeSent": "If that address has an account, we've sent it a six-digit code.",
   "authResetCodeLabel": "Six-digit code",
   "authNewPassword": "New password",
-  "authResetDone": "Password changed. You can sign in now.",
+  "authResetDone": "Password changed. You were signed out everywhere. Sign in with the new password.",
   "authSendCode": "Send code",
   "authResendCode": "Send a new code",
   "authVerifyDone": "Email verified",
   "authTermsNotice": "By creating an account you accept the Terms and the Privacy Policy.",
-  "authVerifyNoCode": "Nothing arrived? Check your spam folder. If it still isn't there, contact support and we'll sort it out.",
+  "authVerifyNoCode": "Nothing arrived? Check your spam folder, then ask for a new code. Only the code in the newest email works.",
   "kycDocIdCard": "National ID card",
   "kycDocPassport": "Passport",
   "kycDocDrivingLicense": "Driving licence",
@@ -1809,7 +1808,7 @@
   "benefitsChapterThreeAccent": "Conçu pour la confiance.",
   "benefitsChapterThreeBody": "Verified identities, payment held until delivery, a code at every handover. Nothing moves on trust alone.",
   "benefitsChapterThreeStamp": "Verified",
-  "benefitsHandoverCaption": "HANDOVER · 6 CHARACTERS",
+  "benefitsHandoverCaption": "HANDOVER CODE",
   "benefitsKilosFree": "KG\nFREE",
   "authWelcomeBackStamp": "Welcome back",
   "authSignInHeadline": "Good to see\nyou again.",
@@ -3188,5 +3187,27 @@
   "reviewReportRemoved": "Wassla has already removed this review.",
   "reviewReportGone": "This review is not available any more.",
   "ratingRemovedByWassla": "Removed by Wassla, not counted",
-  "ratingCommentHiddenByWassla": "Wassla hid the comment from others. The score still counts."
+  "ratingCommentHiddenByWassla": "Wassla hid the comment from others. The score still counts.",
+  "supportEmailSubject": "Help with Wassla",
+  "supportEmailSubjectDelivery": "Help with Wassla delivery {tracking}",
+  "@supportEmailSubjectDelivery": {
+    "placeholders": {
+      "tracking": {
+        "type": "String"
+      }
+    }
+  },
+  "supportEmailFailed": "No email app opened. Write to {email}.",
+  "@supportEmailFailed": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "journeyPausedStaffBodyNoContact": "Wassla paused this journey.",
+  "authVerifyResent": "We sent a new code. Use the code in the newest email.",
+  "authVerifyResend": "Send the code again",
+  "profileVerifyEmail": "Verify email",
+  "profileRating": "Rating"
 }

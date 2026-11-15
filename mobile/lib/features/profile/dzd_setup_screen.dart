@@ -32,6 +32,7 @@ import '../../design/components/status.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../l10n/app_localizations.dart';
+import '../auth/email_gate.dart';
 
 class DzdSetupScreen extends ConsumerStatefulWidget {
   const DzdSetupScreen({super.key});
@@ -172,6 +173,8 @@ class _DzdSetupScreenState extends ConsumerState<DzdSetupScreen> {
       AppSnack.success(context, l.dzdSubmitSuccess);
       Navigator.of(context).pop();
     } on ApiException catch (e) {
+      if (!mounted) return;
+      if (await handleEmailVerificationRequired(context, e)) return;
       if (!mounted) return;
       setState(() => _fieldErrors = FieldErrorMap.from(e));
       AppSnack.failure(context, e);

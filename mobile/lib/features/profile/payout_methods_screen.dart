@@ -27,6 +27,7 @@ import '../../design/tokens.dart';
 import '../../domain/payout.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/status_copy.dart';
+import '../auth/email_gate.dart';
 
 class PayoutMethodsScreen extends ConsumerStatefulWidget {
   const PayoutMethodsScreen({super.key});
@@ -126,6 +127,8 @@ class _PayoutMethodsScreenState extends ConsumerState<PayoutMethodsScreen>
       AppSnack.success(context, l.actionDone);
     } on Object catch (e) {
       if (!mounted) return;
+      if (await handleEmailVerificationRequired(context, e)) return;
+      if (!mounted) return;
       AppSnack.failure(context, e);
     } finally {
       if (mounted) setState(() => _isActionBusy = false);
@@ -191,6 +194,8 @@ class _PayoutMethodsScreenState extends ConsumerState<PayoutMethodsScreen>
         AppSnack.info(context, l.actionRefresh);
       }
     } on Object catch (e) {
+      if (!mounted) return;
+      if (await handleEmailVerificationRequired(context, e)) return;
       if (!mounted) return;
       AppSnack.failure(context, e);
     } finally {

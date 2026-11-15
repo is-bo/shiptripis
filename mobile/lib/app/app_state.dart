@@ -35,6 +35,7 @@ import '../domain/payout.dart';
 import '../domain/problems.dart';
 import '../domain/progress.dart';
 import '../domain/schedule_change.dart';
+import '../domain/find_travelers.dart';
 import '../domain/rating.dart';
 import '../domain/sea_crossings.dart';
 
@@ -839,6 +840,45 @@ final receivedRatingsProvider = Provider.autoDispose<AsyncValue<List<Rating>>>((
   if (session == null) return const AsyncData<List<Rating>>([]);
   return _projectLiveQuery(ref, _receivedRatingsQuery(session));
 });
+
+final _ownRatingSummaryQuery = FutureProvider.autoDispose
+    .family<TravelerRating, AccountSession>((ref, session) async {
+      final repo = ref.watch(ratingRepositoryProvider);
+      final summary = await repo.ownSummary(cancelToken: cancelOnDispose(ref));
+      if (ref.read(accountSessionProvider) != session) {
+        throw const _StaleSessionRead();
+      }
+      return summary;
+    });
+
+/// My own rating as the server states it (the figure on my public card).
+/// Nothing on the phone averages anything.
+final ownRatingSummaryProvider =
+    Provider.autoDispose<AsyncValue<TravelerRating>>((ref) {
+      final session = ref.watch(accountSessionProvider);
+      if (session == null) {
+        return const AsyncData<TravelerRating>(
+          TravelerRating(state: TravelerRatingState.unrated, count: 0),
+        );
+      }
+      return _projectLiveQuery(ref, _ownRatingSummaryQuery(session));
+    });
+
+/// The support address, or null while the server has none. No sign-in is
+/// needed to read it. Every support action hides on null; a failed read hides
+/// them too, rather than showing a button that goes nowhere.
+final supportEmailProvider = FutureProvider.autoDispose<String?>((ref) {
+  return ref
+      .watch(supportRepositoryProvider)
+      .email(cancelToken: cancelOnDispose(ref));
+});
+
+/// Re-reads both the list of ratings I received and the figure that sums them.
+void refreshOwnRatings(WidgetRef ref) {
+  ref
+    ..invalidate(receivedRatingsProvider)
+    ..invalidate(ownRatingSummaryProvider);
+}
 
 final paymentProvidersProvider = FutureProvider.autoDispose<ProvidersView>((
   ref,

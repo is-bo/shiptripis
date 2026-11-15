@@ -163,6 +163,11 @@ class AuthRepository {
         body: {'email': email.trim(), 'code': code.trim()},
       );
 
+  /// Signed in. The server always answers 204 and sends nothing to an
+  /// already-verified account. Only the newest email's code works.
+  Future<void> resendVerifyEmail() =>
+      _api.postVoid('/api/auth/verify-email/resend');
+
   Future<Account> _authenticate(
     Json body, {
     int? expectedIdentityGeneration,

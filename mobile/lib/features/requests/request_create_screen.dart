@@ -103,6 +103,7 @@ import '../../domain/pricing.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/formatters.dart';
 import '../location/preferred_point_field.dart';
+import '../auth/email_gate.dart';
 import 'request_labels.dart';
 
 /// User-facing pricing failures are selected from structured API metadata.
@@ -1308,6 +1309,12 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
   /// step is revealed, a notice at its head says the server refused this and
   /// the problem is marked below, and the first refused field is scrolled to.
   void _handleSubmitFailure(ApiException error) {
+    // An unconfirmed email is not a problem with the form: send the person to
+    // confirm and leave everything they typed exactly as it is.
+    if (isEmailVerificationRequired(error)) {
+      handleEmailVerificationRequired(context, error);
+      return;
+    }
     final l = L.of(context);
     final errors = FieldErrorMap.from(error);
     final owner = _stepOwning(errors);

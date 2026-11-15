@@ -151,7 +151,10 @@ class DealScreen extends ConsumerWidget {
 
                 _DisputeSection(deal: data),
 
-                ProblemsSection(dealId: data.id),
+                ProblemsSection(
+                  dealId: data.id,
+                  trackingNumber: data.trackingNumber,
+                ),
 
                 _RatingSection(deal: data, isSender: isSender),
 
