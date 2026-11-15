@@ -41,7 +41,9 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L15 | AI helper: keys and read access | Opus | xhigh | merged | `claude/project-thread-jm20wy` | #44 | `db32121` | `docs/PHASE_L15_ADMIN_HELPER_READ.md` |
 | L16 | AI helper: changes | Opus | xhigh | merged | `claude/project-thread-3u61hb` | #45 | `a3449e1` | `docs/PHASE_L16_ADMIN_HELPER_CHANGES.md` |
 | L17 | AI helper skill | Sonnet | medium | not_started | | | | |
-| L10 | Final acceptance (runs last, after L17) | Opus | high | not_started | | | | |
+| L18A | Loose ends before acceptance, backend (added 2026-11-15, plan 5.1f) | Opus | high | not_started | | | | |
+| L18B | Loose ends before acceptance, mobile | Sonnet | medium | not_started | | | | |
+| L10 | Final acceptance (runs last, after L18B) | Opus | high | not_started | | | | |
 
 **Parked on 2026-11-13 (Ismail's decision, plan 5.1e).** Wassla now targets fast delivery: urgent
 parcels, mostly on flights and drives made the same day. These packages are not part of this build and
@@ -57,7 +59,7 @@ are never picked up. Their full text is in `docs/parked/WASSLA_PROFESSIONAL_AND_
 | L8B | Custody and handoff, mobile | Sonnet | high | parked |
 
 **Order of the remaining work (plan section 3):** L6A, L9A, L9B, L12A, L12B, L13A, L13B, L14, L15,
-L16, L17, and L10 last. These rows were changed by the plan thread on Ismail's instruction of
+L16, L17, L18A, L18B, and L10 last. These rows were changed by the plan thread on Ismail's instruction of
 2026-11-13; the board is otherwise still edited only by the orchestrator.
 
 **Added 2026-11-12 (approved by Ismail):** L11A to L17 above, and the no-show reports inside L9A and
@@ -963,6 +965,24 @@ Screenshots: `/mnt/project-files/l-series-screens/L16/` (console EN and 390 px, 
 - Tests (before and after counts):
 - Known limits:
 
+### L18A. Loose ends before acceptance, backend
+
+- Contract as built (names that differ from the plan):
+- Left for a later package:
+- Switches added and their defaults:
+- Deviations from the plan (what, why, approved by):
+- Tests (before and after counts):
+- Known limits:
+
+### L18B. Loose ends before acceptance, mobile
+
+- Contract as built (names that differ from the plan):
+- Left for a later package:
+- Switches added and their defaults:
+- Deviations from the plan (what, why, approved by):
+- Tests (before and after counts):
+- Known limits:
+
 ## Questions for Ismail
 
 | Asked | Question | Answer |
@@ -1001,3 +1021,4 @@ Screenshots: `/mnt/project-files/l-series-screens/L16/` (console EN and 390 px, 
 | 2026-11-14 | Advisor answers for L16 (part 1), written into plan L16: an audited `set_account_ban` service with console buttons replaces the unaudited bulk update (the plan had assumed a console ban action that did not exist); prepared actions store a basis and are refused at confirm when the target changed; a repeated identical prepare answers the waiting one, different parameters answer 409; a key stopped early expires its waiting actions; internal notes never reach the helper. |
 | 2026-11-14 | Advisor answers for L16 (part 2), written into plan L16: inline console actions move into `apps/admin_panel/staff_actions.py` with no behaviour change; the "via AI helper" audit context is reset after each run; a dispute resolution is refused at confirm when the fresh settlement preview differs from the prepared one; the typed confirm reason is kept in audit metadata; `problem.acknowledge` needs `manage_disputes`. |
 | 2026-11-15 | L16 merged (PR #45, `a3449e1`): change key, action registry (21 actions calling the console's own checks and functions), prepared changes confirmed only on the console, expiry job, internal notes, the audited account ban, and the never list over every console POST. Django 3,123 to 3,200 tests. Next: L17. |
+| 2026-11-15 | The seven oddities L17 found (its phase doc, section 8), taken to the advisor at Ismail's request: plan 5.1f decides each. New packages L18A (Opus, high) and L18B (Sonnet, medium) run after L17 and before L10: remove the uncalled staff dispute paths, enforce the sender's email verification, serve the user's own rating from the server, a working support contact, the welcome caption. The three statuses nothing sets are left. L10 builds nothing itself. |

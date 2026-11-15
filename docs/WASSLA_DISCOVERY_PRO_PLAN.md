@@ -15,7 +15,7 @@ If the plan and the spec disagree, the spec wins and the disagreement is a plan 
 made the same day. Packages L6B, L7A, L7B, L8A and L8B and the professional half of L6A are
 **parked**: their full text is in `docs/parked/WASSLA_PROFESSIONAL_AND_COURIER_PLAN.md`. They are not
 started, and no package leaves a hook for them. What remains, in order: L6A (smaller), L9A, L9B,
-L12A, L12B, L13A, L13B, L14, L15, L16, L17, L10.
+L12A, L12B, L13A, L13B, L14, L15, L16, L17, L18A, L18B (added 2026-11-15, 5.1f), L10.
 
 ---
 
@@ -413,11 +413,13 @@ steps named in spec 19.1 are behind the second.
 | L15 | AI helper: keys and read access (backend and console) | Opus | xhigh | L14 |
 | L16 | AI helper: changes (backend and console) | Opus | xhigh | L15 |
 | L17 | AI helper skill | Sonnet | medium | L16, L13B |
-| L10 | Final acceptance | Opus | high | all, L17 included |
+| L18A | Loose ends before acceptance, backend | Opus | high | L17 |
+| L18B | Loose ends before acceptance, mobile | Sonnet | medium | L18A |
+| L10 | Final acceptance | Opus | high | all, L18B included |
 
 L11A to L17 were added on 2026-11-12 (spec 16 to 20). **The order of this table is the order of
 work, not the numbers.** Everything down to L5B is merged. What remains, in order: **L6A, L9A, L9B,
-L12A, L12B, L13A, L13B, L14, L15, L16, L17, and L10 last.** The no-show reports of spec 12 are inside
+L12A, L12B, L13A, L13B, L14, L15, L16, L17, L18A, L18B, and L10 last.** The no-show reports of spec 12 are inside
 L9A and L9B.
 
 **Parked on 2026-11-13** (Ismail, 5.1e), not in this table and not to be started: L6B, L7A, L7B, L8A,
@@ -1596,9 +1598,62 @@ end correct without a retry. If the small model fails a scenario, fix the helper
 **Done when.** `docs/PHASE_L17_ADMIN_HELPER_SKILL.md` holds the transcripts; the card's two buttons
 work; `docs/ADMIN_OPERATIONS.md` has a half-page "Using the AI helper" for staff.
 
+### L18A. Loose ends before acceptance, backend (Opus, high effort)
+
+Added on 2026-11-15. While proving the skill, L17 read the code and listed seven oddities
+(`docs/PHASE_L17_ADMIN_HELPER_SKILL.md`, section 8). Ismail asked the coordinator to take them to the
+advisor; 5.1f records what was decided for each. This package and L18B do the four that are fixed and
+the one that is removed. Opus because it edits `apps/disputes/services.py` and the request-creation
+path (1.2).
+
+1. **Remove the dispute code nothing calls.** In `apps/disputes/services.py`: the `as_admin`
+   parameter of `open_dispute`, with the branch that skips the party check and the window, and the
+   whole of `close_dispute`, with its tests. No console page, staff API route or helper action calls
+   either; one skips every check and the other would leave a payout frozen with no resolution. The
+   `closed` status value and the `closed_at` column stay (1.5 rule 5). Every existing dispute test
+   passes unchanged.
+2. **A sender verifies their email** (V1 specification, "Sender launch verification is email-only";
+   the flag and the code screen exist, nothing enforces them). Creating a delivery request is refused
+   with the stable code `email_verification_required` while `is_email_verified` is false. A Google
+   account is already verified. Nothing else is gated, and no identity check is added for senders.
+   Test helpers that create a sender set the flag; no assertion is weakened, and the pull request
+   lists the helpers changed.
+3. **The user's own rating comes from the server.** `GET /api/users/me/ratings/summary` answers the
+   same average and count the user's public cards show, computed through `countable` in
+   `apps/ratings/public.py`. No second average is written (L13A's rule). Fixed query count.
+4. **Support contact.** `GET /api/support` (no sign-in needed, throttled) answers
+   `{"email": <EMAIL_SUPPORT_ADDR> | null}`, from the server setting the emails already use. No new
+   setting, and no address is invented: it is `null` until Ismail sets one.
+
+**Not touched, on purpose (5.1f):** the deal statuses `offer_accepted` and `payment_failed` and the
+journey status `pending_verification`, which nothing sets.
+
+**Tests.** A search proving `as_admin` and `close_dispute` have no caller and no definition. The
+email gate: unverified refused, verified and Google accounts pass, the request tables untouched by a
+refusal. The summary equals the public card's numbers before and after a staff removal. The support
+endpoint with and without the setting.
+
+**Done when.** `docs/PHASE_L18A_LOOSE_ENDS_BACKEND.md` holds the contract for L18B.
+
+### L18B. Loose ends before acceptance, mobile (Sonnet, medium effort)
+
+1. **Own rating.** The Profile fact shows the server's summary (L18A) and does no arithmetic. If the
+   figure is the all-time average, the label says "Rating", not "Recent rating", in three languages.
+2. **Welcome caption.** "HANDOVER · 6 CHARACTERS" names no number in EN, FR and AR: the length is an
+   admin setting.
+3. **Contact support.** One shared action that opens an email to the address from `GET /api/support`,
+   with the tracking number in the subject when it is opened from a delivery. It appears on the
+   dispute screen, the problem list, the staff-paused trip banner and in Profile. When the server
+   answers `null` the action is absent: no label without a button anywhere.
+4. **Email not verified.** On `email_verification_required` the app opens the existing verify-email
+   screen with "send the code again", then returns to the request form with what was typed. Profile
+   offers "Verify email" while the flag is false.
+5. States, RTL, 360 px, zero untranslated keys, kept screenshots (1.6).
+
 ### L10. Final acceptance (Opus, high effort)
 
-L10 runs last, after L17.
+L10 runs last, after L18B. It builds nothing: a fault it finds goes back to the coordinator as a
+package of its own, so that acceptance never reviews its own changes.
 
 1. Whole suites on PostgreSQL, Go with race detection, and Flutter. Counts recorded against the
    baseline (Django 2,529 passed, Flutter 1,083 passed at `dd7f820`).
@@ -1633,7 +1688,10 @@ L10 runs last, after L17.
    with its screen, state and language. Take the missing ones for packages merged before 2026-11-12
    (L2B, L3B) and for L4B if it has none.
 8. `docs/WASSLA_L_SERIES_RELEASE_REPORT.md` and `docs/IMPLEMENTATION_STATUS.md`.
-9. Hand Ismail the report, the list of switches that are still off, and the open decisions. **No merge
+9. Hand Ismail the report, the list of switches that are still off, and the open decisions. The
+   report has a section "Before real users" (the support address in `EMAIL_SUPPORT_ADDR`, the
+   placeholder mailboxes in `web/support.html`, the terms page and the final prohibited-items list of
+   5.1d) and lists the open decisions of 5.1f. **No merge
    into `main` and no deployment without his explicit approval.**
 
 ---
@@ -1730,6 +1788,24 @@ before its package starts):
   sender whose parcel is already collected is told, not asked, because they can no longer cancel; a
   re-timed flight or sea ticket is checked again. The threshold stays 6 hours by default. With a
   same-day target Ismail may want it lower; it is an admin setting.
+
+### 5.1f Oddities found by L17 (advisor, 2026-11-15, at Ismail's request)
+
+L17 listed seven things it noticed while reading the code. Ismail told the coordinator to ask the
+advisor. Decided, for his end review:
+
+| # | Finding | Decision |
+| --- | --- | --- |
+| 1 | Deal statuses `offer_accepted` and `payment_failed` are never set | **Leave.** The V1 specification names them; they sit in status lists, a database constraint and the app. Removing them means editing the delivery state machine for no gain to anyone. |
+| 2 | A staff way to open a dispute, and a way to close one without resolving, that nothing calls | **Remove** (L18A). Unreachable code that skips every check, or leaves a payout frozen, is a trap. Whether staff should be able to open a dispute is an open decision for Ismail. |
+| 3 | Journey status `pending_verification` is never set | **Leave**, as 1. The ticket check replaced it: a trip with an unapproved ticket is active but not offered to anyone. |
+| 4 | The app works out "Recent rating" itself and ignores ratings staff removed | **Fix** (L18A, L18B): the server's number, the same as the public card. |
+| 5 | Welcome caption says 6 characters; the code has 8 | **Fix** (L18B): no number in the caption. |
+| 6 | No working support contact in the app; placeholder mailboxes on the website | **Fix the app** (L18A, L18B) with the address the emails already use. The address itself and the website's mailboxes are Ismail's to supply: "Before real users" in the release report. |
+| 7 | Nothing makes a sender verify identity or email | **Identity: leave**, the V1 specification asks for email only. **Email: fix** (L18A, L18B), the specification asks for it and the server did not enforce it. |
+
+They are one pair of packages, L18A and L18B, **before** L10, so that final acceptance tests the code
+that ships and changes nothing itself.
 
 ### 5.1c Choices the planner made inside those additions (not individually confirmed)
 
