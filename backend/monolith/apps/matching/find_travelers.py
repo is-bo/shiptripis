@@ -42,14 +42,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from django.db.models import Avg, Count
+from django.db.models import Count
 from django.utils import timezone
 
 from apps.deals.models import Deal
 from apps.locations.models import AirportLocalityMapping, Place
 from apps.parcels.models import DeliveryRequest, ParcelRequest
-from apps.ratings.models import Rating
-from apps.ratings.public import countable
+from apps.ratings.public import RATING_NEW, rating_summaries
 from apps.trips.models import JourneyLeg
 from apps.trips.proofs import STATE_APPROVED, leg_proof_state
 
@@ -98,10 +97,6 @@ STATE_REQUEST_INELIGIBLE = "request_ineligible"
 #: Frozen action vocabulary.
 ACTION_VIEW_JOURNEY = "view_journey"
 ACTION_PROPOSE_OFFER = "propose_offer"
-
-#: Frozen rating states.
-RATING_NEW = "new"
-RATING_RATED = "rated"
 
 #: A bounded first page. Four compact cards fill a 390x844 viewport (measured
 #: against the real design system in `docs/PHASE_J4_FIND_TRAVELERS_CONTRACT.md`),
@@ -252,9 +247,10 @@ def trust_signals(
     aggregate is keyed by the already-filtered IDs rather than correlated per
     row. A list of one and a list of forty cost the same.
 
-    **Ratings are the countable ones** (`apps.ratings.public.countable`, L13A):
-    revealed under the blind rule exactly as the rating API reveals them, and
-    not removed by staff. A rating whose comment staff hid still counts.
+    **Ratings are the countable ones** (`apps.ratings.public.rating_summaries`
+    over `countable`, L13A): revealed under the blind rule exactly as the rating
+    API reveals them, and not removed by staff. A rating whose comment staff hid
+    still counts.
 
     With `side=TRUST_AS_TRAVELER` only ratings written by a Sender and deals
     the person carried count; with `None`, both sides of every deal do.
@@ -265,17 +261,7 @@ def trust_signals(
     if side not in (TRUST_AS_TRAVELER, None):
         raise ValueError(f"Unknown trust side {side!r}.")
 
-    rating_scope = Rating.objects.filter(ratee_id__in=user_ids)
-    if side == TRUST_AS_TRAVELER:
-        rating_scope = rating_scope.filter(rater_role=Rating.RaterRole.SENDER)
-    rating_rows = (
-        countable(rating_scope, at=at)
-        .values("ratee_id")
-        .annotate(average=Avg("score"), rated_count=Count("id"))
-    )
-    ratings = {
-        row["ratee_id"]: (row["average"], row["rated_count"]) for row in rating_rows
-    }
+    ratings = rating_summaries(user_ids, at=at, side=side)
 
     # Completed delivery history, and only that. A published Journey, a sent
     # offer and a matched request are all things that have not happened yet.
@@ -293,19 +279,8 @@ def trust_signals(
 
     signals: dict[int, dict] = {}
     for user_id in user_ids:
-        average, count = ratings.get(user_id, (None, 0))
         signals[user_id] = {
-            "rating": (
-                {"state": RATING_NEW, "average": None, "count": 0}
-                if not count or average is None
-                # One decimal. A person with three ratings does not have a
-                # reputation measured to four.
-                else {
-                    "state": RATING_RATED,
-                    "average": round(float(average), 1),
-                    "count": count,
-                }
-            ),
+            "rating": ratings[user_id],
             "completed_deliveries": deliveries.get(user_id, 0),
         }
     return signals

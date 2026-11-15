@@ -16,6 +16,7 @@ resolved.
 from __future__ import annotations
 
 from datetime import timedelta
+from unittest import mock
 
 from django.test import TestCase
 
@@ -149,6 +150,24 @@ class DoublePayRegressionTests(TestCase):
         self.payout = Payout.objects.get(pk=payout.pk)
         assert self.payout.status == Payout.Status.PAID
 
+    def second_dispute(self, reason_text: str) -> Dispute:
+        """A live dispute on this paid-out Deal, a state no caller can reach now.
+
+        Since L18A only a party opens a dispute, and a party is refused once one
+        was resolved (`dispute_already_resolved`, the first wall). The money
+        walls below must hold even so, so this replays the old reproduction by
+        lifting that one gate; everything else is the real `open_dispute`,
+        including the branch that records a payout already paid.
+        """
+
+        with mock.patch("apps.disputes.services._assert_already_resolved"):
+            return open_dispute(
+                deal_id=self.deal.pk,
+                actor_id=self.scenario.sender.pk,
+                category=Dispute.Category.DAMAGED,
+                reason_text=reason_text,
+            )
+
     def test_the_deal_reports_the_money_that_has_left(self):
         money = read_deal_money(self.deal)
         assert money.paid_out_eur_cents == int(self.payout.amount_eur_cents)
@@ -166,16 +185,10 @@ class DoublePayRegressionTests(TestCase):
             )
         assert caught.exception.code == "dispute_already_resolved"
 
-    def test_an_admin_dispute_cannot_refund_money_already_paid_out(self):
+    def test_a_second_dispute_cannot_refund_money_already_paid_out(self):
         """Step 6, now refused rather than silently double-paying."""
 
-        second = open_dispute(
-            deal_id=self.deal.pk,
-            actor_id=self.scenario.admin.pk,
-            category=Dispute.Category.DAMAGED,
-            reason_text="Escalated after the payout.",
-            as_admin=True,
-        )
+        second = self.second_dispute("Escalated after the payout.")
         assert second.payout_already_settled is True
 
         with self.assertRaises(SettlementError) as caught:
@@ -188,13 +201,7 @@ class DoublePayRegressionTests(TestCase):
 
     def test_nothing_left_the_platform_twice(self):
         try:
-            second = open_dispute(
-                deal_id=self.deal.pk,
-                actor_id=self.scenario.admin.pk,
-                category=Dispute.Category.DAMAGED,
-                reason_text="Escalated after the payout.",
-                as_admin=True,
-            )
+            second = self.second_dispute("Escalated after the payout.")
             resolve_dispute(
                 dispute_id=second.pk,
                 admin_actor_id=self.scenario.admin.pk,
@@ -212,19 +219,13 @@ class DoublePayRegressionTests(TestCase):
         assert assert_deal_reconciles(self.deal.pk)["net"] == 0
 
     def test_a_partial_recovery_out_of_the_platform_share_still_reconciles(self):
-        """What the operator *can* still do automatically: refund the fee."""
+        """What a settlement can still do on such a Deal: refund the fee."""
 
         money = read_deal_money(self.deal)
         recoverable = money.settleable_eur_cents
         assert recoverable > 0
 
-        second = open_dispute(
-            deal_id=self.deal.pk,
-            actor_id=self.scenario.admin.pk,
-            category=Dispute.Category.DAMAGED,
-            reason_text="Partial goodwill recovery.",
-            as_admin=True,
-        )
+        second = self.second_dispute("Partial goodwill recovery.")
         resolve_dispute(
             dispute_id=second.pk,
             admin_actor_id=self.scenario.admin.pk,

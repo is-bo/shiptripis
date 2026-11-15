@@ -2,6 +2,7 @@ import logging
 from uuid import UUID
 
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
@@ -12,7 +13,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.notifications.models import OutboundMessage
-from apps.notifications.outbox import enqueue_secret_message
+from apps.notifications.outbox import cancel_message, enqueue_secret_message
 from apps.notifications.push import unregister_push_device
 
 from .google import GoogleAuthError, GoogleAuthUnavailable, verify_id_token
@@ -182,6 +183,13 @@ class GoogleSignInView(APIView):
                 email_at_link=email,
             )
 
+        # Google has just vouched for this address, so an account created with
+        # a password and never confirmed counts as verified once it signs in
+        # with Google under the same email (L18A: posting needs it).
+        if not user.is_email_verified and user.email.lower().strip() == email:
+            user.is_email_verified = True
+            user.save(update_fields=("is_email_verified",))
+
         return Response({"user": MeSerializer(user).data, **_tokens_for_user(user)})
 
 
@@ -291,6 +299,44 @@ class VerifyEmailView(APIView):
 
         user.is_email_verified = True
         user.save(update_fields=("is_email_verified",))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ResendVerifyEmailView(APIView):
+    """Send the signed-in member a fresh email verification code (L18A).
+
+    The sign-up code expires and has an attempt cap, and creating a delivery
+    request needs a verified email, so a member must be able to ask again. The
+    answer is always 204: a verified account is sent nothing; otherwise every
+    unused code is retired (its pending email withdrawn) and a new one goes out
+    through the same outbox path as sign-up. The member row is locked so two
+    taps cannot leave two live codes.
+    """
+
+    permission_classes = (IsAuthenticated,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "email_verify_resend"
+
+    def post(self, request: Request) -> Response:
+        with transaction.atomic():
+            user = User.objects.select_for_update().get(pk=request.user.pk)
+            if user.is_email_verified:
+                return Response(status=status.HTTP_204_NO_CONTENT)
+            unused = list(
+                user.email_verification_codes.filter(
+                    used_at__isnull=True
+                ).values_list("pk", flat=True)
+            )
+            if unused:
+                EmailVerificationCode.objects.filter(pk__in=unused).update(
+                    used_at=timezone.now()
+                )
+                for code_id in unused:
+                    cancel_message(
+                        key=f"email_verification:{code_id}",
+                        reason="superseded by a new verification code",
+                    )
+            _send_verify_email(user)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

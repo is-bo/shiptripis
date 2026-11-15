@@ -29,6 +29,7 @@ def _make_user(email: str = "sender@example.com") -> User:
         full_name="Sen Der",
         phone="+213555000222",
         wilaya="16",
+        is_email_verified=True,  # a sender posts only once verified (L18A)
     )
     return user
 

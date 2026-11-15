@@ -259,10 +259,25 @@ def _finance_refusal_response(exc: FinanceError) -> Response:
     return Response(payload, status=status.HTTP_400_BAD_REQUEST)
 
 
+#: Refusal code when an unverified sender tries to post a parcel (L18A).
+EMAIL_VERIFICATION_REQUIRED = "email_verification_required"
+
+
 class DeliveryV1CreateView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def post(self, request: Request) -> Response:
+        # V1 specification: sender launch verification is email-only. Checked
+        # before anything is validated or written; a Google account arrives
+        # verified, and `POST /api/auth/verify-email/resend` sends a new code.
+        if not request.user.is_email_verified:
+            return Response(
+                {
+                    "code": EMAIL_VERIFICATION_REQUIRED,
+                    "detail": "Verify your email address before posting a parcel.",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         serializer = DeliveryV1CreateSerializer(
             data=request.data,
             context={"request": request},

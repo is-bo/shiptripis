@@ -269,20 +269,27 @@ class DisputeVersusProtectionExpiryRaceTests(Phase4ConcurrencyTestCase):
                 ), (round_index, payout.status)
 
     def test_a_dispute_arriving_after_release_pulls_the_payout_back(self):
+        """A party's call stamped before the deadline, run after the release.
+
+        That is the order the Deal lock produces when the release job takes the
+        row first; the clock is pinned back to replay it.
+        """
+
         scenario = self.build_delivered("after")
         deal = scenario.deal
-        Deal.objects.filter(pk=deal.pk).update(
-            protection_ends_at=timezone.now() - timedelta(seconds=1)
-        )
+        deadline = timezone.now() - timedelta(seconds=1)
+        Deal.objects.filter(pk=deal.pk).update(protection_ends_at=deadline)
         assert evaluate_payout_release(deal_id=deal.pk) == "released"
 
-        open_dispute(
-            deal_id=deal.pk,
-            actor_id=scenario.admin.pk,
-            category=Dispute.Category.DAMAGED,
-            reason_text="Reported to support.",
-            as_admin=True,
-        )
+        with patch(
+            "django.utils.timezone.now", return_value=deadline - timedelta(seconds=1)
+        ):
+            open_dispute(
+                deal_id=deal.pk,
+                actor_id=scenario.sender.pk,
+                category=Dispute.Category.DAMAGED,
+                reason_text="Sent just before the deadline.",
+            )
         assert Payout.objects.get(deal_id=deal.pk).status == Payout.Status.FROZEN
 
 

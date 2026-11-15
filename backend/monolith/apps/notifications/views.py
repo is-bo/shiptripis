@@ -1,12 +1,14 @@
+from django.conf import settings
 from django.db.models import Count, Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.generics import ListAPIView
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .models import Notification, NotificationPreference
@@ -137,3 +139,22 @@ class NotificationPreferenceView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
+
+class SupportContactView(APIView):
+    """`GET /api/support`: where a member writes for help (L18A).
+
+    `{"email": <EMAIL_SUPPORT_ADDR> | null}`, the same server setting the
+    emails print in their footer. No address is invented: until the operator
+    sets one the answer is `null` and the app shows no support action. Open to
+    anyone and reading no credentials, so a stale token cannot break it.
+    """
+
+    authentication_classes = ()
+    permission_classes = (AllowAny,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "support_contact"
+
+    def get(self, request: Request) -> Response:
+        email = str(getattr(settings, "EMAIL_SUPPORT_ADDR", "") or "").strip()
+        return Response({"email": email or None})

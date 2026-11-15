@@ -6,8 +6,9 @@ Three questions, each answered in exactly one place:
 (`apps.ratings.services.is_revealed`, written in SQL: the window frozen on the
 row has passed, or both sides have rated) and "staff have not removed it".
 Every public average, count and list is computed over `countable` and nothing
-else: `trust_signals` (every card, Find Travelers, ranking) and the reviews
-lists below. A rating whose comment staff hid still counts; only its text goes.
+else: `rating_summaries` (the rating on every card, Find Travelers, ranking,
+and the member's own Profile since L18A) and the reviews lists below. A rating
+whose comment staff hid still counts; only its text goes.
 
 **What does a review show?** `public_reviews` builds each review key by key:
 the score, the tags, the comment (or `null` with `comment_removed: true`),
@@ -26,7 +27,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from django.db.models import Exists, OuterRef, Q, QuerySet, Subquery
+from django.db.models import Avg, Count, Exists, OuterRef, Q, QuerySet, Subquery
 
 from .models import Rating, RatingModeration, RatingReport
 
@@ -38,6 +39,10 @@ WRITTEN_BY_TRAVELER = Rating.RaterRole.TRAVELER
 #: ratings their senders wrote, which is what a trip card and Find Travelers
 #: show; `None` is the whole person, as on a profile card.
 SIDE_TRAVELER = "traveler"
+
+#: Frozen rating states of a summary: `new` until one rating counts.
+RATING_NEW = "new"
+RATING_RATED = "rated"
 
 #: What the reporter is told about their report (spec 18): "received" while
 #: staff have not looked at it, then "reviewed", and nothing more.
@@ -76,6 +81,39 @@ def ratings_received(subject_user_id: int, *, side: str | None) -> QuerySet:
     if side == SIDE_TRAVELER:
         queryset = queryset.filter(rater_role=Rating.RaterRole.SENDER)
     return queryset
+
+
+def _summary(average, count: int) -> dict:
+    if not count or average is None:
+        return {"state": RATING_NEW, "average": None, "count": 0}
+    # One decimal. A person with three ratings does not have a reputation
+    # measured to four.
+    return {"state": RATING_RATED, "average": round(float(average), 1), "count": count}
+
+
+def rating_summaries(user_ids: list[int], *, at: datetime, side: str | None) -> dict[int, dict]:
+    """The rating block of a card, `{state, average, count}`, for each person.
+
+    The one average in the product: computed over `countable`, in one grouped
+    query whatever the number of people. `side=SIDE_TRAVELER` counts only
+    what senders wrote (a trip card, Find Travelers); `None` is the whole
+    person (a profile card, the member's own Profile).
+    """
+
+    if not user_ids:
+        return {}
+    scope = Rating.objects.filter(ratee_id__in=user_ids)
+    if side == SIDE_TRAVELER:
+        scope = scope.filter(rater_role=Rating.RaterRole.SENDER)
+    elif side is not None:
+        raise ValueError(f"Unknown review side {side!r}.")
+    rows = (
+        countable(scope, at=at)
+        .values("ratee_id")
+        .annotate(average=Avg("score"), rated_count=Count("id"))
+    )
+    found = {row["ratee_id"]: (row["average"], row["rated_count"]) for row in rows}
+    return {user_id: _summary(*found.get(user_id, (None, 0))) for user_id in user_ids}
 
 
 def report_state(status: str | None) -> str | None:

@@ -5,6 +5,7 @@ from .views import (
     NotificationPreferenceView,
     PushDeviceRegistrationView,
     PushDeviceUnregisterView,
+    SupportContactView,
     mark_all_read,
     mark_read,
     unread_count,
@@ -30,4 +31,5 @@ urlpatterns = [
         name="notification-preferences",
     ),
     path("notifications/<int:pk>/read", mark_read, name="notification-read"),
+    path("support", SupportContactView.as_view(), name="support-contact"),
 ]

@@ -39,13 +39,16 @@ from apps.finance.policy import Phase3Policy, phase3_policy
 from apps.finance.providers.mock import MOCK_WEBHOOK_SECRET
 
 
-def make_user(email: str, *, is_staff: bool = False) -> User:
+def make_user(
+    email: str, *, is_staff: bool = False, is_email_verified: bool = False
+) -> User:
     return User.objects.create_user(
         username=email,
         email=email,
         password="Sup3rStrongPass!",
         full_name=email.split("@")[0],
         is_staff=is_staff,
+        is_email_verified=is_email_verified,
     )
 
 
@@ -146,7 +149,8 @@ def build_scenario(*, prefix: str = "fin", open_request: bool = True) -> Scenari
     """
 
     at = timezone.now()
-    sender = make_user(f"{prefix}-sender@example.com")
+    # A sender posts only with a verified email (L18A).
+    sender = make_user(f"{prefix}-sender@example.com", is_email_verified=True)
     traveler = make_user(f"{prefix}-traveler@example.com")
     outsider = make_user(f"{prefix}-outsider@example.com")
     admin = make_user(f"{prefix}-admin@example.com", is_staff=True)

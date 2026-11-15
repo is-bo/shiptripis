@@ -36,12 +36,12 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 
 ## How does email verification work?
 - After sign-up a 6-digit code is emailed. It is valid 15 minutes and allows 5 tries in total. Limit 10 attempts per hour. These are server environment settings, not on the console.
-- There is no way to ask for a new verification code: no resend endpoint exists. The app says to check the spam folder and contact support.
+- A signed-in member can ask for a new code: `POST /api/auth/verify-email/resend` (limit 5 per hour, server setting `DRF_EMAIL_VERIFY_RESEND_THROTTLE_RATE`). It always answers "done". A verified account is sent nothing; otherwise every older unused code stops working, its email is withdrawn if still waiting, and a fresh code is emailed. The app's code screen gets its "send the code again" button in L18B; until then it says to check the spam folder and contact support.
 - Any wrong code or unknown email gives the same answer: "Invalid code." (so nobody can find out which emails exist).
 - Correct code sets "Email verified". Doing it again for a verified account is fine.
-- The app does not block use until the email is verified. No feature checks the "email verified" tick; it is only displayed. Google sign-up and invited staff accounts are marked verified automatically.
+- Posting a parcel needs a verified email (V1 specification: sender verification is email-only). Until then creating a delivery request is refused with `email_verification_required` "Verify your email address before posting a parcel." Nothing else checks the tick: browsing, pricing, travelling and everything else stay open. Google sign-up and invited staff accounts are marked verified automatically, and signing in with Google on an unconfirmed password account with the same email marks it verified.
 - Staff see "Email verified" or "Email not verified" on the person page.
-<!-- src: backend/monolith/apps/accounts/models.py, views.py (VerifyEmailView), console_people.py -->
+<!-- src: backend/monolith/apps/accounts/models.py, views.py (VerifyEmailView, ResendVerifyEmailView, GoogleSignInView), parcels/views.py (DeliveryV1CreateView), console_people.py -->
 
 ## What if a user forgets the password?
 - They enter their email. The answer is always "accepted" (202) even for unknown emails.
@@ -139,7 +139,7 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 ## What does "verified" unlock and show?
 - ID verified: travelers can publish and match journeys (see above).
 - On a public profile card: "identity_verified" badge (true only with a current approved ID).
-- Nothing else is gated on the "email verified" or "phone verified" ticks.
+- Email verified: needed to post a parcel (`email_verification_required`). Nothing else is gated on the "email verified" or "phone verified" ticks.
 <!-- src: backend/monolith/apps/discovery/profiles.py -->
 
 ## What is a payout identity check?

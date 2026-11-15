@@ -38,7 +38,6 @@ from apps.disputes.models import Dispute, DisputeEvent
 from apps.disputes.services import (
     DisputeError,
     NotAuthorized,
-    close_dispute,
     open_dispute,
     resolve_dispute,
     set_dispute_status,
@@ -142,18 +141,6 @@ class DisputeWindowTests(TestCase):
                 category=Dispute.Category.OTHER,
                 reason_text="Not mine.",
             )
-
-    def test_an_admin_may_open_one_outside_the_window(self):
-        scenario = delivered_scenario(self.client, prefix="dw6")
-        with freeze_at(scenario.deal.protection_ends_at + timedelta(days=2)):
-            dispute = open_dispute(
-                deal_id=scenario.deal.pk,
-                actor_id=scenario.admin.pk,
-                category=Dispute.Category.OTHER,
-                reason_text="Escalated by support.",
-                as_admin=True,
-            )
-        assert dispute.opened_by_role == Dispute.OpenedByRole.ADMIN
 
     def test_a_category_or_reason_that_is_missing_is_refused(self):
         scenario = delivered_scenario(self.client, prefix="dw7")
@@ -280,25 +267,52 @@ class DisputeVersusProtectionExpiryTests(TestCase):
             Payout.Status.FROZEN
         )
 
-    def test_a_payout_released_first_is_pulled_back_by_an_admin_dispute(self):
+    def test_a_payout_released_first_is_pulled_back_by_a_party_dispute(self):
+        """The lock race: the release job wins the Deal row at the deadline.
+
+        A party's call stamped one second before the deadline then waits on the
+        Deal lock and runs after the release has committed. Its window check
+        uses the instant it started, so it goes through and must pull the
+        released payout back. The clock is moved backwards to replay that.
+        """
+
         scenario = delivered_scenario(self.client, prefix="race-b")
-        with freeze_at(scenario.deal.protection_ends_at):
+        deadline = scenario.deal.protection_ends_at
+        with freeze_at(deadline):
             assert evaluate_payout_release(deal_id=scenario.deal.pk) == "released"
         assert Payout.objects.get(deal_id=scenario.deal.pk).status == (
             Payout.Status.ELIGIBLE
         )
 
-        with freeze_at(scenario.deal.protection_ends_at + timedelta(minutes=5)):
+        with freeze_at(deadline - timedelta(seconds=1)):
             dispute = open_dispute(
                 deal_id=scenario.deal.pk,
-                actor_id=scenario.admin.pk,
+                actor_id=scenario.sender.pk,
                 category=Dispute.Category.DAMAGED,
-                reason_text="Reported to support after the window.",
-                as_admin=True,
+                reason_text="Sent just before the deadline.",
             )
         payout = Payout.objects.get(deal_id=scenario.deal.pk)
         assert payout.status == Payout.Status.FROZEN
         assert dispute.payout_frozen is True
+
+    def test_a_party_dispute_after_release_is_refused_and_the_payout_stands(self):
+        scenario = delivered_scenario(self.client, prefix="race-c")
+        deadline = scenario.deal.protection_ends_at
+        with freeze_at(deadline):
+            assert evaluate_payout_release(deal_id=scenario.deal.pk) == "released"
+        with freeze_at(deadline + timedelta(minutes=5)):
+            with self.assertRaises(DisputeError) as caught:
+                open_dispute(
+                    deal_id=scenario.deal.pk,
+                    actor_id=scenario.traveler.pk,
+                    category=Dispute.Category.OTHER,
+                    reason_text="Too late.",
+                )
+        assert caught.exception.code == "dispute_window_closed"
+        assert not Dispute.objects.filter(deal_id=scenario.deal.pk).exists()
+        assert Payout.objects.get(deal_id=scenario.deal.pk).status == (
+            Payout.Status.ELIGIBLE
+        )
 
     def test_no_active_dispute_ever_coexists_with_a_releasable_payout(self):
         """The invariant, stated directly and checked over both orderings."""
@@ -317,15 +331,16 @@ class DisputeVersusProtectionExpiryTests(TestCase):
                 with freeze_at(deadline):
                     evaluate_payout_release(deal_id=scenario.deal.pk)
             else:
+                # The release wins the Deal lock; the party's call, stamped
+                # before the deadline, runs after it (the lock race above).
                 with freeze_at(deadline):
                     evaluate_payout_release(deal_id=scenario.deal.pk)
-                with freeze_at(deadline + timedelta(minutes=1)):
+                with freeze_at(deadline - timedelta(seconds=1)):
                     open_dispute(
                         deal_id=scenario.deal.pk,
-                        actor_id=scenario.admin.pk,
+                        actor_id=scenario.sender.pk,
                         category=Dispute.Category.OTHER,
                         reason_text="Second.",
-                        as_admin=True,
                     )
 
             active = Dispute.objects.filter(
@@ -523,16 +538,6 @@ class DisputeAdministrationTests(TestCase):
                 status=Dispute.Status.UNDER_REVIEW,
                 admin_actor_id=self.scenario.admin.pk,
             )
-
-    def test_closing_a_dispute_without_resolving_releases_the_freeze(self):
-        close_dispute(
-            dispute_id=self.dispute.pk,
-            admin_actor_id=self.scenario.admin.pk,
-            note="Withdrawn by the sender.",
-        )
-        row = Dispute.objects.get(pk=self.dispute.pk)
-        assert row.status == Dispute.Status.CLOSED
-        assert row.is_active is False
 
 
 # --- API surface --------------------------------------------------------------

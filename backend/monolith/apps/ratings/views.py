@@ -3,6 +3,7 @@
     POST /api/deals/<id>/ratings     rate the counterparty, once
     GET  /api/deals/<id>/ratings     this Deal's rating state for the caller
     GET  /api/users/me/ratings       the revealed ratings I have received
+    GET  /api/users/me/ratings/summary   my rating as my profile card shows it (L18A)
     POST /api/ratings/<id>/reports   report a review, once (L13A, spec 18)
 
 Authorization is object-level and derived from the Deal. A party may read the
@@ -39,6 +40,7 @@ from .public import (
     ACCESS_OK,
     SIDE_TRAVELER,
     countable,
+    rating_summaries,
     report_state,
     reviews_visible_to,
     trip_reviews_access,
@@ -180,6 +182,23 @@ class MyRatingsView(APIView):
         return Response(
             MyRatingSerializer(rows, many=True, context={"at": at}).data
         )
+
+
+class MyRatingSummaryView(APIView):
+    """The caller's own rating, `{state, average, count}` (L18A).
+
+    The same block their public profile card carries: every rating they
+    received, on either side, that counts (`rating_summaries` over
+    `countable`), so a rating staff removed is left out here as it is there.
+    The app shows this and does no arithmetic of its own. One query.
+    """
+
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request: Request) -> Response:
+        user_id = request.user.id
+        summary = rating_summaries([user_id], at=timezone.now(), side=None)
+        return Response(summary[user_id])
 
 
 def _policy_failures() -> tuple[type[Exception], ...]:
