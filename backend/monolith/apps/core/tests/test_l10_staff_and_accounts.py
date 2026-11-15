@@ -63,16 +63,26 @@ def code_now(user, *, at=None) -> str:
 class StaffSignInTests(TestCase):
     def staff(self, email, role):
         user = User.objects.create_user(
-            email=email, username=email, password=PASSWORD, full_name="Staff Member", is_staff=True,
+            email=email,
+            username=email,
+            password=PASSWORD,
+            full_name="Staff Member",
+            is_staff=True,
             is_superuser=role == AdminRole.SUPER_ADMIN,
         )
-        assign_admin_roles(user, (role,), elevate_super_admin=role == AdminRole.SUPER_ADMIN)
+        assign_admin_roles(
+            user, (role,), elevate_super_admin=role == AdminRole.SUPER_ADMIN
+        )
         return user
 
     def sign_in(self, client, user):
         response = client.post(
             reverse("admin:login") + "?next=/admin/marketplace/deals/",
-            {"username": user.email, "password": PASSWORD, "next": "/admin/marketplace/deals/"},
+            {
+                "username": user.email,
+                "password": PASSWORD,
+                "next": "/admin/marketplace/deals/",
+            },
         )
         assert response.status_code == 302, response.content[:400]
         return response
@@ -85,48 +95,69 @@ class StaffSignInTests(TestCase):
         # The password alone opens nothing.
         self.sign_in(client, ops)
         gated = client.get("/admin/marketplace/deals/")
-        assert gated.status_code == 302 and gated["Location"].startswith("/admin/two-step/")
+        assert gated.status_code == 302 and gated["Location"].startswith(
+            "/admin/two-step/"
+        )
 
         # First sign-in: enrol. A wrong code is refused; the right one shows ten codes once.
         enrol = reverse("admin_console:two-step-enrol")
         assert client.get(enrol).status_code == 200
-        wrong = client.post(enrol, {"code": "000000", "next": "/admin/marketplace/deals/"})
+        wrong = client.post(
+            enrol, {"code": "000000", "next": "/admin/marketplace/deals/"}
+        )
         assert wrong.status_code == 400
         start = timezone.now() - timedelta(minutes=3)
         with freeze_at(start):
-            done = client.post(enrol, {"code": code_now(ops, at=start), "next": "/admin/marketplace/deals/"})
+            done = client.post(
+                enrol,
+                {"code": code_now(ops, at=start), "next": "/admin/marketplace/deals/"},
+            )
         assert done.status_code == 302
         shown = client.get(reverse("admin_console:two-step-recovery-codes"))
         codes = shown.context["codes"]
         assert len(codes) == 10
         assert client.get("/admin/marketplace/deals/").status_code == 200
-        assert AdminAuditLog.objects.filter(actor=ops, action__startswith="admin.two_step").exists()
+        assert AdminAuditLog.objects.filter(
+            actor=ops, action__startswith="admin.two_step"
+        ).exists()
 
         # Next sign-in: the verify page; a wrong code, then a recovery code.
         client.logout()
         self.sign_in(client, ops)
-        assert client.get("/admin/marketplace/deals/")["Location"].startswith("/admin/two-step/")
+        assert client.get("/admin/marketplace/deals/")["Location"].startswith(
+            "/admin/two-step/"
+        )
         verify = reverse("admin_console:two-step-verify")
         assert client.post(verify, {"code": "000000"}).status_code == 400
         assert client.get("/admin/marketplace/deals/").status_code == 302
         used = client.post(
-            reverse("admin_console:two-step-recovery"), {"code": codes[0], "next": "/admin/users/"}, follow=True
+            reverse("admin_console:two-step-recovery"),
+            {"code": codes[0], "next": "/admin/users/"},
+            follow=True,
         )
         assert "9 of 10 left" in used.content.decode()
         assert client.get("/admin/marketplace/deals/").status_code == 200
         # A recovery code works once.
         again = Client()
         self.sign_in(again, ops)
-        assert again.post(reverse("admin_console:two-step-recovery"), {"code": codes[0]}).status_code == 400
+        assert (
+            again.post(
+                reverse("admin_console:two-step-recovery"), {"code": codes[0]}
+            ).status_code
+            == 400
+        )
 
         # The owner resets the lost second step: ops is signed out and enrols again.
         owners = Client()
         staff_login(owners, owner)
         reset = owners.post(
-            reverse("admin_console:staff-two-step-reset", args=(ops.pk,)), {"reason": "Lost phone", "confirm": "on"}
+            reverse("admin_console:staff-two-step-reset", args=(ops.pk,)),
+            {"reason": "Lost phone", "confirm": "on"},
         )
         assert reset.status_code == 302
-        assert client.get("/admin/marketplace/deals/")["Location"].startswith(reverse("admin:login"))
+        assert client.get("/admin/marketplace/deals/")["Location"].startswith(
+            reverse("admin:login")
+        )
         audit = AdminAuditLog.objects.get(action="admin.two_step_reset")
         assert (audit.actor, audit.reason) == (owner, "Lost phone")
         fresh = Client()
@@ -169,7 +200,13 @@ class ExportsReconcileTests(AcceptanceWorld, TransactionTestCase):
         journey = self.post_trip(
             [
                 self.leg_payload(DRIVE, self.algiers, self.setif, depart, hours=3),
-                self.leg_payload(DRIVE, self.setif, self.constantine, depart + timedelta(hours=4), hours=2),
+                self.leg_payload(
+                    DRIVE,
+                    self.setif,
+                    self.constantine,
+                    depart + timedelta(hours=4),
+                    hours=2,
+                ),
             ]
         )
         self.publish(journey)
@@ -177,7 +214,10 @@ class ExportsReconcileTests(AcceptanceWorld, TransactionTestCase):
         journey.refresh_from_db()
         first, second = journey.legs.order_by("position")
         parcels = []
-        for origin, destination, leg in ((self.algiers, self.setif, first), (self.setif, self.constantine, second)):
+        for origin, destination, leg in (
+            (self.algiers, self.setif, first),
+            (self.setif, self.constantine, second),
+        ):
             parcel = self.post_parcel(
                 origin,
                 destination,
@@ -199,14 +239,18 @@ class ExportsReconcileTests(AcceptanceWorld, TransactionTestCase):
         with freeze_at(refunded.agreed_pickup_at + timedelta(hours=1)):
             staff_login(self.client, self.trust)
             recorded = self.client.post(
-                reverse("admin_console:deal-no-show", args=(refunded.pk,)), {"party": "traveler", "note": "Checked"}
+                reverse("admin_console:deal-no-show", args=(refunded.pk,)),
+                {"party": "traveler", "note": "Checked"},
             )
         assert recorded.status_code == 302
         delivered = self.carry(journey, parcels[0][0], first, first)
 
         # Read the day after: every money event of both deals is in the past.
         delivered.refresh_from_db()
-        with override_settings(**KEYRING), freeze_at(delivered.protection_ends_at + timedelta(days=1)):
+        with (
+            override_settings(**KEYRING),
+            freeze_at(delivered.protection_ends_at + timedelta(days=1)),
+        ):
             staff_login(self.client, self.finance)
             transactions = self.download(self.client, "transactions")
             commissions = self.download(self.client, "commissions")
@@ -221,26 +265,50 @@ class ExportsReconcileTests(AcceptanceWorld, TransactionTestCase):
         def total(key):
             return board["metrics"][key]["amount_eur_cents"]
 
-        assert {row["Tracking number"] for row in commissions} == {delivered.delivery_request.tracking_number, second_tracking}
-        assert sum(self.cents(row["Fee kept"]) for row in commissions) == total("recognized_revenue")
+        assert {row["Tracking number"] for row in commissions} == {
+            delivered.delivery_request.tracking_number,
+            second_tracking,
+        }
+        assert sum(self.cents(row["Fee kept"]) for row in commissions) == total(
+            "recognized_revenue"
+        )
         payments = [row for row in transactions if row["Type"] == "payment"]
         refunds = [row for row in transactions if row["Type"] == "refund"]
-        assert sum(self.cents(r["Amount"]) for r in payments if r["Status"] == "succeeded") == total("gross_funded")
-        assert sum(self.cents(r["Amount"]) for r in refunds if r["Status"] == "succeeded") == total("refunds_finalized")
+        assert sum(
+            self.cents(r["Amount"]) for r in payments if r["Status"] == "succeeded"
+        ) == total("gross_funded")
+        assert sum(
+            self.cents(r["Amount"]) for r in refunds if r["Status"] == "succeeded"
+        ) == total("refunds_finalized")
         assert refunds, "the no-show refund is in the file"
         by_number = {row["Tracking number"]: row for row in payouts}
-        assert set(by_number) == {delivered.delivery_request.tracking_number, second_tracking}
+        assert set(by_number) == {
+            delivered.delivery_request.tracking_number,
+            second_tracking,
+        }
         paid = by_number[delivered.delivery_request.tracking_number]
         assert paid["Status"] == "paid"
-        assert by_number[second_tracking]["Status"] != "paid", "a refunded deal pays no traveler"
+        assert (
+            by_number[second_tracking]["Status"] != "paid"
+        ), "a refunded deal pays no traveler"
         assert self.cents(paid["Amount"]) == delivered.terms.traveler_reward_minor
         # The paid payout is the dashboard's settled payout for its mode.
         settled = payout_board["metrics"]["payouts_settled"]["amount_eur_cents"]
         assert settled == self.cents(paid["Amount"]), settled
-        assert AdminAuditLog.objects.filter(action=AUDIT_ACTION, actor=self.finance).count() == 3
+        assert (
+            AdminAuditLog.objects.filter(
+                action=AUDIT_ACTION, actor=self.finance
+            ).count()
+            == 3
+        )
         # No email, phone or address reaches a cell.
         everything = json.dumps([transactions, commissions, payouts])
-        for secret in (self.sender.email, self.traveler.email, "l10-recipient@example.invalid", "+213555000111"):
+        for secret in (
+            self.sender.email,
+            self.traveler.email,
+            "l10-recipient@example.invalid",
+            "+213555000111",
+        ):
             assert secret not in everything
 
 
@@ -266,7 +334,11 @@ class AccountClaimTests(TestCase):
         user = User.objects.get(email=email)
         phone = api(user).post(
             reverse("notification-device-register"),
-            {"token": f"fcm-token-{uuid.uuid4().hex}", "installation_id": str(uuid.uuid4()), "platform": "android"},
+            {
+                "token": f"fcm-token-{uuid.uuid4().hex}",
+                "installation_id": str(uuid.uuid4()),
+                "platform": "android",
+            },
             format="json",
         )
         assert phone.status_code in (200, 201), phone.data
@@ -274,11 +346,19 @@ class AccountClaimTests(TestCase):
 
     @staticmethod
     def refresh_works(refresh: str) -> bool:
-        return APIClient().post(reverse("auth-refresh"), {"refresh": refresh}, format="json").status_code == 200
+        return (
+            APIClient()
+            .post(reverse("auth-refresh"), {"refresh": refresh}, format="json")
+            .status_code
+            == 200
+        )
 
     @staticmethod
     def pushes_reaching(user) -> int:
-        with override_settings(FCM_ENABLED=True), patch("apps.core.redis_bus.get_client"):
+        with (
+            override_settings(FCM_ENABLED=True),
+            patch("apps.core.redis_bus.get_client"),
+        ):
             return enqueue_fcm_for_event(
                 channel=channels.PAYOUT_STATUS_CHANGED,
                 event_id=str(uuid.uuid4()),
@@ -290,9 +370,16 @@ class AccountClaimTests(TestCase):
         user, refresh = self.squat("l10-google-owner@example.com")
         assert self.refresh_works(refresh) and self.pushes_reaching(user) == 1
 
-        claim = {"sub": "sub-owner", "email": user.email, "email_verified": True, "name": "Real Owner"}
+        claim = {
+            "sub": "sub-owner",
+            "email": user.email,
+            "email_verified": True,
+            "name": "Real Owner",
+        }
         with patch("apps.accounts.views.verify_id_token", return_value=claim):
-            response = APIClient().post(reverse("auth-oauth-google"), {"id_token": "x"}, format="json")
+            response = APIClient().post(
+                reverse("auth-oauth-google"), {"id_token": "x"}, format="json"
+            )
         assert response.status_code == 200, response.data
 
         assert not self.refresh_works(refresh), "the first person is signed out"
@@ -301,14 +388,23 @@ class AccountClaimTests(TestCase):
         account = User.objects.get(pk=user.pk)
         assert account.is_email_verified and not account.has_usable_password()
         assert account.full_name == "Real Owner"
-        assert APIClient().post(
-            reverse("auth-sign-in"), {"email": user.email, "password": "Sup3rStrongPass!"}, format="json"
-        ).status_code != 200
+        assert (
+            APIClient()
+            .post(
+                reverse("auth-sign-in"),
+                {"email": user.email, "password": "Sup3rStrongPass!"},
+                format="json",
+            )
+            .status_code
+            != 200
+        )
         assert self.refresh_works(response.data["refresh"])
 
     def test_the_owner_claims_the_account_with_a_password_reset(self):
         user, refresh = self.squat("l10-reset-owner@example.com")
-        asked = APIClient().post(reverse("auth-password-reset-request"), {"email": user.email}, format="json")
+        asked = APIClient().post(
+            reverse("auth-password-reset-request"), {"email": user.email}, format="json"
+        )
         assert asked.status_code in (200, 202, 204), asked.data
         _, code = PasswordResetCode.issue(user)
         done = APIClient().post(
@@ -321,6 +417,14 @@ class AccountClaimTests(TestCase):
         assert not self.refresh_works(refresh)
         assert self.pushes_reaching(user) == 0
         assert User.objects.get(pk=user.pk).is_email_verified
-        old = APIClient().post(reverse("auth-sign-in"), {"email": user.email, "password": "Sup3rStrongPass!"}, format="json")
-        new = APIClient().post(reverse("auth-sign-in"), {"email": user.email, "password": "OwnersOwnPass77!"}, format="json")
+        old = APIClient().post(
+            reverse("auth-sign-in"),
+            {"email": user.email, "password": "Sup3rStrongPass!"},
+            format="json",
+        )
+        new = APIClient().post(
+            reverse("auth-sign-in"),
+            {"email": user.email, "password": "OwnersOwnPass77!"},
+            format="json",
+        )
         assert (old.status_code, new.status_code) == (400, 200), (old.data, new.data)

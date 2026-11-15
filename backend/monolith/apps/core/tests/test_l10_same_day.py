@@ -31,14 +31,23 @@ class SameDayDeliveryTests(AcceptanceWorld, TestCase):
 
     def test_an_urgent_parcel_flies_the_same_day_with_an_approved_ticket(self):
         depart = self.now + timedelta(hours=3)
-        journey = self.post_trip([self.leg_payload(FLIGHT, self.alg, self.cdg, depart, hours=3)])
+        journey = self.post_trip(
+            [self.leg_payload(FLIGHT, self.alg, self.cdg, depart, hours=3)]
+        )
         leg = journey.legs.get()
 
         # Without an approved ticket the trip cannot be published.
-        refused = api(self.traveler).post(reverse("journeys-publish", args=(journey.pk,)))
+        refused = api(self.traveler).post(
+            reverse("journeys-publish", args=(journey.pk,))
+        )
         assert refused.status_code == 409, refused.data
         proof = self.upload_ticket(leg)
-        assert api(self.traveler).post(reverse("journeys-publish", args=(journey.pk,))).status_code == 409
+        assert (
+            api(self.traveler)
+            .post(reverse("journeys-publish", args=(journey.pk,)))
+            .status_code
+            == 409
+        )
         self.approve_ticket(proof)
         self.publish(journey)
         self.set_price(journey, 600, 1_200)
@@ -78,9 +87,16 @@ class SameDayDeliveryTests(AcceptanceWorld, TestCase):
         for message in emails:
             assert message.context.get("tracking_number") == self.tracking, message.kind
         # No public discovery payload carries the number.
-        assert self.tracking not in str(api(self.traveler).get(reverse("discovery-requests")).data)
-        assert self.tracking not in str(api(self.sender).get(reverse("discovery-trips")).data)
-        assert deal.delivery_confirmed_at.date() in {self.now.date(), (self.now + timedelta(hours=8)).date()}
+        assert self.tracking not in str(
+            api(self.traveler).get(reverse("discovery-requests")).data
+        )
+        assert self.tracking not in str(
+            api(self.sender).get(reverse("discovery-trips")).data
+        )
+        assert deal.delivery_confirmed_at.date() in {
+            self.now.date(),
+            (self.now + timedelta(hours=8)).date(),
+        }
 
     # -- the drive with two stops -------------------------------------------
 
@@ -89,7 +105,13 @@ class SameDayDeliveryTests(AcceptanceWorld, TestCase):
         journey = self.post_trip(
             [
                 self.leg_payload(DRIVE, self.algiers, self.setif, depart, hours=3),
-                self.leg_payload(DRIVE, self.setif, self.constantine, depart + timedelta(hours=4), hours=2),
+                self.leg_payload(
+                    DRIVE,
+                    self.setif,
+                    self.constantine,
+                    depart + timedelta(hours=4),
+                    hours=2,
+                ),
             ],
             stops=[{"position": 1, "handover_note": "Petrol station at the exit"}],
         )
@@ -119,7 +141,18 @@ class SameDayDeliveryTests(AcceptanceWorld, TestCase):
                 "start_place_id": self.marseille.pk,
                 "destination_place_id": self.algiers.pk,
                 "notes": "",
-                "legs": [{**self.leg_payload(SEA, self.marseille, self.algiers, self.now + timedelta(hours=3), hours=20), "position": 0}],
+                "legs": [
+                    {
+                        **self.leg_payload(
+                            SEA,
+                            self.marseille,
+                            self.algiers,
+                            self.now + timedelta(hours=3),
+                            hours=20,
+                        ),
+                        "position": 0,
+                    }
+                ],
             },
             format="json",
         )
@@ -127,7 +160,9 @@ class SameDayDeliveryTests(AcceptanceWorld, TestCase):
 
         self.set_sea_switch(True)
         depart = self.now + timedelta(hours=3)
-        journey = self.post_trip([self.leg_payload(SEA, self.marseille, self.algiers, depart, hours=20)])
+        journey = self.post_trip(
+            [self.leg_payload(SEA, self.marseille, self.algiers, depart, hours=20)]
+        )
         leg = journey.legs.get()
         self.approve_ticket(self.upload_ticket(leg))
         self.publish(journey)

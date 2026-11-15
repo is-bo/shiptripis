@@ -70,7 +70,9 @@ class AcceptanceWorld(SeaWorld):
 
     # -- the traveler -------------------------------------------------------
 
-    def leg_payload(self, mode, origin, destination, depart, hours: int = 2, **extra) -> dict:
+    def leg_payload(
+        self, mode, origin, destination, depart, hours: int = 2, **extra
+    ) -> dict:
         leg = {
             "mode": mode,
             "origin_place_id": origin.pk,
@@ -94,18 +96,24 @@ class AcceptanceWorld(SeaWorld):
             "legs": legs,
             **extra,
         }
-        response = api(self.traveler).post(reverse("journeys-list-create"), payload, format="json")
+        response = api(self.traveler).post(
+            reverse("journeys-list-create"), payload, format="json"
+        )
         assert response.status_code == 201, response.data
         return Journey.objects.get(pk=response.data["id"])
 
     def publish(self, journey: Journey) -> None:
-        response = api(journey.traveler).post(reverse("journeys-publish", args=(journey.pk,)))
+        response = api(journey.traveler).post(
+            reverse("journeys-publish", args=(journey.pk,))
+        )
         assert response.status_code == 200, response.data
         journey.refresh_from_db()
         assert journey.status == Journey.Status.ACTIVE, journey.status
 
     def upload_ticket(self, leg: JourneyLeg) -> int:
-        upload = SimpleUploadedFile("ticket.jpg", b"l10-ticket", content_type="image/jpeg")
+        upload = SimpleUploadedFile(
+            "ticket.jpg", b"l10-ticket", content_type="image/jpeg"
+        )
         with (
             patch("apps.trips.views.image_bytes_match_extension", return_value=True),
             patch("apps.trips.views.put_object"),
@@ -131,7 +139,9 @@ class AcceptanceWorld(SeaWorld):
 
     # -- the sender ---------------------------------------------------------
 
-    def post_parcel(self, origin, destination, *, ready_from, ready_until, deliver_by, weight="2.00") -> DeliveryRequest:
+    def post_parcel(
+        self, origin, destination, *, ready_from, ready_until, deliver_by, weight="2.00"
+    ) -> DeliveryRequest:
         photo = ParcelMedia.objects.create(
             parcel=None,
             uploaded_by=self.sender,
@@ -198,14 +208,20 @@ class AcceptanceWorld(SeaWorld):
         return response.data
 
     def accept(self, offer: dict) -> Deal:
-        response = api(self.traveler).post(reverse("offers-accept", args=(offer["id"],)), {}, format="json")
+        response = api(self.traveler).post(
+            reverse("offers-accept", args=(offer["id"],)), {}, format="json"
+        )
         assert response.status_code in (200, 201), response.data
         return Deal.objects.get(pk=response.data["id"])
 
     def pay_balance(self, deal: Deal) -> None:
-        response = api(self.sender).get(reverse("finance-deal-payment", args=(deal.pk,)))
+        response = api(self.sender).get(
+            reverse("finance-deal-payment", args=(deal.pk,))
+        )
         assert response.status_code == 200, response.data
-        order = PaymentOrder.objects.get(deal=deal, purpose=PaymentOrder.Purpose.DEAL_BALANCE)
+        order = PaymentOrder.objects.get(
+            deal=deal, purpose=PaymentOrder.Purpose.DEAL_BALANCE
+        )
         pay_order_with_mock(APIClient(), order)
         deal.refresh_from_db()
         assert deal.status == Deal.Status.FUNDED, deal.status
@@ -215,7 +231,11 @@ class AcceptanceWorld(SeaWorld):
     def set_recipient(self, deal: Deal) -> None:
         response = api(self.sender).put(
             reverse("deals-recipient", args=(deal.pk,)),
-            {"full_name": "Amina Recipient", "email": "l10-recipient@example.invalid", "phone": "+213555000111"},
+            {
+                "full_name": "Amina Recipient",
+                "email": "l10-recipient@example.invalid",
+                "phone": "+213555000111",
+            },
             format="json",
         )
         assert response.status_code in (200, 201), response.data
@@ -226,7 +246,9 @@ class AcceptanceWorld(SeaWorld):
         code = api(self.sender).get(reverse("handover-pickup-code", args=(deal.pk,)))
         assert code.status_code == 200, code.data
         response = api(self.traveler).post(
-            reverse("handover-pickup-submit", args=(deal.pk,)), {"code": code.data["code"]}, format="json"
+            reverse("handover-pickup-submit", args=(deal.pk,)),
+            {"code": code.data["code"]},
+            format="json",
         )
         assert response.status_code == 200, response.data
         deal.refresh_from_db()
@@ -235,7 +257,9 @@ class AcceptanceWorld(SeaWorld):
     def report(self, leg: JourneyLeg, kind: str, *, at) -> None:
         with freeze_at(at):
             response = api(self.traveler).post(
-                reverse("journey-leg-progress", args=(leg.journey_id, leg.pk)), {"kind": kind}, format="json"
+                reverse("journey-leg-progress", args=(leg.journey_id, leg.pk)),
+                {"kind": kind},
+                format="json",
             )
         assert response.status_code in (200, 201), response.data
 
@@ -247,18 +271,27 @@ class AcceptanceWorld(SeaWorld):
         """
 
         deal.refresh_from_db()
-        at = max(at or deal.delivery_code_available_at, deal.delivery_code_available_at) + timedelta(seconds=1)
-        traveler_try = api(self.traveler).get(reverse("handover-delivery-code", args=(deal.pk,)))
+        at = max(
+            at or deal.delivery_code_available_at, deal.delivery_code_available_at
+        ) + timedelta(seconds=1)
+        traveler_try = api(self.traveler).get(
+            reverse("handover-delivery-code", args=(deal.pk,))
+        )
         assert traveler_try.status_code == 403, traveler_try.data
         early = api(self.sender).get(reverse("handover-delivery-code", args=(deal.pk,)))
         assert early.status_code in (403, 409), early.data
         with freeze_at(at):
             run_due_jobs(limit=50)
-            code = api(self.sender).get(reverse("handover-delivery-code", args=(deal.pk,)))
-            assert code.status_code == 200, code.data
-            assert api(self.traveler).get(
+            code = api(self.sender).get(
                 reverse("handover-delivery-code", args=(deal.pk,))
-            ).status_code == 403
+            )
+            assert code.status_code == 200, code.data
+            assert (
+                api(self.traveler)
+                .get(reverse("handover-delivery-code", args=(deal.pk,)))
+                .status_code
+                == 403
+            )
             response = api(self.traveler).post(
                 reverse("handover-delivery-submit", args=(deal.pk,)),
                 {"code": code.data["code"]},
@@ -287,19 +320,28 @@ class AcceptanceWorld(SeaWorld):
         assert listing.status_code == 200, listing.data
         row = next(r for r in listing.data["results"] if r["journey_id"] == journey.pk)
         assert row["price"]["price_per_kg_eur_cents"] == journey.price_per_kg_eur_cents
-        found = api(self.sender).get(reverse("matches-find-travelers-v1"), {"parcel_id": parcel.pk})
+        found = api(self.sender).get(
+            reverse("matches-find-travelers-v1"), {"parcel_id": parcel.pk}
+        )
         assert found.status_code == 200, found.data
         rows = [r for r in found.data["results"] if r["journey_id"] == journey.pk]
         if not rows:
             from apps.matching.discovery import explain_candidate
 
-            raise AssertionError(explain_candidate(delivery_request_id=parcel.pk, journey_id=journey.pk))
+            raise AssertionError(
+                explain_candidate(delivery_request_id=parcel.pk, journey_id=journey.pk)
+            )
         candidate = rows[0]
         listed = candidate["economics"]["listed"]
-        assert listed["reward_eur_cents"] >= candidate["economics"]["minimum_reward_eur_cents"]
+        assert (
+            listed["reward_eur_cents"]
+            >= candidate["economics"]["minimum_reward_eur_cents"]
+        )
 
         # The sender proposes first, at the listed price; the traveler accepts.
-        offer = self.propose(parcel, journey, first_leg, last_leg, listed["reward_eur_cents"])
+        offer = self.propose(
+            parcel, journey, first_leg, last_leg, listed["reward_eur_cents"]
+        )
         assert offer["tracking_number"] == tracking
         deal = self.accept(offer)
         assert deal.terms.traveler_reward_minor == listed["reward_eur_cents"]
@@ -314,10 +356,20 @@ class AcceptanceWorld(SeaWorld):
         self.pick_up(deal)
         last = legs.index(last_leg)
         for leg in legs[: last + 1]:  # reports follow the trip's order
-            self.report(leg, JourneyLegProgress.Kind.DEPARTED, at=leg.depart_at + timedelta(minutes=5))
-            self.report(leg, JourneyLegProgress.Kind.ARRIVED, at=leg.arrive_at + timedelta(minutes=5))
+            self.report(
+                leg,
+                JourneyLegProgress.Kind.DEPARTED,
+                at=leg.depart_at + timedelta(minutes=5),
+            )
+            self.report(
+                leg,
+                JourneyLegProgress.Kind.ARRIVED,
+                at=leg.arrive_at + timedelta(minutes=5),
+            )
         deal.refresh_from_db()
-        assert deal.status == Deal.Status.IN_TRANSIT, "a progress report never moves a deal"
+        assert (
+            deal.status == Deal.Status.IN_TRANSIT
+        ), "a progress report never moves a deal"
         timeline = api(self.sender).get(reverse("deals-detail", args=(deal.pk,))).data
         assert timeline["status"] == Deal.Status.IN_TRANSIT
 
@@ -328,7 +380,9 @@ class AcceptanceWorld(SeaWorld):
         payout = Payout.objects.get(deal=deal)
         assert payout.status == Payout.Status.NOT_ELIGIBLE
         deal.refresh_from_db()
-        assert deal.protection_ends_at - deal.delivery_confirmed_at == timedelta(hours=48)
+        assert deal.protection_ends_at - deal.delivery_confirmed_at == timedelta(
+            hours=48
+        )
         with freeze_at(deal.protection_ends_at - timedelta(seconds=1)):
             run_due_jobs(limit=50)
         payout.refresh_from_db()
@@ -351,7 +405,9 @@ class AcceptanceWorld(SeaWorld):
         assert mine.status_code == 200, mine.data
         assert tracking in str(mine.data)
         # Every cent is accounted for: the ledger of the deal sums to zero.
-        total = LedgerEntry.objects.filter(deal_id=deal.pk).aggregate(n=Sum("amount_eur_cents"))["n"]
+        total = LedgerEntry.objects.filter(deal_id=deal.pk).aggregate(
+            n=Sum("amount_eur_cents")
+        )["n"]
         assert total == 0, total
         deal.refresh_from_db()
         return deal

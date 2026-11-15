@@ -38,7 +38,9 @@ class MarketplaceAcceptanceTests(AcceptanceWorld, TestCase):
         self.build_acceptance_world()
 
     def flight(self, depart: datetime):
-        journey = self.post_trip([self.leg_payload(FLIGHT, self.alg, self.cdg, depart, hours=3)])
+        journey = self.post_trip(
+            [self.leg_payload(FLIGHT, self.alg, self.cdg, depart, hours=3)]
+        )
         self.approve_ticket(self.upload_ticket(journey.legs.get()))
         self.publish(journey)
         self.set_price(journey, 600, 1_200)
@@ -74,7 +76,9 @@ class MarketplaceAcceptanceTests(AcceptanceWorld, TestCase):
 
         with freeze_at(expires_at - timedelta(minutes=61)):
             run_due_jobs(limit=50)
-        assert not self.notified(self.traveler, channels.OFFER_RESPONSE_REMINDER).exists()
+        assert not self.notified(
+            self.traveler, channels.OFFER_RESPONSE_REMINDER
+        ).exists()
         with freeze_at(expires_at - timedelta(minutes=59)):
             run_due_jobs(limit=50)
         reminder = self.notified(self.traveler, channels.OFFER_RESPONSE_REMINDER).get()
@@ -82,8 +86,12 @@ class MarketplaceAcceptanceTests(AcceptanceWorld, TestCase):
 
         with freeze_at(expires_at + timedelta(seconds=1)):
             run_due_jobs(limit=50)
-            refused = api(self.traveler).post(reverse("offers-accept", args=(offer["id"],)), {}, format="json")
-        assert refused.status_code == 409 and refused.data["code"] == "offer_expired", refused.data
+            refused = api(self.traveler).post(
+                reverse("offers-accept", args=(offer["id"],)), {}, format="json"
+            )
+        assert (
+            refused.status_code == 409 and refused.data["code"] == "offer_expired"
+        ), refused.data
         assert Offer.objects.get(pk=offer["id"]).status == Offer.Status.EXPIRED
         assert not Deal.objects.exists()
         # Expiry leaves no mark: the sender may propose to the same trip again.
@@ -108,8 +116,14 @@ class MarketplaceAcceptanceTests(AcceptanceWorld, TestCase):
         assert Offer.objects.get(pk=offer["id"]).status == Offer.Status.EXPIRED
         # Both people hear that it expired; the traveler was reminded once.
         for person in (self.sender, self.traveler):
-            assert self.notified(person, channels.OFFER_UPDATED).filter(payload__status="expired").exists()
-        assert self.notified(self.traveler, channels.OFFER_RESPONSE_REMINDER).count() == 1
+            assert (
+                self.notified(person, channels.OFFER_UPDATED)
+                .filter(payload__status="expired")
+                .exists()
+            )
+        assert (
+            self.notified(self.traveler, channels.OFFER_RESPONSE_REMINDER).count() == 1
+        )
 
     # -- trip-fit alert, "I can carry this", proposal -----------------------
 
@@ -138,7 +152,9 @@ class MarketplaceAcceptanceTests(AcceptanceWorld, TestCase):
         assert interest.status_code in (200, 201), interest.data
         told = self.notified(self.sender, channels.DISCOVERY_TRAVELER_INTERESTED).get()
         assert told.payload["journey_id"] == journey.pk
-        assert not Offer.objects.exists(), "interest is not an offer: the sender proposes first"
+        assert (
+            not Offer.objects.exists()
+        ), "interest is not an offer: the sender proposes first"
 
         offer = self.propose(parcel, journey, leg, leg, 3_000)
         assert offer["status"] == Offer.Status.PENDING
@@ -149,7 +165,9 @@ class MarketplaceAcceptanceTests(AcceptanceWorld, TestCase):
 
     def test_staff_record_a_traveler_no_show_and_the_sender_is_refunded(self):
         depart = self.now + timedelta(hours=4)
-        journey = self.post_trip([self.leg_payload(DRIVE, self.algiers, self.setif, depart, hours=3)])
+        journey = self.post_trip(
+            [self.leg_payload(DRIVE, self.algiers, self.setif, depart, hours=3)]
+        )
         self.publish(journey)
         leg = journey.legs.get()
         parcel = self.open_parcel(depart, destination=self.setif)
@@ -159,7 +177,9 @@ class MarketplaceAcceptanceTests(AcceptanceWorld, TestCase):
         deal.refresh_from_db()
 
         too_early = api(self.sender).post(
-            reverse("deal-problems", args=(deal.pk,)), {"kind": "traveler_no_show", "note": ""}, format="json"
+            reverse("deal-problems", args=(deal.pk,)),
+            {"kind": "traveler_no_show", "note": ""},
+            format="json",
         )
         assert too_early.status_code in (400, 409), too_early.data
         with freeze_at(deal.agreed_pickup_at + timedelta(hours=1)):
@@ -172,7 +192,9 @@ class MarketplaceAcceptanceTests(AcceptanceWorld, TestCase):
             staff_login(self.client, self.trust)
             page = reverse("admin_console:deal-no-show", args=(deal.pk,))
             assert self.client.get(page, {"party": "traveler"}).status_code == 200
-            recorded = self.client.post(page, {"party": "traveler", "note": "Confirmed by phone"})
+            recorded = self.client.post(
+                page, {"party": "traveler", "note": "Confirmed by phone"}
+            )
         assert recorded.status_code == 302, recorded.content[:500]
         deal.refresh_from_db()
         assert deal.no_show_party == "traveler"
@@ -180,8 +202,13 @@ class MarketplaceAcceptanceTests(AcceptanceWorld, TestCase):
         audit = AdminAuditLog.objects.get(action="deal.no_show_recorded")
         assert audit.actor == self.trust
         problem = ShipmentProblem.objects.get(deal=deal)
-        assert problem.status == ShipmentProblem.Status.CLOSED and problem.closed_by_audit_id == audit.pk
-        assert PaymentRefund.objects.filter(order__deal=deal).exists(), "a traveler no-show refunds the sender"
+        assert (
+            problem.status == ShipmentProblem.Status.CLOSED
+            and problem.closed_by_audit_id == audit.pk
+        )
+        assert PaymentRefund.objects.filter(
+            order__deal=deal
+        ).exists(), "a traveler no-show refunds the sender"
 
     # -- a review reported, hidden, removed ---------------------------------
 
@@ -204,7 +231,13 @@ class MarketplaceAcceptanceTests(AcceptanceWorld, TestCase):
         journey = self.post_trip(
             [
                 self.leg_payload(DRIVE, self.algiers, self.setif, depart, hours=3),
-                self.leg_payload(DRIVE, self.setif, self.constantine, depart + timedelta(hours=4), hours=2),
+                self.leg_payload(
+                    DRIVE,
+                    self.setif,
+                    self.constantine,
+                    depart + timedelta(hours=4),
+                    hours=2,
+                ),
             ]
         )
         self.publish(journey)
@@ -212,7 +245,10 @@ class MarketplaceAcceptanceTests(AcceptanceWorld, TestCase):
         journey.refresh_from_db()
         first, second = journey.legs.order_by("position")
         deals = []
-        for origin, destination, leg in ((self.algiers, self.setif, first), (self.setif, self.constantine, second)):
+        for origin, destination, leg in (
+            (self.algiers, self.setif, first),
+            (self.setif, self.constantine, second),
+        ):
             parcel = self.post_parcel(
                 origin,
                 destination,
@@ -229,31 +265,49 @@ class MarketplaceAcceptanceTests(AcceptanceWorld, TestCase):
         self.rate(bad, self.traveler, 5, "Fine.")
         assert self.summary() == {"state": "rated", "average": 3.0, "count": 2}
 
-        reviews = api(self.sender).get(reverse("discovery-trip-reviews", args=(journey.pk,)))
+        reviews = api(self.sender).get(
+            reverse("discovery-trip-reviews", args=(journey.pk,))
+        )
         assert reviews.status_code == 200, reviews.data
         rude = next(r for r in reviews.data["results"] if r["score"] == 1)
         assert rude["comment"] == "Rude words here."
 
         reported = api(self.traveler).post(
-            reverse("ratings-report", args=(rude["id"],)), {"reason": "offensive", "note": "Insults"}, format="json"
+            reverse("ratings-report", args=(rude["id"],)),
+            {"reason": "offensive", "note": "Insults"},
+            format="json",
         )
         assert reported.status_code == 201, reported.data
 
         staff_login(self.client, self.trust)
         page = reverse("admin_console:review-detail", args=(rude["id"],))
-        hidden = self.client.post(page, {"action": "hide_comment", "hide_comment-reason": "Insults"})
+        hidden = self.client.post(
+            page, {"action": "hide_comment", "hide_comment-reason": "Insults"}
+        )
         assert hidden.status_code == 302, hidden.content[:500]
-        after_hide = api(self.sender).get(reverse("discovery-trip-reviews", args=(journey.pk,))).data
+        after_hide = (
+            api(self.sender)
+            .get(reverse("discovery-trip-reviews", args=(journey.pk,)))
+            .data
+        )
         row = next(r for r in after_hide["results"] if r["id"] == rude["id"])
         assert row["comment"] is None and row["comment_removed"] is True
         assert self.summary()["average"] == 3.0, "a hidden comment still counts"
 
-        removed = self.client.post(page, {"action": "remove", "remove-reason": "Insults"})
+        removed = self.client.post(
+            page, {"action": "remove", "remove-reason": "Insults"}
+        )
         assert removed.status_code == 302, removed.content[:500]
         assert self.summary() == {"state": "rated", "average": 5.0, "count": 1}
-        after_remove = api(self.sender).get(reverse("discovery-trip-reviews", args=(journey.pk,))).data
+        after_remove = (
+            api(self.sender)
+            .get(reverse("discovery-trip-reviews", args=(journey.pk,)))
+            .data
+        )
         assert rude["id"] not in [r["id"] for r in after_remove["results"]]
         actions = list(
-            AdminAuditLog.objects.filter(action__startswith="rating.").values_list("action", flat=True)
+            AdminAuditLog.objects.filter(action__startswith="rating.").values_list(
+                "action", flat=True
+            )
         )
         assert sorted(actions) == ["rating.comment_hidden", "rating.removed"]
