@@ -580,6 +580,8 @@ NO_TASK: dict[str, str] = {
     "ai-helper": "The helper's own keys are handled by the admin on the console, never through it.",
     "ai-helper-create": "The helper's own keys are handled by the admin on the console, never through it.",
     "ai-helper-stop": "The helper's own keys are handled by the admin on the console, never through it.",
+    "ai-helper-skill": "The skill's own download, on the helper card.",
+    "ai-helper-instructions": "The skill's own pasted text, on the helper card.",
     "ai-helper-change": "Confirming what the helper prepared is the admin's own click on the console.",
 }
 

@@ -949,12 +949,29 @@ Screenshots: `/mnt/project-files/l-series-screens/L16/` (console EN and 390 px, 
 
 ### L17. AI helper skill
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+- Contract as built (names that differ from the plan): the skill source moved from
+  `docs/admin-helper-skill/` to `backend/monolith/apps/admin_helper/skill/` (the image build excludes
+  `docs/`): `SKILL.md` (139 lines), `knowledge/*.md` (14 notes files), generated `INSTRUCTIONS.txt`
+  (`manage.py build_helper_instructions`, `--check`; a test fails when stale). Module
+  `apps/admin_helper/skill.py`. Console routes `ai-helper-skill` (zip) and `ai-helper-instructions`
+  (text) on the card ("Download the skill", "Copy the instructions"). The deal record of the helper
+  API gains `payments` (links). Notes files must start with a title, `Covers:` and `Related files:`
+  naming existing files and hold no `UNSURE:`; any later package that changes behaviour the notes
+  describe should update the matching notes file.
+- Left for a later package: L10 reruns the eleven proof conversations on the final build and
+  re-checks the notes against the final code. Skills for other roles (Ismail: later).
+- Switches added and their defaults: none.
+- Deviations from the plan (what, why, approved by): scope widened to "answer any question about the
+  app, for the Super Admin, with diagrams and the outsider's questions" and the knowledge lives in
+  `knowledge/` beside the 140-line core (Ismail, 2026-11-14 and 2026-11-15); the source moved into the
+  monolith; `http://localhost` accepted as an address on a test machine. Judgment calls: phase doc
+  section 7, items 1 to 8, for Ismail's end review.
+- Tests (before and after counts): Django 3,200 before; see the PR for the after count (+12 in
+  `test_l17_skill.py`).
+- Known limits: the notes describe the code at this commit and go stale as the app changes; the proof
+  ran with Haiku through an agent harness, not Claude Code's `/wassla`; INSTRUCTIONS.txt is 385 KB. Code
+  oddities the notes revealed (never-set statuses, a no-caller staff dispute path, a mobile "Recent
+  rating" averaging bug, a stale handover-code caption) are in phase doc section 8 for Codex.
 
 ### L10. Final acceptance
 

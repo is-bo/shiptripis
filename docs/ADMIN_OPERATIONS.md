@@ -313,6 +313,31 @@ An item with nothing waiting is not raised. Each item shows only to an admin
 who can open the page it links to. These thresholds are a judgment call kept
 for the owner's end review.
 
+### Using the AI helper (L17)
+
+The assistant needs the Wassla skill once, and a key each time.
+
+1. **Install the skill.** On the **AI helper** card press **Download the skill** and unzip it into
+   `~/.claude/skills/` (Claude Code). For another assistant, press **Copy the instructions** and paste
+   them as its first message. Neither holds a key or an address.
+2. **Create a key** (read key for questions and briefings; change key only when you want it to prepare
+   something) and press **Copy** on the line that appears.
+3. **Type `/wassla` and paste the line.** Alone, it gives your briefing: what needs you, most urgent
+   first, with the link for each. Add a question after the line to get an answer instead, for example
+   `what is WSL-... waiting for?`, `how do I refund someone?`, `why is this payout blocked?`.
+4. **Ask anything about the app.** The skill carries notes written from the code: prices and fees,
+   payments and payouts, the life of a delivery, trips and matching, problems and disputes, reviews,
+   verification, messages, the console and roles, settings, and the structure of the system with
+   diagrams. These need no key. If the notes do not hold an answer it says so; it does not guess.
+   The live values of a setting are on **Settings**, not in the notes (they give the shipped
+   defaults).
+5. **A change.** With a change key the assistant prepares it and gives you a link; nothing happens
+   until you open the link and press Confirm.
+
+If the assistant says your key has stopped working, create a new one (a read key lasts 8 hours, a change
+key 30 minutes). The notes become out of date as the app changes; developers regenerate the pasted
+text with `manage.py build_helper_instructions` after editing `apps/admin_helper/skill/`.
+
 ## Internal notes
 
 The delivery, dispute and person pages have **Internal notes**: what a

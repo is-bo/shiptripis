@@ -60,7 +60,16 @@ in the one response that created it.
       <button type="submit" class="st-button-quiet">Create change key ({{ helper.change_minutes }} minute{{ helper.change_minutes|pluralize }})</button>
     </form>
   </div>
+  <div class="st-helper-skill">
+    <p><strong>Set up your assistant once.</strong> It needs the Wassla skill: the instructions that tell it how to read your work and answer questions about the app. Neither file holds a key.</p>
+    <div class="st-split-actions">
+      <a class="st-button" href="{% url 'admin_console:ai-helper-skill' %}" download>Download the skill</a>
+      <a class="st-button st-button-quiet" href="{% url 'admin_console:ai-helper-instructions' %}" data-helper-instructions>Copy the instructions</a>
+    </div>
+    <p class="st-helper-note">Claude Code: unzip the download into <code translate="no">~/.claude/skills/</code>, then type <code translate="no">/wassla</code>. Another assistant: press "Copy the instructions", paste them as its first message, and add the line from a new key after them.</p>
+    <p class="st-visually-hidden" id="st-helper-skill-status" role="status" aria-live="polite"></p>
+  </div>
   <p class="st-helper-note">{% if helper.read_key or helper.change_key %}A new key stops the one you have of the same kind. {% endif %}You enter a two-step code first if you have not entered one in the last 10 minutes. Stopping a change key early expires what it prepared.</p>
   {% endif %}
-  {% if helper.issued %}<script src="{% static 'admin_helper/helper.js' %}" defer></script>{% endif %}
+  {% if helper.enabled %}<script src="{% static 'admin_helper/helper.js' %}" defer></script>{% endif %}
 </section>

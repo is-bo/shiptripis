@@ -72,6 +72,17 @@ urlpatterns = [
         capability_required(helper_console.PAGE_PERMISSION)(helper_console.page),
         name="ai-helper",
     ),
+    # L17. The skill itself, from the skill files: a zip and one pasted text.
+    path(
+        "ai-helper/skill.zip",
+        capability_required(helper_console.PAGE_PERMISSION)(helper_console.skill_download),
+        name="ai-helper-skill",
+    ),
+    path(
+        "ai-helper/skill.txt",
+        capability_required(helper_console.PAGE_PERMISSION)(helper_console.skill_instructions),
+        name="ai-helper-instructions",
+    ),
     path(
         "ai-helper/keys/new/",
         capability_required(helper_console.PAGE_PERMISSION)(helper_console.create),

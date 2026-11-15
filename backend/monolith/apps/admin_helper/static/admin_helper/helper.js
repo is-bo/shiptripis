@@ -83,6 +83,40 @@
     copyFrom(button);
   });
 
+  // 4. "Copy the instructions" fetches the skill text from the console and puts
+  //    it on the clipboard. Without this file the link opens the same text.
+  document.addEventListener("click", function (event) {
+    var link = event.target.closest && event.target.closest("[data-helper-instructions]");
+    if (!link || !window.fetch) return;
+    event.preventDefault();
+    var status = document.getElementById("st-helper-skill-status");
+    var original = link.getAttribute("data-copy-original") || link.textContent;
+    link.setAttribute("data-copy-original", original);
+    function done(ok) {
+      link.textContent = ok ? "Copied" : "Could not copy";
+      if (status) {
+        status.textContent = ok
+          ? "Copied. Paste the instructions into your assistant."
+          : "Could not copy. Open the link and copy the text.";
+      }
+      window.setTimeout(function () {
+        link.textContent = original;
+      }, 2200);
+    }
+    window.fetch(link.href, { credentials: "same-origin" }).then(
+      function (response) {
+        if (!response.ok) throw new Error("status " + response.status);
+        return response.text();
+      }
+    ).then(function (text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(text).then(function () { done(true); },
+          function () { done(legacyCopy(text)); });
+      }
+      done(legacyCopy(text));
+    }).catch(function () { done(false); });
+  });
+
   var issued = document.querySelector("[data-helper-issued]");
   var back = issued && issued.getAttribute("data-helper-return");
   if (back && window.history && window.history.replaceState) {
