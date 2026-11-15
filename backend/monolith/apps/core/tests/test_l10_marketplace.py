@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 
 from django.core.cache import cache
 from django.test import TestCase, override_settings
+from django.db.models import Sum
 from django.urls import reverse
 
 from apps.admin_panel.models import AdminAuditLog
@@ -28,7 +29,7 @@ from apps.matching.models import Offer
 from apps.notifications.models import Notification
 from apps.problems.models import ShipmentProblem
 
-from .l10_world import DRIVE, FLIGHT, AcceptanceWorld, api
+from .l10_world import DRIVE, FLIGHT, AcceptanceWorld, api, refusal_code
 
 
 @override_settings(STORAGES=STATIC_STORES)
@@ -181,7 +182,8 @@ class MarketplaceAcceptanceTests(AcceptanceWorld, TestCase):
             {"kind": "traveler_no_show", "note": ""},
             format="json",
         )
-        assert too_early.status_code in (400, 409), too_early.data
+        assert too_early.status_code == 409, too_early.data
+        assert refusal_code(too_early) == "no_show_report_not_allowed", too_early.data
         with freeze_at(deal.agreed_pickup_at + timedelta(hours=1)):
             reported = api(self.sender).post(
                 reverse("deal-problems", args=(deal.pk,)),
@@ -206,9 +208,19 @@ class MarketplaceAcceptanceTests(AcceptanceWorld, TestCase):
             problem.status == ShipmentProblem.Status.CLOSED
             and problem.closed_by_audit_id == audit.pk
         )
-        assert PaymentRefund.objects.filter(
-            order__deal=deal
-        ).exists(), "a traveler no-show refunds the sender"
+        # A traveler no-show gives the sender everything back: the cash paid
+        # on the deal and the posting deposit that was credited to it.
+        on_deal = PaymentRefund.objects.filter(order__deal=deal).aggregate(
+            n=Sum("amount_eur_cents")
+        )["n"]
+        everything = PaymentRefund.objects.filter(order__owner=self.sender).aggregate(
+            n=Sum("amount_eur_cents")
+        )["n"]
+        assert on_deal and everything == deal.terms.sender_total_minor, (
+            on_deal,
+            everything,
+            deal.terms.sender_total_minor,
+        )
 
     # -- a review reported, hidden, removed ---------------------------------
 

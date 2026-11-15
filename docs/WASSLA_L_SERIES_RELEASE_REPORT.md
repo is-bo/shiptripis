@@ -29,20 +29,22 @@ Also clean on the final build: `ruff check`, `ruff format --check`, `makemigrati
 ## 2. End-to-end scenarios
 
 Every scenario is a test in `backend/monolith/apps/core/tests/`, built on `l10_world.py`. A person
-acts through the same API the app calls. Staff act through the console with a verified two-step
-session. Payments use the test-mode mock rail. Time moves with `freeze_at`, and background work runs
+acts through the same API the app calls. Staff act through the console (no-shows, review
+moderation, exports, the two-step reset) or, for ticket approval and manual payout settlement, through
+the same service the console calls. The real two-step gate is exercised in the staff sign-in
+scenario; the other scenarios use the test helper that marks a session verified. Payments use the test-mode mock rail. Time moves with `freeze_at`, and background work runs
 through the real job runner.
 
 | Scenario (plan L10 item 2) | Test | What it proves |
 | --- | --- | --- |
-| Urgent parcel, same day, by flight with an approved ticket | `test_l10_same_day` · `test_an_urgent_parcel_flies_the_same_day_with_an_approved_ticket` | Publishing is refused with no ticket, and again while the ticket is pending. Once the ticket is approved: the trip and its price are in discovery, Find Travelers shows the listed price, and the offer is made at that price. Then payment, the recipient, the pickup code, the progress reports and delivery with the recipient's code (the traveler is refused it, and it stays locked for 30 minutes). Protection lasts exactly 48 hours, and the payout is due 1 second after it ends, not 1 second before. Finance settles the payout and the deal's ledger sums to zero. |
+| Urgent parcel, same day, by flight with an approved ticket | `test_l10_same_day` · `test_an_urgent_parcel_flies_the_same_day_with_an_approved_ticket` | Publishing is refused with no ticket, and again while the ticket is pending (`flight_proof_not_approved`). Once the ticket is approved: the trip and its price are in discovery, Find Travelers shows the listed price, and the offer is made at that price. Then payment, the recipient, the pickup code, the progress reports and delivery with the recipient's code. The traveler is refused that code (`not_authorized`). The code is released exactly 30 minutes after pickup and is still refused 1 second before (`delivery_code_buffer_open`). Protection lasts exactly 48 hours, and the payout is due 1 second after it ends, not 1 second before. Finance settles the payout after protection. Then, on the deal's ledger, the funds held and the traveler payable are both back to zero, and the commission equals the fee. |
 | Tracking number followed through every email and screen | same test | The number is the same on the parcel, the proposal, the deal, the payout list and every email the deal sends (pickup confirmed, code released, the recipient's code, delivery confirmed, protection ending, protection ended, rating available, payout status). No public discovery payload carries it. |
 | Urgent parcel, same day, by drive with two stops | `test_an_urgent_parcel_is_driven_the_same_day_from_a_middle_stop` | The parcel boards at the middle stop and rides the second leg. Progress reports follow the trip's order, and the deal ends completed. |
 | Sea leg with a ticket, switch on for the test | `test_a_sea_leg_with_a_ticket_carries_a_parcel_while_the_switch_is_on` | While the switch is off a sea leg is refused. With it on, the ticket is approved, the trip is published and the parcel is carried to payout. |
 | A proposal expires after its reminder | `test_l10_marketplace` · `test_a_proposal_expires_six_hours_later_after_one_reminder` | The deadline is 6 hours after sending. There is no reminder at 61 minutes before it and one at 59 minutes before, carrying the tracking number. Accepting after the deadline gets `offer_expired`. No deal is made, and the sender can propose to the same trip again. |
 | A proposal expires at the pickup time, which came first | `test_a_proposal_expires_at_the_pickup_time_when_that_comes_first` | The deadline equals the leg's departure. One reminder is sent, and both people hear that the proposal expired. |
 | Trip-fit alert, then "I can carry this", then a proposal | `test_a_trip_fit_alert_leads_to_i_can_carry_this_and_a_proposal` | The traveler is alerted and the bell lists it. The public preview carries no tracking number. "I can carry this" tells the sender and creates no offer. The sender then proposes and the traveler accepts. |
-| A no-show recorded by staff | `test_staff_record_a_traveler_no_show_and_the_sender_is_refunded` | An early report is refused. The sender reports an hour after the agreed pickup. Trust records the no-show on the console: the deal is refunded, the problem is closed by that audit row, and a refund exists. |
+| A no-show recorded by staff | `test_staff_record_a_traveler_no_show_and_the_sender_is_refunded` | An early report is refused. The sender reports an hour after the agreed pickup. The early report is refused with `no_show_report_not_allowed`. Trust records the no-show on the console: the deal is refunded, the problem is closed by that audit row, and the sender gets back the full total, cash and posting deposit. |
 | A review reported, hidden, then removed, and the average changing | `test_a_reported_review_is_hidden_then_removed_and_the_average_changes` | The average is 3.0 over 2 ratings. Hiding the comment leaves the score counted (3.0). Removing the rating gives 5.0 over 1. The review list follows each step, and both actions are audited. |
 | Staff sign-in: enrolment, a wrong code, a recovery code, a reset | `test_l10_staff_and_accounts` · `StaffSignInTests` | A password alone opens nothing. A wrong code at enrolment is refused and the right one is taken. Ten recovery codes are shown. A wrong code is refused at sign-in. A recovery code works once ("9 of 10 left") and is refused the second time. The owner resets the admin (audited), who must enrol again. |
 | The three exports reconciled with the finance dashboard | `ExportsReconcileTests` | Downloaded through the console. Commissions ("Fee kept") equal recognised revenue, payments equal gross funded, refunds equal refunds finalised, and the paid payout matches payouts settled. Each download writes an audit row, and no cell holds an email or a phone number. |
@@ -334,7 +336,8 @@ accepted at their gates.
 
 ## 14. Findings from L10 (sent to the coordinator)
 
-Neither finding blocks a release. L10 does not fix what it finds.
+Neither finding blocks a release. L10 does not fix what it finds. The advisor put both into a new
+backend package, L19, which comes after L10 (plan 5.1g).
 
 1. **One half-stale line in the helper's notes** (low). `knowledge/architecture-and-diagrams.md` line
    192, and the same line in `INSTRUCTIONS.txt`, still says "The server code has a staff-side way to
@@ -350,7 +353,20 @@ Neither finding blocks a release. L10 does not fix what it finds.
    profiles would show these confusing numbers. The fix is to settle in the funding's mode, or to label
    the mode on the dashboard.
 
-## 15. How to rerun
+## 15. Gate review
+
+The second, independent pass found no blocker. It found three weak spots in L10's own tests, all
+fixed before the merge:
+1. The 30-minute code lock was not measured. It is now checked at the exact instant and 1 second
+   before.
+2. A zero-sum ledger check could not fail. Per-account balances are checked instead.
+3. The manual payout was settled on the real clock. It is now settled after protection, and the test
+   asserts that.
+
+It also pinned refusal codes where the tests accepted any 4xx. It confirmed the doc claims above
+against the repository.
+
+## 16. How to rerun
 
 ```
 cd backend/monolith

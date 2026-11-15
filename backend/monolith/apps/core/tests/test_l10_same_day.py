@@ -19,7 +19,7 @@ from django.urls import reverse
 from apps.deals.models import Deal
 from apps.parcels.models import ParcelRequest
 
-from .l10_world import DRIVE, FLIGHT, SEA, AcceptanceWorld, api
+from .l10_world import DRIVE, FLIGHT, SEA, AcceptanceWorld, api, refusal_code
 
 
 class SameDayDeliveryTests(AcceptanceWorld, TestCase):
@@ -41,13 +41,13 @@ class SameDayDeliveryTests(AcceptanceWorld, TestCase):
             reverse("journeys-publish", args=(journey.pk,))
         )
         assert refused.status_code == 409, refused.data
+        assert refusal_code(refused) == "flight_proof_not_approved", refused.data
         proof = self.upload_ticket(leg)
-        assert (
-            api(self.traveler)
-            .post(reverse("journeys-publish", args=(journey.pk,)))
-            .status_code
-            == 409
+        pending = api(self.traveler).post(
+            reverse("journeys-publish", args=(journey.pk,))
         )
+        assert pending.status_code == 409, pending.data
+        assert refusal_code(pending) == "flight_proof_not_approved", pending.data
         self.approve_ticket(proof)
         self.publish(journey)
         self.set_price(journey, 600, 1_200)
@@ -93,10 +93,10 @@ class SameDayDeliveryTests(AcceptanceWorld, TestCase):
         assert self.tracking not in str(
             api(self.sender).get(reverse("discovery-trips")).data
         )
-        assert deal.delivery_confirmed_at.date() in {
-            self.now.date(),
-            (self.now + timedelta(hours=8)).date(),
-        }
+        # Delivered before the sender's deadline, within ten hours of posting.
+        parcel.refresh_from_db()
+        assert deal.delivery_confirmed_at <= parcel.deadline_at
+        assert deal.delivery_confirmed_at - self.now < timedelta(hours=10)
 
     # -- the drive with two stops -------------------------------------------
 

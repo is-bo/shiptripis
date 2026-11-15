@@ -26,7 +26,7 @@ from apps.admin_panel.services import review_flight_proof
 from apps.deals.models import Deal
 from apps.deals.tests.phase4_factories import enable_mock_rail, freeze_at
 from apps.finance.jobs import run_due_jobs
-from apps.finance.models import LedgerEntry, PaymentOrder, Payout
+from apps.finance.models import LedgerAccount, LedgerEntry, PaymentOrder, Payout
 from apps.finance.services import complete_manual_payout
 from apps.finance.tests.factories import pay_order_with_mock
 from apps.handover.models import DealHandoverCode
@@ -36,6 +36,11 @@ from apps.trips.models import Journey, JourneyLeg, JourneyLegProgress
 from apps.trips.tests.sea_world import DRIVE, FLIGHT, SEA, SeaWorld
 
 __all__ = ["AcceptanceWorld", "DRIVE", "FLIGHT", "SEA", "api"]
+
+
+def refusal_code(response) -> str | None:
+    code = response.data.get("code") if hasattr(response.data, "get") else None
+    return code[0] if isinstance(code, list) else code
 
 
 def api(user) -> APIClient:
@@ -271,15 +276,23 @@ class AcceptanceWorld(SeaWorld):
         """
 
         deal.refresh_from_db()
+        assert deal.delivery_code_available_at - deal.pickup_confirmed_at == timedelta(
+            minutes=30
+        )
         at = max(
             at or deal.delivery_code_available_at, deal.delivery_code_available_at
         ) + timedelta(seconds=1)
-        traveler_try = api(self.traveler).get(
-            reverse("handover-delivery-code", args=(deal.pk,))
-        )
+        url = reverse("handover-delivery-code", args=(deal.pk,))
+        traveler_try = api(self.traveler).get(url)
         assert traveler_try.status_code == 403, traveler_try.data
-        early = api(self.sender).get(reverse("handover-delivery-code", args=(deal.pk,)))
-        assert early.status_code in (403, 409), early.data
+        assert refusal_code(traveler_try) == "not_authorized", traveler_try.data
+        # One second before the 30 minutes are up the code is still locked,
+        # even after the release job has run.
+        with freeze_at(deal.delivery_code_available_at - timedelta(seconds=1)):
+            run_due_jobs(limit=50)
+            early = api(self.sender).get(url)
+        assert early.status_code == 409, early.data
+        assert refusal_code(early) == "delivery_code_buffer_open", early.data
         with freeze_at(at):
             run_due_jobs(limit=50)
             code = api(self.sender).get(
@@ -393,21 +406,36 @@ class AcceptanceWorld(SeaWorld):
         assert payout.status == Payout.Status.ELIGIBLE, payout.status
         assert payout.amount_eur_cents == listed["reward_eur_cents"]
 
-        paid = complete_manual_payout(
-            payout_id=payout.pk,
-            admin_actor_id=self.finance.pk,
-            payout_currency="EUR",
-            payout_amount_minor=payout.amount_eur_cents,
-            reference=f"L10-{deal.pk}",
-        )
+        # Finance settles once the payout is due, never during protection.
+        with freeze_at(deal.protection_ends_at + timedelta(seconds=2)):
+            paid = complete_manual_payout(
+                payout_id=payout.pk,
+                admin_actor_id=self.finance.pk,
+                payout_currency="EUR",
+                payout_amount_minor=payout.amount_eur_cents,
+                reference=f"L10-{deal.pk}",
+            )
         assert paid.status == Payout.Status.PAID
+        assert paid.paid_at > deal.protection_ends_at, (
+            paid.paid_at,
+            deal.protection_ends_at,
+        )
         mine = api(self.traveler).get(reverse("finance-payouts"))
         assert mine.status_code == 200, mine.data
         assert tracking in str(mine.data)
-        # Every cent is accounted for: the ledger of the deal sums to zero.
-        total = LedgerEntry.objects.filter(deal_id=deal.pk).aggregate(
-            n=Sum("amount_eur_cents")
-        )["n"]
-        assert total == 0, total
+        # Every cent is accounted for: what the deal held and what the
+        # traveler was owed are both discharged, and Wassla kept its fee.
+        balances = {
+            row["account"]: row["n"]
+            for row in LedgerEntry.objects.filter(deal_id=deal.pk)
+            .values("account")
+            .annotate(n=Sum("amount_eur_cents"))
+        }
+        assert balances.get(LedgerAccount.DEAL_FUNDS, 0) == 0, balances
+        assert balances.get(LedgerAccount.TRAVELER_PAYABLE, 0) == 0, balances
+        assert (
+            balances.get(LedgerAccount.PLATFORM_COMMISSION)
+            == -deal.terms.platform_fee_minor
+        ), balances
         deal.refresh_from_db()
         return deal
