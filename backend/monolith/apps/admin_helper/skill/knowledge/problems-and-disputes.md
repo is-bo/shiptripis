@@ -94,7 +94,7 @@ Related files: money.md (payout protection, how payouts are released, refunds), 
 - Needs a category and a description (up to 4,000 characters). Missing description: "Describe what went wrong so the dispute can be reviewed."
 - Categories (app label): `not_delivered` (Never arrived), `damaged` (Arrived damaged), `wrong_item` (Wrong item), `late` (Arrived too late), `no_show` (The other person didn't show up), `payment` (Something is wrong with the money), `other` (Something else).
 - What opening does at once: the traveler's payout is frozen, a snapshot of evidence references is captured (timeline, offers, terms, payments, handover facts, chat and journey references, no-show record; never the delivery code or recipient contact details), the delivery status becomes `disputed`, protection reminders are cancelled, and both people get an email and live notification.
-- Staff cannot open disputes from the console, so a dispute is always opened by the sender or traveler, before protection ends.
+- Staff cannot open a dispute: the code has no staff path (an uncalled one that skipped the checks was removed in L18A), so a dispute is always opened by the sender or traveler, before protection ends. Whether staff should be able to open one is an open decision for the owner.
 - App text: "Opening a dispute puts the traveler's payout on hold while we look into it."
 <!-- src: backend/monolith/apps/disputes/services.py, backend/monolith/apps/disputes/models.py, mobile/lib/l10n/app_en.arb -->
 
@@ -108,7 +108,7 @@ Related files: money.md (payout protection, how payouts are released, refunds), 
 | `closed` | Filed away, no money decision | "Closed" | Stays as left |
 - The first three are "active": evidence is accepted and the payout stays frozen.
 - Staff can move a dispute only between open, awaiting evidence and under review. `resolved` and `closed` cannot be reopened ("This dispute is already finished and cannot be reopened.", `dispute_already_finished`). Moving to the same status changes nothing.
-- Staff have no way to close a dispute without resolving it: the code has a close step, but no console page, staff API route or helper action uses it. In practice every dispute ends as `resolved`.
+- There is no way to close a dispute without resolving it (an uncalled close step was removed in L18A), so every dispute ends as `resolved`. The `closed` status still exists in the data model, but nothing sets it.
 <!-- src: backend/monolith/apps/disputes/models.py, backend/monolith/apps/disputes/services.py -->
 
 ## What evidence can be added?

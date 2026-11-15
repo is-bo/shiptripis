@@ -48,6 +48,7 @@ class J2PostingTests(TestCase):
             email="j2post-sender@example.com",
             password="Sup3rStrongPass!",
             full_name="J2 Sender",
+            is_email_verified=True,  # a sender posts only once verified (L18A)
         )
         self.client = APIClient()
         self.client.force_authenticate(user=self.sender)

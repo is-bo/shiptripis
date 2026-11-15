@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from django.urls import path
 
-from .views import DealRatingsView, MyRatingsView, RatingReportsView
+from .views import DealRatingsView, MyRatingSummaryView, MyRatingsView, RatingReportsView
 
 urlpatterns = [
     path(
@@ -31,6 +31,11 @@ urlpatterns = [
         "users/me/ratings",
         MyRatingsView.as_view(),
         name="ratings-mine",
+    ),
+    path(
+        "users/me/ratings/summary",
+        MyRatingSummaryView.as_view(),
+        name="ratings-mine-summary",
     ),
     path(
         "ratings/<int:pk>/reports",

@@ -351,7 +351,10 @@ def test_profile_endpoints_disabled_and_owner_only(configured):
         username="api-owner", email="api-owner@example.invalid", role="traveler"
     )
     other = User.objects.create_user(
-        username="api-other", email="api-other@example.invalid", role="traveler"
+        username="api-other",
+        email="api-other@example.invalid",
+        role="traveler",
+        is_email_verified=True,
     )
     set_preference(actor=owner, currency="DZD", enabled=True, expected_revision=0)
     client = APIClient()

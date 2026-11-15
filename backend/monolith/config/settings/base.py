@@ -238,6 +238,14 @@ REST_FRAMEWORK = {
         "email_verify": env.str(
             "DRF_EMAIL_VERIFY_THROTTLE_RATE", default="10/hour"
         ),
+        # A fresh verification code is an email sent on the member's behalf.
+        "email_verify_resend": env.str(
+            "DRF_EMAIL_VERIFY_RESEND_THROTTLE_RATE", default="5/hour"
+        ),
+        # The support address is public; the bound only stops scraping loops.
+        "support_contact": env.str(
+            "DRF_SUPPORT_CONTACT_THROTTLE_RATE", default="30/min"
+        ),
         "google_signin": env.str(
             "DRF_GOOGLE_SIGNIN_THROTTLE_RATE", default="10/min"
         ),

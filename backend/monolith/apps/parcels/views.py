@@ -31,6 +31,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from apps.accounts.permissions import EmailVerifiedToWrite
 from apps.core import channels, redis_bus
 from apps.core.business_settings import NoActiveBusinessSettings
 from apps.core.pagination import paginated_array_response
@@ -260,7 +261,11 @@ def _finance_refusal_response(exc: FinanceError) -> Response:
 
 
 class DeliveryV1CreateView(APIView):
-    permission_classes = (IsAuthenticated,)
+    # V1 specification: sender launch verification is email-only (L18A). The
+    # permission refuses before anything is validated or written; a Google
+    # account arrives verified, and `POST /api/auth/verify-email/resend` sends
+    # a new code.
+    permission_classes = (IsAuthenticated, EmailVerifiedToWrite)
 
     def post(self, request: Request) -> Response:
         serializer = DeliveryV1CreateSerializer(

@@ -105,8 +105,9 @@ class NotAuthorized(DisputeError):
 #: read with the rules it was captured under, rather than with today's.
 BUNDLE_VERSION = 1
 
-#: Statuses an administrator may move a live dispute between. `resolved` and
-#: `closed` are terminal and are reached through their own operations.
+#: Statuses an administrator may move a live dispute between. `resolved` is
+#: terminal and is reached only through `resolve_dispute`. (`closed` is a
+#: stored value that nothing sets since L18A; it counts as finished.)
 ADMIN_SETTABLE_STATUSES = (
     Dispute.Status.OPEN,
     Dispute.Status.AWAITING_EVIDENCE,
@@ -249,9 +250,6 @@ def _assert_already_resolved(aggregate: LockedLifecycleAggregate) -> None:
     so the money cannot actually leave twice. This is the second wall, and the
     better error: a party is told to contact support rather than being handed a
     dispute that will fail to do what they expect.
-
-    An administrator is deliberately not blocked. They may need the record, and
-    the settlement bounds hold for them too.
     """
 
     for row in aggregate.disputes:
@@ -271,7 +269,6 @@ def open_dispute(
     actor_id: int,
     category: str,
     reason_text: str,
-    as_admin: bool = False,
 ) -> Dispute:
     """Open a dispute, freeze the payout and snapshot the evidence, atomically.
 
@@ -286,10 +283,8 @@ def open_dispute(
     `disputed` -- a status which is in neither window -- and a client retrying
     its own successful call must not be told it is too late.
 
-    `as_admin` is passed only by the operations endpoint. It skips the party
-    check and the window, which is the one way a dispute can be opened after the
-    protection window has closed and, therefore, the one way `payout_frozen` can
-    come back false with `payout_already_settled` true instead.
+    Only a party opens a dispute, and only inside its window. Staff have no path
+    of their own (L18A removed an uncalled one that skipped both checks).
     """
 
     at = timezone.now()
@@ -310,9 +305,7 @@ def open_dispute(
         aggregate = lock_deal_lifecycle(deal_id)
         deal = aggregate.deal
 
-        role = (
-            Dispute.OpenedByRole.ADMIN if as_admin else _party_role(deal, actor_id)
-        )
+        role = _party_role(deal, actor_id)
         if not role:
             raise NotAuthorized(
                 "Only a party to this delivery can open a dispute on it."
@@ -322,9 +315,8 @@ def open_dispute(
         if existing is not None:
             return existing
 
-        if not as_admin:
-            _assert_already_resolved(aggregate)
-            _assert_dispute_window_open(deal, at=at)
+        _assert_already_resolved(aggregate)
+        _assert_dispute_window_open(deal, at=at)
 
         previous_status = deal.status
         dispute = Dispute.objects.create(
@@ -368,10 +360,10 @@ def open_dispute(
             dispute.payout_frozen = True
             changed_fields.append("payout_frozen")
         elif payout_status == Payout.Status.PAID:
-            # Only reachable for an admin-opened dispute: a party's window
-            # closes before the protection window does, and no payout can be
-            # released until after that. The money has left, so the record says
-            # so instead of pretending it is still here to be split.
+            # Not expected: a party's window closes when protection ends, and no
+            # payout is released before then. If the money has left anyway, the
+            # record says so instead of pretending it is still here to be split
+            # (the console shows "Payout already settled").
             dispute.payout_already_settled = True
             changed_fields.append("payout_already_settled")
         if changed_fields:
@@ -1119,10 +1111,10 @@ def set_dispute_status(
 ) -> Dispute:
     """Move a live dispute between its review states. Administrators only.
 
-    `resolved` and `closed` are terminal and are not reachable from here: a
-    resolution has to go through `resolve_dispute`, which moves the money, and
-    reopening a resolved dispute would mean a second economic decision on money
-    that has already been paid out or refunded.
+    A finished dispute cannot be moved from here: a resolution has to go
+    through `resolve_dispute`, which moves the money, and reopening a resolved
+    dispute would mean a second economic decision on money that has already
+    been paid out or refunded.
     """
 
     if status not in ADMIN_SETTABLE_STATUSES:
@@ -1135,7 +1127,7 @@ def set_dispute_status(
     with transaction.atomic():
         aggregate = lock_deal_lifecycle(deal_id)
         dispute = Dispute.objects.select_for_update(no_key=True).get(pk=dispute_id)
-        if dispute.status in (Dispute.Status.RESOLVED, Dispute.Status.CLOSED):
+        if not dispute.is_active:
             raise DisputeError(
                 "This dispute is already finished and cannot be reopened.",
                 code="dispute_already_finished",
@@ -1163,48 +1155,6 @@ def set_dispute_status(
             {
                 "dispute_id": dispute.pk,
                 "status": status,
-                "previous_status": previous,
-            },
-            actor_id=admin_actor_id,
-        )
-    return dispute
-
-
-def close_dispute(
-    *, dispute_id: int, admin_actor_id: int, note: str = ""
-) -> Dispute:
-    """Close a dispute's file. Administrators only, and it moves no money.
-
-    Two legitimate uses: filing away a dispute that has already been resolved,
-    and retiring one that should never have been opened. Neither settles
-    anything -- a payout frozen by this dispute stays where the resolution (or
-    the absence of one) left it, and only `resolve_dispute` decides a split.
-    Idempotent: closing a closed dispute returns it unchanged.
-    """
-
-    deal_id = Dispute.objects.values_list("deal_id", flat=True).get(pk=dispute_id)
-    with transaction.atomic():
-        aggregate = lock_deal_lifecycle(deal_id)
-        dispute = Dispute.objects.select_for_update(no_key=True).get(pk=dispute_id)
-        if dispute.status == Dispute.Status.CLOSED:
-            return dispute
-
-        previous = dispute.status
-        dispute.status = Dispute.Status.CLOSED
-        dispute.closed_at = timezone.now()
-        dispute.save(update_fields=["status", "closed_at", "updated_at"])
-        _dispute_event(
-            dispute,
-            DisputeEvent.Kind.CLOSED,
-            {"previous_status": previous, "note": note[:1_000]},
-            actor_id=admin_actor_id,
-        )
-        lifecycle.record_event(
-            aggregate.deal,
-            DealEvent.Kind.DISPUTE_STATUS_CHANGED,
-            {
-                "dispute_id": dispute.pk,
-                "status": dispute.status,
                 "previous_status": previous,
             },
             actor_id=admin_actor_id,
@@ -1311,7 +1261,7 @@ def preview_dispute_resolution(
     with transaction.atomic():
         aggregate = lock_deal_lifecycle(deal_id)
         dispute = Dispute.objects.select_for_update(no_key=True).get(pk=dispute_id)
-        if dispute.status in (Dispute.Status.RESOLVED, Dispute.Status.CLOSED):
+        if not dispute.is_active:
             raise DisputeError(
                 "This dispute is already finished.",
                 code="dispute_already_finished",
@@ -1366,9 +1316,9 @@ def resolve_dispute(
         dispute = Dispute.objects.select_for_update(no_key=True).get(pk=dispute_id)
         if dispute.status == Dispute.Status.RESOLVED:
             return dispute
-        if dispute.status == Dispute.Status.CLOSED:
+        if not dispute.is_active:
             raise DisputeError(
-                "This dispute was closed without a resolution.",
+                "This dispute is already finished.",
                 code="dispute_already_finished",
                 dispute_status=dispute.status,
             )

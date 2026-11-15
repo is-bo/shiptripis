@@ -38,6 +38,8 @@ from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
+from apps.accounts.permissions import EmailVerifiedToWrite
+
 from .payout_accounts import (
     ConnectUnavailable,
     CountryUnsupported,
@@ -73,7 +75,8 @@ class OnboardingInput(StrictInput):
 
 
 class ConnectView(APIView):
-    permission_classes = [IsAuthenticated]
+    # Writing payout setup needs a confirmed email (L18A, as `ProfileView`).
+    permission_classes = [IsAuthenticated, EmailVerifiedToWrite]
     throttle_classes = [ConnectThrottle]
 
     def finalize_response(self, request, response, *args, **kwargs):

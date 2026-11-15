@@ -20,7 +20,7 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 - Email and password. Wrong details: "Incorrect email or password." Limit 10 tries per minute.
 - Google sign-in: the server has a Google sign-in endpoint, but no screen in the app offers it today. Rules of the endpoint:
   - Google must say the email is verified, else "Google account email is not verified."
-  - If the email already has an account, the Google identity is linked to it. If not, a new account is made with a password nobody can use, and the email is marked verified.
+  - If the email already has an account, the Google identity is linked to it. If that account never confirmed its email, Google's proof wins, because whoever opened it never proved they own the address: its password stops working, every signed-in session ends and every phone stops getting its notifications, what was typed at sign-up is replaced as for a new account (name from Google; phone, region and language from this sign-in; phone tick cleared), and the account becomes verified. The owner can set a password again with "reset password". A confirmed account links to Google and nothing of it changes. If no account exists, a new one is made with a password nobody can use, and the email is marked verified.
   - Phone, region and language can be sent when it creates a new account.
   - If Google cannot be reached: a retryable "unavailable" answer (503). Limit 10 per minute.
   - It does not check for a ban before giving tokens, but the server refuses an inactive (banned or disabled) account on every request, so a banned person still cannot use the app.
@@ -36,17 +36,17 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 
 ## How does email verification work?
 - After sign-up a 6-digit code is emailed. It is valid 15 minutes and allows 5 tries in total. Limit 10 attempts per hour. These are server environment settings, not on the console.
-- There is no way to ask for a new verification code: no resend endpoint exists. The app says to check the spam folder and contact support.
+- A signed-in member can ask for a new code: `POST /api/auth/verify-email/resend` (limit 5 per hour, server setting `DRF_EMAIL_VERIFY_RESEND_THROTTLE_RATE`). It always answers "done". A verified account is sent nothing; otherwise every older unused code stops working, its email is withdrawn if still waiting, and a fresh code is emailed. The app's code screen gets its "send the code again" button in L18B; until then it says to check the spam folder and contact support.
 - Any wrong code or unknown email gives the same answer: "Invalid code." (so nobody can find out which emails exist).
 - Correct code sets "Email verified". Doing it again for a verified account is fine.
-- The app does not block use until the email is verified. No feature checks the "email verified" tick; it is only displayed. Google sign-up and invited staff accounts are marked verified automatically.
+- Posting a parcel needs a verified email (V1 specification: sender verification is email-only). Until then creating a delivery request is refused with `email_verification_required` "Confirm your email address first." Changing payout setup needs it too (see money.md). Nothing else checks the tick: browsing, pricing, travelling, ID upload and everything else stay open. Google sign-up and invited staff accounts are marked verified automatically; signing in with Google on an unconfirmed account with the same email verifies it (see Google sign-in above).
 - Staff see "Email verified" or "Email not verified" on the person page.
-<!-- src: backend/monolith/apps/accounts/models.py, views.py (VerifyEmailView), console_people.py -->
+<!-- src: backend/monolith/apps/accounts/models.py, views.py (VerifyEmailView, ResendVerifyEmailView, GoogleSignInView), parcels/views.py (DeliveryV1CreateView), console_people.py -->
 
 ## What if a user forgets the password?
 - They enter their email. The answer is always "accepted" (202) even for unknown emails.
 - A 6-digit code is emailed, valid 15 minutes, 5 tries. Limit 5 per hour, shared by asking for a code and using it. Only the newest code counts.
-- With the code and a new password (same rules as sign-up) the password changes. A security email "password reset completed" is sent. Wrong or used code: "Invalid code."
+- With the code and a new password (same rules as sign-up) the password changes, every other signed-in session ends (refresh tokens revoked, phones stop getting notifications), and the email counts as confirmed, because the code went to it. A security email "password reset completed" is sent. Wrong or used code: "Invalid code." and nothing changes. A sign-in already open keeps working for at most 5 minutes (the access token's life, `JWT_ACCESS_TTL_SECONDS`).
 - Google-only accounts have no password; they can set one this way.
 <!-- src: backend/monolith/apps/accounts/views.py, models.py -->
 
@@ -139,7 +139,7 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 ## What does "verified" unlock and show?
 - ID verified: travelers can publish and match journeys (see above).
 - On a public profile card: "identity_verified" badge (true only with a current approved ID).
-- Nothing else is gated on the "email verified" or "phone verified" ticks.
+- Email verified: needed to post a parcel and to change payout setup (`email_verification_required`). Nothing else is gated on the "email verified" or "phone verified" ticks; the ID upload is not.
 <!-- src: backend/monolith/apps/discovery/profiles.py -->
 
 ## What is a payout identity check?

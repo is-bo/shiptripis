@@ -347,10 +347,10 @@ flowchart TD
 ```
 - Problem reports can be filed only while the deal is `funded`, `pickup_ready`, `picked_up`, `in_transit` or `delivery_ready`.
 - A dispute's three review states can be set by staff with the manage right in any order. `resolved` is reached only through a resolution, which moves the money. A resolved dispute cannot be reopened.
-- A `closed` dispute status exists in the code (it would file a dispute away without moving money), but no console page or staff API offers it today.
+- A `closed` dispute status still exists in the data model, but nothing sets it: the uncalled close step was removed in L18A, so every dispute ends `resolved`.
 - Who may act: Ops, Trust and Super Admin can change a dispute's review state; Finance and Super Admin can resolve; Support can only view (admin-console.md).
 - Problem kinds and dispute categories: see problems-and-disputes.md and overview-and-glossary.md.
-<!-- src: apps/problems/models.py, apps/problems/services.py, apps/disputes/models.py, apps/disputes/services.py (set_dispute_status, close_dispute, resolve_dispute), apps/admin_panel/console_forms.py, apps/admin_panel/permissions.py, apps/deals/cancellation.py -->
+<!-- src: apps/problems/models.py, apps/problems/services.py, apps/disputes/models.py, apps/disputes/services.py (set_dispute_status, resolve_dispute), apps/admin_panel/console_forms.py, apps/admin_panel/permissions.py, apps/deals/cancellation.py -->
 ## How do the staff console and the AI helper work together?
 Short answer: staff use the console in a browser (two-step sign-in, five fixed roles, everything audited). An admin can also create a key and paste it into their own AI assistant. The assistant reads as that admin and can only prepare changes; the admin confirms every change by hand in the console. Details: settings-and-helper.md, admin-console.md.
 ```

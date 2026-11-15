@@ -195,6 +195,9 @@ class OwnerScenarioTests(RouteMatchingFixture, TestCase):
 
     def setUp(self):
         super().setUp()
+        # Account A posts over HTTP, which needs a verified email (L18A).
+        self.sender.is_email_verified = True
+        self.sender.save(update_fields=["is_email_verified"])
         self.departs = (self.now + timedelta(days=3)).replace(
             hour=10, minute=0, second=0, microsecond=0
         )

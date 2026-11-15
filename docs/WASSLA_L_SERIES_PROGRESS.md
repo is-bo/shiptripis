@@ -984,12 +984,40 @@ Screenshots: `/mnt/project-files/l-series-screens/L16/` (console EN and 390 px, 
 
 ### L18A. Loose ends before acceptance, backend
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+- Contract as built (names that differ from the plan): as planned, plus the resend endpoint. Gate:
+  `POST /api/parcels/delivery/v1` answers 403 `{"code": "email_verification_required", "detail": ...}`
+  while `is_email_verified` is false, before validation. **For L18B's "send the code again":
+  `POST /api/auth/verify-email/resend`** (signed in, scope `email_verify_resend` 5/hour, always 204,
+  verified account sent nothing, otherwise old unused codes retired and a fresh one emailed).
+  `GET /api/users/me/ratings/summary` (`ratings-mine-summary`) answers `{state, average, count}`, the
+  public profile card's whole-person figure (all time, so the label is "Rating"); computed by the new
+  `apps.ratings.public.rating_summaries`, which `trust_signals` now calls too. `GET /api/support`
+  (`support-contact`, no authentication at all, scope `support_contact` 30/min) answers
+  `{"email": EMAIL_SUPPORT_ADDR or null}`. Item 5: `apps.accounts.sessions.end_all_sessions(user)`
+  (every refresh token blacklisted, every push device off through
+  `apps.notifications.push.deactivate_all_push_devices`) runs on a Google claim of an unconfirmed
+  account and on every completed password reset (which also confirms the email). Item 6: one
+  permission class `apps.accounts.permissions.EmailVerifiedToWrite` on `DeliveryV1CreateView`,
+  `ProfileView` and `ConnectView`: unsafe methods answer the same 403 `email_verification_required`.
+  Table: phase doc section 6.
+- Left for a later package: L18B (the app half); the knowledge notes' app-side lines marked "L18B".
+  For L18B: check `me.is_email_verified` before the posting flow and before payout setup, and tell
+  the member to use the newest code email after a resend; a refresh answered 401 after a Google
+  claim or a reset means "sign in again". L10: `NUM_PROXIES` needs no change today (Caddy sets
+  `X-Forwarded-For`, no published port); note it for a future CDN.
+- Switches added and their defaults: none. Throttle settings `DRF_EMAIL_VERIFY_RESEND_THROTTLE_RATE`
+  (5/hour) and `DRF_SUPPORT_CONTACT_THROTTLE_RATE` (30/min).
+- Deviations from the plan (what, why, approved by): the resend endpoint (advisor, 2026-11-15, plan
+  `54cbd9c`); the `payout_already_settled` branch kept and the tests that reached it through
+  `as_admin` rewritten, two dropped (advisor, same day; each listed in phase doc section 7); Google
+  sign-in on an existing unconfirmed account with the same email now claims it for the Google owner:
+  password made unusable, refresh tokens revoked, verified (second review finding; judgment call 3),
+  widened by the advisor into plan items 5 and 6 (docs `2f9d386`). Test helpers that set up a payout
+  or post a parcel set `is_email_verified=True`, each listed in phase doc section 7.
+- Tests (before and after counts): Django 3,212 before, 3,248 after (+36).
+- Known limits: an access token already issued lives up to 300 seconds after a claim or a reset;
+  whether staff may open a dispute is Ismail's open decision; the support address is Ismail's to set
+  (null until then).
 
 ### L18B. Loose ends before acceptance, mobile
 
