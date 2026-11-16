@@ -51,8 +51,8 @@ built, merged into the integration branch and accepted by its final package:
   `docs/WASSLA_L_SERIES_RELEASE_REPORT.md`. Tests on the final build: Django 3,270 passed, Flutter
   1,533 passed, Go race tests clean on 14 packages.
 - **Nothing is merged into `main` and nothing is deployed.** The release report has not yet been
-  formally handed to Ismail for his end review; that follows L19 (section 5).
-- One L-series package is left: **L19**, paused by Ismail.
+  formally handed to Ismail for his end review; that is the next step (section 5).
+- **L19** (the two findings of L10) is merged too: PR #51, `bfecca1`, 2026-11-16.
 
 The last commit of the integration branch when this was written: `4478ad9` (board after L10).
 
@@ -78,10 +78,10 @@ rename them as "cleanup" without checking what depends on each.
 
 Ismail decides when each starts. Do not start any of them on your own.
 
-### 5.1 L19, findings of final acceptance (paused)
+### 5.1 L19, findings of final acceptance (merged 2026-11-16, PR #51)
 
-Plan section "L19" and decision 5.1g. **Strongest model, high effort, backend only, no migration.**
-Start only when Ismail says so.
+Plan section "L19" and decision 5.1g. **Done:** both findings are fixed and closed in release report
+section 14; detail in `docs/PHASE_L19_ACCEPTANCE_FINDINGS.md`. What it was:
 
 1. The admin helper's notes still describe a staff path to open a dispute that L18A removed
    (`backend/monolith/apps/admin_helper/skill/knowledge/architecture-and-diagrams.md`, and the same
@@ -286,7 +286,7 @@ hours).
    trip-fit caps of 30 travelers per request and 5 alerts per traveler per day; reviews show the
    role, not the name; authenticator app only for two-step; no email, phone, address or bank detail
    in exports. Also the schedule-change threshold `route_change.material_shift_minutes`, 360.
-6. When to start L19, the scan, the cleanup, and what the other changes are (section 5).
+6. When to start the scan and the cleanup, and what the other changes are (section 5). L19 is done.
 7. For the cleanup: whether to lift the "no migration drops or narrows" rule so the legacy tables
    and branches can go (section 5.2).
 

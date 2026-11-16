@@ -44,7 +44,7 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L18A | Loose ends before acceptance, backend (added 2026-11-15, plan 5.1f) | Opus | high | merged | `claude/project-thread-bh970p` | #47 | `7ad5f36` | `docs/PHASE_L18A_LOOSE_ENDS_BACKEND.md` |
 | L18B | Loose ends before acceptance, mobile | Sonnet | medium | merged | `claude/project-thread-x6y8b6` | #48 | `1e8bb46` | `docs/PHASE_L18B_LOOSE_ENDS_MOBILE.md` |
 | L10 | Final acceptance (runs last, after L18B) | Opus | high | merged | `claude/project-thread-0b81ct` | #49 | `464fe51` | `docs/PHASE_L10_FINAL_ACCEPTANCE.md` |
-| L19 | Findings of final acceptance (added 2026-11-15, plan 5.1g) | Opus | high | paused (Ismail, 2026-11-15) | | | | |
+| L19 | Findings of final acceptance (added 2026-11-15, plan 5.1g) | Opus | high | merged | `claude/project-thread-gz2i0k` | #51 | `bfecca1` | `docs/PHASE_L19_ACCEPTANCE_FINDINGS.md` |
 
 **Parked on 2026-11-13 (Ismail's decision, plan 5.1e).** Wassla now targets fast delivery: urgent
 parcels, mostly on flights and drives made the same day. These packages are not part of this build and
@@ -67,7 +67,7 @@ L16, L17, L18A, L18B, and L10 last. These rows were changed by the plan thread o
 L9B (spec 12, 16 to 20; plan 5.1b), then L4C and the new order (plan 5.1d). **The order of the
 board table is the order of work, as in plan section 3.**
 
-**Next package:** L19 (Opus, high effort; backend only; plan L19 and 5.1g). **Paused:** on 2026-11-15 Ismail asked for a pause after L10. Do not start L19 until he says. Read the L10 handoff block and release report section 14 first. The release report goes to Ismail (L10 item 9) after L19 is merged.
+**Next package:** none. Every L-series package is merged (L19 last, 2026-11-16). Next step: hand Ismail the release report (plan L10 item 9: the report, the switches still off, the open decisions). After that, the work Ismail named in `HANDOFF.md` section 5 (the scan for unnecessary complexity, the repository cleanup, his other changes) starts only when he says.
 
 **L16 judgment calls (for Ismail's end review):** the 22 calls in phase doc section 14. Found, not changed (console behaviour from before
 L16): the console refund form, asked twice for the same payment and reason, answers with the refund
@@ -1113,3 +1113,4 @@ Phase doc: `docs/PHASE_L19_ACCEPTANCE_FINDINGS.md`.
 | 2026-11-15 | L18B merged (PR #48, `1e8bb46`): own rating from the server ("Rating"), welcome caption with no number, one "Contact support" action (absent without a server address), one handler for `email_verification_required` with "Send the code again", Profile "Verify email", reset ends on sign-in, `/auth/verify-email` open to signed-in members, helper notes updated. Flutter 1,521 to 1,533 tests. All 11 checks green. Next: L10. |
 | 2026-11-15 | L10 merged (PR #49, `464fe51`): 22 acceptance tests in four files over one `AcceptanceWorld` (same-day flight, drive and sea runs, marketplace deadlines, alerts, no-show and reviews, staff two-step and exports reconciled with the dashboard, Google and reset claims, the switch matrix); the eleven L17 helper conversations rerun on the final build; release report `docs/WASSLA_L_SERIES_RELEASE_REPORT.md` and gallery in project files. No product code changed. Django 3,248 to 3,270 tests. The second pass tightened three tests (delivery code lock, payout after protection, ledger per account); shard 2 fixed by seeding settings and staff roles in the `TransactionTestCase`. All 11 checks green. Its two findings became L19 (advisor, plan 5.1g). Next: L19, paused by Ismail until he says. |
 | 2026-11-15 | Handoff to another account, at Ismail's request (docs only): `HANDOFF.md` rewritten as the single starting point (state after L10, L19 paused, the next work, decisions, open items, working notes); `CLAUDE.md` rewritten for the current workflow and rules with no owner split, `AGENTS.md` points to it; the stale `.claude/MEMORY.md` and `.claude/memory/` removed; plan 1.1 ownership note updated. |
+| 2026-11-16 | L19 merged (PR #51, `bfecca1`), started by Ismail: the stale staff-dispute sentence dropped from the helper notes (two console-only lines tightened, `INSTRUCTIONS.txt` regenerated, proof conversation answered "No"); a payout made without payout profiles takes its funding attempt's mode, so a deal funded in test is in `test` on the payout, ledger, dashboard and exports. No migration. Django 3,270 to 3,274 tests. All 11 checks green. Release report section 14: both findings closed. Next: hand Ismail the release report. |
