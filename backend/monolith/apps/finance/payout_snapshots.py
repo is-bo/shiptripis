@@ -17,6 +17,16 @@ from .policy import phase3_policy, InvalidPaymentPolicy
 from apps.core.business_settings import NoActiveBusinessSettings
 
 
+def deal_funding_order(deal_id):
+    """The Deal's balance order whose capture funds its payout."""
+    return (
+        PaymentOrder.objects.filter(deal_id=deal_id, purpose="deal_balance")
+        .exclude(status="cancelled")
+        .order_by("-pk")
+        .first()
+    )
+
+
 def funding_attempt(order):
     """Balance capture authority, with credited-deposit-only fallback."""
     attempt = (
@@ -132,13 +142,7 @@ def create_snapshot(*, deal_id, traveler_id, amount_eur_cents, order=None):
     existing = Payout.objects.filter(deal_id=deal_id).first()
     if existing:
         return existing
-    order = (
-        order
-        or PaymentOrder.objects.filter(deal_id=deal_id, purpose="deal_balance")
-        .exclude(status="cancelled")
-        .order_by("-pk")
-        .first()
-    )
+    order = order or deal_funding_order(deal_id)
     if order and (order.deal_id != deal_id or order.purpose != "deal_balance"):
         raise ValidationError("Payout funding order does not belong to this Deal.")
     source = funding_attempt(order) if order else None

@@ -148,7 +148,7 @@ See admin-console.md for the role table.
 | Refund by Stripe fails | Retried automatically; after 8 tries flagged for manual action | Sender still owed |
 | Refund by Chargily | Chargily has no refund interface: Finance sends the money back by hand and records a reference | Manual |
 | Payout fails | Stays owed (`failed`); staff retry a failed Stripe bank payout; a DZD payout is held for Finance | Traveler still owed |
-| Payout already paid | A party's dispute window closes before any payout can be released, so this cannot happen through the app. Staff cannot open a dispute from the console today. If a paid payout ever meets a settlement, the money is not taken back automatically; recovery is a staff matter | Exposure noted |
+| Payout already paid | A party's dispute window closes before any payout can be released, so this cannot happen through the app. Staff cannot open a dispute today. If a paid payout ever meets a settlement, the money is not taken back automatically; recovery is a staff matter | Exposure noted |
 | Wrong delivery code | 5 tries then 15-minute lock; after 3 lockouts it locks; sender can ask for a new code | None |
 See problems-and-disputes.md and money.md.
 <!-- src: apps/deals/cancellation.py, apps/disputes/services.py, apps/finance/settlement.py, apps/finance/services.py -->

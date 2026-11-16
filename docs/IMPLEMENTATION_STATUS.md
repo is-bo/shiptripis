@@ -1,5 +1,17 @@
 # Waçla V1 Implementation Status
 
+## Wassla L19 — Findings of final acceptance (2026-11-16)
+
+- Backend only, no migration. Fixes L10's two low findings (release report section 14, plan 5.1g).
+- Helper notes: the sentence about a staff-side way to open a dispute (removed in L18A) is gone; two
+  console-only lines now say staff cannot open a dispute at all; `INSTRUCTIONS.txt` regenerated; a
+  test keeps the notes and `apps/disputes/services.py` in step. Proof conversation rerun: correct.
+- Payouts without payout profiles take their funding attempt's mode (`legacy_unknown` only with no
+  capture), through `deal_funding_order` + `funding_attempt`, shared with the profile path. A deal
+  funded in test and settled by hand is in `test` on the payout, the ledger, the dashboard and the
+  exports.
+- Django 3,270 to 3,274 tests. Detail: `docs/PHASE_L19_ACCEPTANCE_FINDINGS.md`.
+
 ## Wassla handoff to another account (2026-11-15)
 
 - Docs only, at Ismail's request: the work continues on another account.

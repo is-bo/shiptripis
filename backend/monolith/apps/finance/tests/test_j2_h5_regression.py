@@ -18,10 +18,8 @@ No real provider is contacted. Captures are built as rows and driven through
 is already behind it -- the same technique the H3/H5 harness uses -- and the
 module asserts the TEST mode and the absence of any live key explicitly.
 
-The world runs with payout profiles on, because H5's traveler comparisons read
-the Payout row and a profile-less Payout is stamped `legacy_unknown` and falls
-outside the mode scope entirely. That is pre-existing legacy behaviour, not a J2
-effect, but it would make the traveler comparisons vacuous here.
+The world runs with payout profiles on, the payout path production takes, so
+H5's traveler comparisons read the Payout row production would write.
 """
 
 from __future__ import annotations

@@ -3344,6 +3344,8 @@ def ensure_payout_for_deal(
         return create_snapshot(
             deal_id=deal_id, traveler_id=traveler_id, amount_eur_cents=amount_eur_cents
         )
+    from .payout_snapshots import deal_funding_order, funding_attempt
+
     policy = policy or phase3_policy()
     method, reason = resolve_payout_method(
         traveler_id=traveler_id,
@@ -3351,11 +3353,17 @@ def ensure_payout_for_deal(
         policy=policy,
         query_provider_capability=query_provider_capability,
     )
+    # The payout is money of the environment that funded it, as on the
+    # profile path (`create_snapshot`); `legacy_unknown` only when no
+    # capture funded the Deal.
+    order = deal_funding_order(deal_id)
+    source = funding_attempt(order) if order else None
     payout, created = Payout.objects.get_or_create(
         deal_id=deal_id,
         defaults={
             "traveler_id": traveler_id,
             "amount_eur_cents": amount_eur_cents,
+            "provider_mode": source.provider_mode if source else "legacy_unknown",
             "method": method,
             "status": Payout.Status.NOT_ELIGIBLE,
             "notes": f"Payout method resolved as {method}: {reason or 'capability_available'}",

@@ -1048,14 +1048,23 @@ Phase doc: `docs/PHASE_L18B_LOOSE_ENDS_MOBILE.md`.
 
 ### L19. Findings of final acceptance
 
-Phase doc: (not started; paused by Ismail on 2026-11-15).
+Phase doc: `docs/PHASE_L19_ACCEPTANCE_FINDINGS.md`.
 
-- Contract as built (names that differ from the plan):
-- Left for a later package:
-- Switches added and their defaults:
-- Deviations from the plan (what, why, approved by):
-- Tests (before and after counts):
-- Known limits:
+- Contract as built (names that differ from the plan): no API change. New
+  `apps.finance.payout_snapshots.deal_funding_order(deal_id)`, the lookup `create_snapshot` ran inline,
+  now shared by both payout paths; `ensure_payout_for_deal` (profiles off) sets `provider_mode` from
+  `funding_attempt(...)`, `legacy_unknown` only with no capture. Helper notes: one sentence dropped,
+  two console-only lines tightened, `INSTRUCTIONS.txt` regenerated.
+- Left for a later package: `_funding_provider(order)` in `apps/finance/services.py` is close to
+  `funding_attempt` but differs for an order funded only by a credited deposit; merging them would
+  change a payout method result, so it is listed for the cleanup scan (HANDOFF 5.2).
+- Switches added and their defaults: none.
+- Deviations from the plan (what, why, approved by): two extra note lines tightened (they read as if a
+  non-console staff path existed); the comment in L10's export test corrected, no assertion changed
+  (phase doc section 4, judgment calls 1 and 3).
+- Tests (before and after counts): Django 3,270 before, 3,274 after (+4: `test_l19_notes.py` 2,
+  `test_l19_payout_mode.py` 2). No existing expectation changed.
+- Known limits: none.
 
 ## Questions for Ismail
 

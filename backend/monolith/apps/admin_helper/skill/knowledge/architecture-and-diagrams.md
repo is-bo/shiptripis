@@ -189,7 +189,7 @@ stateDiagram-v2
 - Terminal states: `completed`, `cancelled`, `expired`, `refunded`, `partially_refunded`.
 - Who can open a dispute: only the sender or the traveler, in the app, while the parcel is carried (`picked_up`, `in_transit`, `delivery_ready`) or after delivery until the stored protection end (`delivery_confirmed`, `protection_window`). One live dispute per deal; after one is resolved a party cannot open another ("This delivery has already had a dispute resolved. Contact support if something is still wrong.").
 - Refusals: before pickup "This parcel has not been picked up yet. Cancel the delivery instead."; after protection "The payment protection window for this delivery has closed."
-- The server code has a staff-side way to open a dispute, but no console page or staff API uses it. Staff cannot open a dispute today.
+- Staff cannot open a dispute today.
 - `disputed` remembers the status it came from. Resolving is the only way to `completed` without a confirmed delivery (a dispute in carriage decided for the traveler).
 <!-- src: apps/deals/lifecycle.py, apps/deals/services.py, apps/deals/cancellation.py, apps/disputes/services.py (open_dispute, _assert_dispute_window_open, _resolution_deal_status), apps/disputes/views.py, apps/finance/payout_release.py -->
 ## What is the money flow?

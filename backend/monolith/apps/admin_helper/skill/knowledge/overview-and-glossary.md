@@ -63,7 +63,7 @@ A worked example. Sender in Paris wants a parcel carried to Algiers. A traveler 
 6. Recipient details are set; deal becomes `pickup_ready`. Pickup cannot be confirmed before that. Sender gives the parcel to the traveler, who confirms pickup with the pickup code: `picked_up`, then at once `in_transit`. The delivery code is created `buffered`.
 7. Travel: `in_transit`. The traveler can report leg progress (at the port, departed, arrived).
 8. After the 30-minute buffer the delivery code is released; deal is `delivery_ready`. Recipient gives the code, traveler enters it: `delivery_confirmed`, then `protection_window`.
-9. Either party can open a dispute from pickup until the 48-hour protection ends (no console page lets staff open one). If none is open at the end, the deal is `completed` and the payout becomes eligible. Traveler gets 20.00 EUR (plus any boost); Wassla keeps the 5.00 EUR fee.
+9. Either party can open a dispute from pickup until the 48-hour protection ends (staff cannot open one). If none is open at the end, the deal is `completed` and the payout becomes eligible. Traveler gets 20.00 EUR (plus any boost); Wassla keeps the 5.00 EUR fee.
 10. Payout goes to the traveler by Stripe transfer (EUR) or a manual settlement (e.g. DZD by CCP/RIP) that finance records. Automatic Stripe payout is off by default (`auto_stripe_enabled` false).
 - Cancel or dispute paths: refund to the sender (full, partial or none), see the disputes and cancellation files.
 - Boost example: boost of 10.00 EUR, Boost commission 25% = 2.50 EUR (its own Settings value, seeded equal to the base 25%). Traveler gets the whole 10.00 EUR extra; sender pays 12.50 EUR extra.
