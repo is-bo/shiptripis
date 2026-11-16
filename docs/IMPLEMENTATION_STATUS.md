@@ -10,7 +10,7 @@
   capture), through `deal_funding_order` + `funding_attempt`, shared with the profile path. A deal
   funded in test and settled by hand is in `test` on the payout, the ledger, the dashboard and the
   exports.
-- Django 3,270 to 3,275 tests. Detail: `docs/PHASE_L19_ACCEPTANCE_FINDINGS.md`.
+- Django 3,270 to 3,274 tests. Detail: `docs/PHASE_L19_ACCEPTANCE_FINDINGS.md`.
 
 ## Wassla handoff to another account (2026-11-15)
 

@@ -18,9 +18,11 @@ Backend only. **No migration**, no Go, mobile or landing change, no new switch.
     "Staff cannot open a dispute today."
   - `overview-and-glossary.md`: "(no console page lets staff open one)" became "(staff cannot open one)".
 - `INSTRUCTIONS.txt` regenerated with `python manage.py build_helper_instructions`; `--check` passes.
-- New guard, `apps/admin_helper/tests/test_l19_notes.py`: `open_dispute` takes only the party's
-  arguments and `close_dispute` does not exist; no line of the skill or of `INSTRUCTIONS.txt` names
-  `as_admin`, `close_dispute` or a staff way to open a dispute; both notes still say staff cannot.
+- New guard, `apps/admin_helper/tests/test_l19_notes.py`: no line of the skill or of
+  `INSTRUCTIONS.txt` describes, in plain words, a staff way to open a dispute, and both notes still
+  say staff cannot. L18A's own search (`apps/disputes/tests/test_l18a_removed_paths.py`) already
+  proves that no code and no note names the removed functions, so this test does not repeat it (and
+  names neither function, which that search forbids).
 
 ### Proof conversation, rerun
 
@@ -85,7 +87,7 @@ Existing tests:
 - `test_j2_h5_regression.py`: its module docstring said a payout without profiles "is stamped
   `legacy_unknown`"; now it only says why the world runs with profiles on. No code changed.
 
-Counts: Django 3,270 before, 3,275 after (+5). See section 5 for the runs.
+Counts: Django 3,270 before, 3,274 after (+4). See section 5 for the runs.
 
 ## 4. Judgment calls
 

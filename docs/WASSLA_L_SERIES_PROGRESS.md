@@ -1062,7 +1062,7 @@ Phase doc: `docs/PHASE_L19_ACCEPTANCE_FINDINGS.md`.
 - Deviations from the plan (what, why, approved by): two extra note lines tightened (they read as if a
   non-console staff path existed); the comment in L10's export test corrected, no assertion changed
   (phase doc section 4, judgment calls 1 and 3).
-- Tests (before and after counts): Django 3,270 before, 3,275 after (+5: `test_l19_notes.py` 3,
+- Tests (before and after counts): Django 3,270 before, 3,274 after (+4: `test_l19_notes.py` 2,
   `test_l19_payout_mode.py` 2). No existing expectation changed.
 - Known limits: none.
 
