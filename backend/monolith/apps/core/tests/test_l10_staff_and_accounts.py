@@ -288,8 +288,7 @@ class ExportsReconcileTests(AcceptanceWorld, TransactionTestCase):
             transactions = self.download(self.client, "transactions")
             commissions = self.download(self.client, "commissions")
             # Tests run without payout profiles, so this payout took the manual
-            # path, which leaves its money mode unknown; production requires
-            # profiles, whose snapshot records the mode (finance tests H1 to H7).
+            # path; it carries its funding's mode there too (plan L19).
             payout_mode = Payout.objects.get(deal=delivered).provider_mode
             payouts = self.download(self.client, "payouts", payout_mode)
             board = build_snapshot(Scope.parse({"mode": "test"}))

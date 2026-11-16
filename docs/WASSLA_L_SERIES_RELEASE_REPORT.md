@@ -19,7 +19,7 @@ Detail of the acceptance run: `docs/PHASE_L10_FINAL_ACCEPTANCE.md`. Screens:
 
 | Suite | Baseline at `dd7f820` | Final build | L10 adds |
 | --- | --- | --- | --- |
-| Django (PostgreSQL 16, Redis) | 2,529 passed | 3,248 passed | 22 acceptance tests, 3,270 passed in total |
+| Django (PostgreSQL 16, Redis) | 2,529 passed | 3,248 passed | 22 acceptance tests, 3,270 passed in total (3,275 after L19, section 14) |
 | Flutter (`flutter test`) | 1,083 passed | 1,533 passed | none (L10 adds no app test) |
 | Go (`go test -race ./...`, `go vet`, `gofmt`) | all ok | all ok, 14 packages | none |
 
@@ -338,6 +338,17 @@ accepted at their gates.
 
 Neither finding blocks a release. L10 does not fix what it finds. The advisor put both into a new
 backend package, L19, which comes after L10 (plan 5.1g).
+
+**Both are closed by L19** (PR #51, `docs/PHASE_L19_ACCEPTANCE_FINDINGS.md`). L10's 22 acceptance tests
+pass unchanged on that build; Django 3,275 passed in total (L19 adds 5).
+
+- Finding 1, **closed**: the stale sentence is gone from the notes and from `INSTRUCTIONS.txt`; two
+  lines that limited the claim to the console now say staff cannot open a dispute at all; a test keeps
+  the notes and the code in step, and the proof conversation answers "No" with the member's steps.
+- Finding 2, **closed**: without payout profiles, the payout takes its funding attempt's mode through
+  the same lookup the profile path uses (`legacy_unknown` only with no capture). A deal funded in test
+  and settled by hand is in `test` everywhere: the payout, its ledger transactions, the dashboard
+  (traveler outstanding 0) and the exports; nothing of it is in `legacy_unknown`.
 
 1. **One half-stale line in the helper's notes** (low). `knowledge/architecture-and-diagrams.md` line
    192, and the same line in `INSTRUCTIONS.txt`, still says "The server code has a staff-side way to

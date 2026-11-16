@@ -926,7 +926,7 @@ stateDiagram-v2
 - Terminal states: `completed`, `cancelled`, `expired`, `refunded`, `partially_refunded`.
 - Who can open a dispute: only the sender or the traveler, in the app, while the parcel is carried (`picked_up`, `in_transit`, `delivery_ready`) or after delivery until the stored protection end (`delivery_confirmed`, `protection_window`). One live dispute per deal; after one is resolved a party cannot open another ("This delivery has already had a dispute resolved. Contact support if something is still wrong.").
 - Refusals: before pickup "This parcel has not been picked up yet. Cancel the delivery instead."; after protection "The payment protection window for this delivery has closed."
-- The server code has a staff-side way to open a dispute, but no console page or staff API uses it. Staff cannot open a dispute today.
+- Staff cannot open a dispute today.
 - `disputed` remembers the status it came from. Resolving is the only way to `completed` without a confirmed delivery (a dispute in carriage decided for the traveler).
 ## What is the money flow?
 Short answer: the sender pays the reward plus Wassla's fee (25% seeded, rounded up to a cent). Money is held until delivery plus 48 hours with no dispute, then the traveler gets the reward and Wassla keeps the fee. Example: reward 20.00 EUR, fee 5.00 EUR, sender pays 25.00 EUR, traveler gets 20.00 EUR (details: money.md, pricing.md).
@@ -1867,7 +1867,7 @@ A worked example. Sender in Paris wants a parcel carried to Algiers. A traveler 
 6. Recipient details are set; deal becomes `pickup_ready`. Pickup cannot be confirmed before that. Sender gives the parcel to the traveler, who confirms pickup with the pickup code: `picked_up`, then at once `in_transit`. The delivery code is created `buffered`.
 7. Travel: `in_transit`. The traveler can report leg progress (at the port, departed, arrived).
 8. After the 30-minute buffer the delivery code is released; deal is `delivery_ready`. Recipient gives the code, traveler enters it: `delivery_confirmed`, then `protection_window`.
-9. Either party can open a dispute from pickup until the 48-hour protection ends (no console page lets staff open one). If none is open at the end, the deal is `completed` and the payout becomes eligible. Traveler gets 20.00 EUR (plus any boost); Wassla keeps the 5.00 EUR fee.
+9. Either party can open a dispute from pickup until the 48-hour protection ends (staff cannot open one). If none is open at the end, the deal is `completed` and the payout becomes eligible. Traveler gets 20.00 EUR (plus any boost); Wassla keeps the 5.00 EUR fee.
 10. Payout goes to the traveler by Stripe transfer (EUR) or a manual settlement (e.g. DZD by CCP/RIP) that finance records. Automatic Stripe payout is off by default (`auto_stripe_enabled` false).
 - Cancel or dispute paths: refund to the sender (full, partial or none), see the disputes and cancellation files.
 - Boost example: boost of 10.00 EUR, Boost commission 25% = 2.50 EUR (its own Settings value, seeded equal to the base 25%). Traveler gets the whole 10.00 EUR extra; sender pays 12.50 EUR extra.
@@ -2926,7 +2926,7 @@ See admin-console.md for the role table.
 | Refund by Stripe fails | Retried automatically; after 8 tries flagged for manual action | Sender still owed |
 | Refund by Chargily | Chargily has no refund interface: Finance sends the money back by hand and records a reference | Manual |
 | Payout fails | Stays owed (`failed`); staff retry a failed Stripe bank payout; a DZD payout is held for Finance | Traveler still owed |
-| Payout already paid | A party's dispute window closes before any payout can be released, so this cannot happen through the app. Staff cannot open a dispute from the console today. If a paid payout ever meets a settlement, the money is not taken back automatically; recovery is a staff matter | Exposure noted |
+| Payout already paid | A party's dispute window closes before any payout can be released, so this cannot happen through the app. Staff cannot open a dispute today. If a paid payout ever meets a settlement, the money is not taken back automatically; recovery is a staff matter | Exposure noted |
 | Wrong delivery code | 5 tries then 15-minute lock; after 3 lockouts it locks; sender can ask for a new code | None |
 See problems-and-disputes.md and money.md.
 
