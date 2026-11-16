@@ -60,12 +60,13 @@ The last commit of the integration branch when this was written: `4478ad9` (boar
 
 | Branch | What it is |
 | --- | --- |
-| `main` | **The working branch. All work lands here** through pull requests. Since 2026-11-16 it holds the whole L-series (it was `feature/discovery-professional-delivery`) plus the old `main`. |
+| `main` | **The working branch. All work lands here** through pull requests. Since 2026-11-16 it holds the whole L-series (built on the former integration branch `feature/discovery-professional-delivery`, itself started from the baseline `dd7f820`) plus the old `main`. |
 | `main-old` (`03aac94`) | The `main` before 2026-11-16: last real change in September 2026 (the K-series release record) plus Ismail's README revision. Kept for history; do not build on it. |
-| `feature/discovery-professional-delivery` | The former integration branch, now the same commit as `main` was on 2026-11-16. No new work goes here. |
-| `feature/wassla-v3-baseline` (`dd7f820`) | The baseline the integration branch started from: the app before the L-series. No pull request exists for it. |
-| `codex/rebrand-waçla`, `codex/v1-vps-readiness`, `codex/v2-email-readiness` | Older stacked branches. Each is contained in the next, and all are contained in the baseline. |
-| `claude/project-thread-*` | One per finished package, all squash-merged. Safe to delete once Ismail agrees (section 6). |
+
+On 2026-11-16, at Ismail's request, every other branch was deleted: the former integration branch,
+`feature/wassla-v3-baseline`, the three `codex/*` branches and the `claude/project-thread-*` package
+branches. Each was checked first: either fully contained in `main` or the head of a merged pull
+request. Their commits stay reachable from `main` or from the merged pull requests.
 
 Pull requests are squash-merged. After a squash merge, a warning that the old branch has "unpushed
 commits" is harmless; nothing needs a force-push.
@@ -169,7 +170,6 @@ Candidates, for Ismail to approve before anything is deleted:
   `k6-notes/`, `k7-notes/`, `superpowers/`) are history; `docs/IMPLEMENTATION_STATUS.md` is close to
   9,000 lines. An archive folder or a trimmed status file would make the live documents easier to
   find. The live ones are listed in section 9.
-- Remote branches: the merged `claude/project-thread-*` branches and the three `codex/*` branches.
 - `ARCHITECTURE.md` was corrected in L1A but predates most of the L-series.
 - Removed in the handoff commit because they contradicted today's rules: the old `HANDOFF.md`
   (April 2026) and `.claude/MEMORY.md` with `.claude/memory/` (a two-agent split, DZD commission
