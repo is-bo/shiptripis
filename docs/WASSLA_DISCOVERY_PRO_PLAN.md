@@ -74,9 +74,12 @@ build, and he is not watching it).
 - **Agent:** implements exactly one work package. Reads, in this order: `CLAUDE.md`, the progress file
   (the board and every earlier package's handoff notes), the spec, sections 1 and 2 of this plan, its
   own package, and the code the package names. Nothing else is in scope.
-- **Ownership note.** `CLAUDE.md` and `AGENTS.md` name Codex as the backend owner. For this L-series
-  Ismail assigned the work to Claude agents through the orchestrator, backend included. That
-  instruction is the owner override both files allow.
+- **Ownership note.** Until 2026-11-15 `CLAUDE.md` and `AGENTS.md` named Codex as the backend owner,
+  and for this L-series Ismail assigned the work to Claude agents through the orchestrator, backend
+  included. Both files now say the same thing: there is no owner split, and whichever agent runs a
+  task follows `CLAUDE.md`.
+- **After 2026-11-15** the work continues on another account. `HANDOFF.md` at the repository root
+  says where it stands and how one session can play these roles.
 
 ### 1.2 Models and effort
 

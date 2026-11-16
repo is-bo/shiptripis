@@ -1,56 +1,15 @@
-# Wassla Codex Instructions
+# Wassla: instructions for agents
 
-Codex is the primary engineering owner. Before substantial work, read:
+The rules for every agent in this repository, whatever the tool, are in **`CLAUDE.md`**. Read it in
+full before any work, then `HANDOFF.md` for where the work stands and what is next.
 
-- `docs/SHIPTRIP_V1_SPEC.md`
-- `docs/IMPLEMENTATION_STATUS.md`
+The rules that are never broken, repeated here in case only this file is read:
 
-The specification is authoritative when legacy code, documentation, comments, tests, or previous assumptions conflict with it, unless the user explicitly overrides it.
-
-## Primary ownership
-
-Codex primarily owns Django/backend, Go services, database schema and migrations, APIs, matching and geospatial logic, payments, payouts, disputes, concurrency, security, performance, infrastructure, integrations, tests, and release engineering.
-
-## Permanent engineering rules
-
-- Inspect existing code before editing and preserve useful existing architecture.
-- Prefer safe, staged migrations over destructive rewrites. Django remains migration authority.
-- After schema changes, regenerate schema and sqlc contracts and run schema-drift checks.
-- The server is authoritative for money. Financially important operations must be idempotent and auditable.
-- Capacity reservations and financial state transitions must be transactional.
-- Critical delayed jobs must survive Redis and process restarts.
-- Never use mock payments in production.
-- Write and run tests with implementation.
-- Before completion, review security, authorization, races, performance, migrations, and regressions. Use review or subagents where useful, fix valid findings, and rerun relevant gates.
-- Update `docs/IMPLEMENTATION_STATUS.md` after meaningful work; it tracks progress but never replaces the specification.
-
-## Core invariants
-
-- EUR is canonical. DZD exists only as a Chargily or manual-settlement representation; FX is server-controlled and snapshotted.
-- A Journey consists of ordered legs. V1 transport modes are FLIGHT and DRIVE, and only flight legs require transport proof.
-- Traveler KYC is required before publishing a journey.
-- Capacity is allocated per segment.
-- The sender proposes first. Boost cannot override compatibility.
-- Exact locations stay hidden until the deal is funded.
-- A traveler can never retrieve the delivery code, which remains hidden for 30 minutes after pickup.
-- A dispute freezes payout, and payout waits 48 hours after delivery confirmation.
-- ProductRequest/Kaba is not active in V1.
-
-## Discovery and professional delivery (L-series)
-
-Before any work on Home discovery, sea legs, traveler pricing, progress reminders, the staff
-verification inbox, problem reports, route changes, tracking numbers, proposal deadlines, reviews,
-staff two-step sign-in, finance exports or the admin AI helper, also read:
-
-- `docs/WASSLA_DISCOVERY_PRO_SPEC.md` (owner-approved addendum; overrides the V1 specification for the topics it covers)
-- `docs/WASSLA_DISCOVERY_PRO_PLAN.md` (work packages, order, model and effort per package, and the checks that close each one)
-- `docs/WASSLA_L_SERIES_PROGRESS.md` (the live board and each finished package's handoff notes; read it first, and fill in only your own package's block)
-
-Work happens on `feature/discovery-professional-delivery`, one package per pull request into that
-branch. Never merge into `main` or deploy without the owner's explicit approval. For this series the
-owner assigned backend packages to Claude agents through the orchestrator.
-
-Since 2026-11-13 Wassla targets fast delivery: urgent parcels, mostly on flights and drives made the
-same day. Professional transporters, the manifest dashboard, custody history and courier handoff are
-**parked**, not part of this build: do not start them and do not leave hooks for them. Their complete
-plan is kept in `docs/parked/WASSLA_PROFESSIONAL_AND_COURIER_PLAN.md` for a later subdomain.
+- Never merge into `main` and never deploy without the explicit approval of Ismail, the owner.
+- Work goes to `feature/discovery-professional-delivery` through one pull request per package or
+  task, merged only when every CI check is green, "Schema drift" included.
+- Never skip, delete or weaken a test to get green.
+- Do not build the parked scope (professional transporters, manifest dashboard, custody history,
+  courier handoff) and do not leave hooks for it.
+- There are no real users: no effort on legacy data or backward compatibility.
+- The server is the authority for money, codes, verification and matching.

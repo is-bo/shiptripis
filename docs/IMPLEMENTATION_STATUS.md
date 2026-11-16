@@ -1,5 +1,17 @@
 # Waçla V1 Implementation Status
 
+## Wassla handoff to another account (2026-11-15)
+
+- Docs only, at Ismail's request: the work continues on another account.
+- `HANDOFF.md` rewritten: where the L-series stands (everything merged through L10; L19 paused),
+  what is next (L19, a scan for unnecessary complexity and repeated logic, a repository cleanup,
+  other changes), Ismail's decisions, the open items, where every document lives, and working notes.
+- `CLAUDE.md` rewritten and `AGENTS.md` reduced to a pointer: one set of rules for every agent, no
+  frontend and backend owner split, the current workflow, the hard rules, the quality bar and the
+  invariants as they are after the L-series.
+- Removed as contradicting today's rules: `.claude/MEMORY.md` and `.claude/memory/` (mid-2026).
+- No code changed.
+
 ## Wassla L10 — Final acceptance of the L-series (2026-11-15)
 
 - No product code changed. 22 acceptance tests in `backend/monolith/apps/core/tests/test_l10_*.py`
