@@ -10,7 +10,7 @@ this file. There is no longer a split between a frontend owner and a backend own
 the owner assigns all work, backend included, to whichever agent runs the task.
 
 **Ismail is the owner.** Whoever runs a session acts for him. Product decisions, money rules, scope,
-merging into `main` and deploying stay his.
+and deploying stay his.
 
 ## Read first
 
@@ -29,9 +29,9 @@ record what was built. They never replace a specification.
 
 ## Hard rules
 
-- **Never merge into `main` and never deploy** without Ismail's explicit approval.
-- Work goes to the integration branch `feature/discovery-professional-delivery`: one package or task
-  per branch, one pull request into that branch. Only docs-only board and plan commits go to it
+- **Never deploy** without Ismail's explicit approval.
+- Work goes to `main` (the working branch since 2026-11-16; the old `main` is kept as `main-old`):
+  one package or task per branch, one pull request into `main`. Only docs-only board and plan commits go to it
   directly.
 - **Merge only when every CI check is green, "Schema drift" included,** and the gate review is
   recorded on the pull request (plan 1.6).
@@ -56,11 +56,11 @@ record what was built. They never replace a specification.
 ## How work is done
 
 1. Read the board. Take the next package or the task Ismail gave. One at a time.
-2. Branch from the tip of the integration branch. Build that package and nothing else.
+2. Branch from the tip of `main`. Build that package and nothing else.
 3. Run every check of plan 1.4 that applies. The whole suites, not only the new tests.
 4. Write `docs/PHASE_<id>_<NAME>.md`, add a dated entry at the top of
    `docs/IMPLEMENTATION_STATUS.md`, and fill in the package's handoff block on the board.
-5. Open the pull request into the integration branch, listing each "Done when" line with its
+5. Open the pull request into `main`, listing each "Done when" line with its
    evidence.
 6. Gate review (plan 1.6), recorded on the pull request: every "Done when" line, nothing outside the
    package's scope, a second independent pass on races, authorization, idempotency and money for

@@ -1,5 +1,12 @@
 # Waçla V1 Implementation Status
 
+## Wassla: L-series branch becomes main (2026-11-16)
+
+- At Ismail's request the integration branch `feature/discovery-professional-delivery` became `main`.
+  The old `main` (`03aac94`) is kept as the branch `main-old`; nothing was deleted or force-pushed.
+- The old `main`'s one extra commit (Ismail's README revision) was merged in, keeping his README.
+- `HANDOFF.md`, `CLAUDE.md` and `AGENTS.md` now name `main` as the working branch. No product code changed.
+
 ## Wassla L19 — Findings of final acceptance (2026-11-16)
 
 - Backend only, no migration. Fixes L10's two low findings (release report section 14, plan 5.1g).

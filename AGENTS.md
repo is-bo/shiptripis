@@ -5,8 +5,8 @@ full before any work, then `HANDOFF.md` for where the work stands and what is ne
 
 The rules that are never broken, repeated here in case only this file is read:
 
-- Never merge into `main` and never deploy without the explicit approval of Ismail, the owner.
-- Work goes to `feature/discovery-professional-delivery` through one pull request per package or
+- Never deploy without the explicit approval of Ismail, the owner.
+- Work goes to `main` (the working branch since 2026-11-16) through one pull request per package or
   task, merged only when every CI check is green, "Schema drift" included.
 - Never skip, delete or weaken a test to get green.
 - Do not build the parked scope (professional transporters, manifest dashboard, custody history,

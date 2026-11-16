@@ -11,15 +11,15 @@ needs is in this repository. Nothing here depends on an earlier conversation.
 
 ```
 git fetch origin
-git checkout feature/discovery-professional-delivery
+git checkout main
 ```
 
-All current work is on that branch. `main` is far behind it and must not be touched (section 4).
+All current work is on `main`. Since 2026-11-16 `main` is the L-series branch; the September `main` is kept as `main-old` (section 4). Never deploy without Ismail's approval.
 
 A first message that works for a fresh session:
 
 > Read CLAUDE.md, HANDOFF.md and the board in docs/WASSLA_L_SERIES_PROGRESS.md on the branch
-> feature/discovery-professional-delivery. Tell me where the work stands and what you would do
+> main. Tell me where the work stands and what you would do
 > next, then wait for my go.
 
 ## 2. What Wassla is
@@ -50,7 +50,7 @@ built, merged into the integration branch and accepted by its final package:
 - L10 changed no product code. Its verdict and every number are in
   `docs/WASSLA_L_SERIES_RELEASE_REPORT.md`. Tests on the final build: Django 3,270 passed, Flutter
   1,533 passed, Go race tests clean on 14 packages.
-- **Nothing is merged into `main` and nothing is deployed.** The release report has not yet been
+- **On 2026-11-16 the integration branch became `main`** (at Ismail's request). Nothing is deployed. The release report has not yet been
   formally handed to Ismail for his end review; that is the next step (section 5).
 - **L19** (the two findings of L10) is merged too: PR #51, `bfecca1`, 2026-11-16.
 
@@ -60,9 +60,10 @@ The last commit of the integration branch when this was written: `4478ad9` (boar
 
 | Branch | What it is |
 | --- | --- |
-| `feature/discovery-professional-delivery` | **The integration branch. All work lands here** through pull requests. |
+| `main` | **The working branch. All work lands here** through pull requests. Since 2026-11-16 it holds the whole L-series (it was `feature/discovery-professional-delivery`) plus the old `main`. |
+| `main-old` (`03aac94`) | The `main` before 2026-11-16: last real change in September 2026 (the K-series release record) plus Ismail's README revision. Kept for history; do not build on it. |
+| `feature/discovery-professional-delivery` | The former integration branch, now the same commit as `main` was on 2026-11-16. No new work goes here. |
 | `feature/wassla-v3-baseline` (`dd7f820`) | The baseline the integration branch started from: the app before the L-series. No pull request exists for it. |
-| `main` | Last real change in September 2026 (the K-series release record). Far behind. **Never merge into it without Ismail's explicit approval.** |
 | `codex/rebrand-waçla`, `codex/v1-vps-readiness`, `codex/v2-email-readiness` | Older stacked branches. Each is contained in the next, and all are contained in the baseline. |
 | `claude/project-thread-*` | One per finished package, all squash-merged. Safe to delete once Ismail agrees (section 6). |
 
@@ -199,7 +200,7 @@ not change:
   check: `Go — build, vet, unit tests`, `Go — integration tests (real Redis)`, the four
   `Django — tests (shard N)` jobs, `Django — migrations + tests + lint`,
   `Production config + static web`, `Flutter — format, analyze, tests` and `Schema drift`.
-- After a merge, the board is updated in a small docs-only commit on the integration branch. Pull
+- After a merge, the board is updated in a small docs-only commit on `main`. Pull
   before editing it.
 - Ismail did not want to be asked small questions during the build. A question about what the
   specification or plan means, or a choice between two ways to build the same rule, is settled by
@@ -252,7 +253,7 @@ Locked. Do not reopen them; the plan's section 5 has the dates and the detail.
   including how it is built, with diagrams.
 
 **Process**
-- Never merge into `main` or deploy without his approval. Model and effort exactly as planned.
+- Never deploy without his approval; work reaches `main` only through pull requests that follow the gate. Model and effort exactly as planned.
 - The app has no real users: no legacy or backward-compatibility work.
 - Quality bar: impeccable UX; clean code, dead and messy code removed; location, finance and
   admin-control logic airtight.
