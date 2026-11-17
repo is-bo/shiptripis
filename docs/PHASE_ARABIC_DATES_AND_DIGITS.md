@@ -28,6 +28,9 @@ Western digits (0-9) instead of Arabic-Indic ones (٠-٩), on every surface.
   used by the app and by the test harnesses, which had three copies of the list.
 - **Email dates are in UTC and say so.** A recipient's time zone is not known when the email is
   written. The label "Expires at (UTC)" became "Expires at", since the value now ends in "UTC".
+- **An Arabic date in a plain-text email is not forced left to right.** The text part wraps machine
+  values (codes, tracking numbers, links) in a left-to-right isolate; a value written in Arabic is now
+  left alone, otherwise the date would read backwards.
 - **The Arabic time picker is 24-hour**, like every time the app prints (`21:40`) and like French.
   Flutter's Arabic default was a 12-hour dial with ص and م.
 - Old documents that quote Arabic-Indic digits (for example `PHASE_J6_FINAL_UX_REVIEW.md`) are
@@ -46,6 +49,12 @@ Western digits (0-9) instead of Arabic-Indic ones (٠-٩), on every surface.
   money, times and translated counts, `MaterialLocalizations`, and the date and time pickers on screen.
   The Material and date picker tests fail with Flutter's stock delegate.
 - `apps/core/tests/test_locale_format.py` and two email tests in `test_email_presentation.py`.
+
+## Checks run
+
+Flutter: format, analyze and the whole suite, 1,539 passing (1,533 before plus 6). Django: ruff, and
+the notification and core tests locally (234); the whole suite runs on Postgres in CI. Static web
+check passes, and fails on the old Arabic page.
 
 ## Screenshots
 
