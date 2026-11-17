@@ -2210,8 +2210,7 @@
     "description": "findTravelersCount",
     "placeholders": {
       "count": {
-        "type": "int",
-        "format": "compact"
+        "type": "int"
       }
     }
   },

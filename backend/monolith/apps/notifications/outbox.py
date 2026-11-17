@@ -38,7 +38,7 @@ import uuid
 import smtplib
 import hashlib
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone as datetime_timezone
+from datetime import datetime, timedelta
 from urllib.parse import quote, urlsplit
 from email.utils import parseaddr
 
@@ -52,6 +52,7 @@ from django.utils.translation import gettext as _
 
 from apps.core import redis_bus
 from apps.core.languages import normalize_communication_language
+from apps.core.locale_format import format_utc_datetime
 from apps.core.models import PublishedEvent
 
 from .email_layout import EmailDocument, to_html, to_text
@@ -355,6 +356,12 @@ def _facts(context: dict, *extra: tuple[str, str]) -> tuple[tuple[str, str], ...
     if tracking_number:
         rows.append((_("Tracking number"), str(tracking_number)))
     return tuple(rows)
+
+
+def _moment(value) -> str:
+    """A date in the language being rendered; see `apps.core.locale_format`."""
+
+    return format_utc_datetime(value, translation.get_language())
 
 
 def _amount_fact(context: dict) -> tuple[str, str]:
@@ -822,7 +829,8 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
                 context,
                 (
                     _("Payment protection runs until"),
-                    context.get("protection_ends_at", _("the end of the window")),
+                    _moment(context.get("protection_ends_at"))
+                    or _("the end of the window"),
                 ),
             ),
         )
@@ -854,7 +862,7 @@ def _build_document(message: OutboundMessage) -> EmailDocument:
             ),
             facts=_facts(
                 context,
-                (_("Protection ends at"), context.get("protection_ends_at", "")),
+                (_("Protection ends at"), _moment(context.get("protection_ends_at"))),
             ),
         )
     if kind == OutboundMessage.Kind.DISPUTE_OPENED:
@@ -996,8 +1004,9 @@ def build_document(message: OutboundMessage) -> EmailDocument:
     if message.secret_ref.startswith("outbound_secret:"):
         vault = OutboundSecret.objects.filter(pk=message.secret_ref.split(":", 1)[1]).first()
         if vault:
-            deadline = vault.expires_at.astimezone(datetime_timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-            document = replace(document, facts=(*document.facts, (_("Expires at (UTC)"), deadline)))
+            document = replace(
+                document, facts=(*document.facts, (_("Expires at"), _moment(vault.expires_at)))
+            )
     return document
 
 

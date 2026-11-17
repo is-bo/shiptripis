@@ -30,11 +30,11 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shiptrip/app/app_settings.dart';
 import 'package:shiptrip/app/router.dart';
 import 'package:shiptrip/core/api/api_exception.dart';
 import 'package:shiptrip/core/session/session.dart';
@@ -150,13 +150,8 @@ class _FormHarness {
         container: container,
         child: MaterialApp.router(
           locale: locale,
-          supportedLocales: const [Locale('en'), Locale('fr'), Locale('ar')],
-          localizationsDelegates: const [
-            L.delegate,
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
+          supportedLocales: supportedLocales,
+          localizationsDelegates: appLocalizationsDelegates,
           theme: buildAppTheme(brightness: Brightness.light, locale: locale),
           builder: (context, inner) => MediaQuery(
             data: MediaQuery.of(context).copyWith(

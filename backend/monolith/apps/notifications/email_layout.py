@@ -30,6 +30,7 @@ Constraints this file works inside:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from html import escape
 from urllib.parse import urlsplit
@@ -107,10 +108,22 @@ def _footer_lines(support_email: str = "") -> tuple[str, ...]:
     )
 
 
-def _plain_machine_value(value: str, *, rtl: bool) -> str:
-    """Keep references, numbers and URLs readable inside an RTL text part."""
+_ARABIC_LETTER = re.compile("[\u0600-\u06ff]")
 
-    if not rtl or not value or (value.startswith("\u2066") and value.endswith("\u2069")):
+
+def _plain_machine_value(value: str, *, rtl: bool) -> str:
+    """Keep references, numbers and URLs readable inside an RTL text part.
+
+    A value written in Arabic, such as a date (`15 أوت 2026، 07:30 UTC`), is
+    text rather than a machine value: forcing it left-to-right would reverse it.
+    """
+
+    if (
+        not rtl
+        or not value
+        or (value.startswith("\u2066") and value.endswith("\u2069"))
+        or _ARABIC_LETTER.search(value)
+    ):
         return value
     return f"\u2066{value}\u2069"
 

@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../design/theme.dart';
-import '../l10n/app_localizations.dart';
 import '../core/push/push_coordinator.dart';
 import 'app_state.dart';
 import 'app_settings.dart';
@@ -34,12 +32,7 @@ class ShipTripApp extends ConsumerWidget {
 
       locale: locale,
       supportedLocales: supportedLocales,
-      localizationsDelegates: const [
-        L.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
+      localizationsDelegates: appLocalizationsDelegates,
 
       theme: buildAppTheme(brightness: Brightness.light, locale: resolved),
       darkTheme: buildAppTheme(brightness: Brightness.dark, locale: resolved),

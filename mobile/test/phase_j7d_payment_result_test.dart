@@ -15,11 +15,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart' hide TextDirection;
+import 'package:shiptrip/app/app_settings.dart';
 import 'package:shiptrip/app/router.dart';
 import 'package:shiptrip/core/live/live_updates.dart';
 import 'package:shiptrip/core/money/money.dart';
@@ -367,13 +367,8 @@ Future<GoRouter> _pumpRouter(
       container: container,
       child: MaterialApp.router(
         locale: _locale,
-        supportedLocales: const [Locale('en'), Locale('fr'), Locale('ar')],
-        localizationsDelegates: const [
-          L.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
+        supportedLocales: supportedLocales,
+        localizationsDelegates: appLocalizationsDelegates,
         theme: buildAppTheme(brightness: Brightness.light, locale: _locale),
         routerConfig: router,
       ),
