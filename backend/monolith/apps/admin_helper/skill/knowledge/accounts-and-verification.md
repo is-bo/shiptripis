@@ -18,15 +18,17 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 
 ## Which sign-in methods exist?
 - Email and password. Wrong details: "Incorrect email or password." Limit 10 tries per minute.
-- Google sign-in: the server has a Google sign-in endpoint, but no screen in the app offers it today. Rules of the endpoint:
-  - Google must say the email is verified, else "Google account email is not verified."
-  - If the email already has an account, the Google identity is linked to it. If that account never confirmed its email, Google's proof wins, because whoever opened it never proved they own the address: its password stops working, every signed-in session ends and every phone stops getting its notifications, what was typed at sign-up is replaced as for a new account (name from Google; phone, region and language from this sign-in; phone tick cleared), and the account becomes verified. The owner can set a password again with "reset password". A confirmed account links to Google and nothing of it changes. If no account exists, a new one is made with a password nobody can use, and the email is marked verified.
+- Google sign-in and Sign in with Apple: the server has an endpoint for each (`/api/auth/oauth/google`, `/api/auth/oauth/apple`), but no screen in the app offers them today. Both follow one rule:
+  - A Google or Apple account already linked signs in to its Wassla account.
+  - The provider must say the email is verified, else "Google account email is not verified" (Apple: "Apple account email is not verified."). Otherwise, if the email already has an account, the identity is linked to it. If that account never confirmed its email, the provider's proof wins, because whoever opened it never proved they own the address: its password stops working, every signed-in session ends and every phone stops getting its notifications, what was typed at sign-up is replaced as for a new account (name from the provider; phone, region and language from this sign-in; phone tick cleared), and the account becomes verified. The owner can set a password again with "reset password". A confirmed account is linked and nothing of it changes. If no account exists, a new one is made with a password nobody can use, and the email is marked verified. One email can be linked to both Google and Apple.
+  - A banned or disabled account gets no sign-in, whether its Google or Apple account was already linked or only the email matches: the answer is `account_disabled` "This account is disabled." (403), and nothing of the account changes. After a restore, the person can sign in again the same way.
+  - The name comes from the provider. With no name, the name stays empty (it is never made from the email); the person can add it in Profile. Apple gives the name to the app only on the first sign-in, never inside its token, so the app sends it with that request.
   - Phone, region and language can be sent when it creates a new account.
-  - If Google cannot be reached: a retryable "unavailable" answer (503). Limit 10 per minute.
-  - It does not check for a ban before giving tokens, but the server refuses an inactive (banned or disabled) account on every request, so a banned person still cannot use the app.
-- Apple is listed as a possible provider in the data, but there is no Apple sign-in endpoint. Not in the app.
+  - Two first sign-ins at the same moment make one account and one link, never an error.
+  - Not set up on the server: `google_sign_in_unavailable` "Sign in with Google is not available right now." / `apple_sign_in_unavailable` "Sign in with Apple is not available right now." (503). Google or Apple cannot be reached: a retryable 503 with the same code. Limit 10 per minute each.
+  - Apple checks: the token must be signed with one of Apple's published keys (RS256 only), issued by Apple, made for the Wassla iOS app (its bundle id, `APPLE_SIGN_IN_CLIENT_IDS`), not expired (30 seconds of clock tolerance), carry the one-time value the app made for this sign-in, and say the email is verified. Any failure is a 401 with a short reason, for example "The Apple identity token is not valid." If the person chose Apple's "Hide My Email", the email is Apple's relay address, so it matches no existing account.
 - There is no phone/SMS sign-in.
-<!-- src: backend/monolith/apps/accounts/views.py (GoogleSignInView), models.py (OAuthIdentity), urls.py -->
+<!-- src: backend/monolith/apps/accounts/social.py, apple.py, google.py, views.py (GoogleSignInView, AppleSignInView), models.py (OAuthIdentity), urls.py, config/settings/base.py -->
 
 ## How long does a sign-in last?
 - Access token: 5 minutes (setting `JWT_ACCESS_TTL_SECONDS`, 300). Refresh token: 30 days (2,592,000 s). Each refresh gives a new refresh token and retires the old one.
@@ -39,15 +41,15 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 - A signed-in member can ask for a new code: `POST /api/auth/verify-email/resend` (limit 5 per hour, server setting `DRF_EMAIL_VERIFY_RESEND_THROTTLE_RATE`). It always answers "done". A verified account is sent nothing; otherwise every older unused code stops working, its email is withdrawn if still waiting, and a fresh code is emailed. The app's code screen has a "Send the code again" button for it, and says only the code in the newest email works. The same screen opens from Profile ("Verify email", shown while the email is not confirmed) and whenever posting a parcel or changing payout setup is refused with `email_verification_required`; the member returns to the form with what they typed still there.
 - Any wrong code or unknown email gives the same answer: "Invalid code." (so nobody can find out which emails exist).
 - Correct code sets "Email verified". Doing it again for a verified account is fine.
-- Posting a parcel needs a verified email (V1 specification: sender verification is email-only). Until then creating a delivery request is refused with `email_verification_required` "Confirm your email address first." Changing payout setup needs it too (see money.md). Nothing else checks the tick: browsing, pricing, travelling, ID upload and everything else stay open. Google sign-up and invited staff accounts are marked verified automatically; signing in with Google on an unconfirmed account with the same email verifies it (see Google sign-in above).
+- Posting a parcel needs a verified email (V1 specification: sender verification is email-only). Until then creating a delivery request is refused with `email_verification_required` "Confirm your email address first." Changing payout setup needs it too (see money.md). Nothing else checks the tick: browsing, pricing, travelling, ID upload and everything else stay open. Google or Apple sign-up and invited staff accounts are marked verified automatically; signing in with Google or Apple on an unconfirmed account with the same email verifies it (see sign-in methods above).
 - Staff see "Email verified" or "Email not verified" on the person page.
-<!-- src: backend/monolith/apps/accounts/models.py, views.py (VerifyEmailView, ResendVerifyEmailView, GoogleSignInView), parcels/views.py (DeliveryV1CreateView), console_people.py -->
+<!-- src: backend/monolith/apps/accounts/models.py, views.py (VerifyEmailView, ResendVerifyEmailView), social.py, parcels/views.py (DeliveryV1CreateView), console_people.py -->
 
 ## What if a user forgets the password?
 - They enter their email. The answer is always "accepted" (202) even for unknown emails.
 - A 6-digit code is emailed, valid 15 minutes, 5 tries. Limit 5 per hour, shared by asking for a code and using it. Only the newest code counts.
 - With the code and a new password (same rules as sign-up) the password changes, every other signed-in session ends (refresh tokens revoked, phones stop getting notifications), and the email counts as confirmed, because the code went to it. A security email "password reset completed" is sent. Wrong or used code: "Invalid code." and nothing changes. A sign-in already open keeps working for at most 5 minutes (the access token's life, `JWT_ACCESS_TTL_SECONDS`).
-- Google-only accounts have no password; they can set one this way.
+- Google-only and Apple-only accounts have no password; they can set one this way.
 <!-- src: backend/monolith/apps/accounts/views.py, models.py -->
 
 ## What is on a profile and what can the user change?
@@ -64,7 +66,7 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 | Active | Can sign in and use the app. |
 | Banned | Staff banned them. Cannot sign in. |
 | Sign-in disabled | Account switched off without a ban: a staff account disabled on Staff & access, or any account switched off in the technical Django admin. Cannot sign in. |
-- A banned or disabled person who tries to sign in sees "Incorrect email or password." The server refuses inactive accounts before its own "This account is disabled." check, so that message does not appear in practice.
+- A banned or disabled person who tries to sign in with a password sees "Incorrect email or password." The server refuses inactive accounts before its own "This account is disabled." check, so that message does not appear for a password. With Google or Apple they get `account_disabled` "This account is disabled." (see sign-in methods).
 - There is no self-service "delete account" or "deactivate account" in the app or API. Not in the app. The helper reports `deactivated` for an inactive non-banned account.
 - Users list filters: Active, Restricted (banned or disabled).
 <!-- src: backend/monolith/apps/admin_panel/console_people.py (_header), console_views.py, admin_helper/resources.py, mobile (no delete feature) -->
@@ -77,7 +79,7 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 - Restore turns it back on: "The person can sign in again."
 - Refusals: "You cannot ban or restore your own account." / "This is a staff account. Staff access is changed on Staff & access, not here." / "This account is already banned." / "This account is not banned." If a colleague changed it first: "... Nothing was changed."
 - The AI helper can prepare the same change (`user.ban`, `user.unban`) with a change key; the admin must press Confirm.
-- At sign-in a banned person sees "Incorrect email or password." (the same answer as wrong details).
+- At a password sign-in a banned person sees "Incorrect email or password." (the same answer as wrong details); with Google or Apple, "This account is disabled."
 <!-- src: backend/monolith/apps/admin_panel/console_account.py, staff_actions.py, matching/compatibility.py, discovery/profiles.py, finance/payout_profiles.py, admin_helper/actions.py -->
 
 ## What is ID verification and who needs it?
@@ -186,6 +188,7 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 <!-- src: CLAUDE.md invariants, backend/monolith/apps/trips/models.py (JourneyLegProof), admin_panel/console_views.py -->
 
 ## What about people without an account (recipient and guest payer)?
+- Browsing: the server lets a visitor without an account read Home's public lists, public profiles and reviews (see trips-and-matching.md, Home discovery). The app does not offer browsing without an account yet.
 - Recipient: has no account. The sender records their name, email, optional phone and a delivery note (note up to 1,000 characters), only after funding and before pickup is confirmed. Errors: `pickup_already_confirmed`, `deal_not_funded` "Recipient details are collected once the delivery is funded.", only the sender may do it. Saving the recipient is what moves the deal from `funded` to `pickup_ready`. The traveler sees only the recipient's name and note, and only once the parcel is with them. Nobody else sees the recipient details. The recipient gets the delivery code by email in the language chosen (sender's language by default).
 - Guest payer: someone with no account who pays a sender's order from a link (for example a relative in Algiers). The order owner creates the link in the app (one live link per order; making a new one cancels the old one; can be shown again to share; can be revoked). Optional private label such as "Dad".
 - The link lasts 3 days by default (`payments.guest.link_ttl_seconds`, 259,200 s; allowed 10 minutes to 30 days). Settings > Business settings shows it read only ("Guest payment link lifetime"); it changes only through a full new settings version on the staff API.

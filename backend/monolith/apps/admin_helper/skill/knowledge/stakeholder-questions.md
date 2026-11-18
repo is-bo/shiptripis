@@ -36,7 +36,7 @@ See pricing.md and money.md for the full formulas.
 - Languages: English (default), French, Arabic (right to left) in the app and the home page. Emails follow the user's email language. The legal pages are English only for now.
 - Currency: EUR is the real currency (stored in cents). Chargily shows a DZD amount converted by the server from EUR (rate typed by an admin, shipped placeholder 150 DZD per EUR, minimum 75 DZD). Stripe pays in EUR.
 - Whether a country is actually "live" for users cannot be read from the code: signup asks for no country. Which payment rails are on is a setting (next section).
-- Not offered: sea legs (off by default), a wallet, phone or SMS sign-in, Apple sign-in, account deletion in the app.
+- Not offered: sea legs (off by default), a wallet, phone or SMS sign-in, account deletion in the app. Google sign-in and Sign in with Apple exist on the server only (Apple stays off until the iOS bundle id is set); no app screen offers them yet.
 <!-- src: apps/core/languages.py, apps/trips/transport_rules.py, apps/finance/policy.py, web/en/index.html -->
 
 ## What is switched on or off in the shipped settings, and where do I change it?
@@ -108,7 +108,7 @@ See admin-console.md for the role table.
 - Delivery codes: stored hashed and sealed under their own separate secret. 8 characters; 5 wrong tries lock it 15 minutes; after 3 lockouts it locks fully; at most 12 tries per hour. Only the sender can ask for a new one.
 - Keys and links stored as fingerprints or hashes only: AI helper keys (fingerprint plus last four characters), staff invitation links, guest payment links.
 - AI helper: a read key lasts at most 8 hours, a change key 30 minutes; it acts only with that admin's rights; every change it prepares needs the admin's own click after a fresh two-step; the Super Admin can stop any key.
-- Rate limits (default per user or address): sign-up 5 per hour; sign-in 10 per minute; password reset 5 per hour; email verify 10 per hour; Google sign-in 10 per minute; uploads 20 per hour; chat 60 per minute; checkout 20 per minute; guest payment 20 per minute; dispute evidence 20 per minute; handover codes 12 per minute; general API 60 per minute anonymous, 600 per minute signed in; AI helper 60 per minute per key (setting 10 to 300).
+- Rate limits (default per user or address): sign-up 5 per hour; sign-in 10 per minute; password reset 5 per hour; email verify 10 per hour; Google sign-in 10 per minute; Apple sign-in 10 per minute; Home discovery 10 per minute (per member, or per address for a visitor without an account); uploads 20 per hour; chat 60 per minute; checkout 20 per minute; guest payment 20 per minute; dispute evidence 20 per minute; handover codes 12 per minute; general API 60 per minute anonymous, 600 per minute signed in; AI helper 60 per minute per key (setting 10 to 300).
 - Audit log: who, what, which record, reason, when; immutable; secret-looking fields redacted.
 - Web: HTTPS only, secure cookies, HSTS for 30 days, no sniffing, strict referrer policy.
 - Payments: provider events are verified by signature and stored once, so replays do nothing; the database refuses over-collecting or refunding more than was captured; money moves through an append-only ledger; test and live payments are never mixed.
