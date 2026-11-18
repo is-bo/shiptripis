@@ -78,6 +78,7 @@ Two endpoints, 20 reviews per page by default, at most 50 per page, offset up to
    - a sender coming from Find Travelers who names their own OPEN delivery request, when the matching engine finds that trip a compatible candidate: allowed even if the listings switch is off. Any failure of this path answers exactly like an unknown trip (`trip_not_found`, "This trip is not available.") so it reveals nothing;
    - otherwise the public path: only if the listings switch is on and the trip is listed now.
 3. If the listings switch is off and no other door applies, trip reviews show "Reviews are not available".
+4. A visitor without an account reads both lists on the public paths only: person reviews as in 1; trip reviews only while the listings switch is on and the trip is listed now. A visitor naming a request gets `trip_not_found`, like an unknown trip. "Whether the viewer reported it" is always empty for a visitor.
 - Gone: "This is not available any more" / "The person or trip is no longer listed, so its reviews cannot be shown."
 - No reviews yet: "No reviews yet. A review shows here once a delivery has been rated and the review is open to both sides."
 - A member's own received ratings are always readable on Profile, "Ratings". The person reviews list above follows the profiles switch even for the owner.

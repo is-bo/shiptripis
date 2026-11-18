@@ -160,13 +160,15 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 
 ## Which sign-in methods exist?
 - Email and password. Wrong details: "Incorrect email or password." Limit 10 tries per minute.
-- Google sign-in: the server has a Google sign-in endpoint, but no screen in the app offers it today. Rules of the endpoint:
-  - Google must say the email is verified, else "Google account email is not verified."
-  - If the email already has an account, the Google identity is linked to it. If that account never confirmed its email, Google's proof wins, because whoever opened it never proved they own the address: its password stops working, every signed-in session ends and every phone stops getting its notifications, what was typed at sign-up is replaced as for a new account (name from Google; phone, region and language from this sign-in; phone tick cleared), and the account becomes verified. The owner can set a password again with "reset password". A confirmed account links to Google and nothing of it changes. If no account exists, a new one is made with a password nobody can use, and the email is marked verified.
+- Google sign-in and Sign in with Apple: the server has an endpoint for each (`/api/auth/oauth/google`, `/api/auth/oauth/apple`), but no screen in the app offers them today. Both follow one rule:
+  - A Google or Apple account already linked signs in to its Wassla account.
+  - The provider must say the email is verified, else "Google account email is not verified" (Apple: "Apple account email is not verified."). Otherwise, if the email already has an account, the identity is linked to it. If that account never confirmed its email, the provider's proof wins, because whoever opened it never proved they own the address: its password stops working, every signed-in session ends and every phone stops getting its notifications, what was typed at sign-up is replaced as for a new account (name from the provider; phone, region and language from this sign-in; phone tick cleared), and the account becomes verified. The owner can set a password again with "reset password". A confirmed account is linked and nothing of it changes. If no account exists, a new one is made with a password nobody can use, and the email is marked verified. One email can be linked to both Google and Apple.
+  - A banned or disabled account gets no sign-in, whether its Google or Apple account was already linked or only the email matches: the answer is `account_disabled` "This account is disabled." (403), and nothing of the account changes. After a restore, the person can sign in again the same way.
+  - The name comes from the provider. With no name, the name stays empty (it is never made from the email); the person can add it in Profile. Apple gives the name to the app only on the first sign-in, never inside its token, so the app sends it with that request.
   - Phone, region and language can be sent when it creates a new account.
-  - If Google cannot be reached: a retryable "unavailable" answer (503). Limit 10 per minute.
-  - It does not check for a ban before giving tokens, but the server refuses an inactive (banned or disabled) account on every request, so a banned person still cannot use the app.
-- Apple is listed as a possible provider in the data, but there is no Apple sign-in endpoint. Not in the app.
+  - Two first sign-ins at the same moment make one account and one link, never an error.
+  - Not set up on the server: `google_sign_in_unavailable` "Sign in with Google is not available right now." / `apple_sign_in_unavailable` "Sign in with Apple is not available right now." (503). Google or Apple cannot be reached: a retryable 503 with the same code. Limit 10 per minute each.
+  - Apple checks: the token must be signed with one of Apple's published keys (RS256 only), issued by Apple, made for the Wassla iOS app (its bundle id, `APPLE_SIGN_IN_CLIENT_IDS`), not expired (30 seconds of clock tolerance), carry the one-time value the app made for this sign-in, and say the email is verified. Any failure is a 401 with a short reason, for example "The Apple identity token is not valid." If the person chose Apple's "Hide My Email", the email is Apple's relay address, so it matches no existing account.
 - There is no phone/SMS sign-in.
 
 ## How long does a sign-in last?
@@ -179,14 +181,14 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 - A signed-in member can ask for a new code: `POST /api/auth/verify-email/resend` (limit 5 per hour, server setting `DRF_EMAIL_VERIFY_RESEND_THROTTLE_RATE`). It always answers "done". A verified account is sent nothing; otherwise every older unused code stops working, its email is withdrawn if still waiting, and a fresh code is emailed. The app's code screen has a "Send the code again" button for it, and says only the code in the newest email works. The same screen opens from Profile ("Verify email", shown while the email is not confirmed) and whenever posting a parcel or changing payout setup is refused with `email_verification_required`; the member returns to the form with what they typed still there.
 - Any wrong code or unknown email gives the same answer: "Invalid code." (so nobody can find out which emails exist).
 - Correct code sets "Email verified". Doing it again for a verified account is fine.
-- Posting a parcel needs a verified email (V1 specification: sender verification is email-only). Until then creating a delivery request is refused with `email_verification_required` "Confirm your email address first." Changing payout setup needs it too (see money.md). Nothing else checks the tick: browsing, pricing, travelling, ID upload and everything else stay open. Google sign-up and invited staff accounts are marked verified automatically; signing in with Google on an unconfirmed account with the same email verifies it (see Google sign-in above).
+- Posting a parcel needs a verified email (V1 specification: sender verification is email-only). Until then creating a delivery request is refused with `email_verification_required` "Confirm your email address first." Changing payout setup needs it too (see money.md). Nothing else checks the tick: browsing, pricing, travelling, ID upload and everything else stay open. Google or Apple sign-up and invited staff accounts are marked verified automatically; signing in with Google or Apple on an unconfirmed account with the same email verifies it (see sign-in methods above).
 - Staff see "Email verified" or "Email not verified" on the person page.
 
 ## What if a user forgets the password?
 - They enter their email. The answer is always "accepted" (202) even for unknown emails.
 - A 6-digit code is emailed, valid 15 minutes, 5 tries. Limit 5 per hour, shared by asking for a code and using it. Only the newest code counts.
 - With the code and a new password (same rules as sign-up) the password changes, every other signed-in session ends (refresh tokens revoked, phones stop getting notifications), and the email counts as confirmed, because the code went to it. A security email "password reset completed" is sent. Wrong or used code: "Invalid code." and nothing changes. A sign-in already open keeps working for at most 5 minutes (the access token's life, `JWT_ACCESS_TTL_SECONDS`).
-- Google-only accounts have no password; they can set one this way.
+- Google-only and Apple-only accounts have no password; they can set one this way.
 
 ## What is on a profile and what can the user change?
 - Fields: id, email, full name, phone, region, role, email language, phone verified, email verified, ID verified, ID status, rejection reason, date joined.
@@ -201,7 +203,7 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 | Active | Can sign in and use the app. |
 | Banned | Staff banned them. Cannot sign in. |
 | Sign-in disabled | Account switched off without a ban: a staff account disabled on Staff & access, or any account switched off in the technical Django admin. Cannot sign in. |
-- A banned or disabled person who tries to sign in sees "Incorrect email or password." The server refuses inactive accounts before its own "This account is disabled." check, so that message does not appear in practice.
+- A banned or disabled person who tries to sign in with a password sees "Incorrect email or password." The server refuses inactive accounts before its own "This account is disabled." check, so that message does not appear for a password. With Google or Apple they get `account_disabled` "This account is disabled." (see sign-in methods).
 - There is no self-service "delete account" or "deactivate account" in the app or API. Not in the app. The helper reports `deactivated` for an inactive non-banned account.
 - Users list filters: Active, Restricted (banned or disabled).
 
@@ -213,7 +215,7 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 - Restore turns it back on: "The person can sign in again."
 - Refusals: "You cannot ban or restore your own account." / "This is a staff account. Staff access is changed on Staff & access, not here." / "This account is already banned." / "This account is not banned." If a colleague changed it first: "... Nothing was changed."
 - The AI helper can prepare the same change (`user.ban`, `user.unban`) with a change key; the admin must press Confirm.
-- At sign-in a banned person sees "Incorrect email or password." (the same answer as wrong details).
+- At a password sign-in a banned person sees "Incorrect email or password." (the same answer as wrong details); with Google or Apple, "This account is disabled."
 
 ## What is ID verification and who needs it?
 - A traveler must have a current approved ID before a journey can be published, listed, matched or accepted. App text: "You need to be verified before you can publish a journey." and "You're verified. You can publish journeys and carry parcels."
@@ -310,6 +312,7 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 - Passwords and one-time codes are stored hashed.
 
 ## What about people without an account (recipient and guest payer)?
+- Browsing: the server lets a visitor without an account read Home's public lists, public profiles and reviews (see trips-and-matching.md, Home discovery). The app does not offer browsing without an account yet.
 - Recipient: has no account. The sender records their name, email, optional phone and a delivery note (note up to 1,000 characters), only after funding and before pickup is confirmed. Errors: `pickup_already_confirmed`, `deal_not_funded` "Recipient details are collected once the delivery is funded.", only the sender may do it. Saving the recipient is what moves the deal from `funded` to `pickup_ready`. The traveler sees only the recipient's name and note, and only once the parcel is with them. Nobody else sees the recipient details. The recipient gets the delivery code by email in the language chosen (sender's language by default).
 - Guest payer: someone with no account who pays a sender's order from a link (for example a relative in Algiers). The order owner creates the link in the app (one live link per order; making a new one cancels the old one; can be shown again to share; can be revoked). Optional private label such as "Dad".
 - The link lasts 3 days by default (`payments.guest.link_ttl_seconds`, 259,200 s; allowed 10 minutes to 30 days). Settings > Business settings shows it read only ("Guest payment link lifetime"); it changes only through a full new settings version on the staff API.
@@ -820,7 +823,7 @@ flowchart LR
 One line per folder in `backend/monolith/apps`. A member never sees these names; staff see them only in "Technical records".
 | App | Owns |
 |---|---|
-| `accounts` | People: sign-up, sign-in, tokens, email codes, ban state, Google link |
+| `accounts` | People: sign-up, sign-in, tokens, email codes, ban state, Google and Apple links |
 | `core` | Shared plumbing: business settings, policy defaults, scheduling of events, health, languages, locks that keep money steps in order |
 | `kyc` | ID verification records (Go `kyc` takes uploads; Django stores and reviews) |
 | `trips` | Journeys and legs, ticket proofs, leg progress, schedule changes (the old single `Trip` is history) |
@@ -2434,6 +2437,7 @@ Two endpoints, 20 reviews per page by default, at most 50 per page, offset up to
    - a sender coming from Find Travelers who names their own OPEN delivery request, when the matching engine finds that trip a compatible candidate: allowed even if the listings switch is off. Any failure of this path answers exactly like an unknown trip (`trip_not_found`, "This trip is not available.") so it reveals nothing;
    - otherwise the public path: only if the listings switch is on and the trip is listed now.
 3. If the listings switch is off and no other door applies, trip reviews show "Reviews are not available".
+4. A visitor without an account reads both lists on the public paths only: person reviews as in 1; trip reviews only while the listings switch is on and the trip is listed now. A visitor naming a request gets `trip_not_found`, like an unknown trip. "Whether the viewer reported it" is always empty for a visitor.
 - Gone: "This is not available any more" / "The person or trip is no longer listed, so its reviews cannot be shown."
 - No reviews yet: "No reviews yet. A review shows here once a delivery has been rated and the review is open to both sides."
 - A member's own received ratings are always readable on Profile, "Ratings". The person reviews list above follows the profiles switch even for the owner.
@@ -2823,7 +2827,7 @@ See pricing.md and money.md for the full formulas.
 - Languages: English (default), French, Arabic (right to left) in the app and the home page. Emails follow the user's email language. The legal pages are English only for now.
 - Currency: EUR is the real currency (stored in cents). Chargily shows a DZD amount converted by the server from EUR (rate typed by an admin, shipped placeholder 150 DZD per EUR, minimum 75 DZD). Stripe pays in EUR.
 - Whether a country is actually "live" for users cannot be read from the code: signup asks for no country. Which payment rails are on is a setting (next section).
-- Not offered: sea legs (off by default), a wallet, phone or SMS sign-in, Apple sign-in, account deletion in the app.
+- Not offered: sea legs (off by default), a wallet, phone or SMS sign-in, account deletion in the app. Google sign-in and Sign in with Apple exist on the server only (Apple stays off until the iOS bundle id is set); no app screen offers them yet.
 
 ## What is switched on or off in the shipped settings, and where do I change it?
 | Thing | Shipped state | Where to change it |
@@ -2889,7 +2893,7 @@ See admin-console.md for the role table.
 - Delivery codes: stored hashed and sealed under their own separate secret. 8 characters; 5 wrong tries lock it 15 minutes; after 3 lockouts it locks fully; at most 12 tries per hour. Only the sender can ask for a new one.
 - Keys and links stored as fingerprints or hashes only: AI helper keys (fingerprint plus last four characters), staff invitation links, guest payment links.
 - AI helper: a read key lasts at most 8 hours, a change key 30 minutes; it acts only with that admin's rights; every change it prepares needs the admin's own click after a fresh two-step; the Super Admin can stop any key.
-- Rate limits (default per user or address): sign-up 5 per hour; sign-in 10 per minute; password reset 5 per hour; email verify 10 per hour; Google sign-in 10 per minute; uploads 20 per hour; chat 60 per minute; checkout 20 per minute; guest payment 20 per minute; dispute evidence 20 per minute; handover codes 12 per minute; general API 60 per minute anonymous, 600 per minute signed in; AI helper 60 per minute per key (setting 10 to 300).
+- Rate limits (default per user or address): sign-up 5 per hour; sign-in 10 per minute; password reset 5 per hour; email verify 10 per hour; Google sign-in 10 per minute; Apple sign-in 10 per minute; Home discovery 10 per minute (per member, or per address for a visitor without an account); uploads 20 per hour; chat 60 per minute; checkout 20 per minute; guest payment 20 per minute; dispute evidence 20 per minute; handover codes 12 per minute; general API 60 per minute anonymous, 600 per minute signed in; AI helper 60 per minute per key (setting 10 to 300).
 - Audit log: who, what, which record, reason, when; immutable; secret-looking fields redacted.
 - Web: HTTPS only, secure cookies, HSTS for 30 days, no sniffing, strict referrer policy.
 - Payments: provider events are verified by signature and stored once, so replays do nothing; the database refuses over-collecting or refunding more than was captured; money moves through an append-only ledger; test and live payments are never mixed.
@@ -3232,6 +3236,7 @@ Settings (console Business settings, "Marketplace features" card; stored under `
 | `trip_fit_max_travelers` | 30 | 1-100 |
 | `trip_fit_daily_cap` | 5 | 1-50 |
 - A switched-off tier answers normally with state `disabled` (the section simply is not offered). If settings are unreadable discovery answers 503 "Discovery is temporarily unavailable."
+- Who may read: Listings (trips and requests), People, a person's page and both review lists are public. A visitor without an account gets the same cards and the same disabled states as a member; a member's own trips, requests and profile are left out of their own lists, a visitor's lists leave nothing out. Matches, "I can carry this", the own public profile and route alerts need an account (401 without one). Limit 10 per minute per member, or per address for a visitor, who is also held to the general 60 per minute. The app does not offer browsing without an account yet.
 - The settings are checked at each request; nothing is cached. An unknown or misspelt key is refused when the settings revision is saved.
 
 ## Which trips and requests are listed on Home?

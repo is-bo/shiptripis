@@ -12,22 +12,34 @@ whose comment staff hid still counts; only its text goes.
 
 **What does a review show?** `public_reviews` builds each review key by key:
 the score, the tags, the comment (or `null` with `comment_removed: true`),
-which side wrote it, the month, and whether the viewer reported it. Never the
-author's name, any member id, the deal or its tracking number.
+which side wrote it, the month, and whether the viewer reported it (always
+`null` for a guest). Never the author's name, any member id, the deal or its
+tracking number.
 
 **May this viewer read this person's reviews?** `reviews_visible_to`: the
 person has a visible public profile, owns a journey that is listed now, or
 shares a match with the viewer. A trip's reviews have one more door,
 `trip_reviews_access`: a sender coming from Find Travelers names their own open
 request, and the matching engine's single-pair verdict decides (settled by the
-advisor on 2026-11-14, plan L13A).
+advisor on 2026-11-14, plan L13A). A guest, a viewer without an account (plan
+EGS, decision 10), takes the public paths only.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from django.db.models import Avg, Count, Exists, OuterRef, Q, QuerySet, Subquery
+from django.db.models import (
+    Avg,
+    CharField,
+    Count,
+    Exists,
+    OuterRef,
+    Q,
+    QuerySet,
+    Subquery,
+    Value,
+)
 
 from .models import Rating, RatingModeration, RatingReport
 
@@ -143,7 +155,7 @@ def public_reviews(
     subject_user_id: int,
     *,
     side: str | None,
-    viewer_id: int,
+    viewer_id: int | None,
     at: datetime,
     limit: int,
     offset: int,
@@ -151,18 +163,24 @@ def public_reviews(
     """One page of a person's countable reviews, newest first, and the next offset.
 
     One query whatever the page size: the moderation state and the viewer's own
-    report are correlated subqueries on the page's own rows.
+    report are correlated subqueries on the page's own rows. A guest
+    (`viewer_id` `None`) has reported nothing, so no report is looked up.
     """
 
     moderation = RatingModeration.objects.filter(rating_id=OuterRef("pk"))
-    my_report = RatingReport.objects.filter(
-        rating_id=OuterRef("pk"), reporter_id=viewer_id
-    )
+    if viewer_id is None:
+        my_report_status = Value(None, output_field=CharField())
+    else:
+        my_report_status = Subquery(
+            RatingReport.objects.filter(
+                rating_id=OuterRef("pk"), reporter_id=viewer_id
+            ).values("status")[:1]
+        )
     queryset = (
         countable(ratings_received(subject_user_id, side=side), at=at)
         .annotate(
             moderation_state=Subquery(moderation.values("state")[:1]),
-            my_report_status=Subquery(my_report.values("status")[:1]),
+            my_report_status=my_report_status,
         )
         .only("pk", "score", "tags", "comment", "rater_role", "created_at")
         .order_by("-created_at", "-pk")
@@ -257,7 +275,7 @@ def _compatible_candidate(*, viewer_id: int, request_id: int, journey_id: int, a
 
 def trip_reviews_access(
     *,
-    viewer_id: int,
+    viewer_id: int | None,
     journey_id: int,
     request_id: int | None,
     at: datetime,
@@ -273,24 +291,31 @@ def trip_reviews_access(
     that path answers exactly as an unknown journey does, so it tells nothing
     about the pair or about the journey existing. Otherwise the public path:
     `disabled` while listings are off, and only a journey listed now passes.
+
+    A guest (`viewer_id` `None`) owns nothing, shares no match and has no
+    request, so only the public path is theirs; a guest naming a request is
+    answered as an unknown journey.
     """
 
     from apps.discovery.listings import listable_journeys
     from apps.trips.models import Journey
 
+    if viewer_id is None and request_id is not None:
+        return ACCESS_NOT_FOUND, None
     owner_id = (
         Journey.objects.filter(pk=journey_id).values_list("traveler_id", flat=True).first()
     )
-    if owner_id is not None and (
-        owner_id == viewer_id or shares_match(viewer_id, owner_id)
-    ):
-        return ACCESS_OK, owner_id
-    if request_id is not None:
-        if owner_id is not None and _compatible_candidate(
-            viewer_id=viewer_id, request_id=request_id, journey_id=journey_id, at=at
+    if viewer_id is not None:
+        if owner_id is not None and (
+            owner_id == viewer_id or shares_match(viewer_id, owner_id)
         ):
             return ACCESS_OK, owner_id
-        return ACCESS_NOT_FOUND, None
+        if request_id is not None:
+            if owner_id is not None and _compatible_candidate(
+                viewer_id=viewer_id, request_id=request_id, journey_id=journey_id, at=at
+            ):
+                return ACCESS_OK, owner_id
+            return ACCESS_NOT_FOUND, None
     if not listings_enabled:
         return ACCESS_DISABLED, None
     if (

@@ -56,3 +56,20 @@ class GoogleUnavailableViewTests(APITestCase):
             reverse("auth-oauth-google"), {"id_token": "fake"}, format="json"
         )
         self.assertEqual(resp.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertEqual(resp.data["code"], "google_sign_in_unavailable")
+
+    @override_settings(GOOGLE_OAUTH_CLIENT_IDS=[])
+    def test_an_empty_client_list_answers_the_stable_code_and_asks_google_nothing(self):
+        with patch.object(google.id_token, "verify_oauth2_token") as verify:
+            resp = self.client.post(
+                reverse("auth-oauth-google"), {"id_token": "fake"}, format="json"
+            )
+        self.assertEqual(resp.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertEqual(
+            resp.data,
+            {
+                "code": "google_sign_in_unavailable",
+                "detail": "Sign in with Google is not available right now.",
+            },
+        )
+        verify.assert_not_called()

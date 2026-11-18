@@ -95,24 +95,25 @@ def _recent_requests(at: datetime) -> QuerySet:
 
 
 def people(
-    *, side: str, route: RouteFilter, viewer_id: int, at: datetime
+    *, side: str, route: RouteFilter, viewer_id: int | None, at: datetime
 ) -> QuerySet:
     """Visible profiles on one side of the marketplace, most recently active first.
 
     `side` is who is listed: `traveler` or `sender`. With a route, a person is
     on it when one of their usual routes is, or when their own recent trips
-    (or requests) were.
+    (or requests) were. A member (`viewer_id`) is never listed to themselves;
+    a guest (`None`) has no one to leave out.
     """
 
     activity = _recent_journeys(at) if side == ROLE_TRAVELER else _recent_requests(at)
     latest_field = "published_at" if side == ROLE_TRAVELER else "created_at"
     usual = PublicProfileRoute.objects.filter(profile_id=OuterRef("pk"))
-    queryset = (
-        visible_profiles()
-        .exclude(user_id=viewer_id)
-        .alias(has_activity=Exists(activity), has_usual_route=Exists(usual))
-        .filter(Q(has_activity=True) | Q(has_usual_route=True))
-    )
+    queryset = visible_profiles()
+    if viewer_id is not None:
+        queryset = queryset.exclude(user_id=viewer_id)
+    queryset = queryset.alias(
+        has_activity=Exists(activity), has_usual_route=Exists(usual)
+    ).filter(Q(has_activity=True) | Q(has_usual_route=True))
     if route.has_origin or route.has_destination:
         usual_on_route = usual.filter(
             _route_end_q("origin_locality", route.origin_place_ids, route.origin_country)

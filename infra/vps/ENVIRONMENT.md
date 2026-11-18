@@ -44,7 +44,8 @@ before initial startup. Optional features remain disabled unless explicitly supp
 | `FINANCE_JOB_INTERVAL_SECONDS` | Single durable finance/lifecycle/outbox loop interval; 30 seconds. |
 | `GRPC_AUTH_MODE` | `bearer` over container loopback for retained combined topology. mTLS is already supported by the application for a future split. |
 | `GRPC_ALLOW_PRIVATE_BEARER` | Explicit `true` opt-in required by existing production safeguards. Token below is dedicated. |
-| `GOOGLE_OAUTH_CLIENT_IDS` | Optional owner-verified OAuth audience list; leave empty until configured. |
+| `GOOGLE_OAUTH_CLIENT_IDS` | Comma-separated Google OAuth client ids a Google ID token may name as its audience (the web/server client id the app is built with, and the iOS client id). Empty keeps Sign in with Google off: `POST /api/auth/oauth/google` answers 503 `google_sign_in_unavailable`. |
+| `APPLE_SIGN_IN_CLIENT_IDS` | Comma-separated audiences accepted for Sign in with Apple: the iOS app's bundle id. Empty keeps Sign in with Apple off: `POST /api/auth/oauth/apple` answers 503 `apple_sign_in_unavailable`. Apple's signing keys are fetched from `https://appleid.apple.com/auth/keys`; no Apple secret is needed. |
 | `LOG_LEVEL` | Go structured log level; `info` initially. |
 | `PERFORMANCE_ACCESS_LOG_ENABLED` | `true` to retain safe route-template/status/timing logs. |
 | `PERFORMANCE_DB_METRICS_ENABLED` | Optional query timing, initially `false` to avoid overhead. |

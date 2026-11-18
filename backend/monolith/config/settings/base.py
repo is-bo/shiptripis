@@ -249,6 +249,9 @@ REST_FRAMEWORK = {
         "google_signin": env.str(
             "DRF_GOOGLE_SIGNIN_THROTTLE_RATE", default="10/min"
         ),
+        "apple_signin": env.str(
+            "DRF_APPLE_SIGNIN_THROTTLE_RATE", default="10/min"
+        ),
         "media_upload": env.str("DRF_MEDIA_UPLOAD_THROTTLE_RATE", default="20/hour"),
         "chat_message": env.str("DRF_CHAT_MESSAGE_THROTTLE_RATE", default="60/min"),
         "admin_invitation": env.str(
@@ -279,8 +282,18 @@ SIMPLE_JWT = {
     "BLACKLIST_AFTER_ROTATION": True,
 }
 
-# --- Google OAuth ---
-GOOGLE_OAUTH_CLIENT_IDS = env.list("GOOGLE_OAUTH_CLIENT_IDS", default=[])
+# --- Sign in with Google and Apple ---
+# Each list is the `aud` a provider's token must name; an empty list switches
+# that provider off (its endpoint answers 503 `<provider>_sign_in_unavailable`).
+# Comma-separated; spaces around an id are dropped.
+def _client_ids(name: str) -> list[str]:
+    return [value.strip() for value in env.list(name, default=[]) if value.strip()]
+
+
+# Google: every OAuth client id a Google ID token may name as its audience.
+GOOGLE_OAUTH_CLIENT_IDS = _client_ids("GOOGLE_OAUTH_CLIENT_IDS")
+# Apple: the iOS app's bundle id, which is the `aud` of its identity tokens.
+APPLE_SIGN_IN_CLIENT_IDS = _client_ids("APPLE_SIGN_IN_CLIENT_IDS")
 
 # --- Password reset ---
 PASSWORD_RESET_CODE_TTL_SECONDS = env.int(

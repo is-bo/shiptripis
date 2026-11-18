@@ -7,6 +7,7 @@ from decimal import Decimal
 
 from django.test import TestCase
 from django.urls import reverse
+from rest_framework.test import APIClient
 
 from apps.kyc.models import KycSubmission
 from apps.matching.v1_services import accept_offer
@@ -146,10 +147,13 @@ class TripsListingTests(DiscoveryWorld, TestCase):
             self.trips(), {"state": "disabled", "results": [], "next_offset": None}
         )
 
-    def test_anonymous_callers_are_refused(self):
-        from rest_framework.test import APIClient
-
-        self.assertIn(APIClient().get(reverse(TRIPS)).status_code, (401, 403))
+    def test_a_guest_reads_the_listing_too(self):
+        # Plan EGS, decision 10: the listing is public (it was member-only).
+        response = APIClient().get(reverse(TRIPS))
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(
+            [row["journey_id"] for row in response.data["results"]], [self.journey.pk]
+        )
 
 
 class RequestsListingTests(DiscoveryWorld, TestCase):

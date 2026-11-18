@@ -6,7 +6,8 @@ public keys and check the `aud` claim is one of our configured client IDs.
 
 Returns the verified payload (with `sub`, `email`, `name`, ...) on success;
 raises `GoogleAuthError` on any verification failure, and
-`GoogleAuthUnavailable` when Google's signing keys cannot be fetched.
+`GoogleAuthUnavailable` when no client id is configured on this server or
+Google's signing keys cannot be fetched.
 """
 from __future__ import annotations
 
@@ -29,7 +30,7 @@ class GoogleAuthError(Exception):
 
 
 class GoogleAuthUnavailable(Exception):
-    """Google's certificate endpoint could not be reached in time."""
+    """Not configured here, or Google's certificate endpoint was not reached in time."""
 
 
 class _BoundedRequest(google_requests.Request):
@@ -62,7 +63,7 @@ def _transport() -> _BoundedRequest:
 
 def verify_id_token(token: str) -> dict:
     if not settings.GOOGLE_OAUTH_CLIENT_IDS:
-        raise GoogleAuthError("Google OAuth not configured on server")
+        raise GoogleAuthUnavailable("Sign in with Google is not available right now.")
 
     try:
         payload = id_token.verify_oauth2_token(

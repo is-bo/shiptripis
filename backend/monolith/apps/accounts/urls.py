@@ -2,6 +2,7 @@ from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from .views import (
+    AppleSignInView,
     GoogleSignInView,
     MeView,
     PasswordResetConfirmView,
@@ -19,6 +20,7 @@ urlpatterns = [
     path("auth/sign-out", SignOutView.as_view(), name="auth-sign-out"),
     path("auth/refresh", TokenRefreshView.as_view(), name="auth-refresh"),
     path("auth/oauth/google", GoogleSignInView.as_view(), name="auth-oauth-google"),
+    path("auth/oauth/apple", AppleSignInView.as_view(), name="auth-oauth-apple"),
     path(
         "auth/password/reset/request",
         PasswordResetRequestView.as_view(),

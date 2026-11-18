@@ -81,7 +81,7 @@ flowchart LR
 One line per folder in `backend/monolith/apps`. A member never sees these names; staff see them only in "Technical records".
 | App | Owns |
 |---|---|
-| `accounts` | People: sign-up, sign-in, tokens, email codes, ban state, Google link |
+| `accounts` | People: sign-up, sign-in, tokens, email codes, ban state, Google and Apple links |
 | `core` | Shared plumbing: business settings, policy defaults, scheduling of events, health, languages, locks that keep money steps in order |
 | `kyc` | ID verification records (Go `kyc` takes uploads; Django stores and reviews) |
 | `trips` | Journeys and legs, ticket proofs, leg progress, schedule changes (the old single `Trip` is history) |
