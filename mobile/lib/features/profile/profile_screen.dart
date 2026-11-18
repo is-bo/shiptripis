@@ -34,7 +34,9 @@ import '../../domain/find_travelers.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/formatters.dart';
 import '../shell/app_shell.dart';
+import '../auth/account_gate.dart';
 import '../auth/email_gate.dart';
+import '../auth/guest_states.dart';
 import '../common/contact_support.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -44,6 +46,9 @@ class ProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l = L.of(context);
     final account = ref.watch(accountProvider);
+    if (account == null && ref.watch(isGuestProvider)) {
+      return const _GuestProfile();
+    }
     final completedDeals = ref.watch(completedDealsCountProvider);
     final rating = ref.watch(ownRatingSummaryProvider);
     final supportEmail = supportEmailOf(ref);
@@ -183,7 +188,7 @@ class ProfileScreen extends ConsumerWidget {
   /// screen wait on a platform channel for a footnote.
   static const _appVersion = '1.0.0';
 
-  String _localeLabel(BuildContext context, WidgetRef ref) {
+  static String _localeLabel(BuildContext context, WidgetRef ref) {
     final l = L.of(context);
     final chosen = ref.watch(localeProvider);
     if (chosen == null) return l.profileLanguageSystem;
@@ -194,7 +199,7 @@ class ProfileScreen extends ConsumerWidget {
     };
   }
 
-  String _themeLabel(BuildContext context, ThemeMode mode) {
+  static String _themeLabel(BuildContext context, ThemeMode mode) {
     final l = L.of(context);
     return switch (mode) {
       ThemeMode.light => l.profileAppearanceLight,
@@ -216,7 +221,7 @@ class ProfileScreen extends ConsumerWidget {
     await ref.read(sessionProvider.notifier).signOut();
   }
 
-  Future<void> _openLegalUrl(BuildContext context, String path) async {
+  static Future<void> _openLegalUrl(BuildContext context, String path) async {
     final l = L.of(context);
     try {
       final base = AppConfig.webBaseUrl.trim();
@@ -242,6 +247,106 @@ class ProfileScreen extends ConsumerWidget {
         AppSnack.info(context, l.profileLinkOpenFailed);
       }
     }
+  }
+}
+
+/// Profile for someone without an account: the way in, and the settings
+/// that do not need one.
+class _GuestProfile extends ConsumerWidget {
+  const _GuestProfile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = L.of(context);
+    final c = context.colors;
+    final text = Theme.of(context).textTheme;
+    final supportEmail = supportEmailOf(ref);
+
+    return AppScaffold(
+      topBar: AppTopBar(title: l.profileTitle),
+      body: ListView(
+        padding: AppScrollPadding.page(context),
+        children: [
+          const SignedOutNotice(),
+          AppCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.person_outline_rounded, size: 28, color: c.brandInk),
+                const SizedBox(height: AppSpace.md),
+                Text(l.guestProfileTitle, style: text.titleMedium),
+                const SizedBox(height: AppSpace.sm),
+                Text(
+                  l.guestProfileBody,
+                  style: text.bodyMedium?.copyWith(color: c.textSecondary),
+                ),
+                const SizedBox(height: AppSpace.lg),
+                AppButton(
+                  label: l.authSignUp,
+                  onPressed: () =>
+                      ensureAccount(context, AccountReason.generic),
+                ),
+                const SizedBox(height: AppSpace.sm),
+                AppButton(
+                  label: l.authSignIn,
+                  variant: AppButtonVariant.secondary,
+                  onPressed: () => openSignIn(context),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpace.xl),
+
+          SectionHeader(title: l.guestSettings),
+          _Row(
+            icon: Icons.translate_rounded,
+            label: l.profileLanguage,
+            value: ProfileScreen._localeLabel(context, ref),
+            onTap: () => context.pushNamed(Routes.profileLanguage),
+          ),
+          _Row(
+            icon: Icons.contrast_rounded,
+            label: l.profileAppearance,
+            value: ProfileScreen._themeLabel(
+              context,
+              ref.watch(themeModeProvider),
+            ),
+            onTap: () => context.pushNamed(Routes.profileAppearance),
+          ),
+          const SizedBox(height: AppSpace.xl),
+
+          SectionHeader(title: l.profileSupport),
+          _Row(
+            icon: Icons.auto_stories_outlined,
+            label: l.guestHowItWorks,
+            onTap: () => context.openHowItWorks(),
+          ),
+          _Row(
+            icon: Icons.description_outlined,
+            label: l.profileTerms,
+            onTap: () => ProfileScreen._openLegalUrl(context, '/terms'),
+          ),
+          _Row(
+            icon: Icons.privacy_tip_outlined,
+            label: l.profilePrivacy,
+            onTap: () => ProfileScreen._openLegalUrl(context, '/privacy'),
+          ),
+          if (supportEmail != null)
+            _Row(
+              icon: Icons.mail_outline_rounded,
+              label: l.actionContactSupport,
+              onTap: () => openSupportEmail(context, supportEmail),
+            ),
+          const SizedBox(height: AppSpace.lg),
+          Center(
+            child: Text(
+              l.profileVersion(ProfileScreen._appVersion),
+              style: text.bodySmall?.copyWith(color: c.textTertiary),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

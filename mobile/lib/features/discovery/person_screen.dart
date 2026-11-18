@@ -25,6 +25,7 @@ import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../domain/public_discovery.dart';
 import '../../l10n/app_localizations.dart';
+import '../auth/account_gate.dart';
 import '../common/traveler_candidate_card.dart';
 import '../reviews/review_widgets.dart';
 import 'discovery_actions.dart';
@@ -271,18 +272,25 @@ class _RouteAlertRowState extends ConsumerState<_RouteAlertRow> {
 
   Future<void> _toggle(bool on, RouteAlert? existing) async {
     final l = L.of(context);
+    final wasGuest = ref.read(isGuestProvider);
+    if (!await ensureAccount(context, AccountReason.alert) || !mounted) return;
     setState(() => _busy = true);
     try {
       final repo = ref.read(discoveryRepositoryProvider);
-      if (on) {
+      var current = existing;
+      if (wasGuest) {
+        // Signed in just now: the member may already watch this route.
+        current = _existing(await ref.read(routeAlertsProvider.future));
+      }
+      if (on && current == null) {
         await repo.createAlert(
           watches: widget.watches,
           originPlaceId: widget.route.origin.placeId,
           destinationPlaceId: widget.route.destination.placeId,
           subjectProfileId: widget.profileId,
         );
-      } else if (existing != null) {
-        await repo.deleteAlert(existing.id);
+      } else if (!on && current != null) {
+        await repo.deleteAlert(current.id);
       }
       ref.invalidate(routeAlertsProvider);
       await ref.read(routeAlertsProvider.future);

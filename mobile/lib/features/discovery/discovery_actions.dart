@@ -20,6 +20,7 @@ import '../../app/router.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/error_codes.dart';
 import '../../core/format/locale_formats.dart';
+import '../../core/session/session.dart';
 import '../../data/discovery_repository.dart';
 import '../../design/components/feedback.dart';
 import '../../core/money/money.dart';
@@ -33,6 +34,7 @@ import '../../domain/delivery_request.dart';
 import '../../domain/journey.dart';
 import '../../domain/public_discovery.dart';
 import '../../l10n/app_localizations.dart';
+import '../auth/account_gate.dart';
 import '../common/formatters.dart';
 import '../common/status_copy.dart';
 import '../common/traveler_candidate_card.dart';
@@ -439,12 +441,16 @@ Future<void> showRequestPreview(
   RequestCard card, {
   int? carryJourneyId,
 }) async {
+  // A guest may sign in from the sheet, and the tab under it is then built
+  // again for the member: the trip form opens from the app's own navigator,
+  // which outlives that.
+  final root = Navigator.of(context, rootNavigator: true).context;
   final publish = await showAppSheet<bool>(
     context,
     builder: (_) =>
         _RequestPreviewSheet(card: card, carryJourneyId: carryJourneyId),
   );
-  if (publish == true && context.mounted) await context.openJourneyCreate();
+  if (publish == true && root.mounted) await root.openJourneyCreate();
 }
 
 class _RequestPreviewSheet extends ConsumerStatefulWidget {
@@ -461,6 +467,31 @@ class _RequestPreviewSheet extends ConsumerStatefulWidget {
 class _RequestPreviewSheetState extends ConsumerState<_RequestPreviewSheet> {
   bool _busy = false;
   CarryOutcome? _outcome;
+
+  /// A guest asked to carry this and has just made an account: the signal
+  /// goes as soon as their trips are known.
+  bool _carryOnceSignedIn = false;
+
+  Future<void> _carryAsGuest() async {
+    if (!await ensureAccount(context, AccountReason.carry) || !mounted) return;
+    setState(() => _carryOnceSignedIn = true);
+  }
+
+  /// Carries on with the guest's "I can carry this" once their trips are
+  /// read: the signal for a live trip, or the sheet's own "Add a journey"
+  /// when they have none.
+  void _continueCarry(
+    AsyncValue<List<Journey>> myJourneys,
+    List<Journey> live,
+  ) {
+    if (!_carryOnceSignedIn) return;
+    if (!myJourneys.hasValue && !myJourneys.hasError) return;
+    _carryOnceSignedIn = false;
+    if (!myJourneys.hasValue || live.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _carry(live);
+    });
+  }
 
   Future<void> _carry(List<Journey> journeys) async {
     final l = L.of(context);
@@ -521,8 +552,10 @@ class _RequestPreviewSheetState extends ConsumerState<_RequestPreviewSheet> {
     final locale = Localizations.localeOf(context);
     final card = widget.card;
 
+    final guest = ref.watch(isGuestProvider);
     final myJourneys = ref.watch(myJourneysProvider);
     final journeys = ref.watch(activeJourneysProvider);
+    _continueCarry(myJourneys, journeys);
     final sent = _outcome is CarrySent;
     final stops = placeStops([card.pickup, card.delivery]);
     final suggested = journeys
@@ -534,6 +567,12 @@ class _RequestPreviewSheetState extends ConsumerState<_RequestPreviewSheet> {
       footer = AppButton(
         label: l.actionDone,
         onPressed: () => Navigator.of(context).pop(),
+      );
+    } else if (guest) {
+      footer = AppButton(
+        label: l.requestCarryAction,
+        icon: Icons.back_hand_outlined,
+        onPressed: _carryAsGuest,
       );
     } else if (journeys.isEmpty && myJourneys.hasValue) {
       footer = AppButton(

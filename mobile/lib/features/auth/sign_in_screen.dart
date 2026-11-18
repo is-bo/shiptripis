@@ -16,6 +16,7 @@ import 'package:go_router/go_router.dart';
 import '../../app/router.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/session/session.dart';
+import 'account_gate.dart';
 import 'auth_header.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/forms.dart';
@@ -26,7 +27,9 @@ import '../../design/tokens.dart';
 import '../../l10n/app_localizations.dart';
 
 class SignInScreen extends ConsumerStatefulWidget {
-  const SignInScreen({super.key});
+  const SignInScreen({this.flow = AccountFlow.none, super.key});
+
+  final AccountFlow flow;
 
   @override
   ConsumerState<SignInScreen> createState() => _SignInScreenState();
@@ -62,7 +65,11 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       await ref
           .read(sessionProvider.notifier)
           .signIn(email: _email.text, password: _password.text);
-      // The router's redirect takes over from here; no manual navigation.
+      // On its own, the router's redirect takes over from here. Inside the
+      // account moment, the flow closes and the guest's action goes ahead.
+      if (mounted && widget.flow.active) {
+        completeAccountFlow(context, widget.flow);
+      }
     } on ApiException catch (error) {
       if (!mounted) return;
       setState(() {
@@ -81,6 +88,8 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   Widget build(BuildContext context) {
     final l = L.of(context);
     final validators = Validators.of(context);
+    final session = ref.watch(sessionProvider);
+    final expired = session is SessionSignedOut && session.becauseExpired;
 
     return DismissKeyboardOnTap(
       child: AppScaffold(
@@ -94,6 +103,15 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                 headline: l.authSignInHeadline,
                 subhead: l.authSignInSubhead,
               ),
+              if (expired && _formError == null) ...[
+                InfoNotice(
+                  title: l.stateSessionExpiredTitle,
+                  message: l.stateSessionExpiredBody,
+                  tone: StatusTone.waiting,
+                  icon: Icons.logout_rounded,
+                ),
+                const SizedBox(height: AppSpace.lg),
+              ],
               if (_formError != null) ...[
                 InfoNotice(
                   message: _formError!,
@@ -138,6 +156,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                   onPressed: () => context.pushNamed(
                     Routes.forgotPassword,
                     queryParameters: {
+                      ...widget.flow.parameters,
                       if (_email.text.trim().isNotEmpty)
                         'email': _email.text.trim(),
                     },
@@ -160,7 +179,10 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
             AppButton(
               label: l.authNoAccount,
               variant: AppButtonVariant.tertiary,
-              onPressed: () => context.pushReplacementNamed(Routes.signUp),
+              onPressed: () => context.pushReplacementNamed(
+                Routes.signUp,
+                queryParameters: widget.flow.parameters,
+              ),
             ),
           ],
         ),

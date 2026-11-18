@@ -491,8 +491,12 @@ void main() {
       session.signIn(email: 'b@example.com', password: 'secret'),
     );
     expect(container.read(accountProvider)?.id, 77);
+    // Not even in a tab that is not showing.
+    expect(_renderedDealIds(tester).intersection(_idsOfA), isEmpty);
 
-    // Home, then Deliveries on both of its Deal sources.
+    // Signing out leaves the tabs (a guest uses them), so the app is still
+    // on Deliveries: Home, then Deliveries on both of its Deal sources.
+    await _openTab(tester, Icons.home_outlined);
     expect(_renderedDealIds(tester).intersection(_idsOfA), isEmpty);
     expect(
       container.read(attentionProvider).map((item) => item.dealId),

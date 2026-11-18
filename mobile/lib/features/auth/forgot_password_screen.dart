@@ -24,6 +24,7 @@ import '../../core/session/session.dart';
 import '../../design/components/codes.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/forms.dart';
+import 'account_gate.dart';
 import 'auth_header.dart';
 import '../../design/components/primitives.dart';
 import '../../design/components/status.dart';
@@ -32,9 +33,17 @@ import '../../design/tokens.dart';
 import '../../l10n/app_localizations.dart';
 
 class ForgotPasswordScreen extends ConsumerStatefulWidget {
-  const ForgotPasswordScreen({this.initialEmail, super.key});
+  const ForgotPasswordScreen({
+    this.initialEmail,
+    this.flow = AccountFlow.none,
+    super.key,
+  });
 
   final String? initialEmail;
+
+  /// Inside the account moment this was opened from its sign-in, which is
+  /// where a finished reset goes back to.
+  final AccountFlow flow;
 
   @override
   ConsumerState<ForgotPasswordScreen> createState() =>
@@ -104,7 +113,11 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
       // The server ended every session on every device, so the only place to
       // go is sign-in.
       AppSnack.success(context, l.authResetDone);
-      context.goNamed(Routes.signIn);
+      if (widget.flow.active) {
+        context.pop();
+      } else {
+        context.goNamed(Routes.signIn);
+      }
     } on ApiException catch (error) {
       if (!mounted) return;
       // Every failure here is indistinguishable by design. Showing the same

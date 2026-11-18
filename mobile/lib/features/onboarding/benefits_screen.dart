@@ -1,13 +1,13 @@
-/// The three chapters between the front page and sign-up.
+/// "How Wassla works": three chapters a guest opens from Home or Profile.
 ///
 /// Restored from the original ShipTrip onboarding: a bilingual poster in
 /// three panels, each with a hand-painted hero on an airmail-bordered card
 /// with a postage stamp tacked to its corner. Chapter I is the post, II is
 /// the suitcase, III is the seal — send, earn, trust.
 ///
-/// It is skippable from the first frame, and skipping is not a lesser path:
+/// It can be left from the first frame, and leaving is not a lesser path:
 /// the story is charm, not instruction, and nothing downstream assumes the
-/// user read it.
+/// user read it. Its last button is the account moment.
 ///
 /// Every illustration is a [CustomPainter]. There is no image asset in this
 /// app, which is why the heroes tint correctly in dark mode and cost nothing
@@ -15,17 +15,17 @@
 /// renders a finished static frame when the platform asks for reduced motion.
 library;
 
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
-import '../../app/router.dart';
 import '../../design/identity.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../design/typography.dart';
 import '../../l10n/app_localizations.dart';
+import '../auth/account_gate.dart';
 
 enum _Hero { post, suitcase, seal }
 
@@ -64,11 +64,16 @@ class _BenefitsScreenState extends State<BenefitsScreen> {
     super.dispose();
   }
 
-  void _finish() => context.pushReplacementNamed(Routes.signUp);
+  /// The account moment. Once they have an account, the story has done its
+  /// job and closes; closing the account screen leaves them on this page.
+  Future<void> _finish() async {
+    final navigator = Navigator.of(context);
+    if (await ensureAccount(context, AccountReason.generic)) navigator.pop();
+  }
 
   void _advance(int count) {
     if (_index >= count - 1) {
-      _finish();
+      unawaited(_finish());
       return;
     }
     _controller.nextPage(
@@ -142,26 +147,14 @@ class _BenefitsScreenState extends State<BenefitsScreen> {
                 ),
                 child: Row(
                   children: [
+                    const PaperBackButton(),
+                    const SizedBox(width: AppSpace.lg),
                     Text(
                       l.benefitsIndex(_index + 1, chapters.length),
                       style: AppTypography.monoLabel(
                         context,
                         color: c.textTertiary,
                         tracking: 2,
-                      ),
-                    ),
-                    const Spacer(),
-                    // Hidden on the last page, where "Get started" is the
-                    // same action and a skip beside it is just noise.
-                    AnimatedOpacity(
-                      opacity: isLast ? 0 : 1,
-                      duration: AppMotion.respecting(context, AppMotion.fast),
-                      child: IgnorePointer(
-                        ignoring: isLast,
-                        child: TextButton(
-                          onPressed: _finish,
-                          child: Text(l.benefitsSkip),
-                        ),
                       ),
                     ),
                   ],

@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/app_state.dart';
 import '../../app/router.dart';
 import '../../core/format/locale_formats.dart';
+import '../../core/session/session.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/primitives.dart';
@@ -20,6 +21,8 @@ import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../domain/chat.dart';
 import '../../l10n/app_localizations.dart';
+import '../auth/account_gate.dart';
+import '../auth/guest_states.dart';
 import '../common/formatters.dart';
 import '../shell/app_shell.dart';
 
@@ -29,6 +32,15 @@ class ChatListScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l = L.of(context);
+    if (ref.watch(isGuestProvider)) {
+      return GuestTabScreen(
+        title: l.chatTitle,
+        headline: l.guestChatTitle,
+        body: l.guestChatBody,
+        icon: Icons.forum_outlined,
+        reason: AccountReason.chat,
+      );
+    }
     final threads = ref.watch(chatThreadsProvider);
 
     return AppScaffold(

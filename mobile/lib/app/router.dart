@@ -21,9 +21,10 @@
 /// ## Guarding
 ///
 /// One redirect, driven by [SessionState]. It answers three questions and no
-/// more: are we still restoring, is there a session, and is this route one of
-/// the few that never needs one. Per-screen auth checks are not used — they
-/// scatter the rule and always miss a case.
+/// more: are we still restoring, is there a session, and is this a place a
+/// guest may look at ([isPublicLocation]). Per-screen auth checks are not
+/// used — they scatter the rule and always miss a case. What a guest may look
+/// at but not *do* is asked at the action, by `ensureAccount`.
 library;
 
 import 'package:flutter/material.dart';
@@ -36,6 +37,7 @@ import '../domain/location.dart';
 import '../domain/progress.dart';
 import '../domain/public_discovery.dart';
 import '../domain/reviews.dart';
+import '../features/auth/account_gate.dart';
 import '../features/auth/forgot_password_screen.dart';
 import '../features/auth/sign_in_screen.dart';
 import '../features/auth/sign_up_screen.dart';
@@ -70,7 +72,6 @@ import '../features/location/location_picker_screen.dart';
 import '../features/notifications/notifications_screen.dart';
 import '../features/offers/negotiation_screen.dart';
 import '../features/onboarding/benefits_screen.dart';
-import '../features/onboarding/onboarding_screen.dart';
 import '../features/profile/appearance_screen.dart';
 import '../features/profile/dzd_setup_screen.dart';
 import '../features/profile/language_screen.dart';
@@ -93,8 +94,8 @@ import '../features/splash/splash_screen.dart';
 /// here rather than a search across thirty files.
 abstract final class Routes {
   static const splash = 'splash';
-  static const onboarding = 'onboarding';
-  static const benefits = 'benefits';
+  static const howItWorks = 'how-it-works';
+  static const accountGate = 'account-gate';
   static const signIn = 'sign-in';
   static const signUp = 'sign-up';
   static const forgotPassword = 'forgot-password';
@@ -161,30 +162,97 @@ abstract final class Routes {
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
-/// Routes that never require a session.
+/// The places a guest may be. An entry ending in `/` is that whole subtree;
+/// any other entry is that one location.
 ///
-/// The guest payment link is the interesting one: somebody's relative in
-/// Algiers opens it from a message, has no account, and must be able to pay.
-const _publicPrefixes = <String>['/onboarding', '/auth', '/guest/pay'];
+/// The four tabs are here because each has a guest state (Deliveries and
+/// Chat explain themselves, Profile offers the way in). The guest payment
+/// link is the other interesting one: somebody's relative in Algiers opens
+/// it from a message, has no account, and must be able to pay.
+const _publicLocations = <String>[
+  '/home',
+  '/deliveries',
+  '/chat',
+  '/profile',
+  '/profile/language',
+  '/profile/appearance',
+  '/how-it-works',
+  '/location/pick',
+  '/discover/',
+  '/reviews/',
+  '/auth/',
+  '/guest/pay/',
+];
 
-bool _isPublic(String location) =>
-    _publicPrefixes.any((prefix) => location.startsWith(prefix));
+/// Whether a signed-out person may open [path], a location without its
+/// query.
+bool isPublicLocation(String path) => _publicLocations.any(
+  (entry) => entry.endsWith('/') ? path.startsWith(entry) : path == entry,
+);
 
-bool _isSafePostLoginLocation(String? location) =>
+/// Whether [location] is a place to return to after signing in.
+bool isSafePostLoginLocation(String? location) =>
     location != null &&
     location.startsWith('/') &&
     !location.startsWith('//') &&
-    !_isPublic(location);
+    !location.startsWith('/auth/') &&
+    location != '/splash';
+
+/// Sign-in that returns to [next] once it succeeds. As an account flow
+/// ([flow]) it closes itself and opens [next] above the screen beneath it.
+String _signInFor(String next, {bool flow = false}) => Uri(
+  path: '/auth/sign-in',
+  queryParameters: {if (flow) 'continue': '1', 'next': next},
+).toString();
+
+/// Every location on the stack, the bottom one first: the base and each
+/// pushed route.
+List<Uri> _stackLocations(RouteMatchList configuration) {
+  final locations = <Uri>[configuration.uri];
+  void walk(List<RouteMatchBase> matches) {
+    for (final match in matches) {
+      if (match is ImperativeRouteMatch) {
+        locations.add(match.matches.uri);
+      } else if (match is ShellRouteMatch) {
+        walk(match.matches);
+      }
+    }
+  }
+
+  walk(configuration.matches);
+  return locations;
+}
+
+/// A session that ends while a member-only screen is open puts the person on
+/// Home with sign-in above it, which brings them back to that screen. One
+/// that ends on screens a guest may see leaves them there, as a guest.
+void _leavePrivateScreens(GoRouter router) {
+  final configuration = router.routerDelegate.currentConfiguration;
+  if (configuration.matches.isEmpty) return;
+  final private = _stackLocations(
+    configuration,
+  ).where((location) => !isPublicLocation(location.path));
+  if (private.isEmpty) return;
+  router.go('/home');
+  router.push(_signInFor(private.last.toString(), flow: true));
+}
 
 final routerProvider = Provider<GoRouter>((ref) {
   // go_router needs a Listenable, Riverpod speaks in providers. One notifier,
   // bumped whenever the session changes, bridges them without the router
   // itself being rebuilt from scratch on every auth event.
   final refresh = ValueNotifier<int>(0);
-  ref.listen(sessionProvider, (_, _) => refresh.value++);
   ref.onDispose(refresh.dispose);
 
-  return GoRouter(
+  late final GoRouter router;
+  ref.listen(sessionProvider, (previous, next) {
+    if (previous is SessionSignedIn && next is SessionSignedOut) {
+      _leavePrivateScreens(router);
+    }
+    refresh.value++;
+  });
+
+  return router = GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/splash',
     refreshListenable: refresh,
@@ -201,24 +269,26 @@ final routerProvider = Provider<GoRouter>((ref) {
         return location == '/splash' ? null : '/splash';
       }
 
+      // Signed out is a guest. Home is the front page, and a place only a
+      // member can see asks them to sign in, then returns them there.
       if (session is SessionSignedOut) {
-        if (_isPublic(location)) return null;
-        // Signed-out users land on onboarding, which offers both doors. It is
-        // the product's front page, not a hurdle in front of sign-in.
-        return session.becauseExpired ? '/auth/sign-in' : '/onboarding';
+        if (location == '/splash') return '/home';
+        if (isPublicLocation(location)) return null;
+        return _signInFor(state.uri.toString());
       }
 
       // Signed in. The auth screens and the splash are no longer valid places
       // to be — but the guest payment link stays reachable, because a signed-in
       // user can perfectly well be paying somebody else's obligation.
       // The one auth screen a signed-in person needs: confirming their own
-      // email, from sign-up, from Profile, or when posting is refused.
+      // email, from sign-up, from Profile, or when posting is refused. And the
+      // account flow closes itself once it succeeds, so the action that
+      // opened it goes ahead on the screen underneath.
       if (location == '/auth/verify-email') return null;
-      if (location == '/splash' ||
-          location.startsWith('/onboarding') ||
-          location.startsWith('/auth')) {
+      if (isAccountFlowLocation(state.uri)) return null;
+      if (location == '/splash' || location.startsWith('/auth/')) {
         final next = state.uri.queryParameters['next'];
-        if (_isSafePostLoginLocation(next)) return next;
+        if (isSafePostLoginLocation(next)) return next;
         return '/home';
       }
       return null;
@@ -230,46 +300,47 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: Routes.splash,
         builder: (context, state) => const SplashScreen(),
       ),
+      // The three-chapter story, opened from guest Home and guest Profile.
       GoRoute(
-        path: '/onboarding',
-        name: Routes.onboarding,
-        builder: (context, state) => const OnboardingScreen(),
-        routes: [
-          // The three-chapter story between the front page and sign-up. A
-          // nested route so it inherits `/onboarding`'s public status, and
-          // pushed rather than replaced so Back returns to the welcome screen
-          // instead of leaving the app.
-          GoRoute(
-            path: 'benefits',
-            name: Routes.benefits,
-            builder: (context, state) => const BenefitsScreen(),
-          ),
-        ],
+        path: '/how-it-works',
+        name: Routes.howItWorks,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const BenefitsScreen(),
       ),
 
       // ---- Auth ----
       GoRoute(
+        path: '/auth/continue',
+        name: Routes.accountGate,
+        builder: (context, state) => AccountGateScreen(
+          reason: AccountReason.parse(state.uri.queryParameters['reason']),
+        ),
+      ),
+      GoRoute(
         path: '/auth/sign-in',
         name: Routes.signIn,
-        builder: (context, state) => const SignInScreen(),
+        builder: (context, state) => SignInScreen(flow: AccountFlow.of(state)),
       ),
       GoRoute(
         path: '/auth/sign-up',
         name: Routes.signUp,
-        builder: (context, state) => const SignUpScreen(),
+        builder: (context, state) => SignUpScreen(flow: AccountFlow.of(state)),
       ),
       GoRoute(
         path: '/auth/forgot',
         name: Routes.forgotPassword,
         builder: (context, state) => ForgotPasswordScreen(
           initialEmail: state.uri.queryParameters['email'],
+          flow: AccountFlow.of(state),
         ),
       ),
       GoRoute(
         path: '/auth/verify-email',
         name: Routes.verifyEmail,
-        builder: (context, state) =>
-            VerifyEmailScreen(email: state.uri.queryParameters['email'] ?? ''),
+        builder: (context, state) => VerifyEmailScreen(
+          email: state.uri.queryParameters['email'] ?? '',
+          flow: AccountFlow.of(state),
+        ),
       ),
 
       // ---- Guest payment: anonymous, outside the shell ----
@@ -290,7 +361,8 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/home',
                 name: Routes.home,
-                builder: (context, state) => const HomeScreen(),
+                builder: (context, state) =>
+                    const AccountScope(child: HomeScreen()),
               ),
             ],
           ),
@@ -299,7 +371,8 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/deliveries',
                 name: Routes.deliveries,
-                builder: (context, state) => const DeliveriesScreen(),
+                builder: (context, state) =>
+                    const AccountScope(child: DeliveriesScreen()),
               ),
             ],
           ),
@@ -308,7 +381,8 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/chat',
                 name: Routes.chat,
-                builder: (context, state) => const ChatListScreen(),
+                builder: (context, state) =>
+                    const AccountScope(child: ChatListScreen()),
               ),
             ],
           ),
@@ -317,7 +391,8 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/profile',
                 name: Routes.profile,
-                builder: (context, state) => const ProfileScreen(),
+                builder: (context, state) =>
+                    const AccountScope(child: ProfileScreen()),
               ),
             ],
           ),
@@ -705,17 +780,24 @@ extension AppNavigation on BuildContext {
   void goHome() => goNamed(Routes.home);
   void goDeliveries() => goNamed(Routes.deliveries);
 
+  void openHowItWorks() => pushNamed(Routes.howItWorks);
+
   /// Opens the request form, optionally with the route already chosen (a trip
-  /// the sender found in Browse).
+  /// the sender found in Browse). A guest makes an account first, and the
+  /// form then opens with the same route, on top of the same screen.
   Future<void> openRequestCreate({
     CanonicalPlace? pickup,
     CanonicalPlace? delivery,
-  }) => pushNamed(
-    Routes.requestCreate,
-    extra: pickup == null && delivery == null
-        ? null
-        : RequestRoutePrefill(pickup: pickup, delivery: delivery),
-  );
+  }) async {
+    final router = GoRouter.of(this);
+    if (!await ensureAccount(this, AccountReason.postRequest)) return;
+    await router.pushNamed<void>(
+      Routes.requestCreate,
+      extra: pickup == null && delivery == null
+          ? null
+          : RequestRoutePrefill(pickup: pickup, delivery: delivery),
+    );
+  }
 
   void openRequest(int id) =>
       pushNamed(Routes.requestDetail, pathParameters: {'id': '$id'});
@@ -789,7 +871,12 @@ extension AppNavigation on BuildContext {
   void openBoost(int requestId) =>
       pushNamed(Routes.requestBoost, pathParameters: {'id': '$requestId'});
 
-  Future<void> openJourneyCreate() => pushNamed(Routes.journeyCreate);
+  /// Opens the trip form. A guest makes an account first.
+  Future<void> openJourneyCreate() async {
+    final router = GoRouter.of(this);
+    if (!await ensureAccount(this, AccountReason.postTrip)) return;
+    await router.pushNamed<void>(Routes.journeyCreate);
+  }
 
   Future<void> openJourneyEdit(int id) =>
       pushNamed(Routes.journeyEdit, pathParameters: {'id': '$id'});

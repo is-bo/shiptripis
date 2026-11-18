@@ -1,9 +1,10 @@
 /// Regression coverage for the shared [AppScaffold] system-inset contract.
 ///
-/// Auth and onboarding routes intentionally have no AppBar, so the scaffold
-/// must protect their first and last pixels itself. Keeping this at the shared
-/// primitive level catches a device-specific regression before it is repeated
-/// across every form and shell surface.
+/// The auth routes, the account screen and How Wassla works intentionally
+/// have no AppBar, so the scaffold must protect their first and last pixels
+/// itself. Keeping this at the shared primitive level catches a
+/// device-specific regression before it is repeated across every form and
+/// shell surface.
 library;
 
 import 'package:flutter/material.dart';
