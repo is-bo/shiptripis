@@ -46,6 +46,10 @@ before initial startup. Optional features remain disabled unless explicitly supp
 | `GRPC_ALLOW_PRIVATE_BEARER` | Explicit `true` opt-in required by existing production safeguards. Token below is dedicated. |
 | `GOOGLE_OAUTH_CLIENT_IDS` | Comma-separated Google OAuth client ids a Google ID token may name as its audience (the web/server client id the app is built with, and the iOS client id). Empty keeps Sign in with Google off: `POST /api/auth/oauth/google` answers 503 `google_sign_in_unavailable`. |
 | `APPLE_SIGN_IN_CLIENT_IDS` | Comma-separated audiences accepted for Sign in with Apple: the iOS app's bundle id. Empty keeps Sign in with Apple off: `POST /api/auth/oauth/apple` answers 503 `apple_sign_in_unavailable`. Apple's signing keys are fetched from `https://appleid.apple.com/auth/keys`; no Apple secret is needed. |
+| `DRF_DISCOVERY_GUEST_THROTTLE_RATE` | Requests per address for a guest (no account) on the public discovery and geography reads; `300/min`. Mobile carriers put hundreds of people behind one IPv4 address, so this bucket replaces the shared `anon` rate there and is roomy. Members are never counted on it. |
+| `DRF_MATCHING_DISCOVERY_THROTTLE_RATE` | Discovery and Find Travelers reads per member; `60/min` (Home alone makes two to four). |
+| `DRF_REGISTRATION_THROTTLE_RATE` | Email sign-ups per address; `30/hour`. Each sign-up still needs a new email address and an unconfirmed account cannot post. |
+| `DRF_GOOGLE_SIGNIN_THROTTLE_RATE`, `DRF_APPLE_SIGNIN_THROTTLE_RATE` | Provider sign-ins per address; `30/min` each. Password sign-in (`DRF_LOGIN_THROTTLE_RATE`, `10/min`) stays tight: it is the only bound on password guessing. |
 | `LOG_LEVEL` | Go structured log level; `info` initially. |
 | `PERFORMANCE_ACCESS_LOG_ENABLED` | `true` to retain safe route-template/status/timing logs. |
 | `PERFORMANCE_DB_METRICS_ENABLED` | Optional query timing, initially `false` to avoid overhead. |

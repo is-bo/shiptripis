@@ -14,7 +14,14 @@ provider:
    ``account_disabled`` before any token is issued, on both paths.
 
 No name from the provider means an empty name (decision 13): the local part of
-an email address is not a name (`apps.matching.find_travelers.first_name`).
+an email address is not a name (`apps.matching.find_travelers.first_name`). An
+account whose name is still empty takes the provider's name when a later
+sign-in brings one; a name that is set is never overwritten
+(`User.fill_blank_name`, the same set-once rule as `PATCH /api/me`).
+
+A token without an email still signs in to an identity already linked; it
+cannot link or open an account (`email_missing`), and an email the provider
+has not verified cannot either (`email_not_verified`).
 
 Two first sign-ins can race on the two unique constraints this writes,
 `User.email` and `OAuthIdentity(provider, subject)`. The attempt that loses is
@@ -117,19 +124,20 @@ def _sign_in_once(
     identity = _linked_identity(provider=provider, subject=subject)
     if identity is not None:
         _refuse_if_switched_off(identity.user)
+        identity.user.fill_blank_name(name)
         return identity.user
 
-    if email_verified is not True:
-        raise SocialSignInRefused(
-            status.HTTP_401_UNAUTHORIZED,
-            EMAIL_NOT_VERIFIED,
-            f"{label} account email is not verified.",
-        )
     if not email:
         raise SocialSignInRefused(
             status.HTTP_400_BAD_REQUEST,
             EMAIL_MISSING,
             f"{label} account has no verified email.",
+        )
+    if email_verified is not True:
+        raise SocialSignInRefused(
+            status.HTTP_401_UNAUTHORIZED,
+            EMAIL_NOT_VERIFIED,
+            f"{label} account email is not verified.",
         )
 
     user = _locked_account(email=email)
@@ -137,7 +145,9 @@ def _sign_in_once(
         user = _open_account(email=email, name=name, data=data)
     else:
         _refuse_if_switched_off(user)
-        if not user.is_email_verified:
+        if user.is_email_verified:
+            user.fill_blank_name(name)
+        else:
             _claim_unconfirmed_account(user, name=name, data=data)
     OAuthIdentity.objects.create(
         user=user,

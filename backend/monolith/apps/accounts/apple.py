@@ -3,16 +3,23 @@
 The iOS app signs in with Apple and sends the identity token it receives to
 `/api/auth/oauth/apple`. The token is a JWT signed RS256 with one of the keys
 Apple publishes at `APPLE_KEYS_URL`. Before asking Apple, the app made a random
-nonce and gave Apple its SHA-256; it sends the raw nonce here, so a token
-obtained for another sign-in cannot be replayed.
+nonce and gave Apple its SHA-256; it sends the raw nonce here. The nonce binds
+the token to this app's sign-in request, so a token Apple issued for another
+sign-in is refused; the token's short expiry bounds how long it can be
+replayed. The nonce is deliberately not single-use: Apple gives the person's
+name only on the first authorization, so a retry with the same token after a
+failed first attempt must still work.
 
 `verify_identity_token` accepts a token only when all of these hold: the
 header names RS256 and the id of a key Apple publishes; the signature verifies
 with that key; `iss` is exactly Apple; `aud` is a single value listed in
 `APPLE_SIGN_IN_CLIENT_IDS` (the iOS bundle id); `exp` and `iat` are present
 and current within 30 seconds (CLAUDE.md G2); `sub` is present; `nonce` is the
-SHA-256 of the raw nonce; Apple says the email is verified. The person's name
-is never in the token.
+SHA-256 of the raw nonce; an `email`, when the token carries one, is one Apple
+says is verified. A token without an email is accepted with `email` None and
+`email_verified` False: it can sign in to an identity already linked, never
+link or open an account (`apps.accounts.social`). The person's name is never
+in the token.
 
 Raises `AppleAuthError` when the token is refused (401) and
 `AppleAuthUnavailable` when Sign in with Apple cannot be checked right now:
@@ -79,8 +86,10 @@ def _new_keys_client() -> PyJWKClient:
     )
 
 
-#: One client per process, so every request thread shares its cached key set;
-#: `PyJWKClient` serializes its own fetches.
+#: One client per process, so every request thread shares its cached key set.
+#: The warm-up fetch runs outside the client's lock, so on a cold cache each
+#: concurrent request thread may fetch Apple's keys once: bounded by the
+#: thread count, and harmless.
 _keys = _new_keys_client()
 
 
@@ -93,8 +102,9 @@ def nonce_digest(raw_nonce: str) -> str:
 def verify_identity_token(token: str, *, raw_nonce: str) -> dict:
     """The verified claims of an Apple identity token.
 
-    ``email_verified`` comes back as the boolean ``True``; Apple sends it as
-    ``true`` or as the string ``"true"``.
+    With an email, ``email_verified`` comes back as the boolean ``True``
+    (Apple sends ``true`` or the string ``"true"``); anything else is refused.
+    Without one, ``email`` is None and ``email_verified`` False.
     """
 
     audiences = list(settings.APPLE_SIGN_IN_CLIENT_IDS)
@@ -161,6 +171,8 @@ def verify_identity_token(token: str, *, raw_nonce: str) -> dict:
         and hmac.compare_digest(nonce, nonce_digest(raw_nonce))
     ):
         raise AppleAuthError("The Apple identity token does not belong to this sign-in.")
+    if claims.get("email") is None:
+        return {**claims, "email": None, "email_verified": False}
     verified = claims.get("email_verified")
     if verified is not True and verified != "true":
         raise AppleAuthError("Apple account email is not verified.")

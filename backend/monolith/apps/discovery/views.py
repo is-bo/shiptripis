@@ -12,9 +12,12 @@ with its own base class so the rule is visible where a view is declared:
 - **Member endpoints** (`_MemberDiscoveryView`): matches, "I can carry this",
   the own profile and alerts. They are about the caller and need an account.
 
-Every endpoint is throttled on the existing `matching_discovery` scope (per
-member, or per address for a guest, who is also held to the anonymous rate)
-and reads its switch from the marketplace policy at the moment of the request.
+A member is throttled on the `matching_discovery` scope and the `user` rate,
+both per member. A guest is counted by address on the `discovery_guest` scope
+only (`apps.core.throttles`): many people share one address behind a mobile
+carrier's NAT, so the guest bucket is roomy and is not the `anon` one. Every
+endpoint reads its switch from the marketplace policy at the moment of the
+request.
 A tier that is switched off answers HTTP 200 with `state: "disabled"`,
 because "this section is not offered" is a designed state, not a failure.
 """
@@ -28,7 +31,7 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
-from rest_framework.throttling import AnonRateThrottle, ScopedRateThrottle, UserRateThrottle
+from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 
 from apps.core.business_settings import NoActiveBusinessSettings
@@ -37,6 +40,7 @@ from apps.core.marketplace_policy import (
     MarketplacePolicy,
     marketplace_policy,
 )
+from apps.core.throttles import PUBLIC_READ_THROTTLES, MemberScopedRateThrottle
 from apps.matching.discovery import phase2_policy
 from apps.matching.find_travelers import TRUST_AS_TRAVELER, trust_signals
 from apps.matching.policy import InvalidPhase2Policy
@@ -178,7 +182,7 @@ class _PublicDiscoveryView(APIView):
     """A public read: open to a guest, the same cards for everyone."""
 
     permission_classes = (AllowAny,)
-    throttle_classes = (AnonRateThrottle, UserRateThrottle, ScopedRateThrottle)
+    throttle_classes = (*PUBLIC_READ_THROTTLES, MemberScopedRateThrottle)
     throttle_scope = "matching_discovery"
 
 

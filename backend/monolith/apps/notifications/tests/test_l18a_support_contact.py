@@ -1,7 +1,8 @@
 """L18A: `GET /api/support` tells the app where a member writes for help.
 
 The answer is the server setting the emails already print, `EMAIL_SUPPORT_ADDR`,
-or `null` while the operator has not set one. No sign-in, own throttle.
+which is contact@wassla.eu unless the deployment names another (plan EGS,
+decision 2): never `null`. No sign-in, own throttle.
 """
 
 from __future__ import annotations
@@ -27,15 +28,13 @@ class SupportContactTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"email": "help@wassla.invalid"})
 
-    @override_settings(EMAIL_SUPPORT_ADDR="")
-    def test_an_unset_address_is_null(self):
+    def test_the_shipped_default_is_contact_at_wassla(self):
+        # A blank `EMAIL_SUPPORT_ADDR` resolves to this in the settings
+        # (`test_v2_configuration.test_blank_identity_settings_mean_contact_at_wassla`),
+        # so the answer is never null.
         response = APIClient().get(URL)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"email": None})
-
-    @override_settings(EMAIL_SUPPORT_ADDR="   ")
-    def test_a_blank_address_is_null(self):
-        self.assertEqual(APIClient().get(URL).json(), {"email": None})
+        self.assertEqual(response.json(), {"email": "contact@wassla.eu"})
 
     @override_settings(EMAIL_SUPPORT_ADDR="help@wassla.invalid")
     def test_a_stale_token_does_not_break_it(self):

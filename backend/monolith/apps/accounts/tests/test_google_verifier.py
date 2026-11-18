@@ -1,5 +1,6 @@
 """Google sign-in must not hold a request slot for google-auth's 120s default."""
 
+import logging
 import threading
 from unittest.mock import MagicMock, patch
 
@@ -73,3 +74,44 @@ class GoogleUnavailableViewTests(APITestCase):
             },
         )
         verify.assert_not_called()
+
+
+@override_settings(GOOGLE_OAUTH_CLIENT_IDS=["client-id"])
+class GoogleRefusalTextTests(APITestCase):
+    """A refusal is fixed text: never google-auth's message, the token or a claim."""
+
+    TOKEN = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJzZWNyZXQtc3ViamVjdCJ9.c2lnbmF0dXJl"
+
+    def post(self):
+        with self.assertLogs(level="DEBUG") as logs:
+            # A marker, so the capture holds at least one record.
+            logging.getLogger(__name__).debug("google refusal")
+            resp = self.client.post(
+                reverse("auth-oauth-google"), {"id_token": self.TOKEN}, format="json"
+            )
+        for private in (self.TOKEN, "secret-subject", "someone-else", "evil.example"):
+            self.assertNotIn(private, "\n".join(logs.output))
+        return resp
+
+    def test_the_librarys_error_text_is_not_echoed_or_logged(self):
+        leaky = ValueError(f"Token used too late. Token: {self.TOKEN} sub=secret-subject")
+        with patch.object(google.id_token, "verify_oauth2_token", side_effect=leaky):
+            resp = self.post()
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(resp.data, {"detail": "The Google ID token is not valid."})
+
+    def test_each_claim_refusal_is_fixed_text(self):
+        claims = {"aud": "client-id", "iss": "https://accounts.google.com", "email_verified": True}
+        cases = {
+            "The Google ID token is not for this app.": {"aud": "someone-else"},
+            "The Google ID token was not issued by Google.": {"iss": "https://evil.example"},
+            "Google account email is not verified.": {"email_verified": False},
+        }
+        for detail, change in cases.items():
+            with self.subTest(detail):
+                with patch.object(
+                    google.id_token, "verify_oauth2_token", return_value={**claims, **change}
+                ):
+                    resp = self.post()
+                self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+                self.assertEqual(resp.data, {"detail": detail})

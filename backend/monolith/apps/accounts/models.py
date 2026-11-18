@@ -46,6 +46,24 @@ class User(AbstractUser):
     def __str__(self) -> str:
         return self.email
 
+    def fill_blank_name(self, name: str) -> bool:
+        """Set ``name`` only while the stored name is blank; True if it was set.
+
+        A name is set once (plan EGS review): by the member through
+        `PATCH /api/me`, or by Google or Apple at a later sign-in, whichever
+        comes first. One conditional UPDATE decides, so of two concurrent
+        writers only one can win, whatever this instance says.
+        """
+
+        if not name:
+            return False
+        filled = User.objects.filter(pk=self.pk, full_name__regex=r"^\s*$").update(
+            full_name=name
+        )
+        if filled:
+            self.full_name = name
+        return bool(filled)
+
 
 class OAuthIdentity(models.Model):
     """Maps a third-party account (Google sub, Apple sub, ...) to a User."""

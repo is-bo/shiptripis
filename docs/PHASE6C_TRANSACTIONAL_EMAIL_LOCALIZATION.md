@@ -36,6 +36,11 @@ Content-Type: application/json
 
 The serializer rejects values outside `en`, `fr`, and `ar`.
 
+Since EGS (2026-11-18) the same endpoint also accepts `full_name` (trimmed, 1 to
+120 characters) once, while the stored name is blank, for a Google or Apple
+account that arrived without one; after that it answers
+`400 {"code": "name_already_set", "detail": "Your name is already set."}`.
+
 ### Parcel recipients
 
 `deals.DealRecipient.communication_language` is Deal-scoped because recipients

@@ -145,6 +145,22 @@ class VerifierTests(SimpleTestCase):
                     message="Apple account email is not verified.",
                 )
 
+    def test_an_email_present_but_unverified_is_still_refused(self):
+        self.assertRefused(
+            identity_token(email="someone@example.com", email_verified=False),
+            message="Apple account email is not verified.",
+        )
+
+    def test_a_token_without_an_email_passes_with_no_email(self):
+        for verified in (DROP, False, True, "true"):
+            with self.subTest(verified):
+                claims = self.verify(identity_token(email=DROP, email_verified=verified))
+                self.assertIsNone(claims["email"])
+                self.assertIs(claims["email_verified"], False)
+                self.assertEqual(claims["sub"], SUBJECT)
+        claims = self.verify(identity_token(email=None, email_verified=DROP))
+        self.assertEqual((claims["email"], claims["email_verified"]), (None, False))
+
     def test_every_required_claim_must_be_present(self):
         for claim in ("iss", "aud", "exp", "iat", "sub"):
             with self.subTest(claim):
@@ -271,6 +287,38 @@ class AppleSignInViewTests(APITestCase):
         self.assertEqual(user.full_name, "")
         self.assertEqual(response.data["user"]["full_name"], "")
         self.assertEqual(user.preferred_language, "en")
+
+    def test_a_known_identity_signs_in_with_a_token_without_an_email(self):
+        first = self.sign_in(full_name="Amina Benali")
+        again = self.sign_in(identity_token(email=DROP, email_verified=DROP))
+        self.assertEqual(again.status_code, 200, again.data)
+        self.assertEqual(again.data["user"]["id"], first.data["user"]["id"])
+        self.assertEqual((User.objects.count(), OAuthIdentity.objects.count()), (1, 1))
+
+    def test_an_unknown_identity_without_an_email_is_refused(self):
+        response = self.sign_in(identity_token(email=DROP, email_verified=DROP))
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertEqual(
+            response.data,
+            {"code": "email_missing", "detail": "Apple account has no verified email."},
+        )
+        self.assertNothingWritten()
+
+    def test_an_unknown_identity_with_an_unverified_email_is_refused(self):
+        response = self.sign_in(identity_token(email_verified=False))
+        self.assertEqual(response.status_code, 401, response.data)
+        self.assertEqual(response.data, {"detail": "Apple account email is not verified."})
+        self.assertNothingWritten()
+
+    def test_a_returning_sign_in_fills_an_empty_name_only(self):
+        self.sign_in()
+        self.assertEqual(User.objects.get().full_name, "")
+        filled = self.sign_in(full_name="  Amina Benali ")
+        self.assertEqual(filled.status_code, 200, filled.data)
+        self.assertEqual(filled.data["user"]["full_name"], "Amina Benali")
+        again = self.sign_in(full_name="Someone Else")
+        self.assertEqual(again.data["user"]["full_name"], "Amina Benali")
+        self.assertEqual(User.objects.get().full_name, "Amina Benali")
 
     def test_a_returning_sign_in_uses_the_identity_and_changes_nothing(self):
         self.sign_in(full_name="Amina Benali")
