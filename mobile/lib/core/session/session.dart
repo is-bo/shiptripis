@@ -35,11 +35,13 @@ class SessionRestoring extends SessionState {
   const SessionRestoring();
 }
 
+/// Nobody is signed in: the app is browsed as a guest.
 class SessionSignedOut extends SessionState {
   const SessionSignedOut({this.becauseExpired = false});
 
   /// True when a live session ended rather than the app simply starting
-  /// signed out. The sign-in screen explains the difference.
+  /// signed out, until the guest signs in again or dismisses the notice that
+  /// says so. The sign-in screen and the guest screens explain the difference.
   final bool becauseExpired;
 }
 
@@ -127,11 +129,18 @@ final roleContextProvider =
       RoleContextController.new,
     );
 
-/// True when the account may switch sides at all. Drives whether the switch
-/// affordance exists — not merely whether it is enabled.
-final canSwitchRoleProvider = Provider<bool>(
-  (ref) => ref.watch(accountProvider)?.role.canSwitch ?? false,
+/// True once the restore has settled on nobody being signed in.
+final isGuestProvider = Provider<bool>(
+  (ref) => ref.watch(sessionProvider) is SessionSignedOut,
 );
+
+/// True when the viewer may switch sides at all. Drives whether the switch
+/// affordance exists — not merely whether it is enabled. A guest may: they
+/// are only looking, and the choice carries into the account they make.
+final canSwitchRoleProvider = Provider<bool>((ref) {
+  if (ref.watch(isGuestProvider)) return true;
+  return ref.watch(accountProvider)?.role.canSwitch ?? false;
+});
 
 // ---------------------------------------------------------------------------
 // Controllers
@@ -472,6 +481,14 @@ class SessionController extends Notifier<SessionState> {
     state = const SessionSignedOut(becauseExpired: true);
   }
 
+  /// The guest closed the "you were signed out" notice.
+  void dismissSignedOutNotice() {
+    final current = state;
+    if (current is SessionSignedOut && current.becauseExpired) {
+      state = const SessionSignedOut();
+    }
+  }
+
   /// Picks the starting context for a freshly authenticated account: the
   /// remembered choice when it is still permitted, otherwise whichever side
   /// the account can actually use.
@@ -532,9 +549,10 @@ class RoleContextController extends Notifier<RoleContext> {
 
   /// Switches context. A no-op for accounts the server has restricted to one
   /// side, so a stale UI affordance can never put the user into a context
-  /// they are not allowed to act in.
+  /// they are not allowed to act in. A guest's choice is stored like a
+  /// member's, so the account they then make starts on the same side.
   void set(RoleContext next) {
-    if (!(ref.read(accountProvider)?.role.canSwitch ?? false)) return;
+    if (!ref.read(canSwitchRoleProvider)) return;
     if (state == next) return;
     _remembered = next;
     state = next;

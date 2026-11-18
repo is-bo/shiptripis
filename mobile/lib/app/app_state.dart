@@ -53,12 +53,21 @@ CancelToken cancelOnDispose(Ref ref) {
   return token;
 }
 
+/// A private read, refreshed by live events for [resource].
+///
+/// A guest asks the server for nothing private. A list a guest's screens
+/// show (their own requests behind a trip preview, say) reads as [guest];
+/// anything else stays loading, for a session that is not there.
 Future<T> _liveRead<T>(
   Ref ref,
   int? expectedAccountId,
   LiveResource resource,
-  Future<T> Function(CancelToken cancel) read,
-) async {
+  Future<T> Function(CancelToken cancel) read, {
+  T? guest,
+}) async {
+  if (ref.watch(isGuestProvider)) {
+    return guest ?? Completer<T>().future;
+  }
   final unsubscribe = ref
       .read(liveUpdatesProvider)
       .register(resource, ref.invalidateSelf);
@@ -97,6 +106,7 @@ final _myRequestsQuery = FutureProvider.autoDispose
         accountId,
         const LiveResource.requests(),
         (cancel) => repo.mine(cancelToken: cancel),
+        guest: const [],
       );
     });
 final myRequestsProvider =
@@ -190,6 +200,7 @@ final _myJourneysQuery = FutureProvider.autoDispose.family<List<Journey>, int?>(
       accountId,
       const LiveResource.journeys(),
       (cancel) => repo.mine(cancelToken: cancel),
+      guest: const [],
     );
   },
 );
@@ -326,6 +337,7 @@ final _currentDealsQuery = FutureProvider.autoDispose.family<List<Deal>, int?>((
     accountId,
     const LiveResource.deals(),
     (cancel) => repo.current(cancelToken: cancel),
+    guest: const [],
   );
 });
 
@@ -707,6 +719,7 @@ final _chatThreadsQuery = FutureProvider.autoDispose
         accountId,
         const LiveResource.threads(),
         (cancel) => repo.threads(cancelToken: cancel),
+        guest: const [],
       );
     });
 final chatThreadsProvider = Provider.autoDispose<AsyncValue<List<ChatThread>>>(
