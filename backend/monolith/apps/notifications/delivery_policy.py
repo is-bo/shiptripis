@@ -1,4 +1,8 @@
-"""Shared PostgreSQL send gate; its lock number and rate query match Go."""
+"""Shared PostgreSQL send gate; its lock number and rate query match Go.
+
+Also the one rule for whether the selected email provider is configured,
+which the staff console and the provider-health API both report.
+"""
 
 from datetime import timedelta
 
@@ -10,8 +14,14 @@ from django.utils import timezone
 from .models import OutboundMessage
 
 # Held only through a bounded final send/publication transaction. A crashed
-# connection releases it automatically; no expiring Redis lock can overlap SMTP.
+# connection releases it automatically; no expiring Redis lock can overlap a send.
 SEND_LOCK = 877431106
+
+#: `last_error` values a provider refusal writes (Django and Go alike). Each one
+#: spends the shared minute budget, exactly like an accepted send.
+PROVIDER_TRANSIENT = "provider_transient"
+PROVIDER_PERMANENT = "provider_permanent"
+PROVIDER_FAILURES = (PROVIDER_TRANSIENT, PROVIDER_PERMANENT)
 
 
 def acquire_send_lock():
@@ -42,9 +52,22 @@ def rate_limited():
         OutboundMessage.objects.filter(
             Q(dispatched_at__gte=since)
             | Q(
-                last_error__in=("smtp_transient", "smtp_permanent"),
+                last_error__in=PROVIDER_FAILURES,
                 updated_at__gte=since,
             )
         ).count()
         >= settings.EMAIL_RATE_LIMIT_PER_MINUTE
     )
+
+
+def email_transport_configured() -> bool:
+    """Whether the selected provider has what it needs to send.
+
+    Sender.net's API needs its token; SMTP needs a relay host (authentication
+    is optional, as for a local MailHog). The From address always has a value:
+    `EMAIL_FROM_ADDR` defaults to contact@wassla.eu.
+    """
+
+    if getattr(settings, "TRANSACTIONAL_EMAIL_PROVIDER", "smtp") == "sender_net":
+        return bool(getattr(settings, "SENDER_NET_API_TOKEN", ""))
+    return bool(getattr(settings, "EMAIL_HOST", ""))

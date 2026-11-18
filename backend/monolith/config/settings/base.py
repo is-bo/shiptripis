@@ -298,29 +298,40 @@ EMAIL_VERIFY_MAX_ATTEMPTS = env.int("EMAIL_VERIFY_MAX_ATTEMPTS", default=5)
 
 # --- Email ---
 # Transactional obligations live in PostgreSQL. Ordinary rendered mail uses the
-# `email:send` stream and Go SMTP worker; secret-bearing verification, reset,
-# invitation and delivery-code messages use Django's trusted final SMTP adapter
-# so plaintext never enters Redis. DEFAULT_FROM_EMAIL applies to both paths.
-DEFAULT_FROM_EMAIL = env.str(
-    "DEFAULT_FROM_EMAIL", default="Wassla <noreply@example.invalid>"
-)
+# `email:send` stream and the Go email worker; secret-bearing verification,
+# reset, invitation and delivery-code messages use Django's trusted email
+# backend so plaintext never enters Redis. Both send through the provider that
+# `EMAIL_PROVIDER` names: `sender_net` (Sender.net's REST API, the production
+# provider) or `smtp` (any SMTP relay; MailHog in local development).
+TRANSACTIONAL_EMAIL_ENABLED = env.bool("EMAIL_ENABLED", default=False)
+TRANSACTIONAL_EMAIL_PROVIDER = env.str("EMAIL_PROVIDER", default="smtp").strip().lower()
+# The one Wassla address: From, Reply-To and support (the app's "Contact
+# support" and every email footer). A blank value means this default.
+WASSLA_CONTACT_ADDRESS = "contact@wassla.eu"
 # Public links and support identity used by transactional templates. These are
-# intentionally non-secret; SMTP/API credentials remain in the email worker's
-# environment and are never exposed to request handlers.
+# intentionally non-secret; provider credentials are injected from the
+# deployment's secret file and are never exposed to request handlers.
 FRONTEND_BASE_URL = env.str("FRONTEND_BASE_URL", default="")
-EMAIL_SUPPORT_ADDR = env.str("EMAIL_SUPPORT_ADDR", default="")
+EMAIL_SUPPORT_ADDR = (
+    env.str("EMAIL_SUPPORT_ADDR", default="").strip() or WASSLA_CONTACT_ADDRESS
+)
 EMAIL_REPLY_TO = env.str("EMAIL_REPLY_TO", default="").strip() or EMAIL_SUPPORT_ADDR
 EMAIL_FROM_NAME = env.str("EMAIL_FROM_NAME", default="Wassla").strip() or "Wassla"
-EMAIL_FROM_ADDR = env.str("EMAIL_FROM_ADDR", default="")
-if EMAIL_FROM_ADDR:
-    from email.utils import formataddr
-    DEFAULT_FROM_EMAIL = formataddr((EMAIL_FROM_NAME, EMAIL_FROM_ADDR))
+EMAIL_FROM_ADDR = env.str("EMAIL_FROM_ADDR", default="").strip() or WASSLA_CONTACT_ADDRESS
+from email.utils import formataddr  # noqa: E402
+
+DEFAULT_FROM_EMAIL = formataddr((EMAIL_FROM_NAME, EMAIL_FROM_ADDR))
+# Sender.net API token (`EMAIL_PROVIDER=sender_net`). A secret: only in the
+# mounted secret file, never in `stack.env`, images, logs or Git.
+SENDER_NET_API_TOKEN = env.str("SENDER_NET_API_TOKEN", default="").strip()
+# SMTP relay (`EMAIL_PROVIDER=smtp`).
 EMAIL_HOST = env.str("EMAIL_SMTP_HOST", default="")
 EMAIL_PORT = env.int("EMAIL_SMTP_PORT", default=587)
 EMAIL_HOST_USER = env.str("EMAIL_SMTP_USERNAME", default="")
 EMAIL_HOST_PASSWORD = env.str("EMAIL_SMTP_PASSWORD", default="")
 EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
-EMAIL_TIMEOUT = env.int("EMAIL_SMTP_TIMEOUT_SECONDS", default=10)
+# Bounds both providers: the SMTP socket and the API's connect and read.
+EMAIL_TIMEOUT = env.int("EMAIL_TIMEOUT_SECONDS", default=10)
 EMAIL_RATE_LIMIT_PER_MINUTE = env.int("EMAIL_RATE_LIMIT_PER_MINUTE", default=60)
 from django.utils.dateparse import parse_datetime  # noqa: E402
 _email_cutoff = env.str("EMAIL_ACTIVATION_NOT_BEFORE", default="")
@@ -331,8 +342,6 @@ if _email_cutoff and (
     raise RuntimeError("EMAIL_ACTIVATION_NOT_BEFORE must be an ISO timestamp with timezone.")
 if not 1 <= EMAIL_TIMEOUT <= 10 or not 1 <= EMAIL_RATE_LIMIT_PER_MINUTE <= 600:
     raise RuntimeError("Email timeout must be 1..10 seconds and rate must be 1..600 per minute.")
-TRANSACTIONAL_EMAIL_ENABLED = env.bool("EMAIL_ENABLED", default=False)
-TRANSACTIONAL_EMAIL_PROVIDER = env.str("EMAIL_PROVIDER", default="smtp").lower()
 # Separate encryption root for short-lived OTP/invitation delivery copies.
 # When unset, the outbox derives a key from SECRET_KEY; production deployments
 # should provide a rotated, dedicated secret instead.
