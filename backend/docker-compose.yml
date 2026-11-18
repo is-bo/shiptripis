@@ -85,8 +85,8 @@ services:
   # http://localhost:8026 without configuring a real relay (and without any
   # risk of mailing a real address from a dev box).
   #
-  # Dev only — never deployed. Production sets EMAIL_SMTP_HOST/PORT to a real
-  # relay (Brevo/Mailgun/…) with EMAIL_USE_TLS=true + auth. Ports are 1026/8026
+  # Dev only — never deployed. Production uses Sender.net's API
+  # (EMAIL_PROVIDER=sender_net) and no SMTP relay. Ports are 1026/8026
   # on the host to avoid colliding with anything already on 1025/8025; inside
   # the compose network the email-service still talks to `mailhog:1025`.
   mailhog:
@@ -227,12 +227,12 @@ services:
       timeout: 3s
       retries: 6
 
-  # Email/SMTP sender. Pure stream consumer (no Postgres, no public route) —
-  # drains the durable `email:send` stream Django XADDs onto and sends over SMTP.
-  # Django's publisher landed 2026-07-27 (enqueue_email_after_commit), so this
-  # only needs EMAIL_ENABLED=true + the EMAIL_SMTP_* vars to go live; with the
-  # mailhog defaults in .env.example that works out of the box locally. While
-  # disabled it still boots and serves /healthz, so it sits here harmlessly.
+  # Email sender. Stream consumer with a small Postgres pool for delivery
+  # receipts and no public route — drains the durable `email:send` stream
+  # Django XADDs onto and sends through EMAIL_PROVIDER (here `smtp` to mailhog,
+  # per .env.example; production uses Sender.net's API). With EMAIL_ENABLED=true
+  # it works out of the box locally. While disabled it still boots and serves
+  # /healthz, so it sits here harmlessly.
   email-service:
     build:
       context: ./services
@@ -242,8 +242,8 @@ services:
       SHIPTRIP_SERVICE: "email"
       EMAIL_HTTP_ADDR: ":8085"
     depends_on:
-	  postgres:
-		condition: service_healthy
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
       # Dev convenience: with EMAIL_SMTP_HOST=mailhog the first send would fail

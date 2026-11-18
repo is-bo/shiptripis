@@ -91,6 +91,11 @@ def spawn(name: str, command: list[str], *, env: dict[str, str] | None = None) -
             "CHARGILY_WEBHOOK_SECRET",
         ):
             process_env.pop(key, None)
+    if name in {"chat", "notification", "kyc", "gateway"}:
+        # Email provider credentials belong to Django and the Go email
+        # service alone.
+        for key in ("SENDER_NET_API_TOKEN", "EMAIL_SMTP_USERNAME", "EMAIL_SMTP_PASSWORD"):
+            process_env.pop(key, None)
     child = Child(
         name,
         subprocess.Popen(

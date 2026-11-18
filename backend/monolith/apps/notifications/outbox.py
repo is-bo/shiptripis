@@ -8,8 +8,9 @@ them is a promise:
   It is fire-and-forget by design and is documented as such.
 * The generic Redis email stream carries only non-secret, already-rendered
   messages. Secret-bearing messages (verification, password reset, invitations,
-  and delivery codes) are rendered and sent through Django's trusted SMTP
-  boundary so their plaintext never enters Redis.
+  and delivery codes) are rendered and sent through Django's trusted email
+  backend (Sender.net's API in production, `sender_net.py`) so their plaintext
+  never enters Redis.
 
 The Phase 4 obligation is a PostgreSQL row (`OutboundMessage`). The Redis stream
 is only how it travels once it exists. That is the same rule Phase 3 applied to
@@ -17,17 +18,18 @@ money: Redis may accelerate, Redis is never the record.
 
 **Secret material never rests in message context or transport events.**
 `context` holds what a template needs and nothing secret. A code is named by
-`secret_ref` and resolved only in the final trusted SMTP render/send boundary;
+`secret_ref` and resolved only in the final trusted render/send boundary;
 the plaintext is not in this table, Redis, `core_published_event`, the in-app
 inbox, audit metadata, or logs.
 
 **Delivery semantics.** One logical message is one row, deduplicated on `key`,
 so arming it twice is arming it once. Dispatch claims the row, hands the
 rendered body to the transport, and only then marks it dispatched: a crash in
-between can resend the same logical content with a stable Message-ID.
-The obligation is unique; SMTP transport remains at-least-once. A crash after
-SMTP acceptance but before the database commit can produce a duplicate. SMTP
-acceptance is not evidence of final inbox delivery.
+between can resend the same logical content.
+The obligation is unique; the provider transport (Sender.net's API or SMTP)
+remains at-least-once. A crash after provider acceptance but before the
+database commit can produce a duplicate. Provider acceptance is not evidence
+of final inbox delivery.
 """
 
 from __future__ import annotations
@@ -57,7 +59,9 @@ from apps.core.models import PublishedEvent
 
 from .email_layout import EmailDocument, to_html, to_text
 
+from .delivery_policy import PROVIDER_PERMANENT, PROVIDER_TRANSIENT
 from .models import OutboundMessage, OutboundSecret
+from .sender_net import SenderNetRejected
 
 logger = logging.getLogger(__name__)
 
@@ -175,7 +179,7 @@ def enqueue_secret_message(
 
     The authentication-domain row keeps only its verification hash. A
     short-lived, independently encrypted copy is referenced by the outbox and
-    erased after SMTP acceptance. The invitation's canonical capability remains
+    erased after provider acceptance. The invitation's canonical capability remains
     SHA-256 hashed in its invitation row; this short-lived encrypted delivery
     copy is never exposed by an API, audit row, or event payload.
     """
@@ -1092,7 +1096,7 @@ def _xadd_email(
 def _send_email_via_provider(
     *, to: str, subject: str, body: str, html: str = "", obligation_id: int | None = None
 ) -> None:
-    """Send a secret-bearing message at the final SMTP boundary.
+    """Send a secret-bearing message through the final trusted email backend.
 
     The Go stream worker is used for ordinary transactional messages. A
     delivery code must not be serialized into Redis, so this narrow adapter
@@ -1104,7 +1108,7 @@ def _send_email_via_provider(
     if backend.endswith(".console.EmailBackend"):
         # Console backends print the body, which would put the handover code in
         # logs. Local development must use MailHog/SMTP for this message.
-        raise RuntimeError("Secret-bearing email requires a non-console SMTP backend.")
+        raise RuntimeError("Secret-bearing email requires a non-console email backend.")
     reply_to = [settings.EMAIL_REPLY_TO] if settings.EMAIL_REPLY_TO else None
     message = EmailMultiAlternatives(
         subject=subject,
@@ -1171,7 +1175,7 @@ def _consume_secret_ref(message: OutboundMessage) -> None:
 
 
 def dispatch_message(*, message_id: int) -> str:
-    """Serialize each obligation; hold the shared send lock only for final SMTP."""
+    """Serialize each obligation; hold the shared send lock only for the final send."""
     from .delivery_policy import acquire_send_lock
 
     kind = OutboundMessage.objects.only("kind").get(pk=message_id).kind
@@ -1232,7 +1236,7 @@ def _dispatch_message_locked(*, message_id: int) -> str:
             message.max_attempts
         ):
             message.status = OutboundMessage.Status.FAILED
-            message.last_error = "SMTP delivery receipt was not confirmed."
+            message.last_error = "Email delivery receipt was not confirmed."
             message.next_attempt_at = None
             message.save(
                 update_fields=("status", "last_error", "next_attempt_at", "updated_at")
@@ -1283,15 +1287,9 @@ def _dispatch_message_locked(*, message_id: int) -> str:
                 obligation_id=message.pk,
             )
         except Exception as exc:  # noqa: BLE001 - provider errors are retryable
-            smtp_code = 0
-            if isinstance(exc, smtplib.SMTPRecipientsRefused):
-                codes = [reply[0] for reply in exc.recipients.values()]
-                smtp_code = codes[0] if codes and all(500 <= code < 600 for code in codes) else 0
-            elif isinstance(exc, (smtplib.SMTPDataError, smtplib.SMTPSenderRefused)):
-                smtp_code = exc.smtp_code
-            permanent = 500 <= smtp_code < 600
+            permanent = _permanent_provider_refusal(exc)
             failed_permanently = permanent or attempts >= max_attempts
-            safe_error = "smtp_permanent" if permanent else "smtp_transient"
+            safe_error = PROVIDER_PERMANENT if permanent else PROVIDER_TRANSIENT
             OutboundMessage.objects.filter(pk=message_id).update(
                 status=(
                     OutboundMessage.Status.FAILED
@@ -1358,6 +1356,26 @@ def _dispatch_message_locked(*, message_id: int) -> str:
     # Never overwrite a fast consumer's accepted/failure outcome after XADD.
     # If no receipt arrives, the sweep republishes the same stable event id.
     return "transported"
+
+
+def _permanent_provider_refusal(exc: Exception) -> bool:
+    """Whether the provider refused this message itself, so a retry cannot help.
+
+    Sender.net's API says so with `SenderNetRejected` (HTTP 400 or 422). SMTP
+    says so with a 5xx reply to the recipient, sender or data. Everything else
+    (timeouts, network, authentication and configuration trouble, 4xx) stays
+    retryable within the obligation's bounded budget.
+    """
+
+    if isinstance(exc, SenderNetRejected):
+        return True
+    smtp_code = 0
+    if isinstance(exc, smtplib.SMTPRecipientsRefused):
+        codes = [reply[0] for reply in exc.recipients.values()]
+        smtp_code = codes[0] if codes and all(500 <= code < 600 for code in codes) else 0
+    elif isinstance(exc, (smtplib.SMTPDataError, smtplib.SMTPSenderRefused)):
+        smtp_code = exc.smtp_code
+    return 500 <= smtp_code < 600
 
 
 def _retry_delay(attempts: int) -> timedelta:

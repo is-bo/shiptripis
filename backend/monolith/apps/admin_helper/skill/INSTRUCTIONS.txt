@@ -757,10 +757,10 @@ The parts:
 | Flutter app (iOS, Android; `mobile/`) | What senders, travelers and recipients' links use. Tabs: Home, Deliveries, Chat, Profile; bell for notices. English, French, Arabic (right-to-left). Never decides money or status; it only shows what the server says. | Django over HTTPS; Go services over WebSocket |
 | Django monolith (`backend/monolith`) | The brain. All rules, money, deals, matching, verification, disputes, the admin console and the AI helper API. One codebase, many "apps" (next section). | PostgreSQL, Redis, object storage, Stripe, Chargily, email, push |
 | PostgreSQL 16 and Redis 7 | PostgreSQL is the one source of truth. Redis is a fast message bus (live events, push and email queues), not the truth: Django also saves every obligation in the database. | Django, Go |
-| Go services (`backend/services`) | `notification` (live updates and push), `chat` (live chat relay), `kyc` (ID photo upload), `email` (sends queued mail). If they are down Django still works. | Redis, PostgreSQL, object storage, Firebase, mail server |
+| Go services (`backend/services`) | `notification` (live updates and push), `chat` (live chat relay), `kyc` (ID photo upload), `email` (sends queued mail). If they are down Django still works. | Redis, PostgreSQL, object storage, Firebase, Sender.net |
 | Object storage (S3-compatible) | Private buckets for parcel photos, ticket proofs, dispute evidence, ID photos, payout evidence. | Django, Go kyc |
 | Stripe and Chargily | Stripe: EUR cards, refunds, EUR payouts (connected accounts). Chargily: Algerian card / Edahabia, shown in DZD converted by the server from EUR. | Django (calls and webhooks) |
-| Firebase push and email (SMTP) | Phone notices when the app is closed; verification, reset, invitation, delivery-code and status emails. Both ship switched off (server flags `FCM_ENABLED` and `EMAIL_ENABLED` default to false) until the operator turns them on. | Go notification and email; Django |
+| Firebase push and email (Sender.net API) | Phone notices when the app is closed; verification, reset, invitation, delivery-code and status emails. Both ship switched off (server flags `FCM_ENABLED` and `EMAIL_ENABLED` default to false) until the operator turns them on. | Go notification and email; Django |
 | Landing site (`web/`) | Static pages in en, fr, ar plus terms, privacy, prohibited items, support. No build step. | Served by a small web server inside the app unit, reached through the edge |
 | Admin console (`/admin/`, part of Django) | Staff pages: verification, deals, disputes, payments, payouts, settings, audit. Also the AI helper pages. | Django, only from approved office addresses |
 | Caddy edge | The only public door (ports 80 and 443). Adds HTTPS, hides internal routes. | App container |
@@ -790,7 +790,7 @@ ASCII diagram of the system (show this one in a code block):
           | (truth)   |     | (bus)   | |storage | | Chargily  |
           +-----------+     +---------+ |(files) | +-----------+
                                         +--------+
-        Out to phones: Firebase push.  Out to inboxes: email (SMTP).
+        Out to phones: Firebase push.  Out to inboxes: email (Sender.net).
 ```
 
 Same picture in mermaid:
@@ -812,7 +812,8 @@ flowchart LR
     Django --> Stripe[Stripe]
     Django --> Chargily[Chargily]
     Go --> FCM[Firebase push]
-    Go --> Mail[Email SMTP]
+    Go --> Mail[Email: Sender.net API]
+    Django --> Mail
 ```
 
 ## What are the Django apps and what does each own?
@@ -1555,7 +1556,7 @@ Every email is tied to a durable record (visible in Django admin "Outbound messa
 - Each email is a durable row with status: `pending`, `dispatched` (accepted by the mail provider), `failed`, `cancelled`. Visible to staff in Django admin > Outbound messages (filter by status, kind, language; search by email, key or error). It is read-only; rows cannot be deleted or edited.
 - Master switch: `EMAIL_ENABLED` (deployment setting, default off). While off, nothing is sent and rows stay pending; they can still be sent after activation. Email is required for going live with payments.
 - Retries: wait 60 s, doubling each attempt, capped at 6 hours. Default max 10 attempts (12 for the recipient delivery code).
-- Permanent provider refusal (a 5xx code such as a bad address) fails at once with `smtp_permanent`; temporary trouble is `smtp_transient` until attempts run out.
+- Permanent provider refusal (Sender.net answering 400 or 422, or an SMTP 5xx code such as a bad address) fails at once with `provider_permanent`; temporary trouble (a timeout, a rate limit, a token or account problem, a provider outage) is `provider_transient` until attempts run out.
 - A message that can never be built (missing secret, no longer valid) is marked failed with `email_context_or_capability_unavailable`.
 - Sending is rate-limited to 60 emails per minute in total (`EMAIL_RATE_LIMIT_PER_MINUTE`, 1 to 600); Django and the Go email worker share the same limit.
 - Old backlog guard: a message older than 48 hours (or created before the activation cutoff) is held (`activation_held`) and is not sent until an operator reviews it. Reviews are explicit and audited: "release" or "cancel" through a maintenance command that never sends mail itself; an audit command lists the backlog.
@@ -1573,7 +1574,7 @@ Every email is tied to a durable record (visible in Django admin "Outbound messa
 ## What are the Go services in backend/services?
 - `notification`: live WebSocket hub for bell/live events, plus the worker that sends Firebase push to closed apps (only if push is enabled and no live delivery happened within 2 s).
 - `chat`: relays new chat messages to the two people's open chat sockets. Read-only relay; it never writes messages (Django does).
-- `email`: reads the email queue and sends ordinary (non-secret) emails over SMTP, records delivery receipts. Gated by `EMAIL_ENABLED`. Code-bearing emails (verification, reset, invitation, recipient delivery code) are sent by Django directly so codes never go through the queue.
+- `email`: reads the email queue and sends ordinary (non-secret) emails through Sender.net's API (or an SMTP relay in development), records delivery receipts. Gated by `EMAIL_ENABLED`. Code-bearing emails (verification, reset, invitation, recipient delivery code) are sent by Django directly so codes never go through the queue.
 - `kyc`: accepts identity-document uploads (JPEG or PNG, max 8 MiB per image, rate-limited), stores them in object storage and records the submission in Django. See accounts-and-verification.md.
 - Shared libraries (pkg) cover login-token checks, config, database, health checks, retries, metrics, Redis and storage.
 
@@ -1588,8 +1589,8 @@ Static site in `web/` (no build step). Routes: `/en/`, `/fr/`, `/ar/` (Arabic is
 ## How do users contact support?
 - Website support page lists four mailboxes (placeholders marked "must be replaced with verified support mailboxes before launch"): general support, safety and disputes, privacy requests, payment questions. Users should include name, account email, and a deal or payment reference; never a handover code ("no one at Wassla will ever ask you for one"). Not an emergency service.
 - In the app there is no support button or contact row. Profile's "Help and support" section holds only Terms of service and Privacy policy. Some screens only tell the user in text to contact support: the closed dispute window ("Disputes can be opened for 48 hours after delivery. Contact support if you still need help."; no button is drawn), the email-code screen if the code never arrives, and a journey paused by staff.
-- Emails: the support address and reply-to are deployment settings (`EMAIL_SUPPORT_ADDR`, `EMAIL_REPLY_TO`, sender name default "Wassla"); the admin invitation email tells recipients to "contact Wassla support" if unexpected.
-- The server tells the app the same address: `GET /api/support` (no sign-in, limit 30 a minute) answers `{"email": <EMAIL_SUPPORT_ADDR>}`, or `{"email": null}` while it is not set. No address is invented. The app's "Contact support" action opens an email to it (the delivery's tracking number goes in the subject when asked from a delivery). It appears in Profile, on the dispute screen, with the problem list on a delivery, and on a journey paused by staff, and is absent everywhere while the answer is null.
+- Emails: all mail comes from "Wassla <contact@wassla.eu>", which is also the reply-to and the support address. These are deployment settings (`EMAIL_FROM_ADDR`, `EMAIL_SUPPORT_ADDR`, `EMAIL_REPLY_TO`, sender name default "Wassla"), and contact@wassla.eu is the default for each; the admin invitation email tells recipients to "contact Wassla support" if unexpected.
+- The server tells the app the same address: `GET /api/support` (no sign-in, limit 30 a minute) answers `{"email": <EMAIL_SUPPORT_ADDR>}`, which is contact@wassla.eu unless the deployment names another; `{"email": null}` only if the setting is overridden to blank. The app's "Contact support" action opens an email to it (the delivery's tracking number goes in the subject when asked from a delivery). It appears in Profile, on the dispute screen, with the problem list on a delivery, and on a journey paused by staff, and is absent everywhere while the answer is null.
 
 ## Worked examples
 - Sender pays at 10:00 and the traveler confirms pickup at 14:00: pickup email to the sender at 14:00 saying the code appears in 30 minutes; at 14:30 the recipient gets "Your Wassla delivery code" by email and the sender gets "Your delivery code is now available" (no code inside). The traveler sees nothing with the code.

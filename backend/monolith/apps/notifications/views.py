@@ -145,9 +145,10 @@ class SupportContactView(APIView):
     """`GET /api/support`: where a member writes for help (L18A).
 
     `{"email": <EMAIL_SUPPORT_ADDR> | null}`, the same server setting the
-    emails print in their footer. No address is invented: until the operator
-    sets one the answer is `null` and the app shows no support action. Open to
-    anyone and reading no credentials, so a stale token cannot break it.
+    emails print in their footer (contact@wassla.eu unless the deployment names
+    another). Only a setting overridden to blank answers `null`, and the app
+    then shows no support action. Open to anyone and reading no credentials, so
+    a stale token cannot break it.
     """
 
     authentication_classes = ()

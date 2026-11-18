@@ -1,38 +1,59 @@
-# Waçla transactional email operations — V2 preparation
+# Wassla transactional email operations
 
-V2 performs no external activation. Keep `EMAIL_ENABLED=false`,
-`EMAIL_ACTIVATION_APPROVED=false` and `EMAIL_SENDING_DOMAIN_VERIFIED=false`.
-Do not create Sender credentials, change DNS/mailboxes, deploy, or
-run any of these commands against an existing environment during V2.
-The commands below describe later, explicitly authorized operations.
+Wassla sends through **Sender.net's REST API** from one address,
+**Wassla <contact@wassla.eu>**, which is also Reply-To and the support address.
+Everything ships switched off: keep `EMAIL_ENABLED=false`,
+`EMAIL_ACTIVATION_APPROVED=false` and `EMAIL_SENDING_DOMAIN_VERIFIED=false`
+until the owner approves activation. Do not deploy, create provider
+credentials or change DNS without that approval. The commands below describe
+later, explicitly authorized operations.
 
 ## Architecture and configuration
 
-Reuse PostgreSQL `OutboundMessage` and `ScheduledJob`. Django owns business
-events, recipient/locale snapshots and multipart rendering. Ordinary messages
-use Redis/Go SMTP; verification/reset/invitation/delivery codes bypass Redis and
-use trusted Django SMTP. Both use a shared PostgreSQL send gate, the same From,
-Reply-To, TLS policy, timeout and rate budget. No Sender SDK or REST dependency.
+PostgreSQL `OutboundMessage` and `ScheduledJob` are the obligation. Django owns
+business events, recipient/locale snapshots and multipart rendering (text and
+HTML from one document, in English, French and Arabic). Ordinary messages
+travel Redis `email:send` to the Go email worker; verification, reset,
+invitation and delivery-code messages bypass Redis and are sent by Django's
+trusted email backend. Both paths use the provider `EMAIL_PROVIDER` names, the
+shared PostgreSQL send gate, the same From, Reply-To, timeout and minute rate
+budget.
 
-The [official Sender SMTP guide](https://www.sender.net/help/transactional-emails/getting-started/)
-documents `smtp.sender.net:587`, STARTTLS, SMTP-user authentication and a From
-address on a verified domain. SMTP credentials are distinct from the From email.
-Use `EMAIL_PROVIDER=sender_net`; `smtp` remains the generic provider contract.
+| `EMAIL_PROVIDER` | Transport | Used for |
+| --- | --- | --- |
+| `sender_net` | `POST https://api.sender.net/v2/message/send` with `Authorization: Bearer <token>` (Django `apps/notifications/sender_net.py`, Go `internal/email/sender_net.go`) | Production |
+| `smtp` | Any SMTP relay (`EMAIL_SMTP_*`, `EMAIL_USE_TLS`) | MailHog in local development, or any relay if ever preferred |
+
+**The API token.** Create it in Sender.net (Settings, API access tokens). It is
+a secret: it goes only in the mounted `secrets/app.json` as
+`SENDER_NET_API_TOKEN`, never in `stack.env`, Docker build args, images, logs,
+tickets or Git. The runtime injects it once into the shared supervisor
+environment, so Django and Go read the same value; a duplicate source is
+refused. No log line, exception, stored error or metric carries the token, a
+recipient, a subject or a body.
+
+**The From address.** Sender only sends from an address on a domain verified in
+its dashboard, so `wassla.eu` must be verified (see the DNS section) before
+`EMAIL_SENDING_DOMAIN_VERIFIED=true`.
 
 | Location | Settings |
 | --- | --- |
-| Private `stack.env` | `EMAIL_ENABLED=false`, `EMAIL_ACTIVATION_APPROVED=false`, `EMAIL_PROVIDER=sender_net`, `EMAIL_SMTP_HOST=smtp.sender.net`, `EMAIL_SMTP_PORT=587`, `EMAIL_USE_TLS=true` |
-| Private `stack.env` | `EMAIL_FROM_NAME=Waçla`, owner-chosen `EMAIL_FROM_ADDR`, `EMAIL_SUPPORT_ADDR`, optional `EMAIL_REPLY_TO` (falls back to support); `FRONTEND_BASE_URL` must be the actual HTTPS public origin |
-| Private `stack.env` | `EMAIL_SMTP_TIMEOUT_SECONDS=10` (1–10), `EMAIL_RATE_LIMIT_PER_MINUTE=60` (1–600; tune to the actual provider limit) |
-| Private `stack.env` | `EMAIL_SENDING_DOMAIN_VERIFIED=false`, `EMAIL_ACTIVATION_NOT_BEFORE=`; the latter becomes a timezone-qualified ISO timestamp in V3 |
-| Mounted `secrets/app.json` | `EMAIL_SMTP_USERNAME` and `EMAIL_SMTP_PASSWORD`, both empty in V2. Never put them in `stack.env`, Docker build args, images, logs or Git |
-| Existing mounted secret | Preserve `TRANSACTIONAL_EMAIL_SECRET`; it decrypts queued capabilities and is unrelated to SMTP credential rotation |
+| Private `stack.env` | `EMAIL_ENABLED=false`, `EMAIL_ACTIVATION_APPROVED=false`, `EMAIL_PROVIDER=sender_net`; no `EMAIL_SMTP_*` (production refuses an SMTP host with `sender_net`) |
+| Private `stack.env` | `EMAIL_FROM_NAME=Wassla`, `EMAIL_FROM_ADDR=contact@wassla.eu`, `EMAIL_SUPPORT_ADDR=contact@wassla.eu`, `EMAIL_REPLY_TO=` (blank: the support address); blank From or support values also mean contact@wassla.eu. `FRONTEND_BASE_URL` must be the actual HTTPS public origin |
+| Private `stack.env` | `EMAIL_TIMEOUT_SECONDS=10` (1–10; bounds one send on either provider), `EMAIL_RATE_LIMIT_PER_MINUTE=60` (1–600; tune to the Sender account's limit) |
+| Private `stack.env` | `EMAIL_SENDING_DOMAIN_VERIFIED=false`, `EMAIL_ACTIVATION_NOT_BEFORE=`; the latter becomes a timezone-qualified ISO timestamp at activation |
+| Mounted `secrets/app.json` | `SENDER_NET_API_TOKEN`, empty until activation |
+| Existing mounted secret | Preserve `TRANSACTIONAL_EMAIL_SECRET`; it decrypts queued capabilities and is unrelated to token rotation |
 
-Follow [ENVIRONMENT.md](ENVIRONMENT.md) for file ownership/modes. The runtime
-injects secrets once into the shared supervisor environment; Django and Go
-therefore consume identical values. Duplicate sources are refused. Both
-services start without SMTP credentials while disabled. Production startup
-validates enabled configuration without dialing Sender.
+With `EMAIL_ENABLED=true`, production startup refuses (and names the setting):
+a missing token, one shorter than 20 characters or one containing spaces, any
+`EMAIL_SMTP_HOST` under `sender_net`, an invalid From/support/Reply-To address,
+an unverified domain or a missing activation cutoff. With provider `smtp` it
+keeps requiring a host and TLS. Both services start without credentials while
+disabled, and configuration is validated without calling Sender; `/readyz`
+reports PostgreSQL and Redis only.
+
+Follow [ENVIRONMENT.md](ENVIRONMENT.md) for file ownership/modes.
 
 ## Invitation browser access
 
@@ -69,8 +90,8 @@ click/open tracking for capability mail, as described below.
    They omit recipients, message keys/context, bodies, URLs, tokens and codes.
    The audit never decrypts or sends. Include pending **and failed** rows in the
    review record; failed rows are already terminal and are not automatically
-   retried. Review Redis lag/pending entries and any already accepted SMTP
-   receipts too; SMTP acceptance must never be replayed as a new send.
+   retried. Review Redis lag/pending entries and any already accepted provider
+   receipts too; a provider acceptance must never be replayed as a new send.
 4. Classify with the application state and permissioned operations console:
 
    | Class | Operator decision |
@@ -80,7 +101,7 @@ click/open tracking for capability mail, as described below.
    | Expired/revoked/used invitation | Cancel; privileged operator issues a fresh role-bound invitation if still needed |
    | Used/rotated/cancelled/buffered delivery code or changed recipient | Cancel obsolete obligation; reconcile current handover state through existing authorized services. Never reveal or regenerate a code in this command |
    | Historical payment, refund, payout, trust or lifecycle notice | Inspect current provider/domain state, superseding events, recipient authority and relevance. A success receipt may remain valid evidence; an old action prompt may be obsolete. Never alter ledger/payment state to make an email eligible |
-   | SMTP receipt already accepted but outbox still pending | Reconcile through the existing receipt/sweep path; do not authorize another send. Review command refuses release |
+   | Provider acceptance already recorded but outbox still pending | Reconcile through the existing receipt/sweep path; do not authorize another send. Review command refuses release |
    | Still-valid obligation | Explicit release for that exact row, after checking recipient, locale, context, current business state and expiry. Do not discard it merely because it is old |
 
 5. Record one explicit decision at a time with the digest from a fresh audit:
@@ -100,33 +121,26 @@ click/open tracking for capability mail, as described below.
    Old Redis entries then cannot name a sendable obligation.
 6. Re-audit. Unreviewed pre-cutoff rows remain held. Independently, unreviewed
    rows older than 48 hours are held after an extended outage. Holds consume no
-   SMTP attempts and do not delete valid obligations. Expired reviews require
+   send attempts and do not delete valid obligations. Expired reviews require
    a new decision. The sweep filters held rows so they cannot starve new mail.
 
 Classification is assistance, not proof that a financial/lifecycle notice is
 still useful: review the current business record. Never bulk approve an entire
 historical queue. Do not flush Redis to bypass the audit or reset all statuses.
 
-## Domain, DNS and monitored business inboxes — V3 only
+## Domain, DNS and the contact mailbox
 
-The owner supplies the actual Namecheap domain; none is assumed in code.
-Choose a hosted mailbox provider, preferably Namecheap Private Email for a
-small initial team. Use a real monitored `support@<domain>` mailbox;
-`contact@<domain>` can be an alias into that mailbox if the same team handles
-both, or a separate mailbox when access/ownership differs. Use
-`notifications@<domain>` as the verified transactional From identity. It need
-not have a separate paid inbox when replies go to support; an alias into the
-monitored inbox is useful for replies sent directly to From. Never advertise
-an unmonitored Reply-To. Do not host IMAP/SMTP mailboxes on the VPS.
+The domain is `wassla.eu`. Sender sends mail; it does **not** receive it. The
+address `contact@wassla.eu` is From, Reply-To and support, so it must be a real
+monitored mailbox at a mailbox provider (for example Namecheap Private Email),
+with that provider's MX records. Replies and support requests land there. Never
+advertise an unmonitored address. Do not host IMAP/SMTP mailboxes on the VPS.
 
 [Namecheap supports hosted Private Email and third-party MX configurations](https://www.namecheap.com/support/knowledgebase/article.aspx/322/2237/how-can-i-set-up-mx-records-required-for-mail-service/).
-[Aliases can route business addresses to the chosen mailbox](https://www.namecheap.com/support/knowledgebase/article.aspx/10791/2215/how-to-create-an-alias-for-namecheap-private-email/).
-No mailbox purchase or subscription is part of V2.
 
-In V3, verify ownership using a working address on the owner's domain. Obtain
-the actual authentication records from Sender's Domains dashboard; that
-dashboard is authoritative for names, selectors, tokens and targets. Do not
-derive DNS values from examples in this repository.
+Add `wassla.eu` in Sender's Domains dashboard and obtain its authentication
+records there; that dashboard is authoritative for names, selectors, tokens
+and targets. Do not derive DNS values from examples in this repository.
 
 * **SPF:** inventory the existing policy and every legitimate sender, including
   the mailbox provider. Merge authorized mechanisms into **one** SPF policy at
@@ -134,91 +148,100 @@ derive DNS values from examples in this repository.
   record or blindly replace the mailbox provider's policy.
 * **DKIM:** copy Sender's current dashboard-supplied records exactly. Keep the
   mailbox provider's independent selector/records. Confirm signing-domain
-  alignment against the chosen From domain.
+  alignment against the From domain.
 * **DMARC:** inventory any existing policy, establish an owner-approved report
   destination and rollout policy, verify SPF/DKIM alignment, then strengthen
   policy using observed legitimate traffic. Do not weaken an existing policy
   merely to pass a dashboard check.
-* **MX:** incoming mail belongs to the mailbox provider. Sender relay settings
-  do not justify replacing inbound MX. Use that provider's exact MX values.
+* **MX:** incoming mail belongs to the mailbox provider. Sending through Sender
+  does not justify replacing inbound MX. Use that provider's exact MX values.
 * **Bounce/return path:** use Sender's supported envelope/return-path behavior;
-  do not invent a custom bounce domain or DNS target. Confirm supported custom
-  return-path options and actual alignment during V3 testing.
+  do not invent a custom bounce domain or DNS target.
 
 See [Sender domain authentication](https://www.sender.net/help/deliverability-compliance/spf-dkim-dmarc-setup/).
-Verify authoritative/public DNS answers and dashboard status after propagation
-using `dig TXT <domain>`, the actual DKIM hostname and `dig TXT _dmarc.<domain>`;
+Verify public DNS answers and dashboard status after propagation using
+`dig TXT wassla.eu`, the actual DKIM hostname and `dig TXT _dmarc.wassla.eu`;
 do not log verification links or private dashboard screenshots. Check that
-support/contact can receive and send replies before activating transactional mail.
+contact@wassla.eu can receive and send replies before activating transactional
+mail.
 
-## Retry, health, alerts and credential rotation
+## Retry, health, alerts and token rotation
 
-`dispatched` and legacy `PublishedEvent.delivered_at` mean **SMTP accepted**,
-not final inbox delivery. The application does not currently consume Sender
-delivery/bounce webhooks. In V3 use Sender's transactional logs and supported
-bounce events; verify authentication, replay protection, retention and account
-capabilities before adding any inbound integration. Do not invent a webhook
-signature contract. Keep optional open/click tracking disabled for sensitive
-transactional mail; this code adds no tracking pixel or third-party resource.
+`dispatched` and `PublishedEvent.delivered_at` mean **the provider accepted the
+message** (Sender answered `2xx` with `"success": true`, or the SMTP relay
+accepted DATA), not final inbox delivery. The application does not consume
+Sender delivery/bounce webhooks. Use Sender's transactional logs; verify
+authentication, replay protection and retention before adding any inbound
+integration. Keep open/click tracking disabled for sensitive transactional mail;
+this code adds no tracking pixel or third-party resource.
 
 PostgreSQL serializes the bounded last-mile send across Django/Go workers and
-counts accepted/failed attempts for the shared minute budget. SMTP timeouts and
-4xx failures remain retryable with exponential backoff (60 seconds to 6 hours)
-and the existing bounded obligation budget (normally 10, recipient code 12).
-Recipient/sender/DATA 5xx refusals become durable terminal failures. Dial, TLS
-and authentication/configuration failures remain retryable within the budget;
-alert and repair configuration before releasing more work. Worker death releases database
+counts accepted and failed attempts for the shared minute budget. Failure
+classes, the same on both paths:
+
+| Answer | Outcome | Stored `last_error` |
+| --- | --- | --- |
+| Sender `400` or `422`; SMTP 5xx refusal of recipient, sender or data | Terminal failure at once (the message itself is invalid) | `provider_permanent` |
+| Sender `401`, `403`, `404` (token or account configuration), `408`, `429`, any `5xx`, a redirect, a `2xx` without `"success": true`; SMTP 4xx, auth, TLS; any timeout or network error | Retry with exponential backoff (60 seconds to 6 hours) within the obligation's budget (normally 10, recipient code 12) | `provider_transient` |
+
+Configuration failures stay retryable so they do not burn messages; alert and
+repair configuration before releasing more work. Worker death releases database
 locks; missing jobs and lost Redis entries are recovered by the outbox sweep.
 The Go PEL sweeper reclaims abandoned work; duplicate entries consult the same
-durable obligation/receipt before sending. Stable Message-ID values help
-correlation. A crash **after SMTP acceptance but before database commit** can
-still duplicate a message: SMTP supplies no idempotency transaction. Never
+durable obligation/receipt before sending. A crash **after provider acceptance
+but before the database commit**, or a timeout after Sender accepted, can still
+duplicate a message: neither the API nor SMTP offers an idempotency key. Never
 describe this boundary as exactly-once or as final delivery.
 
 Monitor the private `/readyz` and `/debug/vars` email endpoints through existing
 host/container checks; do not expose them publicly. Track `smtp_attempts_total`,
 `smtp_accepted_total`, `smtp_retryable_failures_total`,
-`smtp_permanent_failures_total` and `send_gate_skips_total` in `email_stats`.
-The existing `ops_snapshot` includes overdue age/count, failed, retrying and
-activation-held obligations plus Redis email lag/pending. Alert on:
+`smtp_permanent_failures_total` and `send_gate_skips_total` in `email_stats`
+(the names predate the API sender and count both providers). Failure log lines
+carry `failure`, `provider`, `http_status` or `smtp_code`, and the API or relay
+host, never an address. The existing `ops_snapshot` includes overdue age/count,
+failed, retrying and activation-held obligations plus Redis email lag/pending.
+Alert on:
 
 * worker/process unhealthy or missing finance snapshots;
 * actionable email overdue >10 minutes, growing Redis lag >100, or repeated
-  SMTP timeouts/4xx failures;
+  timeouts, `401`/`403` (token) or `429` (rate) answers;
 * any new permanent failure/unconfirmed acceptance, and failed obligations
   requiring operator reconciliation;
 * persistent activation holds approaching expiry or a released row that has
   not been sent. Holds need review, not automatic retry-budget resets.
 
 V1 host monitoring retains its local systemd alert hook. The owner must connect
-it to a monitored operational destination during V3; V2 sends no alerts
-externally. Reconcile expected historical failures when setting alert baselines.
+it to a monitored operational destination before relying on it.
 
-For SMTP credential rotation: disable both activation switches, stop/drain the
-application, inspect pending/uncertain acceptance, obtain replacement SMTP
-credentials in V3, atomically replace mounted `app.json` retaining its private
+For token rotation: disable both activation switches, stop/drain the
+application, inspect pending/uncertain acceptance, create the replacement token
+in Sender, atomically replace mounted `app.json` retaining its private
 owner/group/mode, validate configuration and recreate the shared application
-process. Both senders must load the same replacement. Complete a controlled
-allowlisted test before revoking old credentials; re-enable only after the
-normal backlog review. If compromise is suspected, revoke immediately and keep
-sending off until review completes. Never rotate the outbox encryption root as
-a side effect of SMTP password rotation.
+process. Both senders load the same replacement. Complete a controlled
+allowlisted test before deleting the old token; re-enable only after the normal
+backlog review. If compromise is suspected, delete the token in Sender
+immediately and keep sending off until review completes. Never rotate the
+outbox encryption root as a side effect of token rotation.
 
-## Eventual V3 activation checklist
+## Activation checklist
 
-* Owner confirms domain, HTTPS public origin, From/support/contact identities,
-  mailbox access, native-language review and permitted test recipients.
-* Verified ownership, SPF/DKIM/DMARC alignment, monitored Reply-To and inbound MX.
-* Sender SMTP account capability/rate limits reviewed; credentials injected only
-  through mounted secrets. Provider tracking settings reviewed for sensitive mail.
-* Current backup, completed per-row backlog audit and a current activation cutoff;
-  an approved fresh-verification support path for legacy unverified accounts.
-* Apply V2's additive migrations through the existing single-owner V1 procedure;
-  validate production startup with sending still disabled.
-* Deploy only after separate owner authorization. Set both activation switches
-  and the verified-domain flag only for the agreed V3 activation window.
-* Controlled Gmail/Outlook/Apple Mail/mobile tests in EN/FR/AR; inspect headers,
-  From/Reply-To, TLS, SPF/DKIM/DMARC, spam placement, one-time-use/expiry,
-  acceptance, bounce behavior and received replies. These are not V2 results.
+* Owner confirms the HTTPS public origin, the contact@wassla.eu mailbox access,
+  native-language review and permitted test recipients.
+* `wassla.eu` verified in Sender; SPF/DKIM/DMARC aligned; contact@wassla.eu
+  receives mail (inbound MX at the mailbox provider).
+* Sender account limits reviewed against `EMAIL_RATE_LIMIT_PER_MINUTE`; the API
+  token injected only through `secrets/app.json`. Tracking settings reviewed
+  for sensitive mail.
+* Current backup, completed per-row backlog audit and a current activation
+  cutoff.
+* Validate production startup with sending still disabled.
+* Deploy only after separate owner authorization. Set `EMAIL_ENABLED=true`,
+  `EMAIL_ACTIVATION_APPROVED=true` and `EMAIL_SENDING_DOMAIN_VERIFIED=true`
+  only for the agreed activation window.
+* Controlled Gmail/Outlook/Apple Mail/mobile tests in EN/FR/AR: a verification
+  code, a password reset and an ordinary status email; inspect From and
+  Reply-To, SPF/DKIM/DMARC, spam placement, one-time-use/expiry, acceptance in
+  Sender's logs, bounce behavior and received replies.
 * Confirm backlog/retry/worker alerts; record evidence and disable sending again
   if any gate fails. Financial switches stay TEST/off throughout.

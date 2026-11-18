@@ -98,6 +98,7 @@ from apps.locations.models import (
     GeographyCatalogueImport,
     Place,
 )
+from apps.notifications.delivery_policy import email_transport_configured
 from apps.notifications.models import OutboundMessage
 from apps.parcels import tracking
 from apps.parcels.models import DeliveryRequest, ParcelRequest
@@ -597,7 +598,7 @@ def _provider_rows() -> list[dict]:
 
     email_enabled = bool(getattr(settings, "TRANSACTIONAL_EMAIL_ENABLED", False))
     email_configured = bool(
-        getattr(settings, "EMAIL_HOST", "")
+        email_transport_configured()
         and getattr(settings, "DEFAULT_FROM_EMAIL", "")
         and getattr(settings, "EMAIL_SENDING_DOMAIN_VERIFIED", False)
     )

@@ -295,41 +295,64 @@ if HANDOVER_CODE_SECRET == SECRET_KEY:  # noqa: F405
         "HANDOVER_CODE_SECRET must differ from DJANGO_SECRET_KEY."
     )
 
-# --- Email (SMTP) ---
-# The Go email-service carries ordinary transactional mail from `email:send`.
-# Django's SMTP backend is also the trusted final boundary for secret-bearing
-# messages that must never be serialized into Redis. Both use environment-only
-# credentials; DEFAULT_FROM_EMAIL falls back to base.py when unset.
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-# Django's default is no socket timeout. Secret-bearing mail is sent from the
-# finance worker's serial loop, so one stalled SMTP connection would otherwise
-# stop payout, refund and expiry jobs behind it indefinitely.
-if TRANSACTIONAL_EMAIL_PROVIDER not in {"smtp", "sender_net", "sender.net"}:  # noqa: F405
+# --- Email ---
+# The Go email service carries ordinary transactional mail from `email:send`.
+# Django's email backend is the trusted final boundary for secret-bearing
+# messages that must never be serialized into Redis. Both send through the
+# provider `EMAIL_PROVIDER` names, with the same From, Reply-To, timeout and
+# credentials, which the VPS runtime injects from the mounted secret file.
+_EMAIL_BACKENDS = {
+    "sender_net": "apps.notifications.sender_net.SenderNetEmailBackend",
+    "smtp": "django.core.mail.backends.smtp.EmailBackend",
+}
+if TRANSACTIONAL_EMAIL_PROVIDER not in _EMAIL_BACKENDS:  # noqa: F405
     raise RuntimeError("EMAIL_PROVIDER must be 'smtp' or 'sender_net'.")
+EMAIL_BACKEND = _EMAIL_BACKENDS[TRANSACTIONAL_EMAIL_PROVIDER]  # noqa: F405
+# Both backends are bounded by EMAIL_TIMEOUT (EMAIL_TIMEOUT_SECONDS, 1..10).
+# Secret-bearing mail is sent from the finance worker's serial loop, so one
+# stalled connection would otherwise stop payout, refund and expiry jobs.
 if TRANSACTIONAL_EMAIL_ENABLED:  # noqa: F405
-    if not EMAIL_HOST or not EMAIL_FROM_ADDR:  # noqa: F405
-        raise RuntimeError(
-            "EMAIL_SMTP_HOST and EMAIL_FROM_ADDR are required when EMAIL_ENABLED=true."
-        )
+    from django.core.exceptions import ValidationError
+    from django.core.validators import validate_email
+
+    for _name, _address in (
+        ("EMAIL_FROM_ADDR", EMAIL_FROM_ADDR),  # noqa: F405
+        # Support first: a blank EMAIL_REPLY_TO means the support address.
+        ("EMAIL_SUPPORT_ADDR", EMAIL_SUPPORT_ADDR),  # noqa: F405
+        ("EMAIL_REPLY_TO", EMAIL_REPLY_TO),  # noqa: F405
+    ):
+        try:
+            validate_email(_address)
+        except ValidationError:
+            raise RuntimeError(f"{_name} must be a single valid email address.") from None
     if not EMAIL_SENDING_DOMAIN_VERIFIED:  # noqa: F405
         raise RuntimeError(
             "EMAIL_SENDING_DOMAIN_VERIFIED must be true before enabling production email."
         )
-    from django.core.validators import validate_email
-    for address in (EMAIL_FROM_ADDR, EMAIL_REPLY_TO, EMAIL_SUPPORT_ADDR):  # noqa: F405
-        validate_email(address)
-    if not EMAIL_ACTIVATION_NOT_BEFORE or not EMAIL_USE_TLS:  # noqa: F405
-        raise RuntimeError("Production email requires an activation cutoff and TLS.")
-    if TRANSACTIONAL_EMAIL_PROVIDER in {"sender_net", "sender.net"} and (  # noqa: F405
-        EMAIL_HOST != "smtp.sender.net" or EMAIL_PORT != 587  # noqa: F405
-    ):
-        raise RuntimeError("Sender.net requires smtp.sender.net:587 with STARTTLS.")
-    if TRANSACTIONAL_EMAIL_PROVIDER in {"sender_net", "sender.net"} and (  # noqa: F405
-        not EMAIL_HOST_USER or not EMAIL_HOST_PASSWORD or not EMAIL_USE_TLS  # noqa: F405
-    ):
-        raise RuntimeError(
-            "Sender.net requires SMTP username/password and TLS when email is enabled."
-        )
+    if not EMAIL_ACTIVATION_NOT_BEFORE:  # noqa: F405
+        raise RuntimeError("Production email requires EMAIL_ACTIVATION_NOT_BEFORE.")
+    if TRANSACTIONAL_EMAIL_PROVIDER == "sender_net":  # noqa: F405
+        # The token travels in an Authorization header: printable ASCII with no
+        # spaces. These messages never echo its value.
+        if len(SENDER_NET_API_TOKEN) < 20 or not all(  # noqa: F405
+            33 <= ord(character) <= 126 for character in SENDER_NET_API_TOKEN  # noqa: F405
+        ):
+            raise RuntimeError(
+                "SENDER_NET_API_TOKEN must be set (at least 20 printable characters, "
+                "no spaces) when EMAIL_PROVIDER=sender_net and EMAIL_ENABLED=true."
+            )
+        if EMAIL_HOST:  # noqa: F405
+            raise RuntimeError(
+                "EMAIL_SMTP_HOST must be empty with EMAIL_PROVIDER=sender_net: "
+                "Sender.net is used through its API."
+            )
+    else:
+        if not EMAIL_HOST:  # noqa: F405
+            raise RuntimeError(
+                "EMAIL_SMTP_HOST is required when EMAIL_PROVIDER=smtp and EMAIL_ENABLED=true."
+            )
+        if not EMAIL_USE_TLS:  # noqa: F405
+            raise RuntimeError("Production SMTP email requires EMAIL_USE_TLS=true.")
 
 
 from types import SimpleNamespace  # noqa: E402

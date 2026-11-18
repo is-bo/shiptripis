@@ -63,6 +63,7 @@ from apps.finance.services import (
 )
 from apps.kyc.models import KycSubmission
 from apps.matching.models import Match, Offer
+from apps.notifications.delivery_policy import email_transport_configured
 from apps.notifications.models import OutboundMessage
 from apps.parcels.models import DeliveryRequest
 from apps.ratings.models import Rating
@@ -246,15 +247,17 @@ def _provider_health() -> dict:
             "code": "route_provider_status_unavailable",
         }
 
-    smtp_host = str(getattr(settings, "EMAIL_HOST", "") or "")
-    smtp_user = str(getattr(settings, "EMAIL_HOST_USER", "") or "")
     from_address = str(getattr(settings, "DEFAULT_FROM_EMAIL", "") or "")
     email_enabled = bool(getattr(settings, "TRANSACTIONAL_EMAIL_ENABLED", False))
+    provider = str(getattr(settings, "TRANSACTIONAL_EMAIL_PROVIDER", "smtp"))
     result["email"] = {
-        "provider": str(getattr(settings, "TRANSACTIONAL_EMAIL_PROVIDER", "smtp")),
+        "provider": provider,
         "enabled": email_enabled,
-        "configured": bool(email_enabled and smtp_host and smtp_user and from_address),
-        "tls": bool(getattr(settings, "EMAIL_USE_TLS", False)),
+        "configured": bool(
+            email_enabled and email_transport_configured() and from_address
+        ),
+        # Sender.net's API is HTTPS only; SMTP follows EMAIL_USE_TLS.
+        "tls": provider == "sender_net" or bool(getattr(settings, "EMAIL_USE_TLS", False)),
         "sending_domain_verified": bool(
             getattr(settings, "EMAIL_SENDING_DOMAIN_VERIFIED", False)
         ),

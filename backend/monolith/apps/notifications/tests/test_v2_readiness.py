@@ -433,7 +433,7 @@ def committed_mail(db):
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize("outcome", ["dispatched", "smtp_transient"])
+@pytest.mark.parametrize("outcome", ["dispatched", "provider_transient"])
 @pytest.mark.parametrize("redis_reply_lost", [False, True])
 def test_redis_publication_observes_committed_claim_and_preserves_fast_outcome(
     committed_mail, outcome, redis_reply_lost
@@ -708,7 +708,7 @@ def test_real_django_smtp_timeout_preserves_a_retryable_obligation():
                 with pytest.raises(outbox.EmailDeliveryError):
                     outbox.dispatch_message(message_id=row.pk)
                 row.refresh_from_db()
-                assert row.status == "pending" and row.last_error == "smtp_transient"
+                assert row.status == "pending" and row.last_error == "provider_transient"
                 assert not server.messages
                 server.greeting_delay = 0
                 OutboundMessage.objects.filter(pk=row.pk).update(
