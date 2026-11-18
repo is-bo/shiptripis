@@ -187,11 +187,18 @@ class _BenefitsScreenState extends State<BenefitsScreen> {
                 child: Row(
                   children: [
                     PassportDots(count: chapters.length, active: _index),
-                    const Spacer(),
-                    _AdvanceButton(
-                      isLast: isLast,
-                      label: l.onboardingGetStarted,
-                      onPressed: () => _advance(chapters.length),
+                    const SizedBox(width: AppSpace.lg),
+                    // The button takes what the dots leave, so its label
+                    // shortens rather than pushing it off a narrow phone.
+                    Expanded(
+                      child: Align(
+                        alignment: AlignmentDirectional.centerEnd,
+                        child: _AdvanceButton(
+                          isLast: isLast,
+                          label: l.onboardingGetStarted,
+                          onPressed: () => _advance(chapters.length),
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -1309,23 +1316,27 @@ class _AdvanceButton extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              AnimatedSize(
-                duration: AppMotion.respecting(context, AppMotion.normal),
-                curve: AppMotion.enter,
-                child: isLast
-                    ? Padding(
-                        padding: const EdgeInsetsDirectional.only(
-                          start: 12,
-                          end: 10,
-                        ),
-                        child: Text(
-                          label,
-                          style: Theme.of(
-                            context,
-                          ).textTheme.labelLarge?.copyWith(color: c.onAccent),
-                        ),
-                      )
-                    : const SizedBox(width: 2),
+              Flexible(
+                child: AnimatedSize(
+                  duration: AppMotion.respecting(context, AppMotion.normal),
+                  curve: AppMotion.enter,
+                  child: isLast
+                      ? Padding(
+                          padding: const EdgeInsetsDirectional.only(
+                            start: 12,
+                            end: 10,
+                          ),
+                          child: Text(
+                            label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(
+                              context,
+                            ).textTheme.labelLarge?.copyWith(color: c.onAccent),
+                          ),
+                        )
+                      : const SizedBox(width: 2),
+                ),
               ),
               Container(
                 width: 34,

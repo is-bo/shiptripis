@@ -31,10 +31,14 @@ class RecordedRequest {
     required this.path,
     required this.body,
     this.query = const <String, dynamic>{},
+    this.headers = const <String, dynamic>{},
   });
 
   final String method;
   final String path;
+
+  /// The headers as sent, the bearer included.
+  final Map<String, dynamic> headers;
 
   /// The decoded JSON body, or `{}` for a request that carried none.
   final Map<String, dynamic> body;
@@ -147,6 +151,7 @@ class _FakeAdapter implements HttpClientAdapter {
         _ => <String, dynamic>{},
       },
       query: Map<String, dynamic>.from(options.queryParameters),
+      headers: Map<String, dynamic>.from(options.headers),
     );
     unawaited(cancelFuture?.then((_) => request.cancelled = true));
 

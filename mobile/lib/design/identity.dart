@@ -343,7 +343,8 @@ class _DashedBorderPainter extends CustomPainter {
 /// A blob of sealing wax with a letter pressed into it.
 ///
 /// Used where the product wants to say "this is settled and witnessed" —
-/// a completed handover, a verified identity, the trust panel in onboarding.
+/// a completed handover, a verified identity, the trust chapter of How Wassla
+/// works.
 class WaxSeal extends StatelessWidget {
   const WaxSeal({
     required this.glyph,
@@ -459,13 +460,23 @@ class PostageStamp extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    label.toUpperCase(),
-                    style: AppTypography.monoLabel(
-                      context,
-                      color: c.sealSoft,
-                      size: 9,
-                      tracking: 1.6,
+                  // One line, shrunk to the stamp's face: "PAR AVION" or
+                  // "EMBARQUEMENT" wrapped at a large text size and pushed
+                  // the plane off the stamp.
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        label.toUpperCase(),
+                        maxLines: 1,
+                        style: AppTypography.monoLabel(
+                          context,
+                          color: c.sealSoft,
+                          size: 9,
+                          tracking: 1.6,
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -809,7 +820,7 @@ class _PaperDisc extends StatelessWidget {
   }
 }
 
-/// The page indicator from the onboarding carousel: the active dot stretches
+/// The page indicator of How Wassla works: the active dot stretches
 /// into a sun-coloured lozenge with a glow under it.
 class PassportDots extends StatelessWidget {
   const PassportDots({required this.count, required this.active, super.key});

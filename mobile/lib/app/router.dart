@@ -237,10 +237,47 @@ void _leavePrivateScreens(GoRouter router) {
   router.push(_signInFor(private.last.toString(), flow: true));
 }
 
+/// Where the router sends a person in [session] who asks for [uri], or null
+/// to let them stay.
+String? _redirectFor(SessionState session, Uri uri) {
+  final location = uri.path;
+
+  // Restoring: hold on the splash rather than flashing a sign-in screen at a
+  // user who is already signed in. A cold start with no network stays here
+  // too — being offline is not being signed out.
+  if (session is SessionRestoring) {
+    return location == '/splash' ? null : '/splash';
+  }
+
+  // Signed out is a guest. Home is the front page, and a place only a member
+  // can see asks them to sign in, then returns them there.
+  if (session is SessionSignedOut) {
+    if (location == '/splash') return '/home';
+    if (isPublicLocation(location)) return null;
+    return _signInFor(uri.toString());
+  }
+
+  // Signed in. The auth screens and the splash are no longer valid places to
+  // be — but the guest payment link stays reachable, because a signed-in user
+  // can perfectly well be paying somebody else's obligation. The one auth
+  // screen a signed-in person needs: confirming their own email, from
+  // sign-up, from Profile, or when posting is refused. And the account flow
+  // closes itself once it succeeds, so the action that opened it goes ahead
+  // on the screen underneath.
+  if (location == '/auth/verify-email') return null;
+  if (isAccountFlowLocation(uri)) return null;
+  if (location == '/splash' || location.startsWith('/auth/')) {
+    final next = uri.queryParameters['next'];
+    if (isSafePostLoginLocation(next)) return next;
+    return '/home';
+  }
+  return null;
+}
+
 final routerProvider = Provider<GoRouter>((ref) {
   // go_router needs a Listenable, Riverpod speaks in providers. One notifier,
-  // bumped whenever the session changes, bridges them without the router
-  // itself being rebuilt from scratch on every auth event.
+  // bumped when a session change moves the person, bridges them without the
+  // router itself being rebuilt from scratch on every auth event.
   final refresh = ValueNotifier<int>(0);
   ref.onDispose(refresh.dispose);
 
@@ -249,7 +286,15 @@ final routerProvider = Provider<GoRouter>((ref) {
     if (previous is SessionSignedIn && next is SessionSignedOut) {
       _leavePrivateScreens(router);
     }
-    refresh.value++;
+    // Only when the redirect now answers differently. A refresh rebuilds the
+    // stack from what the router last reported, and every screen pushed on it
+    // comes back as a new route whose result nobody awaits: the account
+    // moment, which signs a guest in under the screen they asked from, would
+    // never hear that it closed.
+    final base = router.routerDelegate.currentConfiguration;
+    if (base.isEmpty || _redirectFor(next, base.uri) != null) {
+      refresh.value++;
+    }
   });
 
   return router = GoRouter(
@@ -257,42 +302,8 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/splash',
     refreshListenable: refresh,
     debugLogDiagnostics: false,
-
-    redirect: (context, state) {
-      final session = ref.read(sessionProvider);
-      final location = state.matchedLocation;
-
-      // Restoring: hold on the splash rather than flashing a sign-in screen at
-      // a user who is already signed in. A cold start with no network stays
-      // here too — being offline is not being signed out.
-      if (session is SessionRestoring) {
-        return location == '/splash' ? null : '/splash';
-      }
-
-      // Signed out is a guest. Home is the front page, and a place only a
-      // member can see asks them to sign in, then returns them there.
-      if (session is SessionSignedOut) {
-        if (location == '/splash') return '/home';
-        if (isPublicLocation(location)) return null;
-        return _signInFor(state.uri.toString());
-      }
-
-      // Signed in. The auth screens and the splash are no longer valid places
-      // to be — but the guest payment link stays reachable, because a signed-in
-      // user can perfectly well be paying somebody else's obligation.
-      // The one auth screen a signed-in person needs: confirming their own
-      // email, from sign-up, from Profile, or when posting is refused. And the
-      // account flow closes itself once it succeeds, so the action that
-      // opened it goes ahead on the screen underneath.
-      if (location == '/auth/verify-email') return null;
-      if (isAccountFlowLocation(state.uri)) return null;
-      if (location == '/splash' || location.startsWith('/auth/')) {
-        final next = state.uri.queryParameters['next'];
-        if (isSafePostLoginLocation(next)) return next;
-        return '/home';
-      }
-      return null;
-    },
+    redirect: (context, state) =>
+        _redirectFor(ref.read(sessionProvider), state.uri),
 
     routes: [
       GoRoute(
