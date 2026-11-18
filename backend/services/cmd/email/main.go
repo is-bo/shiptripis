@@ -3,17 +3,20 @@
 // Scope:
 //   - Consumes the durable `email:send` Redis Stream that Django XADDs rendered
 //     messages onto (signup verification + password-reset OTP).
-//   - Sends each over SMTP via internal/email. Django owns the copy/templates;
-//     this service is a pure transport.
+//   - Sends each through the provider EMAIL_PROVIDER names, via
+//     internal/email: Sender.net's REST API (sender_net) or SMTP (smtp).
+//     Django owns the copy/templates; this service is a pure transport.
 //
 // It is intentionally minimal: no JWT or WebSocket. It uses a small PostgreSQL
-// pool only for durable SMTP delivery receipts; Django still owns OTP
+// pool only for durable delivery receipts; Django still owns OTP
 // generation, verification and the transactional outbox. The service exposes
 // a Redis stream consumer plus an HTTP admin surface (/healthz, /readyz,
-// /debug/vars).
+// /debug/vars). Readiness reports PostgreSQL and Redis only: it never calls
+// the provider.
 //
-// Gated by EMAIL_ENABLED (default false). Flipping EMAIL_ENABLED=true and
-// supplying EMAIL_SMTP_* activates the consumer + sweeper.
+// Gated by EMAIL_ENABLED (default false). Flipping EMAIL_ENABLED=true with the
+// provider's configuration (SENDER_NET_API_TOKEN, or EMAIL_SMTP_*) activates
+// the consumer + sweeper.
 // While disabled the process still boots and serves health, so it can sit in
 // compose harmlessly.
 //
@@ -142,20 +145,10 @@ func run() error {
 	emailErr := make(chan error, 2)
 	emailAlive := 0
 	if emailCfg.Enabled {
-		// Build the real SMTP sender. Fail loud at boot on bad config
-		// (CLAUDE.md §9). LoadEmail already guarantees host/port/from are set
-		// when Enabled.
-		sender, err := email.NewSMTPSender(email.SMTPConfig{
-			Host:     emailCfg.SMTPHost,
-			Port:     emailCfg.SMTPPort,
-			Username: emailCfg.SMTPUsername,
-			Password: emailCfg.SMTPPassword,
-			FromAddr: emailCfg.FromAddr,
-			FromName: emailCfg.FromName,
-			UseTLS:   emailCfg.UseTLS,
-			ReplyTo:  emailCfg.ReplyTo,
-			Timeout:  emailCfg.SMTPTimeout,
-		}, log)
+		// Build the provider's sender. Fail loud at boot on bad config
+		// (CLAUDE.md §9). LoadEmail already guarantees the provider's
+		// requirements when Enabled.
+		sender, err := newSender(emailCfg, log)
 		if err != nil {
 			return err
 		}
@@ -235,4 +228,30 @@ func run() error {
 	}
 	log.Info("email service stopped")
 	return fatal
+}
+
+// newSender picks the EmailSender for EMAIL_PROVIDER. Both read the same From,
+// Reply-To and timeout as Django's email backend.
+func newSender(cfg config.Email, log *slog.Logger) (email.EmailSender, error) {
+	if cfg.Provider == "sender_net" {
+		return email.NewSenderNetSender(email.SenderNetConfig{
+			Endpoint: email.SenderNetEndpoint,
+			Token:    cfg.SenderNetAPIToken,
+			FromAddr: cfg.FromAddr,
+			FromName: cfg.FromName,
+			ReplyTo:  cfg.ReplyTo,
+			Timeout:  cfg.Timeout,
+		}, log)
+	}
+	return email.NewSMTPSender(email.SMTPConfig{
+		Host:     cfg.SMTPHost,
+		Port:     cfg.SMTPPort,
+		Username: cfg.SMTPUsername,
+		Password: cfg.SMTPPassword,
+		FromAddr: cfg.FromAddr,
+		FromName: cfg.FromName,
+		UseTLS:   cfg.UseTLS,
+		ReplyTo:  cfg.ReplyTo,
+		Timeout:  cfg.Timeout,
+	}, log)
 }

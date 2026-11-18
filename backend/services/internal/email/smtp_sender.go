@@ -300,13 +300,17 @@ func newSendFailure(host string, err error) *SendFailure {
 }
 
 // SendFailureLogAttrs returns log attributes for any EmailSender error: the
-// SendFailure fields when there is one, and otherwise only the error's Go
-// type. Send errors are never logged as text, because an SMTP error's text
-// can name the recipient.
+// SendFailure or SenderNetFailure fields when there is one, and otherwise only
+// the error's Go type. Send errors are never logged as text, because an SMTP
+// error's text and an API answer can both name the recipient.
 func SendFailureLogAttrs(err error) []any {
 	var failure *SendFailure
 	if errors.As(err, &failure) {
 		return failure.LogAttrs()
+	}
+	var apiFailure *SenderNetFailure
+	if errors.As(err, &apiFailure) {
+		return apiFailure.LogAttrs()
 	}
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):

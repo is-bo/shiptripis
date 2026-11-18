@@ -399,66 +399,72 @@ func LoadFCM() (FCM, error) {
 	}, nil
 }
 
-// ── Email (SMTP transactional sender) ────────────────────────────────────────
+// ── Email (transactional sender: Sender.net API or SMTP) ─────────────────────
+
+// ContactAddress is the one Wassla address: From, Reply-To and support. It is
+// the default for EMAIL_FROM_ADDR and EMAIL_SUPPORT_ADDR, as in Django's
+// config/settings/base.py.
+const ContactAddress = "contact@wassla.eu"
 
 // Email holds the email-service settings. Django XADDs rendered messages onto
-// the `email:send` stream; the consumer sends them over SMTP.
+// the `email:send` stream; the consumer sends them through the provider.
 //
 // Disabled by default. Flipping EMAIL_ENABLED=true activates ordinary
-// non-secret stream delivery once the SMTP environment is complete.
+// non-secret stream delivery once the provider's configuration is complete.
 type Email struct {
-	// Provider is a transport label used for health/metrics and configuration
-	// review. Sender.net uses the same standards-compliant SMTP seam as any
-	// other relay; the Go worker deliberately does not couple to a vendor SDK.
+	// Provider selects the sender: "sender_net" (Sender.net's REST API, the
+	// production provider) or "smtp" (any SMTP relay; MailHog in development).
 	Provider      string
 	Enabled       bool
 	Stream        string
 	ConsumerGroup string
 	ConsumerName  string
 
-	SMTPHost            string // required when Enabled
-	SMTPPort            int    // required when Enabled
-	SMTPUsername        string // optional (dev sinks like MailHog need no auth)
-	SMTPPassword        string
-	FromAddr            string // required when Enabled
-	FromName            string // optional display name
-	UseTLS              bool   // STARTTLS (587) / implicit TLS (465); false for dev (25/1025)
+	// SenderNetAPIToken is the Sender.net bearer token, required for
+	// provider sender_net. A secret: never logged.
+	SenderNetAPIToken string
+
+	SMTPHost     string // required for provider smtp
+	SMTPPort     int    // required for provider smtp
+	SMTPUsername string // optional (dev sinks like MailHog need no auth)
+	SMTPPassword string
+	UseTLS       bool // STARTTLS (587) / implicit TLS (465); false for dev (25/1025)
+
+	FromAddr            string
+	FromName            string
 	ReplyTo             string
-	SMTPTimeout         time.Duration
+	Timeout             time.Duration // bounds one send on either provider
 	ActivationNotBefore time.Time
 	RateLimitPerMinute  int
 }
 
 // LoadEmail reads EMAIL_* env vars. When EMAIL_ENABLED is false (the default)
-// every other field is optional and the struct can be passed to the consumer
-// for a no-op idle state. When true, SMTP host/port + from address are required
-// so a half-configured mail deploy fails loud at boot per CLAUDE.md §9.
+// every other field is optional and the service idles. When true, the
+// provider's own requirements are enforced so a half-configured mail deploy
+// fails loud at boot per CLAUDE.md §9: the API token for sender_net (with no
+// SMTP host, which would mean the operator expects SMTP), host and port for
+// smtp.
 func LoadEmail() (Email, error) {
 	var b errBuilder
 	enabled := optBool(&b, "EMAIL_ENABLED", false)
 	provider := strings.ToLower(optString("EMAIL_PROVIDER", "smtp"))
-	switch provider {
-	case "smtp", "sender_net", "sender.net":
-		// Sender.net is an SMTP relay adapter, not a separate delivery path.
-		if provider == "sender.net" {
-			provider = "sender_net"
-		}
-	default:
+	if provider != "smtp" && provider != "sender_net" {
 		b.addf("EMAIL_PROVIDER must be 'smtp' or 'sender_net' (got %q)", provider)
 	}
 	stream := optString("EMAIL_STREAM", "email:send")
 	group := optString("EMAIL_CONSUMER_GROUP", "email-send-workers")
 	name := optString("EMAIL_CONSUMER_NAME", optString("HOSTNAME", "email-1"))
 
+	token := optString("SENDER_NET_API_TOKEN", "")
 	host := optString("EMAIL_SMTP_HOST", "")
 	port := optInt(&b, "EMAIL_SMTP_PORT", 0)
 	user := optString("EMAIL_SMTP_USERNAME", "")
 	pass := optString("EMAIL_SMTP_PASSWORD", "")
-	from := optString("EMAIL_FROM_ADDR", "")
-	fromName := optString("EMAIL_FROM_NAME", "Wassla")
 	useTLS := optBool(&b, "EMAIL_USE_TLS", true)
-	replyTo := optString("EMAIL_REPLY_TO", optString("EMAIL_SUPPORT_ADDR", ""))
-	timeout := optInt(&b, "EMAIL_SMTP_TIMEOUT_SECONDS", 10)
+	from := optString("EMAIL_FROM_ADDR", ContactAddress)
+	fromName := optString("EMAIL_FROM_NAME", "Wassla")
+	replyTo := optString("EMAIL_REPLY_TO", optString("EMAIL_SUPPORT_ADDR", ContactAddress))
+	timeout := optInt(&b, "EMAIL_TIMEOUT_SECONDS", 10)
 	rate := optInt(&b, "EMAIL_RATE_LIMIT_PER_MINUTE", 60)
 	if timeout < 1 || timeout > 10 || rate < 1 || rate > 600 {
 		b.addf("email timeout must be 1..10 seconds and rate 1..600 per minute")
@@ -473,40 +479,31 @@ func LoadEmail() (Email, error) {
 	}
 
 	if enabled {
-		if host == "" {
-			b.addf("EMAIL_SMTP_HOST is required when EMAIL_ENABLED=true")
-		}
-		if port == 0 {
-			b.addf("EMAIL_SMTP_PORT is required when EMAIL_ENABLED=true")
-		}
-		if from == "" {
-			b.addf("EMAIL_FROM_ADDR is required when EMAIL_ENABLED=true")
-		}
 		if addr, err := mail.ParseAddress(from); err != nil || addr.Address != from {
 			b.addf("EMAIL_FROM_ADDR must be a bare email address")
 		}
-		if replyTo != "" {
-			if _, err := mail.ParseAddress(replyTo); err != nil {
-				b.addf("EMAIL_REPLY_TO must be an email address")
+		if _, err := mail.ParseAddress(replyTo); err != nil {
+			b.addf("EMAIL_REPLY_TO must be an email address")
+		}
+		switch provider {
+		case "sender_net":
+			if !validSenderNetToken(token) {
+				b.addf("SENDER_NET_API_TOKEN must be set (at least 20 printable characters, no spaces) for EMAIL_PROVIDER=sender_net")
+			}
+			if host != "" {
+				b.addf("EMAIL_SMTP_HOST must be empty for EMAIL_PROVIDER=sender_net (Sender.net is used through its API)")
+			}
+		case "smtp":
+			if host == "" {
+				b.addf("EMAIL_SMTP_HOST is required for EMAIL_PROVIDER=smtp")
+			}
+			if port == 0 {
+				b.addf("EMAIL_SMTP_PORT is required for EMAIL_PROVIDER=smtp")
 			}
 		}
 		if optString("SHIPTRIP_ENVIRONMENT", "") == "production" {
-			if cutoff.IsZero() || replyTo == "" || !optBool(&b, "EMAIL_SENDING_DOMAIN_VERIFIED", false) || !useTLS {
-				b.addf("production email requires activation cutoff, Reply-To, verified domain and TLS")
-			}
-		}
-		if provider == "sender_net" {
-			if host != "smtp.sender.net" || port != 587 {
-				b.addf("Sender.net requires smtp.sender.net:587")
-			}
-			if user == "" {
-				b.addf("EMAIL_SMTP_USERNAME is required for Sender.net")
-			}
-			if pass == "" {
-				b.addf("EMAIL_SMTP_PASSWORD is required for Sender.net")
-			}
-			if !useTLS {
-				b.addf("EMAIL_USE_TLS must be true for Sender.net")
+			if cutoff.IsZero() || !optBool(&b, "EMAIL_SENDING_DOMAIN_VERIFIED", false) || (provider == "smtp" && !useTLS) {
+				b.addf("production email requires activation cutoff, verified domain and (for SMTP) TLS")
 			}
 		}
 	}
@@ -514,21 +511,39 @@ func LoadEmail() (Email, error) {
 		return Email{}, err
 	}
 	return Email{
-		Provider:      provider,
-		Enabled:       enabled,
-		Stream:        stream,
-		ConsumerGroup: group,
-		ConsumerName:  name,
-		SMTPHost:      host,
-		SMTPPort:      port,
-		SMTPUsername:  user,
-		SMTPPassword:  pass,
-		FromAddr:      from,
-		FromName:      fromName,
-		UseTLS:        useTLS,
-		ReplyTo:       replyTo, SMTPTimeout: time.Duration(timeout) * time.Second,
-		ActivationNotBefore: cutoff, RateLimitPerMinute: rate,
+		Provider:            provider,
+		Enabled:             enabled,
+		Stream:              stream,
+		ConsumerGroup:       group,
+		ConsumerName:        name,
+		SenderNetAPIToken:   token,
+		SMTPHost:            host,
+		SMTPPort:            port,
+		SMTPUsername:        user,
+		SMTPPassword:        pass,
+		UseTLS:              useTLS,
+		FromAddr:            from,
+		FromName:            fromName,
+		ReplyTo:             replyTo,
+		Timeout:             time.Duration(timeout) * time.Second,
+		ActivationNotBefore: cutoff,
+		RateLimitPerMinute:  rate,
 	}, nil
+}
+
+// validSenderNetToken is the same shape rule Django's production settings
+// apply: the token travels in an Authorization header, so printable ASCII
+// with no spaces, and long enough not to be a placeholder.
+func validSenderNetToken(token string) bool {
+	if len(token) < 20 {
+		return false
+	}
+	for i := 0; i < len(token); i++ {
+		if token[i] < 0x21 || token[i] > 0x7e {
+			return false
+		}
+	}
+	return true
 }
 
 // ── logger / service identity ────────────────────────────────────────────────

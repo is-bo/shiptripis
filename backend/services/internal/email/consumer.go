@@ -13,9 +13,10 @@ import (
 	"shiptrip/pkg/retry"
 )
 
-// Consumer drains the `email:send` Redis Stream and sends each entry over
-// SMTP. It mirrors notification.Consumer (the FCM worker) minus the
-// FCM-specific bits: there is no 2s delivery-grace wait and no
+// Consumer drains the `email:send` Redis Stream and sends each entry through
+// the configured provider (Sender.net's API or SMTP). It mirrors
+// notification.Consumer (the FCM worker) minus the FCM-specific bits: there
+// is no 2s delivery-grace wait and no
 // `delivered:<event_id>` WS-dedup, because email has no WebSocket counterpart
 // that might satisfy the same event first.
 //
@@ -42,7 +43,7 @@ type Consumer struct {
 	sweepInterval time.Duration
 	maxEntryAge   time.Duration
 
-	// sem bounds concurrent handle() goroutines so a slow SMTP endpoint can't
+	// sem bounds concurrent handle() goroutines so a slow provider can't
 	// grow goroutines without limit. wg tracks them so Run/Sweep don't return
 	// until in-flight handlers finish — an XAck on a cancelled ctx would
 	// re-deliver via the sweeper.
@@ -68,9 +69,9 @@ type ConsumerConfig struct {
 	Stream        string
 	ConsumerGroup string
 	ConsumerName  string
-	// Sender is the actual SMTP backend. Pass nil to install LogOnlySender —
-	// the consumer never panics on nil. cmd/email passes the real smtpSender
-	// when EMAIL_ENABLED=true.
+	// Sender is the actual provider. Pass nil to install LogOnlySender —
+	// the consumer never panics on nil. cmd/email passes senderNetSender or
+	// smtpSender by EMAIL_PROVIDER when EMAIL_ENABLED=true.
 	Sender EmailSender
 	// Receipts is the durable PostgreSQL acknowledgement boundary. Production
 	// always supplies it; tests may omit it to use the no-op implementation.
@@ -93,13 +94,14 @@ const (
 	// xreadCount is the batch size per loop.
 	xreadCount = 16
 	// handleConcurrency bounds in-flight handle() goroutines per pod. Each
-	// holds one PEL entry and at most one SMTP dial's worth of memory.
-	// The shared PostgreSQL send gate serializes SMTP. Process each batch in
+	// holds one PEL entry and at most one send's worth of memory.
+	// The shared PostgreSQL send gate serializes sends. Process each batch in
 	// order instead of draining it into competing handlers that defer to PEL.
 	handleConcurrency = 1
 
 	// sendTimeout caps one handler's detached work: the receipt and dedup
-	// checks plus a single SMTP send (dial + STARTTLS + auth + DATA).
+	// checks plus a single provider send (one API call, or SMTP dial +
+	// STARTTLS + auth + DATA).
 	// Detached from the parent ctx so a graceful shutdown mid-send completes
 	// rather than leaving the entry half-sent and unacked. sendTimeout plus
 	// ackTimeout must fit cmd/email's 15s shutdownTimeout, which in turn sits
@@ -361,7 +363,7 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 			return
 		}
 		if already {
-			// SMTP accepted this event on an earlier attempt but the durable
+			// The provider accepted this event on an earlier attempt but the durable
 			// receipt failed. Repair PostgreSQL before acknowledging the stream;
 			// otherwise Django would retry the logical obligation forever.
 			if err := c.receipts.MarkDelivered(sendCtx, p.EventID); err != nil {
@@ -392,8 +394,8 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage) {
 	// Record the short-lived send marker before the durable receipt. If the
 	// PostgreSQL write fails, the PEL retry repairs the receipt without sending
 	// again. A simultaneous Redis restart and receipt failure can still produce
-	// one duplicate; SMTP offers no idempotency primitive, so at-least-once is
-	// the honest boundary.
+	// one duplicate; neither SMTP nor Sender's API offers an idempotency
+	// primitive, so at-least-once is the honest boundary.
 	if p.EventID != "" {
 		if err := c.rdb.SetEX(sendCtx, sentKey, "1", sentKeyTTL); err != nil {
 			c.log.Warn("email: sent-marker write failed", "event_id", p.EventID, "err", err)

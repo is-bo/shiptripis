@@ -11,8 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// ReceiptStore is the durable acknowledgement boundary between SMTP and the
-// Django outbox. An email stream entry is acknowledged only after the matching
+// ReceiptStore is the durable acknowledgement boundary between the provider
+// and the Django outbox. An email stream entry is acknowledged only after the matching
 // core_published_event row records delivery.
 type ReceiptStore interface {
 	Delivered(ctx context.Context, eventID string) (bool, error)
@@ -84,7 +84,7 @@ func (s *postgresReceiptStore) Deliver(ctx context.Context, p EmailPayload, send
 	}
 	switch kind {
 	case "email_verification", "password_reset", "admin_invitation", "recipient_delivery_code":
-		return true, nil // these obligations belong to Django's trusted SMTP path
+		return true, nil // these obligations belong to Django's trusted send path
 	}
 	if (reviewed == nil || reviewed.Before(time.Now().Add(-24*time.Hour))) && ((!s.policy.ActivationNotBefore.IsZero() && created.Before(s.policy.ActivationNotBefore)) || created.Before(time.Now().Add(-48*time.Hour))) {
 		return true, nil
@@ -119,7 +119,7 @@ func (s *postgresReceiptStore) Deliver(ctx context.Context, p EmailPayload, send
 	}
 	var used int
 	err = tx.QueryRow(ctx, `SELECT count(*) FROM notification_outbound_message WHERE
-	 dispatched_at >= now()-interval '1 minute' OR (last_error IN ('smtp_transient','smtp_permanent') AND updated_at >= now()-interval '1 minute')`).Scan(&used)
+	 dispatched_at >= now()-interval '1 minute' OR (last_error IN ('provider_transient','provider_permanent') AND updated_at >= now()-interval '1 minute')`).Scan(&used)
 	if err != nil {
 		return false, errors.New("email: rate budget unavailable")
 	}
@@ -134,12 +134,12 @@ func (s *postgresReceiptStore) Deliver(ctx context.Context, p EmailPayload, send
 		}
 	} else {
 		_, permanent := AsPermanent(sendErr)
-		state, failure := "pending", "smtp_transient"
+		state, failure := "pending", "provider_transient"
 		if permanent || attempts >= maxAttempts {
 			state = "failed"
 		}
 		if permanent {
-			failure = "smtp_permanent"
+			failure = "provider_permanent"
 		}
 		delay := min(60*(1<<min(max(attempts-1, 0), 9)), 21600)
 		_, err = tx.Exec(ctx, `UPDATE notification_outbound_message SET status=$2,last_error=$3,
