@@ -89,9 +89,9 @@ class SignInSerializer(serializers.Serializer):
         return attrs
 
 
-class GoogleSignInSerializer(serializers.Serializer):
-    id_token = serializers.CharField()
-    # Optional fields used to populate a fresh User if Google didn't supply them.
+class _SocialSignInSerializer(serializers.Serializer):
+    """What a Google or Apple sign-in may add to a new or claimed account."""
+
     phone = serializers.CharField(required=False, allow_blank=True, max_length=32)
     wilaya = serializers.CharField(required=False, allow_blank=True, max_length=2)
     preferred_language = serializers.ChoiceField(
@@ -106,6 +106,24 @@ class GoogleSignInSerializer(serializers.Serializer):
         if value not in WILAYA_CODES:
             raise serializers.ValidationError("Invalid wilaya code.")
         return value
+
+
+class GoogleSignInSerializer(_SocialSignInSerializer):
+    id_token = serializers.CharField()
+
+
+class AppleSignInSerializer(_SocialSignInSerializer):
+    # An Apple identity token is about 1 KB; the bound only stops a huge body
+    # from reaching the base64 decoder.
+    identity_token = serializers.CharField(max_length=8192)
+    # The raw nonce the app made; Apple holds its SHA-256. It is opaque, so it
+    # is never trimmed: one changed character would fail the comparison.
+    nonce = serializers.CharField(min_length=16, max_length=128, trim_whitespace=False)
+    # Apple gives the person's name to the app on the first authorization
+    # only, and never in the token; the app sends it with that request.
+    full_name = serializers.CharField(
+        required=False, allow_blank=True, max_length=120, default=""
+    )
 
 
 class PasswordResetRequestSerializer(serializers.Serializer):
