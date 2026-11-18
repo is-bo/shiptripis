@@ -1,5 +1,17 @@
 # Waçla V1 Implementation Status
 
+## Wassla: Algerian month names and Western digits in Arabic (2026-11-17)
+
+- Ismail's request: Arabic shows جانفي، فيفري ... أوت, never يناير or أغسطس, and 0-9, never ٠-٩.
+- App: Flutter's date and time pickers and `MaterialLocalizations` now use the same `ar_DZ` formats as
+  `LocaleFormats` (24-hour, Western digits, Algerian months); the boost history date goes through
+  `LocaleFormats`; the Find travelers count no longer uses a `compact` format; Arabic writes "،"
+  between a date and a time. One delegate list, `appLocalizationsDelegates`, for the app and the tests.
+- Server: emails print the protection deadline and code expiry as a readable date in the email's
+  language (`apps/core/locale_format.py`) instead of a raw timestamp.
+- Website: one Arabic caption fixed; the static web check refuses Arabic-Indic digits and Mashriq months.
+- No migration. Detail: `docs/PHASE_ARABIC_DATES_AND_DIGITS.md`.
+
 ## Wassla: L-series branch becomes main (2026-11-16)
 
 - At Ismail's request the integration branch `feature/discovery-professional-delivery` became `main`.

@@ -4265,15 +4265,10 @@ class LFr extends L {
 
   @override
   String findTravelersCount(int count) {
-    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
-      locale: localeName,
-    );
-    final String countString = countNumberFormat.format(count);
-
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$countString voyageurs',
+      other: '$count voyageurs',
       one: '1 voyageur',
     );
     return '$_temp0';

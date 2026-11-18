@@ -6,12 +6,11 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shiptrip/app/app_settings.dart';
 import 'package:shiptrip/design/theme.dart';
-import 'package:shiptrip/l10n/app_localizations.dart';
 
 /// Device sizes the layout has to survive.
 ///
@@ -143,13 +142,6 @@ Future<void> pumpApp(
     child: inner ?? const SizedBox.shrink(),
   );
 
-  const supported = [Locale('en'), Locale('fr'), Locale('ar')];
-  const delegates = [
-    L.delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-  ];
   final theme = buildAppTheme(brightness: Brightness.light, locale: locale);
 
   await tester.pumpWidget(
@@ -158,8 +150,8 @@ Future<void> pumpApp(
       child: routed
           ? MaterialApp.router(
               locale: locale,
-              supportedLocales: supported,
-              localizationsDelegates: delegates,
+              supportedLocales: supportedLocales,
+              localizationsDelegates: appLocalizationsDelegates,
               theme: theme,
               builder: applyMedia,
               routerConfig: GoRouter(
@@ -177,8 +169,8 @@ Future<void> pumpApp(
             )
           : MaterialApp(
               locale: locale,
-              supportedLocales: supported,
-              localizationsDelegates: delegates,
+              supportedLocales: supportedLocales,
+              localizationsDelegates: appLocalizationsDelegates,
               theme: theme,
               builder: applyMedia,
               home: child,

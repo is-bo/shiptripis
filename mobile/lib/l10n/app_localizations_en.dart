@@ -4228,15 +4228,10 @@ class LEn extends L {
 
   @override
   String findTravelersCount(int count) {
-    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
-      locale: localeName,
-    );
-    final String countString = countNumberFormat.format(count);
-
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$countString travelers',
+      other: '$count travelers',
       one: '1 traveler',
     );
     return '$_temp0';

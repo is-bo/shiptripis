@@ -198,6 +198,11 @@ def check_scripts() -> list[str]:
     return errors
 
 
+# Wassla's Arabic is Algerian: Western digits and the Maghrebi month names.
+EASTERN_DIGITS = re.compile("[\u0660-\u0669\u06f0-\u06f9]")
+MASHRIQ_MONTHS = re.compile("يناير|فبراير|أبريل|مايو|يونيو|يوليو|أغسطس")
+
+
 def main() -> int:
     errors: list[str] = []
     pages = sorted(WEB.rglob("*.html"))
@@ -209,6 +214,10 @@ def main() -> int:
         for required in REQUIRED_REFERENCES:
             if required not in text:
                 errors.append(f"{source.relative_to(ROOT)}: does not reference {required}")
+        if EASTERN_DIGITS.search(text):
+            errors.append(f"{source.relative_to(ROOT)}: use Western digits (0-9), not Arabic-Indic ones")
+        if MASHRIQ_MONTHS.search(text):
+            errors.append(f"{source.relative_to(ROOT)}: use the Algerian month names (جانفي, فيفري...)")
     errors.extend(check_stylesheets())
     errors.extend(check_scripts())
     errors.extend(check_edge_routing())

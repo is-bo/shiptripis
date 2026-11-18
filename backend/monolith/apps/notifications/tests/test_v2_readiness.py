@@ -18,6 +18,7 @@ from django.utils import timezone
 
 from apps.accounts.models import User, PasswordResetCode
 from apps.admin_panel.models import AdminAuditLog
+from apps.core.locale_format import format_utc_datetime
 from apps.notifications import outbox
 from apps.notifications.backlog import classify, fingerprint, review
 from apps.notifications.models import OutboundMessage, OutboundSecret
@@ -656,7 +657,7 @@ def test_real_invitation_vault_preserves_explicit_locale_and_actual_expiry(langu
     subject, text, html = outbox.render_parts(message)
     assert message.language == language
     assert token in text and token in html
-    assert invitation.expires_at.strftime("%Y-%m-%d %H:%M UTC") in text
+    assert format_utc_datetime(invitation.expires_at, language) in text
     if language == "ar":
         assert 'dir="rtl"' in html
     else:

@@ -18,6 +18,7 @@ These tests hold three lines:
 
 from __future__ import annotations
 
+import re
 from unittest import mock
 
 from django.test import TestCase, override_settings
@@ -369,3 +370,34 @@ class ADurableOutboxRendersRowsWrittenByAnOlderDeployTests(TestCase):
             )
         )
         assert "as: Partial split." in text
+
+
+class EmailDatesAreReadableInEveryLanguageTests(TestCase):
+    def test_the_protection_deadline_is_a_human_date_not_a_raw_timestamp(self):
+        expected = {
+            "en": "1 September 2026, 10:00 UTC",
+            "fr": "1 septembre 2026 à 10:00 UTC",
+            "ar": "1 سبتمبر 2026، 10:00 UTC",
+        }
+        for language, date in expected.items():
+            message = _message(OutboundMessage.Kind.PROTECTION_ENDING)
+            message.language = language
+            _, text, html = outbox.render_parts(message)
+            for rendered in (text, html):
+                assert date in rendered, (language, rendered)
+                assert "2026-09-01T10:00:00Z" not in rendered
+
+    def test_arabic_email_dates_use_algerian_months_and_western_digits(self):
+        message = _message(
+            OutboundMessage.Kind.PROTECTION_ENDING,
+            protection_ends_at="2026-08-15T07:30:00Z",
+        )
+        message.language = "ar"
+        _, text, html = outbox.render_parts(message)
+        for rendered in (text, html):
+            assert "15 أوت 2026، 07:30 UTC" in rendered
+            assert "أغسطس" not in rendered
+            assert not re.search("[\u0660-\u0669\u06f0-\u06f9]", rendered)
+        # An Arabic date reads right to left; only machine values are forced LTR.
+        assert "\u206615 أوت" not in text
+        assert "\u2066WSL-7K3M9QXD\u2069" in text

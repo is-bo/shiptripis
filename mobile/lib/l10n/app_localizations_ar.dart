@@ -4225,17 +4225,12 @@ class LAr extends L {
 
   @override
   String findTravelersCount(int count) {
-    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
-      locale: localeName,
-    );
-    final String countString = countNumberFormat.format(count);
-
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$countString مسافر',
-      many: '$countString مسافرًا',
-      few: '$countString مسافرين',
+      other: '$count مسافر',
+      many: '$count مسافرًا',
+      few: '$count مسافرين',
       two: 'مسافران',
       one: 'مسافر واحد',
       zero: 'لا مسافرين',

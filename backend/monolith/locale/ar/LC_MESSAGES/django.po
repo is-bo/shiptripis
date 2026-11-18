@@ -562,8 +562,8 @@ msgstr "يمكن استخدام هذا الرابط الخاص مرة واحدة
 msgid "Role"
 msgstr "الدور"
 
-msgid "Expires at (UTC)"
-msgstr "تنتهي الصلاحية في (UTC)"
+msgid "Expires at"
+msgstr "تنتهي الصلاحية في"
 
 msgid "Use this code before it expires. Wassla will never ask you to share this code outside the verification screen."
 msgstr "استخدم هذا الرمز قبل انتهاء صلاحيته. لن تطلب منك Wassla أبداً مشاركة هذا الرمز خارج شاشة التحقق."

@@ -7,14 +7,26 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/format/locale_formats.dart';
 import '../core/session/session.dart';
+import '../l10n/app_localizations.dart';
 
 /// The languages ShipTrip ships. All three are launch languages, not
 /// afterthoughts: French and Arabic are the corridor's own languages and
 /// English is the fallback.
 const supportedLocales = <Locale>[Locale('en'), Locale('fr'), Locale('ar')];
+
+/// The app's strings plus Flutter's own, with Material formatting dates and
+/// numbers the way the rest of the app does (see [LocaleFormats]).
+const appLocalizationsDelegates = <LocalizationsDelegate<Object>>[
+  L.delegate,
+  LocaleFormats.materialDelegate,
+  GlobalWidgetsLocalizations.delegate,
+  GlobalCupertinoLocalizations.delegate,
+];
 
 /// `null` means "follow the device".
 final localeProvider = NotifierProvider<LocaleController, Locale?>(

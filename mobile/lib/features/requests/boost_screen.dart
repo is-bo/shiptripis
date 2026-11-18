@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/app_state.dart';
+import '../../core/format/locale_formats.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/money/money.dart';
 import '../../data/repositories.dart';
@@ -382,9 +383,10 @@ class _BoostScreenState extends ConsumerState<BoostScreen> {
                                 ),
                                 const SizedBox(height: AppSpace.xxs),
                                 Text(
-                                  MaterialLocalizations.of(
-                                    context,
-                                  ).formatFullDate(ev.createdAt),
+                                  LocaleFormats.fullDate(
+                                    Localizations.localeOf(context),
+                                    ev.createdAt,
+                                  ),
                                   style: Theme.of(context).textTheme.bodySmall
                                       ?.copyWith(
                                         color: context.colors.textTertiary,
