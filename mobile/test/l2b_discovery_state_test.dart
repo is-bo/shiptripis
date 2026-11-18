@@ -5,7 +5,7 @@
 ///
 /// * a list pages on **the server's own cursor** and shows a row once;
 /// * a card read for one member is **never shown to the next**, and a signed
-///   out app reads nothing;
+///   out app reads only the public listings;
 /// * two filters that say the same thing are the same read.
 library;
 
@@ -194,72 +194,79 @@ void main() {
     });
   });
 
-  group('one member\'s cards are never shown to the next', () {
-    test(
-      'a sign-out drops the previous account\'s value, a sign-in reads fresh',
-      () async {
-        var account = 42;
-        final backend = discoveryBackend()
-          ..handle(
-            'GET',
-            '/api/me',
-            (_) => FakeResponse(200, {...meFixture(), 'id': account}),
-          )
-          ..handle(
-            'GET',
-            '/api/discovery/trips',
-            (_) => discoveryPage([
-              tripCardFixture(
-                account,
-                name: account == 42 ? 'A-card' : 'B-card',
-              ),
-            ]),
-          )
-          ..on('POST', '/api/auth/sign-out', const FakeResponse(200, {}));
-        final container = await _signedIn(backend);
-        final sub = container.listen(previewTripsProvider(null), (_, _) {});
-        addTearDown(sub.close);
-        final a = await _ready(
-          () => container.read(previewTripsProvider(null)),
-        );
-        expect(a.results.single.traveler.displayName, 'A-card');
-
-        await container.read(sessionProvider.notifier).signOut();
-
-        final whileSignedOut = container.read(previewTripsProvider(null));
-        expect(
-          whileSignedOut.ofCurrentAccount.hasValue,
-          isFalse,
-          reason: 'the previous account\'s card must not be readable',
-        );
-
-        account = 99;
-        await container.read(sessionProvider.notifier).restore();
-        expect(
-          container.read(previewTripsProvider(null)).ofCurrentAccount.hasValue,
-          isFalse,
-          reason: 'not even while the new account\'s read is in flight',
-        );
-        final b = await _ready(
-          () => container.read(previewTripsProvider(null)),
-        );
-        expect(b.results.single.traveler.displayName, 'B-card');
-      },
-    );
-
-    test('signed out, nothing is read', () async {
-      // The server refuses the session, so the app never signs in.
+  group('one viewer\'s cards are never shown to the next', () {
+    test('a sign-out drops the member\'s value, the guest reads the public '
+        'listings, and a sign-in reads them again for the member', () async {
+      var account = 42;
+      var viewer = 'A';
       final backend = discoveryBackend()
-        ..on('GET', '/api/me', const FakeResponse(401, {'detail': 'no'}))
-        ..on(
-          'POST',
-          '/api/auth/refresh',
-          const FakeResponse(401, {'detail': 'no'}),
-        );
-      final container = discoveryContainer(backend);
+        ..handle(
+          'GET',
+          '/api/me',
+          (_) => FakeResponse(200, {...meFixture(), 'id': account}),
+        )
+        ..handle(
+          'GET',
+          '/api/discovery/trips',
+          (_) => discoveryPage([tripCardFixture(1, name: '$viewer-card')]),
+        )
+        ..on('POST', '/api/auth/sign-out', const FakeResponse(200, {}));
+      final container = await _signedIn(backend);
+      final sub = container.listen(previewTripsProvider(null), (_, _) {});
+      addTearDown(sub.close);
+      final a = await _ready(() => container.read(previewTripsProvider(null)));
+      expect(a.results.single.traveler.displayName, 'A-card');
+
+      viewer = 'guest';
+      await container.read(sessionProvider.notifier).signOut();
+
+      final whileSignedOut = container.read(previewTripsProvider(null));
+      expect(
+        whileSignedOut.ofCurrentAccount.hasValue,
+        isFalse,
+        reason: 'the previous account\'s card must not be readable',
+      );
+      final guest = await _ready(
+        () => container.read(previewTripsProvider(null)),
+      );
+      expect(guest.results.single.traveler.displayName, 'guest-card');
+
+      // The guest signs in. Their public cards may stay on screen while the
+      // member's read is in flight, so the screen under the account moment
+      // stays as it was; the previous member's never come back.
+      account = 99;
+      viewer = 'B';
+      await container.read(sessionProvider.notifier).restore();
+      final inFlight = container
+          .read(previewTripsProvider(null))
+          .ofCurrentAccount;
+      expect(
+        inFlight.value?.results.single.traveler.displayName,
+        anyOf(isNull, 'guest-card'),
+      );
+      final b = await _ready(() => container.read(previewTripsProvider(null)));
+      expect(b.results.single.traveler.displayName, 'B-card');
+      expect(backend.to('GET', '/api/discovery/trips'), hasLength(3));
+    });
+
+    test('signed out, only the public listings are read', () async {
+      // Nothing stored: the app opens as a guest.
+      final backend = discoveryBackend();
+      final store = FakeTokenStore(refresh: null);
+      final container = ProviderContainer(
+        retry: (_, _) => null,
+        overrides: [
+          tokenStoreProvider.overrideWithValue(store),
+          apiClientProvider.overrideWithValue(apiClientFor(backend, store)),
+        ],
+      );
       addTearDown(container.dispose);
+      await container.read(sessionProvider.notifier).restore();
+      expect(container.read(sessionProvider), isA<SessionSignedOut>());
+
       final subs = [
         container.listen(senderMatchesProvider, (_, _) {}),
+        container.listen(travelerMatchesProvider, (_, _) {}),
         container.listen(previewTripsProvider(null), (_, _) {}),
         container.listen(tripFeedProvider(const BrowseFilter()), (_, _) {}),
         container.listen(ownProfileProvider, (_, _) {}),
@@ -270,11 +277,20 @@ void main() {
           s.close();
         }
       });
-      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await _ready(() => container.read(previewTripsProvider(null)));
+      await _ready(
+        () => container.read(tripFeedProvider(const BrowseFilter())),
+      );
+      final alerts = await _ready(() => container.read(routeAlertsProvider));
 
+      expect(alerts, isEmpty);
       expect(
-        backend.requests.where((r) => r.path.startsWith('/api/discovery')),
-        isEmpty,
+        backend.requests
+            .where((r) => r.path.startsWith('/api/discovery'))
+            .map((r) => r.path)
+            .toSet(),
+        {'/api/discovery/trips'},
+        reason: 'matches, the own profile and alerts are a member\'s',
       );
     });
   });

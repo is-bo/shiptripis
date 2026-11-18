@@ -3283,34 +3283,7 @@ class LFr extends L {
       'Choisissez d’abord un fichier.';
 
   @override
-  String get onboardingEyebrow => 'Bienvenue';
-
-  @override
-  String get onboardingHeadline =>
-      'Envoyez tout,\nles voyageurs\nfont le reste.';
-
-  @override
-  String get onboardingBody =>
-      'Un corridor entre l’Algérie et la France. Les voyageurs transportent, les expéditeurs économisent, et l’argent est retenu jusqu’à l’arrivée.';
-
-  @override
   String get onboardingStamp => 'EST. 2026 · ALG ↔ FR';
-
-  @override
-  String get onboardingTrust =>
-      'Identité vérifiée · Paiement retenu · Prix en euros';
-
-  @override
-  String get onboardingRouteFrom => 'ALGER';
-
-  @override
-  String get onboardingRouteTo => 'PARIS';
-
-  @override
-  String get onboardingRouteMeta => 'DIRECT · 2H 25';
-
-  @override
-  String get benefitsSkip => 'Passer';
 
   @override
   String benefitsIndex(int current, int total) {
@@ -3414,9 +3387,6 @@ class LFr extends L {
   @override
   String get authVerifySubhead =>
       'Saisissez le code à six chiffres reçu par e-mail. C’est la dernière étape.';
-
-  @override
-  String get onboardingGetStartedShort => 'Commencer';
 
   @override
   String get requestItemPhoto => 'Photo de l\'objet';
@@ -6189,4 +6159,136 @@ class LFr extends L {
 
   @override
   String get profileRating => 'Note';
+
+  @override
+  String get accountGateStamp => 'Votre compte Wassla';
+
+  @override
+  String get accountGateEmail => 'Continuer avec l’e-mail';
+
+  @override
+  String get accountGateHaveAccount => 'J’ai déjà un compte';
+
+  @override
+  String get accountReasonPostRequestTitle =>
+      'Créez votre compte\npour envoyer votre colis.';
+
+  @override
+  String get accountReasonPostRequestBody =>
+      'Les voyageurs voient qui envoie, et votre paiement est retenu jusqu’à l’arrivée du colis.';
+
+  @override
+  String get accountReasonPostTripTitle =>
+      'Créez votre compte\npour publier votre trajet.';
+
+  @override
+  String get accountReasonPostTripBody =>
+      'Les expéditeurs choisissent des voyageurs de confiance : votre compte porte votre vérification d’identité et vos avis.';
+
+  @override
+  String get accountReasonCarryTitle =>
+      'Créez votre compte\npour transporter ce colis.';
+
+  @override
+  String get accountReasonCarryBody =>
+      'L’expéditeur voit qui propose de le transporter, et votre paiement arrive sur votre compte après la livraison.';
+
+  @override
+  String get accountReasonAlertTitle =>
+      'Créez votre compte\npour recevoir des alertes.';
+
+  @override
+  String get accountReasonAlertBody =>
+      'Nous vous prévenons quand un trajet ou un colis correspond à cet itinéraire.';
+
+  @override
+  String get accountReasonProposeTitle =>
+      'Créez votre compte\npour envoyer une offre.';
+
+  @override
+  String get accountReasonProposeBody =>
+      'Les offres, le chat et le paiement se passent tous dans votre compte.';
+
+  @override
+  String get accountReasonReportTitle =>
+      'Créez votre compte\npour signaler un avis.';
+
+  @override
+  String get accountReasonReportBody =>
+      'Les signalements viennent des membres, pour que nous puissions les examiner avec vous.';
+
+  @override
+  String get accountReasonDeliveriesTitle =>
+      'Créez votre compte\npour suivre vos livraisons.';
+
+  @override
+  String get accountReasonDeliveriesBody =>
+      'Les colis que vous envoyez et ceux que vous transportez apparaissent au même endroit.';
+
+  @override
+  String get accountReasonChatTitle => 'Créez votre compte\npour discuter.';
+
+  @override
+  String get accountReasonChatBody =>
+      'Le chat s’ouvre entre l’expéditeur et le voyageur une fois la livraison payée.';
+
+  @override
+  String get accountReasonNotificationsTitle =>
+      'Créez votre compte\npour recevoir des notifications.';
+
+  @override
+  String get accountReasonNotificationsBody =>
+      'Les offres, les messages et le suivi des livraisons vous arrivent ici.';
+
+  @override
+  String get accountReasonGenericTitle => 'Créez votre compte\npour commencer.';
+
+  @override
+  String get accountReasonGenericBody =>
+      'Envoyez un colis, ou transportez-en un sur un trajet que vous faites déjà.';
+
+  @override
+  String get guestSignedOutNotice =>
+      'Vous avez été déconnecté. Reconnectez-vous.';
+
+  @override
+  String get guestNoticeDismiss => 'Fermer';
+
+  @override
+  String get guestWelcomeTitle =>
+      'Envoyez-le avec quelqu’un qui fait déjà le trajet.';
+
+  @override
+  String get guestWelcomeBody =>
+      'Faites un tour : ce sont de vrais trajets et de vrais colis. Un compte n’est nécessaire que pour publier ou transporter.';
+
+  @override
+  String get guestHowItWorks => 'Comment fonctionne Wassla';
+
+  @override
+  String get guestAccountAction => 'Se connecter ou créer un compte';
+
+  @override
+  String get guestDeliveriesTitle => 'Vos livraisons apparaissent ici';
+
+  @override
+  String get guestDeliveriesBody =>
+      'Connectez-vous pour suivre les colis que vous envoyez et ceux que vous transportez.';
+
+  @override
+  String get guestChatTitle => 'Vos conversations apparaissent ici';
+
+  @override
+  String get guestChatBody =>
+      'Le chat s’ouvre entre l’expéditeur et le voyageur une fois la livraison payée.';
+
+  @override
+  String get guestProfileTitle => 'Vous visitez en tant qu’invité';
+
+  @override
+  String get guestProfileBody =>
+      'Créez un compte pour envoyer un colis ou en transporter un. Cela prend deux minutes.';
+
+  @override
+  String get guestSettings => 'Réglages';
 }

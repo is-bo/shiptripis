@@ -28,7 +28,6 @@ library;
 
 import 'dart:math' as math;
 
-import 'package:country_flags/country_flags.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
@@ -344,7 +343,8 @@ class _DashedBorderPainter extends CustomPainter {
 /// A blob of sealing wax with a letter pressed into it.
 ///
 /// Used where the product wants to say "this is settled and witnessed" —
-/// a completed handover, a verified identity, the trust panel in onboarding.
+/// a completed handover, a verified identity, the trust chapter of How Wassla
+/// works.
 class WaxSeal extends StatelessWidget {
   const WaxSeal({
     required this.glyph,
@@ -460,13 +460,23 @@ class PostageStamp extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    label.toUpperCase(),
-                    style: AppTypography.monoLabel(
-                      context,
-                      color: c.sealSoft,
-                      size: 9,
-                      tracking: 1.6,
+                  // One line, shrunk to the stamp's face: "PAR AVION" or
+                  // "EMBARQUEMENT" wrapped at a large text size and pushed
+                  // the plane off the stamp.
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        label.toUpperCase(),
+                        maxLines: 1,
+                        style: AppTypography.monoLabel(
+                          context,
+                          color: c.sealSoft,
+                          size: 9,
+                          tracking: 1.6,
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -706,73 +716,6 @@ class _BoardingPassBorder extends ShapeBorder {
   int get hashCode => notch.hashCode;
 }
 
-// ---------------------------------------------------------------------------
-// Corridor marks
-// ---------------------------------------------------------------------------
-
-/// A country flag with its code beside it — the DZ ↔ FR corridor made
-/// concrete. Numerals and codes stay LTR inside an Arabic layout.
-class CountryPill extends StatelessWidget {
-  const CountryPill({
-    required this.code,
-    this.label,
-    this.dense = false,
-    super.key,
-  });
-
-  /// ISO 3166-1 alpha-2, e.g. `DZ`.
-  final String code;
-
-  /// Defaults to [code]. Pass a name when the pill stands alone.
-  final String? label;
-
-  final bool dense;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final text = (label ?? code).toUpperCase();
-    return Semantics(
-      label: text,
-      excludeSemantics: true,
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: dense ? 10 : 14,
-          vertical: dense ? 6 : 9,
-        ),
-        decoration: BoxDecoration(
-          color: c.surface,
-          borderRadius: AppRadius.rPill,
-          border: Border.all(color: c.hairline),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(2),
-              child: SizedBox(
-                height: dense ? 12 : 14,
-                width: dense ? 18 : 22,
-                child: CountryFlag.fromCountryCode(code),
-              ),
-            ),
-            SizedBox(width: dense ? 6 : 8),
-            Text(
-              text,
-              style: AppTypography.monoLabel(
-                context,
-                color: c.textPrimary,
-                size: dense ? 11 : 12.5,
-                tracking: 0.8,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 /// The supplied Wassla mark. Keep the class name for existing call sites.
 /// Raster exports come directly from the supplied SVG paths at 4x density.
 class ShipTripMark extends StatelessWidget {
@@ -814,11 +757,46 @@ class PaperBackButton extends StatelessWidget {
   final VoidCallback? onPressed;
 
   @override
+  Widget build(BuildContext context) => _PaperDisc(
+    // Directional: "back" is the other way round in Arabic.
+    icon: Icons.arrow_back_rounded,
+    label: MaterialLocalizations.of(context).backButtonTooltip,
+    onPressed: onPressed,
+  );
+}
+
+/// The same disc with a cross, for a full-screen step that closes rather
+/// than goes back (the account screen).
+class PaperCloseButton extends StatelessWidget {
+  const PaperCloseButton({this.onPressed, super.key});
+
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => _PaperDisc(
+    icon: Icons.close_rounded,
+    label: MaterialLocalizations.of(context).closeButtonTooltip,
+    onPressed: onPressed,
+  );
+}
+
+class _PaperDisc extends StatelessWidget {
+  const _PaperDisc({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
   Widget build(BuildContext context) {
     final c = context.colors;
     return Semantics(
       button: true,
-      label: MaterialLocalizations.of(context).backButtonTooltip,
+      label: label,
       excludeSemantics: true,
       child: Material(
         color: c.surfaceRaised,
@@ -830,8 +808,7 @@ class PaperBackButton extends StatelessWidget {
             width: AppSpace.minTapTarget,
             height: AppSpace.minTapTarget,
             child: Icon(
-              // Directional: "back" is the other way round in Arabic.
-              Icons.arrow_back_rounded,
+              icon,
               size: 20,
               color: c.textPrimary,
               textDirection: Directionality.of(context),
@@ -843,7 +820,7 @@ class PaperBackButton extends StatelessWidget {
   }
 }
 
-/// The page indicator from the onboarding carousel: the active dot stretches
+/// The page indicator of How Wassla works: the active dot stretches
 /// into a sun-coloured lozenge with a glow under it.
 class PassportDots extends StatelessWidget {
   const PassportDots({required this.count, required this.active, super.key});

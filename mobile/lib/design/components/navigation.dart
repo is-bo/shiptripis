@@ -9,6 +9,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../identity.dart';
 import '../layout/app_scaffold.dart';
 import '../tokens.dart';
 import 'primitives.dart';
@@ -241,10 +242,15 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
     this.onBack,
     this.backLabel,
     this.bottom,
+    this.showMark = false,
     super.key,
   });
 
   final String title;
+
+  /// Shows the Wassla mark in place of the title text, which stays the
+  /// bar's accessible name. For the front page a guest opens on.
+  final bool showMark;
   final String? subtitle;
   final List<Widget> actions;
   final Widget? leading;
@@ -286,15 +292,23 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Semantics(
-            header: true,
-            child: Text(
-              title,
-              style: text.headlineSmall,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+          if (showMark)
+            Semantics(
+              header: true,
+              label: title,
+              excludeSemantics: true,
+              child: const ShipTripMark(size: 28),
+            )
+          else
+            Semantics(
+              header: true,
+              child: Text(
+                title,
+                style: text.headlineSmall,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          ),
           if (subtitle != null)
             Text(
               subtitle!,

@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shiptrip/app/app_state.dart';
 import 'package:shiptrip/core/api/api_exception.dart';
 import 'package:shiptrip/core/api/error_codes.dart';
+import 'package:shiptrip/core/session/session.dart';
 import 'package:shiptrip/features/chat/chat_list_screen.dart';
 import 'package:shiptrip/features/chat/chat_thread_screen.dart';
 import 'package:shiptrip/features/notifications/notifications_screen.dart';
@@ -26,6 +27,8 @@ ProviderContainer _chatContainer(Future<List<ChatThread>> Function() load) {
     overrides: [
       chatThreadsProvider.overrideWith((ref) => ref.watch(source)),
       unreadNotificationsProvider.overrideWith((ref) => const AsyncData(0)),
+      // A member's chat list: a guest sees the guest tab instead.
+      isGuestProvider.overrideWithValue(false),
     ],
   );
 }
@@ -72,6 +75,8 @@ void main() {
             ),
           ),
           unreadNotificationsProvider.overrideWith((ref) => const AsyncData(0)),
+          // A member's chat list: a guest sees the guest tab instead.
+          isGuestProvider.overrideWithValue(false),
         ],
       );
       await pumpApp(tester, const ChatListScreen(), container: container);
@@ -100,6 +105,8 @@ void main() {
             ),
           ),
           unreadNotificationsProvider.overrideWith((ref) => const AsyncData(0)),
+          // A member's chat list: a guest sees the guest tab instead.
+          isGuestProvider.overrideWithValue(false),
         ],
       );
       await pumpApp(tester, const ChatListScreen(), container: container);

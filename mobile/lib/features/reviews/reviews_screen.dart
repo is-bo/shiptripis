@@ -13,6 +13,7 @@ import '../../app/discovery_state.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/error_codes.dart';
 import '../../core/format/locale_formats.dart';
+import '../../core/session/session.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/primitives.dart';
@@ -21,6 +22,7 @@ import '../../design/tokens.dart';
 import '../../domain/find_travelers.dart';
 import '../../domain/reviews.dart';
 import '../../l10n/app_localizations.dart';
+import '../auth/account_gate.dart';
 import '../discovery/discovery_widgets.dart';
 import 'report_review_sheet.dart';
 import 'review_widgets.dart';
@@ -128,6 +130,18 @@ class _Body extends ConsumerWidget {
     PublicReview review,
   ) async {
     final provider = reviewsFeedProvider(subject);
+    final wasGuest = ref.read(isGuestProvider);
+    if (!await ensureAccount(context, AccountReason.report) ||
+        !context.mounted) {
+      return;
+    }
+    if (wasGuest) {
+      // Signed in just now: the list is read again for this member, who may
+      // have reported this review already.
+      final feed = await ref.read(provider.future);
+      final fresh = feed.items.where((r) => r.id == review.id).firstOrNull;
+      if (fresh == null || fresh.myReport != null || !context.mounted) return;
+    }
     // From Find Travelers the sender's request rides along, so a review the
     // listings switch no longer shows can still be reported under the same
     // rule that lets them read it.

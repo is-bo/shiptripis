@@ -21,10 +21,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/app_state.dart';
+import '../../app/router.dart';
+import '../../core/session/session.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/primitives.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../l10n/app_localizations.dart';
+import '../auth/account_gate.dart';
 
 class AppShell extends ConsumerWidget {
   const AppShell({required this.navigationShell, super.key});
@@ -89,6 +92,48 @@ class AppShell extends ConsumerWidget {
   }
 }
 
+/// Builds a tab's screen afresh whenever the person using the app changes:
+/// a sign-out, a sign-in, another account.
+///
+/// The tabs outlive a sign-out (a guest keeps using them), and Riverpod
+/// pauses the reads of a tab that is not showing. Without this, a tab left in
+/// the background would hold the previous member's screen until it was shown
+/// again. It listens on the container itself, which a hidden tab does not
+/// pause.
+class AccountScope extends StatefulWidget {
+  const AccountScope({required this.child, super.key});
+
+  final Widget child;
+
+  @override
+  State<AccountScope> createState() => _AccountScopeState();
+}
+
+class _AccountScopeState extends State<AccountScope> {
+  ProviderSubscription<AccountSession?>? _session;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _session ??= ProviderScope.containerOf(context, listen: false).listen(
+      accountSessionProvider,
+      (previous, next) {
+        if (previous != next && mounted) setState(() {});
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _session?.close();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      KeyedSubtree(key: ValueKey(_session?.read()), child: widget.child);
+}
+
 /// The bell, with its unread count, for a screen's top bar.
 ///
 /// Lives here rather than in the design system because it reads app state.
@@ -110,7 +155,12 @@ class NotificationBell extends ConsumerWidget {
           ? l.navNotificationsWithCount(count)
           : l.navNotifications,
       badgeCount: count,
-      onPressed: () => context.pushNamed('notifications'),
+      onPressed: () async {
+        final router = GoRouter.of(context);
+        if (await ensureAccount(context, AccountReason.notifications)) {
+          await router.pushNamed<void>(Routes.notifications);
+        }
+      },
     );
   }
 }

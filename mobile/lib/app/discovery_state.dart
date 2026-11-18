@@ -7,13 +7,17 @@
 ///   separate widgets, so one failing, or one switched off, never blanks the
 ///   page, and a section scrolled far below the fold does not read until it is
 ///   near the screen.
-/// * **They are `autoDispose` and tied to the signed-in session.** A listing
-///   goes stale the moment the app is backgrounded, and the previous account's
-///   cards must never survive a sign-out. Watching [accountSessionProvider]
+/// * **They are `autoDispose` and tied to who is looking.** A listing goes
+///   stale the moment the app is backgrounded, and the previous account's
+///   cards must never survive a sign-out. The public reads (listings, people,
+///   a person, reviews) watch [discoveryAudienceProvider], a guest or one
+///   member's sign-in; the personal ones (matches, the own profile, alerts)
+///   watch [accountSessionProvider] and read nothing for a guest. A change
 ///   rebuilds each of them and cancels its read. A rebuild keeps the previous
 ///   value in Riverpod, so every reader goes through
-///   [AccountScopedValue.ofCurrentAccount], which drops it; and signed out, no
-///   read starts at all.
+///   [AccountScopedValue.ofCurrentAccount], which drops it. A guest who signs
+///   in is the one exception: their cards stay while each read is asked again
+///   for the member, so the screen they signed in from stays as it was.
 /// * **Lists page on the server's own cursor.** [FeedController] sends the
 ///   `next_offset` it was given and nothing else, and drops a row it already
 ///   holds, so an item that moved between two pages cannot show twice.
@@ -32,10 +36,57 @@ import '../domain/find_travelers.dart' show TravelerRating;
 import '../domain/reviews.dart';
 import 'app_state.dart';
 
-/// A read that has nobody to ask for. Signed out there is no account to read
-/// on behalf of, so nothing is sent and nothing ever answers; the screens that
-/// showed these reads are gone by then.
+/// A read that has nobody to ask for: a personal read for a guest, or any
+/// read while the session is still being restored. Nothing is sent and
+/// nothing ever answers.
 Future<T> _signedOut<T>() => Completer<T>().future;
+
+/// Who the public discovery reads are for, as their cache identity: a guest,
+/// or one member's sign-in. Null while the session is being restored, when
+/// nothing is read.
+///
+/// A member's sign-in ending, or another beginning, gives a new identity, so
+/// nothing read for one viewer is shown to the next. A guest signing in keeps
+/// the guest's identity: [_watchAudience] re-reads each listing for the new
+/// member by refresh, so the cards and the screen under the account moment
+/// stay mounted while it happens.
+final discoveryAudienceProvider = NotifierProvider<DiscoveryAudience, Object?>(
+  DiscoveryAudience.new,
+);
+
+class DiscoveryAudience extends Notifier<Object?> {
+  Object? _audience;
+  AccountSession? _member;
+
+  @override
+  Object? build() {
+    final session = ref.watch(sessionProvider);
+    final previous = _member;
+    final member = _member = session is SessionSignedIn
+        ? (accountId: session.account.id, generation: session.generation)
+        : null;
+    final fromGuest = previous == null && _audience is _Guest;
+    return _audience = switch (session) {
+      SessionRestoring() => null,
+      SessionSignedOut() => fromGuest ? _audience : _Guest(),
+      SessionSignedIn() =>
+        fromGuest || (previous == member && _audience != null)
+            ? _audience
+            : member,
+    };
+  }
+}
+
+/// A guest's identity. Never const: each spell signed out is its own.
+class _Guest {}
+
+/// The audience of a public read, and a re-read when a guest signs in.
+Object? _watchAudience(Ref ref) {
+  ref.listen(accountSessionProvider, (previous, next) {
+    if (previous == null && next != null) ref.invalidateSelf();
+  });
+  return ref.watch(discoveryAudienceProvider);
+}
 
 /// What a discovery read holds for the account that is signed in now.
 extension AccountScopedValue<T> on AsyncValue<T> {
@@ -75,7 +126,7 @@ final travelerMatchesProvider =
 /// "Trips leaving soon", optionally narrowed to one corridor.
 final previewTripsProvider = FutureProvider.autoDispose
     .family<DiscoveryPage<TripCard>, Corridor?>((ref, corridor) {
-      if (ref.watch(accountSessionProvider) == null) return _signedOut();
+      if (_watchAudience(ref) == null) return _signedOut();
       return ref
           .watch(discoveryRepositoryProvider)
           .trips(
@@ -88,7 +139,7 @@ final previewTripsProvider = FutureProvider.autoDispose
 /// "Parcels looking for a traveler", optionally narrowed to one corridor.
 final previewRequestsProvider = FutureProvider.autoDispose
     .family<DiscoveryPage<RequestCard>, Corridor?>((ref, corridor) {
-      if (ref.watch(accountSessionProvider) == null) return _signedOut();
+      if (_watchAudience(ref) == null) return _signedOut();
       return ref
           .watch(discoveryRepositoryProvider)
           .requests(
@@ -101,7 +152,7 @@ final previewRequestsProvider = FutureProvider.autoDispose
 /// The People row. Keyed by the **viewer's** side: a sender sees travelers.
 final previewPeopleProvider = FutureProvider.autoDispose
     .family<DiscoveryPage<ProfileCard>, bool>((ref, viewerIsSender) {
-      if (ref.watch(accountSessionProvider) == null) return _signedOut();
+      if (_watchAudience(ref) == null) return _signedOut();
       return ref
           .watch(discoveryRepositoryProvider)
           .people(
@@ -168,7 +219,11 @@ final ownProfileProvider =
       OwnProfileController.new,
     );
 
+/// The member's route alerts. A guest has none, and asks for none: their
+/// switch on a person's page reads "off" and turning it on asks for an
+/// account first.
 final routeAlertsProvider = FutureProvider.autoDispose<List<RouteAlert>>((ref) {
+  if (ref.watch(isGuestProvider)) return Future.value(const []);
   if (ref.watch(accountSessionProvider) == null) return _signedOut();
   return ref
       .watch(discoveryRepositoryProvider)
@@ -180,7 +235,7 @@ final personProvider = FutureProvider.autoDispose.family<PersonLookup, String>((
   ref,
   id,
 ) {
-  if (ref.watch(accountSessionProvider) == null) return _signedOut();
+  if (_watchAudience(ref) == null) return _signedOut();
   return ref
       .watch(discoveryRepositoryProvider)
       .person(id, cancelToken: cancelOnDispose(ref));
@@ -246,12 +301,12 @@ abstract class FeedController<T> extends AsyncNotifier<DiscoveryFeed<T>> {
   @override
   Future<DiscoveryFeed<T>> build() async {
     final generation = ++_generation;
-    final signedIn = ref.watch(accountSessionProvider) != null;
+    final audience = _watchAudience(ref);
     ref.onDispose(() {
       _generation++;
       _more?.cancel();
     });
-    if (!signedIn) return _signedOut();
+    if (audience == null) return _signedOut();
     final page = await fetch(
       ref.watch(discoveryRepositoryProvider),
       0,

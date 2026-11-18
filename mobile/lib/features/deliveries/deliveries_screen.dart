@@ -36,6 +36,8 @@ import '../../domain/delivery_request.dart';
 import '../../domain/journey.dart';
 import '../../domain/offer.dart';
 import '../../l10n/app_localizations.dart';
+import '../auth/account_gate.dart';
+import '../auth/guest_states.dart';
 import '../common/delivery_card.dart';
 import '../common/status_copy.dart';
 import '../offers/offer_deadline.dart';
@@ -57,6 +59,15 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
   @override
   Widget build(BuildContext context) {
     final l = L.of(context);
+    if (ref.watch(isGuestProvider)) {
+      return GuestTabScreen(
+        title: l.deliveriesTitle,
+        headline: l.guestDeliveriesTitle,
+        body: l.guestDeliveriesBody,
+        icon: Icons.inventory_2_outlined,
+        reason: AccountReason.deliveries,
+      );
+    }
     // Only the id: a profile refresh must not rebuild every row (K5).
     final accountId = ref.watch(
       accountProvider.select((account) => account?.id),

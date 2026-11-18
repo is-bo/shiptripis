@@ -613,7 +613,11 @@ class _AuthInterceptor extends Interceptor {
       return handler.next(response);
     }
     if (refresh == null) {
-      await _endSession(expectedIdentityGeneration: requestIdentity);
+      // A request sent without a bearer is a guest's: its 401 ends no
+      // session, and clearing storage would only drop the guest's choices.
+      if (request.headers.containsKey('Authorization')) {
+        await _endSession(expectedIdentityGeneration: requestIdentity);
+      }
       return handler.next(response);
     }
 
