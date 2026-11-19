@@ -33,15 +33,19 @@ import '../../l10n/app_localizations.dart';
 import 'account_gate.dart';
 import 'auth_header.dart';
 
-/// Whether the name step was offered in this run of the app. Held in memory
-/// only: the next launch asks again while the name is still empty.
+/// Whether the name step was offered to the signed-in account in this run
+/// of the app. Held in memory only: the next launch asks again while the
+/// name is still empty, and another account signing in starts over.
 final accountNameAskedProvider = NotifierProvider<AccountNameAsked, bool>(
   AccountNameAsked.new,
 );
 
 class AccountNameAsked extends Notifier<bool> {
   @override
-  bool build() => false;
+  bool build() {
+    ref.watch(accountProvider.select((account) => account?.id));
+    return false;
+  }
 
   void markAsked() => state = true;
 }

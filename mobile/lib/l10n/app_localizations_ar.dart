@@ -6201,10 +6201,10 @@ class LAr extends L {
   String get guestSettings => 'الإعدادات';
 
   @override
-  String get socialContinueWithApple => 'المتابعة مع Apple';
+  String get socialContinueWithApple => 'المتابعة باستخدام Apple';
 
   @override
-  String get socialContinueWithGoogle => 'المتابعة مع Google';
+  String get socialContinueWithGoogle => 'المتابعة باستخدام Google';
 
   @override
   String get socialOr => 'ولا';

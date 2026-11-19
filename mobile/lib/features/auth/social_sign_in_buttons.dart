@@ -78,6 +78,10 @@ class _SocialSignInButtonsState extends ConsumerState<SocialSignInButtons> {
       if (mounted) setState(() => _error = _failed(provider));
     } on ApiException catch (error) {
       if (mounted) setState(() => _error = _describe(provider, error));
+    } on Object {
+      // The keystore, or a sign-in that another one overtook: nothing the
+      // person can act on but trying again.
+      if (mounted) setState(() => _error = _failed(provider));
     } finally {
       if (mounted) setState(() => _busy = null);
     }
@@ -269,6 +273,7 @@ class _GoogleButton extends StatelessWidget {
       style: OutlinedButton.styleFrom(
         backgroundColor: fill,
         foregroundColor: ink,
+        disabledBackgroundColor: fill,
         disabledForegroundColor: ink.withValues(alpha: 0.6),
         side: BorderSide(color: dark ? _darkStroke : _lightStroke),
       ),
@@ -333,47 +338,117 @@ class _ProviderButton extends StatelessWidget {
   }
 }
 
-/// Google's "G", in its four colours.
+/// Google's "G", in its four colours, drawn from the official mark's paths
+/// (Google's sign-in branding, on a 48 by 48 grid) and scaled to fit.
 class GoogleLogoPainter extends CustomPainter {
   const GoogleLogoPainter();
 
-  static const _blue = Color(0xFF4285F4);
-  static const _green = Color(0xFF34A853);
-  static const _yellow = Color(0xFFFBBC05);
-  static const _red = Color(0xFFEA4335);
+  static const _grid = 48.0;
 
-  static double _rad(double degrees) => degrees * 3.141592653589793 / 180;
+  static final _marks = <(Color, Path)>[
+    (
+      const Color(0xFFEA4335),
+      _svgPath(
+        'M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 '
+        '14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z',
+      ),
+    ),
+    (
+      const Color(0xFF4285F4),
+      _svgPath(
+        'M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 '
+        '5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z',
+      ),
+    ),
+    (
+      const Color(0xFFFBBC05),
+      _svgPath(
+        'M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19'
+        'C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z',
+      ),
+    ),
+    (
+      const Color(0xFF34A853),
+      _svgPath(
+        'M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 '
+        '2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z',
+      ),
+    ),
+  ];
 
   @override
   void paint(Canvas canvas, Size size) {
-    final side = size.shortestSide;
-    final stroke = side * 0.2;
-    final center = size.center(Offset.zero);
-    final radius = (side - stroke) / 2;
-    final ring = Rect.fromCircle(center: center, radius: radius);
-    Paint arc(Color color) => Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke;
-
-    // Angles run clockwise from three o'clock; the G opens at the upper
-    // right, between the red arc and the blue bar.
+    final scale = size.shortestSide / _grid;
     canvas
-      ..drawArc(ring, _rad(-40), _rad(-100), false, arc(_red))
-      ..drawArc(ring, _rad(-140), _rad(-90), false, arc(_yellow))
-      ..drawArc(ring, _rad(130), _rad(-85), false, arc(_green))
-      ..drawArc(ring, _rad(45), _rad(-45), false, arc(_blue))
-      ..drawRect(
-        Rect.fromLTRB(
-          center.dx,
-          center.dy - stroke / 2,
-          center.dx + radius + stroke / 2,
-          center.dy + stroke / 2,
-        ),
-        Paint()..color = _blue,
-      );
+      ..save()
+      ..translate(
+        (size.width - _grid * scale) / 2,
+        (size.height - _grid * scale) / 2,
+      )
+      ..scale(scale);
+    for (final (color, path) in _marks) {
+      canvas.drawPath(path, Paint()..color = color);
+    }
+    canvas.restore();
   }
 
   @override
   bool shouldRepaint(GoogleLogoPainter oldDelegate) => false;
+}
+
+/// The SVG path commands the mark uses (M, C, S, L, H, V and Z, absolute or
+/// relative), as a [Path].
+Path _svgPath(String data) {
+  final tokens = RegExp(
+    r'[MCSLHVZmcslhvz]|-?(?:\d+\.?\d*|\.\d+)',
+  ).allMatches(data).map((m) => m.group(0)!).toList();
+  final path = Path();
+  var at = Offset.zero;
+  var lastControl = Offset.zero;
+  var command = '';
+  var i = 0;
+  double number() => double.parse(tokens[i++]);
+  Offset point(bool relative) {
+    final p = Offset(number(), number());
+    return relative ? at + p : p;
+  }
+
+  while (i < tokens.length) {
+    if (RegExp('[A-Za-z]').hasMatch(tokens[i])) command = tokens[i++];
+    final relative = command == command.toLowerCase();
+    switch (command.toUpperCase()) {
+      case 'M':
+        at = point(relative);
+        path.moveTo(at.dx, at.dy);
+        // Pairs after a move are lines.
+        command = relative ? 'l' : 'L';
+      case 'L':
+        at = point(relative);
+        path.lineTo(at.dx, at.dy);
+      case 'H':
+        final x = number();
+        at = Offset(relative ? at.dx + x : x, at.dy);
+        path.lineTo(at.dx, at.dy);
+      case 'V':
+        final y = number();
+        at = Offset(at.dx, relative ? at.dy + y : y);
+        path.lineTo(at.dx, at.dy);
+      case 'C' || 'S':
+        final c1 = command.toUpperCase() == 'S'
+            ? at * 2 - lastControl
+            : point(relative);
+        final c2 = point(relative);
+        final end = point(relative);
+        path.cubicTo(c1.dx, c1.dy, c2.dx, c2.dy, end.dx, end.dy);
+        lastControl = c2;
+        at = end;
+        continue;
+      case 'Z':
+        path.close();
+      default:
+        throw FormatException('Unsupported path command', command);
+    }
+    lastControl = at;
+  }
+  return path;
 }

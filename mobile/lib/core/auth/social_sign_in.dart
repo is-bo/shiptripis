@@ -13,6 +13,7 @@
 /// build, and is never offered elsewhere.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -93,6 +94,10 @@ abstract interface class SocialSignIn {
   Future<GoogleCredential?> google();
 
   Future<AppleCredential?> apple();
+
+  /// Forgets the provider's own signed-in account, so the next person on a
+  /// shared phone is offered the account picker. Best effort: never throws.
+  Future<void> signOut();
 }
 
 /// Which providers a build offers on [platform], given its configuration.
@@ -185,13 +190,8 @@ class PlatformSocialSignIn implements SocialSignIn {
 
   @override
   Future<GoogleCredential?> google() async {
+    await _initializeGoogle();
     try {
-      await (_googleReady ??= GoogleSignIn.instance.initialize(
-        clientId: defaultTargetPlatform == TargetPlatform.iOS
-            ? AppConfig.googleIosClientId
-            : null,
-        serverClientId: AppConfig.googleServerClientId,
-      ));
       final account = await GoogleSignIn.instance.authenticate();
       final idToken = account.authentication.idToken;
       if (idToken == null || idToken.isEmpty) {
@@ -203,14 +203,40 @@ class PlatformSocialSignIn implements SocialSignIn {
           error.code == GoogleSignInExceptionCode.interrupted) {
         return null;
       }
-      // A failed initialization must not stick: the next tap tries again.
-      _googleReady = null;
       throw SocialSignInFailure(SocialProvider.google, error.code);
     } on SocialSignInFailure {
       rethrow;
     } on Object catch (error) {
-      _googleReady = null;
       throw SocialSignInFailure(SocialProvider.google, error);
+    }
+  }
+
+  /// `initialize` is called once per process. Only a failed one is tried
+  /// again, at the next tap.
+  Future<void> _initializeGoogle() async {
+    final ready = _googleReady ??= GoogleSignIn.instance.initialize(
+      clientId: defaultTargetPlatform == TargetPlatform.iOS
+          ? AppConfig.googleIosClientId
+          : null,
+      serverClientId: AppConfig.googleServerClientId,
+    );
+    try {
+      await ready;
+    } on Object catch (error) {
+      if (identical(_googleReady, ready)) _googleReady = null;
+      throw SocialSignInFailure(SocialProvider.google, error);
+    }
+  }
+
+  @override
+  Future<void> signOut() async {
+    final ready = _googleReady;
+    if (ready == null) return;
+    try {
+      await ready;
+      await GoogleSignIn.instance.signOut();
+    } on Object {
+      // The app's own sign-out has already happened; this is a courtesy.
     }
   }
 
@@ -310,13 +336,25 @@ class SocialAuth {
     }
     final fresh = await _provider.apple();
     if (fresh == null) return null;
+    final keptFor = kept?.userIdentifier;
     if (fresh.fullName.isEmpty &&
         kept != null &&
         kept.fullName.isNotEmpty &&
-        kept.userIdentifier == fresh.userIdentifier) {
+        keptFor != null &&
+        keptFor == fresh.userIdentifier) {
       return fresh.withFullName(kept.fullName);
     }
     return fresh;
+  }
+
+  /// The session moved on (signed out, or someone signed in): a kept Apple
+  /// credential and name belong to an attempt that is over.
+  void _sessionChanged(SessionState? previous, SessionState next) {
+    _keptApple = null;
+    _keptAppleUsable = false;
+    if (previous is SessionSignedIn && next is SessionSignedOut) {
+      unawaited(_provider.signOut());
+    }
   }
 
   /// Whether a JWT's `exp` leaves at least [_tokenMargin]. Read only to
@@ -342,4 +380,8 @@ class SocialAuth {
   }
 }
 
-final socialAuthProvider = Provider<SocialAuth>(SocialAuth.new);
+final socialAuthProvider = Provider<SocialAuth>((ref) {
+  final auth = SocialAuth(ref);
+  ref.listen(sessionProvider, auth._sessionChanged);
+  return auth;
+});
