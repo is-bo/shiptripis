@@ -5,11 +5,13 @@
 /// for a guest it opens [AccountGateScreen] (`/auth/continue`), which says
 /// why an account is needed and offers the ways in. Sign-in and sign-up
 /// opened from it carry `continue=1` and are an *account flow*: the router
-/// never redirects them when the session turns signed in, and on success
-/// [completeAccountFlow] closes every flow route in one step, so the
-/// caller's `await ensureAccount(...)` resumes on the very screen the guest
-/// was on and the action they asked for goes ahead.
+/// never redirects them when the session turns signed in. Every way in ends
+/// in [finishSignIn], which has [completeAccountFlow] close every flow route
+/// in one step, so the caller's `await ensureAccount(...)` resumes on the very
+/// screen the guest was on and the action they asked for goes ahead.
 library;
+
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -31,7 +33,6 @@ enum AccountReason {
   postTrip('post_trip'),
   carry('carry'),
   alert('alert'),
-  propose('propose'),
   report('report'),
   deliveries('deliveries'),
   chat('chat'),
@@ -52,7 +53,6 @@ enum AccountReason {
     postTrip => l.accountReasonPostTripTitle,
     carry => l.accountReasonCarryTitle,
     alert => l.accountReasonAlertTitle,
-    propose => l.accountReasonProposeTitle,
     report => l.accountReasonReportTitle,
     deliveries => l.accountReasonDeliveriesTitle,
     chat => l.accountReasonChatTitle,
@@ -65,7 +65,6 @@ enum AccountReason {
     postTrip => l.accountReasonPostTripBody,
     carry => l.accountReasonCarryBody,
     alert => l.accountReasonAlertBody,
-    propose => l.accountReasonProposeBody,
     report => l.accountReasonReportBody,
     deliveries => l.accountReasonDeliveriesBody,
     chat => l.accountReasonChatBody,
@@ -112,27 +111,34 @@ const _flowParameter = 'continue';
 const _nextParameter = 'next';
 
 /// Whether [uri] is one of the account flow's routes. Read by the router,
-/// which never moves a newly signed-in person off one.
+/// which never moves a newly signed-in person off one: the flow ends itself.
 bool isAccountFlowLocation(Uri uri) =>
     uri.path == '/auth/continue' ||
     (uri.path.startsWith('/auth/') &&
         uri.queryParameters[_flowParameter] == '1');
 
-const _flowAuthRoutes = {
-  Routes.signIn,
-  Routes.signUp,
-  Routes.forgotPassword,
-  Routes.verifyEmail,
-};
+/// The pages of the account-flow screens pushed on [stack], by the key the
+/// router gives each pushed page (`Page.key` is the match's `pageKey`).
+Set<LocalKey> _pushedFlowPages(RouteMatchList stack) {
+  final keys = <LocalKey>{};
+  void walk(List<RouteMatchBase> matches) {
+    for (final match in matches) {
+      if (match is ImperativeRouteMatch) {
+        if (isAccountFlowLocation(match.matches.uri)) keys.add(match.pageKey);
+      } else if (match is ShellRouteMatch) {
+        walk(match.matches);
+      }
+    }
+  }
 
-bool _isAccountFlowRoute(Route<dynamic> route) {
-  final settings = route.settings;
-  if (settings.name == Routes.accountGate) return true;
-  final arguments = settings.arguments;
-  return _flowAuthRoutes.contains(settings.name) &&
-      arguments is Map &&
-      arguments[_flowParameter] == '1';
+  walk(stack.matches);
+  return keys;
 }
+
+/// Completed when the account screen opened by the pending [ensureAccount]
+/// goes away, however it goes: closed, completed, or swept off by a new
+/// stack (a notification tapped while it was open).
+Completer<void>? _gateClosed;
 
 /// Answers whether the person has an account, asking a guest to make one.
 ///
@@ -150,10 +156,18 @@ Future<bool> ensureAccount(BuildContext context, AccountReason reason) async {
   // A second tap while the first one's account screen is opening.
   if (isAccountFlowLocation(router.state.uri)) return false;
 
-  await router.pushNamed<void>(
-    Routes.accountGate,
-    queryParameters: {'reason': reason.wire},
+  final closed = _gateClosed = Completer<void>();
+  unawaited(
+    router
+        .pushNamed<void>(
+          Routes.accountGate,
+          queryParameters: {'reason': reason.wire},
+        )
+        .whenComplete(() {
+          if (!closed.isCompleted) closed.complete();
+        }),
   );
+  await closed.future;
   return container.read(sessionProvider) is SessionSignedIn;
 }
 
@@ -168,19 +182,80 @@ Future<void> openSignIn(BuildContext context) => context.pushNamed<void>(
 ///
 /// The screen underneath is the one the guest asked from, and the future
 /// that opened the gate completes there. When the flow is the whole stack (it
-/// was opened by a link), Home is put under the person instead.
+/// was opened by a link), Home is put under the person instead. Called from a
+/// screen the flow has already closed, it does nothing.
 void completeAccountFlow(BuildContext context, AccountFlow flow) {
+  if (ModalRoute.of(context)?.isActive == false) return;
   final router = GoRouter.of(context);
   final next = isSafePostLoginLocation(flow.next) ? flow.next : null;
-  if (isAccountFlowLocation(router.routerDelegate.currentConfiguration.uri)) {
+  final stack = router.routerDelegate.currentConfiguration;
+  if (isAccountFlowLocation(stack.uri)) {
     router.go(next ?? '/home');
     return;
   }
-  Navigator.of(
-    context,
-    rootNavigator: true,
-  ).popUntil((route) => !_isAccountFlowRoute(route));
+  final flowPages = _pushedFlowPages(stack);
+  Navigator.of(context, rootNavigator: true).popUntil((route) {
+    final page = route.settings;
+    return page is! Page || !flowPages.contains(page.key);
+  });
   if (next != null) router.push(next);
+}
+
+/// What happens once someone has signed in (or made their account) on an
+/// auth screen opened as [flow]. The one place every way in ends: the email
+/// sign-in, confirming the email after sign-up, and the account screen.
+///
+/// Inside the account flow it closes the flow, so the action or place it was
+/// opened for goes ahead. Outside one (the auth screen is the whole stack),
+/// the router's redirect has already moved the member on, and there is
+/// nothing to do.
+void finishSignIn(BuildContext context, AccountFlow flow) {
+  if (!flow.active) return;
+  completeAccountFlow(context, flow);
+}
+
+/// An account-flow screen (the gate, sign-in, sign-up, forgot password)
+/// reached by someone already signed in, by a link: there is nothing to ask,
+/// so the flow ends as soon as it shows.
+class AccountFlowScreen extends ConsumerStatefulWidget {
+  const AccountFlowScreen({required this.flow, required this.child, super.key});
+
+  final AccountFlow flow;
+  final Widget child;
+
+  @override
+  ConsumerState<AccountFlowScreen> createState() => _AccountFlowScreenState();
+}
+
+class _AccountFlowScreenState extends ConsumerState<AccountFlowScreen> {
+  @override
+  void initState() {
+    super.initState();
+    if (widget.flow.active && ref.read(sessionProvider) is SessionSignedIn) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _endOnceShown());
+    }
+  }
+
+  /// Once the screen has finished coming in: replacing the stack while the
+  /// one it replaced is still leaving would build the shell twice.
+  void _endOnceShown() {
+    if (!mounted) return;
+    final animation = ModalRoute.of(context)?.animation;
+    if (animation == null || animation.isCompleted) {
+      completeAccountFlow(context, widget.flow);
+      return;
+    }
+    void shown(AnimationStatus status) {
+      if (!status.isCompleted) return;
+      animation.removeStatusListener(shown);
+      if (mounted) completeAccountFlow(context, widget.flow);
+    }
+
+    animation.addStatusListener(shown);
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// The account screen.
@@ -189,6 +264,23 @@ class AccountGateScreen extends ConsumerStatefulWidget {
 
   final AccountReason reason;
 
+  /// Runs [signIn], started from a widget on the account screen whose caller
+  /// then calls [finishSignIn] itself, so the screen does not also finish it
+  /// when the session turns signed in.
+  static Future<T> finishingHere<T>(
+    BuildContext context,
+    Future<T> Function() signIn,
+  ) async {
+    final gate = context.findAncestorStateOfType<_AccountGateScreenState>();
+    if (gate == null) return signIn();
+    gate._finishedByCaller++;
+    try {
+      return await signIn();
+    } finally {
+      gate._finishedByCaller--;
+    }
+  }
+
   @override
   ConsumerState<AccountGateScreen> createState() => _AccountGateScreenState();
 }
@@ -196,22 +288,31 @@ class AccountGateScreen extends ConsumerStatefulWidget {
 class _AccountGateScreenState extends ConsumerState<AccountGateScreen> {
   static const _flow = AccountFlow._(active: true);
 
+  /// Sign-ins started on this screen whose caller calls [finishSignIn] itself.
+  int _finishedByCaller = 0;
+
   @override
-  void initState() {
-    super.initState();
-    // Only a link can open this for someone already signed in: there is
-    // nothing to ask them.
-    if (ref.read(sessionProvider) is SessionSignedIn) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) completeAccountFlow(context, _flow);
-      });
-    }
+  void dispose() {
+    final closed = _gateClosed;
+    if (closed != null && !closed.isCompleted) closed.complete();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final l = L.of(context);
     final c = context.colors;
+    // A sign-in that finished with this screen on top and nobody left to
+    // finish it (a sign-in screen backed out of while it was answering) is
+    // finished here, the one way every sign-in is.
+    ref.listen(sessionProvider, (previous, next) {
+      if (previous is! SessionSignedIn &&
+          next is SessionSignedIn &&
+          _finishedByCaller == 0 &&
+          (ModalRoute.of(context)?.isCurrent ?? false)) {
+        finishSignIn(context, _flow);
+      }
+    });
 
     return AppScaffold(
       body: ListView(
@@ -257,8 +358,8 @@ class _AccountGateScreenState extends ConsumerState<AccountGateScreen> {
 /// account screen, above "Continue with email".
 ///
 /// It renders nothing until those sign-ins exist: the buttons go here, each
-/// followed by `SizedBox(height: AppSpace.sm)`, and a successful one calls
-/// [completeAccountFlow] like the email sign-in does.
+/// followed by `SizedBox(height: AppSpace.sm)`. A button runs its sign-in
+/// through [AccountGateScreen.finishingHere] and then calls [finishSignIn].
 class AccountProviderButtons extends StatelessWidget {
   const AccountProviderButtons({super.key});
 

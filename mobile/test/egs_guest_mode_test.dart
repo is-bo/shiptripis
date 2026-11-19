@@ -33,8 +33,10 @@ import 'package:shiptrip/design/components/navigation.dart';
 import 'package:shiptrip/design/components/primitives.dart';
 import 'package:shiptrip/design/identity.dart';
 import 'package:shiptrip/features/auth/account_gate.dart';
+import 'package:shiptrip/features/auth/forgot_password_screen.dart';
 import 'package:shiptrip/features/auth/guest_states.dart';
 import 'package:shiptrip/features/auth/sign_in_screen.dart';
+import 'package:shiptrip/features/auth/sign_up_screen.dart';
 import 'package:shiptrip/features/auth/verify_email_screen.dart';
 import 'package:shiptrip/features/home/home_screen.dart';
 import 'package:shiptrip/features/journeys/journey_create_screen.dart';
@@ -53,13 +55,38 @@ final L _ar = lookupL(const Locale('ar'));
 /// keystore to answer, so this one does. [access] is what a request carries:
 /// a guest's keystore holds no token at all.
 class _Store extends FakeTokenStore {
-  _Store({super.refresh, super.locale, this.access = 'access-token'});
+  _Store({super.refresh, super.locale, this.access = 'access-token'})
+    : _refresh = refresh;
 
-  final String? access;
+  /// What the keystore holds. A clear really empties it, and a sign-in
+  /// really fills it, so a bearer sent afterwards is one that was stored.
+  String? access;
+  String? _refresh;
   int clears = 0;
 
   @override
   Future<String?> readAccess() async => access;
+
+  @override
+  Future<String?> readRefresh() async => _refresh;
+
+  @override
+  Future<bool> saveAuthenticationIfCurrent({
+    required int expectedIdentityGeneration,
+    required String access,
+    required String refresh,
+  }) async {
+    final saved = await super.saveAuthenticationIfCurrent(
+      expectedIdentityGeneration: expectedIdentityGeneration,
+      access: access,
+      refresh: refresh,
+    );
+    if (saved) {
+      this.access = access;
+      _refresh = refresh;
+    }
+    return saved;
+  }
 
   @override
   Future<String> readOrCreateInstallationId() async => 'installation';
@@ -71,9 +98,16 @@ class _Store extends FakeTokenStore {
   Future<void> writePendingPushToken(String? token) async {}
 
   @override
-  Future<bool> clearIfIdentityCurrent(int expectedIdentityGeneration) {
+  Future<bool> clearIfIdentityCurrent(int expectedIdentityGeneration) async {
     clears++;
-    return super.clearIfIdentityCurrent(expectedIdentityGeneration);
+    final cleared = await super.clearIfIdentityCurrent(
+      expectedIdentityGeneration,
+    );
+    if (cleared) {
+      access = null;
+      _refresh = null;
+    }
+    return cleared;
   }
 }
 
@@ -102,7 +136,7 @@ Map<String, dynamic> _personCard() => profileCardFixture(
 /// A server with something to look at, and the member's own reads answered
 /// calmly for once the guest has made an account.
 class _Server {
-  _Server({this.journeys = const []}) {
+  _Server({this.journeys = const [], this.role = 'both'}) {
     backend
       ..emptyDiscovery()
       ..on(
@@ -194,10 +228,17 @@ class _Server {
   /// The trips the account has once it exists.
   final List<int> journeys;
 
+  /// The side the account may work from, as the server states it.
+  final String role;
+
   final alerts = <Map<String, dynamic>>[];
   bool verified = true;
 
-  Map<String, dynamic> _me() => {...meFixture(), 'is_email_verified': verified};
+  Map<String, dynamic> _me() => {
+    ...meFixture(),
+    'role': role,
+    'is_email_verified': verified,
+  };
 
   FakeResponse _signedIn(int status) => FakeResponse(status, {
     'access': 'access-token',
@@ -247,6 +288,7 @@ Future<ProviderContainer> _boot(
   final tokens = store ?? _guest();
   await tester.pumpWidget(
     ProviderScope(
+      retry: appRetry,
       overrides: [
         tokenStoreProvider.overrideWithValue(tokens),
         apiClientProvider.overrideWithValue(
@@ -316,7 +358,13 @@ void _expectGate(AccountReason reason) {
 
 /// No account-flow screen is left anywhere on the stack.
 void _expectFlowClosed() {
-  for (final type in [AccountGateScreen, SignInScreen, VerifyEmailScreen]) {
+  for (final type in [
+    AccountGateScreen,
+    SignInScreen,
+    SignUpScreen,
+    ForgotPasswordScreen,
+    VerifyEmailScreen,
+  ]) {
     expect(find.byType(type, skipOffstage: false), findsNothing);
   }
 }
@@ -411,6 +459,9 @@ void main() {
         '',
         'deals/7',
         '//evil.example/x',
+        r'/\evil.example',
+        r'/\\evil.example/x',
+        r'/deals\7',
         'https://evil.example',
         '/auth/sign-in',
         '/splash',
@@ -469,6 +520,7 @@ void main() {
         await _settle(tester, 5);
         expect(_at(container).path, '/auth/sign-in', reason: path);
         expect(_at(container).queryParameters['next'], path);
+        expect(_at(container).queryParameters['continue'], '1');
       }
 
       router.go('/notifications');
@@ -478,6 +530,49 @@ void main() {
 
       expect(container.read(sessionProvider), isA<SessionSignedIn>());
       expect(_at(container).path, '/notifications');
+      _expectFlowClosed();
+
+      await _shutdown(tester);
+    });
+
+    testWidgets('a private place pushed over Home asks for sign-in, then opens '
+        'there, with Home under it', (tester) async {
+      final container = await _boot(tester, _Server());
+
+      _router(container).push('/notifications');
+      await _settle(tester);
+      expect(_at(container).path, '/auth/sign-in');
+      expect(_at(container).queryParameters['next'], '/notifications');
+      await _signIn(tester);
+
+      expect(_at(container).path, '/notifications');
+      _expectFlowClosed();
+      await _systemBack(tester);
+      expect(_at(container).path, '/home');
+
+      await _shutdown(tester);
+    });
+
+    testWidgets('a member who reaches an account-flow screen by a link is '
+        'moved on at once', (tester) async {
+      final container = await _boot(tester, _Server(), store: _Store());
+      final router = _router(container);
+
+      for (final location in [
+        '/auth/sign-in?continue=1',
+        '/auth/sign-up?continue=1',
+        '/auth/forgot?continue=1',
+        '/auth/continue?reason=post_request',
+      ]) {
+        router.go(location);
+        await _settle(tester);
+        expect(_at(container).path, '/home', reason: location);
+        _expectFlowClosed();
+      }
+      router.go('/auth/sign-in?continue=1&next=/notifications');
+      await _settle(tester);
+      expect(_at(container).path, '/notifications');
+      _expectFlowClosed();
 
       await _shutdown(tester);
     });
@@ -704,6 +799,90 @@ void main() {
       await _shutdown(tester);
     });
 
+    testWidgets('Back on a sign-in that is still answering: the action goes '
+        'ahead once it does', (tester) async {
+      final server = _Server();
+      final answer = Completer<FakeResponse>();
+      server.backend.handle('POST', '/api/auth/sign-in', (_) => answer.future);
+      final container = await _boot(tester, server);
+
+      await tester.tap(_hero());
+      await _settle(tester);
+      await tester.tap(_button(_en.accountGateHaveAccount));
+      await _settle(tester);
+      await tester.enterText(_field(_en.authEmail), 'sender@example.com');
+      await tester.enterText(_field(_en.authPassword), 'correct horse battery');
+      await tester.tap(_button(_en.authSignIn));
+      await tester.pump();
+      await _systemBack(tester);
+      expect(find.byType(SignInScreen), findsNothing);
+      _expectGate(AccountReason.postRequest);
+
+      answer.complete(
+        FakeResponse(200, {
+          'access': 'access-token',
+          'refresh': 'refresh-token',
+          'user': meFixture(),
+        }),
+      );
+      await _settle(tester);
+
+      expect(container.read(sessionProvider), isA<SessionSignedIn>());
+      expect(find.byType(RequestCreateScreen), findsOneWidget);
+      _expectFlowClosed();
+
+      await _shutdown(tester);
+    });
+
+    testWidgets('a sign-in the account screen\'s own button finishes is '
+        'finished once, by that button', (tester) async {
+      final container = await _boot(tester, _Server());
+
+      await tester.tap(_hero());
+      await _settle(tester);
+      final gate = tester.element(find.byType(AccountProviderButtons));
+      final signedIn = AccountGateScreen.finishingHere(
+        gate,
+        () => container
+            .read(sessionProvider.notifier)
+            .signIn(
+              email: 'sender@example.com',
+              password: 'correct horse battery',
+            ),
+      );
+      await _settle(tester);
+      await signedIn;
+
+      expect(container.read(sessionProvider), isA<SessionSignedIn>());
+      _expectGate(AccountReason.postRequest);
+
+      finishSignIn(gate, AccountFlow.of(_router(container).state));
+      await _settle(tester);
+
+      expect(find.byType(RequestCreateScreen), findsOneWidget);
+      _expectFlowClosed();
+
+      await _shutdown(tester);
+    });
+
+    testWidgets('a new stack while the account screen is open answers "no"', (
+      tester,
+    ) async {
+      final container = await _boot(tester, _Server());
+      final home = tester.element(find.byType(HomeScreen));
+
+      final pending = ensureAccount(home, AccountReason.generic);
+      await _settle(tester);
+      expect(find.byType(AccountGateScreen), findsOneWidget);
+      _router(container).go('/discover/trips');
+      await _settle(tester);
+
+      expect(await pending, isFalse);
+      _expectFlowClosed();
+
+      await _shutdown(tester);
+    });
+
     testWidgets('"Sign in" on guest Home returns to Home as the member', (
       tester,
     ) async {
@@ -821,6 +1000,29 @@ void main() {
       expect(_at(container).path, '/discover/people/$_personId');
       expect(tester.widget<Switch>(find.byType(Switch).first).value, isTrue);
       _expectFlowClosed();
+
+      await _shutdown(tester);
+    });
+
+    testWidgets('the alert asked for on one side stays that side when the '
+        'account turns out to work from the other', (tester) async {
+      final server = _Server(role: 'sender');
+      final container = await _boot(tester, server);
+      await tester.tap(find.text(_en.roleTraveler));
+      await _settle(tester);
+      _router(container).push('/discover/people/$_personId');
+      await _settle(tester);
+
+      await tester.tap(find.byType(Switch).first);
+      await _settle(tester);
+      await _signInFromGate(tester);
+
+      expect(container.read(roleContextProvider), RoleContext.sender);
+      expect(
+        server.posts('/api/discovery/alerts').single.body['watches'],
+        'requests',
+        reason: 'the guest asked while carrying',
+      );
 
       await _shutdown(tester);
     });
@@ -1040,61 +1242,137 @@ void main() {
     });
   });
 
-  group('a guest\'s 401', () {
-    test(
-      'ends no session: a request without a bearer clears nothing',
-      () async {
-        final backend = FakeBackend()
-          ..on(
-            'GET',
-            '/api/discovery/trips',
-            const FakeResponse(401, {'detail': 'unauthorized'}),
-          );
-        final store = _Store(refresh: null, access: null);
-        var expired = 0;
-        final client = apiClientFor(
-          backend,
-          store,
-          onSessionExpired: () => expired++,
-        );
+  group('a guest\'s request', () {
+    FakeBackend unauthorized() => FakeBackend()
+      ..on(
+        'GET',
+        '/api/discovery/trips',
+        const FakeResponse(401, {'detail': 'unauthorized'}),
+      )
+      ..on('POST', '/api/auth/refresh', const FakeResponse(401, {}));
 
-        await expectLater(
-          client.getObject('/api/discovery/trips'),
-          throwsA(anything),
-        );
+    test('carries no bearer, and its 401 ends nothing and refreshes nothing, '
+        'even with a member\'s bytes still stored', () async {
+      final backend = unauthorized();
+      // A member's credentials still on disk while their sign-out is sent.
+      final store = _Store()..bearerWithheld = true;
+      var expired = 0;
+      final client = apiClientFor(
+        backend,
+        store,
+        onSessionExpired: () => expired++,
+      );
 
-        expect(backend.requests.single.headers, isNot(contains(_bearer)));
-        expect(store.clears, 0);
-        expect(expired, 0);
-      },
-    );
+      await expectLater(
+        client.getObject('/api/discovery/trips'),
+        throwsA(anything),
+      );
 
-    test(
-      'a member\'s 401 with no refresh token still ends the session',
-      () async {
-        final backend = FakeBackend()
-          ..on(
-            'GET',
-            '/api/discovery/trips',
-            const FakeResponse(401, {'detail': 'unauthorized'}),
-          );
-        final store = _Store(refresh: null);
-        var expired = 0;
-        final client = apiClientFor(
-          backend,
-          store,
-          onSessionExpired: () => expired++,
-        );
+      expect(backend.requests.single.headers, isNot(contains(_bearer)));
+      expect(backend.to('POST', '/api/auth/refresh'), isEmpty);
+      expect(store.clears, 0);
+      expect(expired, 0);
+    });
 
-        await expectLater(
-          client.getObject('/api/discovery/trips'),
-          throwsA(anything),
-        );
+    test('a member\'s 401 with no refresh token ends the session', () async {
+      final backend = unauthorized();
+      final store = _Store(refresh: null);
+      var expired = 0;
+      final client = apiClientFor(
+        backend,
+        store,
+        onSessionExpired: () => expired++,
+      );
 
-        expect(store.clears, 1);
-        expect(expired, 1);
-      },
-    );
+      await expectLater(
+        client.getObject('/api/discovery/trips'),
+        throwsA(anything),
+      );
+
+      expect(store.clears, 1);
+      expect(expired, 1);
+    });
+
+    test('a member whose keystore gave no access token still has their '
+        'session ended by a 401', () async {
+      final backend = unauthorized();
+      final store = _Store(refresh: null, access: null);
+      var expired = 0;
+      final client = apiClientFor(
+        backend,
+        store,
+        onSessionExpired: () => expired++,
+      );
+
+      await expectLater(
+        client.getObject('/api/discovery/trips'),
+        throwsA(anything),
+      );
+
+      expect(backend.requests.single.headers, isNot(contains(_bearer)));
+      expect(store.clears, 1);
+      expect(expired, 1);
+    });
+
+    testWidgets('after a sign-out, the guest\'s first reads go without the '
+        'member\'s bearer while the sign-out is still being sent', (
+      tester,
+    ) async {
+      final server = _Server();
+      final signOut = Completer<FakeResponse>();
+      server.backend.handle(
+        'POST',
+        '/api/auth/sign-out',
+        (_) => signOut.future,
+      );
+      final store = _Store(access: 'member-token');
+      final container = await _boot(tester, server, store: store);
+      await _openTab(tester, _en.navProfile);
+      final from = server.backend.requests.length;
+
+      final out = container.read(sessionProvider.notifier).signOut();
+      await _settle(tester);
+      await _openTab(tester, _en.navHome);
+
+      final sent = server.backend.requests.skip(from).toList();
+      final signOutCall = sent.singleWhere(
+        (r) => r.path == '/api/auth/sign-out',
+      );
+      expect(signOutCall.headers[_bearer], 'Bearer member-token');
+      expect(store.access, 'member-token', reason: 'still being sent');
+      final reads = sent.where((r) => r.path.startsWith('/api/discovery'));
+      expect(reads, isNotEmpty);
+      for (final r in reads) {
+        expect(r.headers, isNot(contains(_bearer)), reason: r.path);
+      }
+      expect(server.backend.to('POST', '/api/auth/refresh'), isEmpty);
+
+      signOut.complete(const FakeResponse(200, {}));
+      await _settle(tester, 5);
+      await out;
+      expect(store.access, isNull);
+
+      await _shutdown(tester);
+    });
+
+    testWidgets('a throttled read shows the throttle at once, asked once', (
+      tester,
+    ) async {
+      final server = _Server();
+      server.backend.on(
+        'GET',
+        '/api/discovery/trips',
+        const FakeResponse(429, {'detail': 'throttled'}),
+      );
+      await _boot(tester, server);
+
+      expect(server.backend.to('GET', '/api/discovery/trips'), hasLength(1));
+      expect(find.textContaining(_en.stateRateLimitedBody), findsWidgets);
+      await _settle(tester, 100);
+      expect(server.backend.to('GET', '/api/discovery/trips'), hasLength(1));
+
+      await _shutdown(tester);
+    });
   });
 
   group('the guest surfaces fit', () {
@@ -1183,7 +1461,46 @@ void main() {
         await _systemBack(tester);
       }
 
+      await expectHowItWorksFits(tester, router);
+
       await _shutdown(tester);
     });
+
+    for (final landscape in const [Size(640, 320), Size(800, 360)]) {
+      testWidgets('How Wassla works in landscape '
+          '${landscape.width.toInt()}x${landscape.height.toInt()}, 1.6x text, '
+          'in Arabic', (tester) async {
+        // Booted upright: the splash's own landscape layout is not this test's.
+        final container = await bootArabic(tester);
+        tester.view.physicalSize = landscape;
+        tester.view.padding = FakeViewPadding.zero;
+        tester.view.viewPadding = FakeViewPadding.zero;
+        await _settle(tester, 5);
+        expect(tester.takeException(), isNull);
+
+        await expectHowItWorksFits(tester, _router(container));
+
+        await _shutdown(tester);
+      });
+    }
   });
+}
+
+/// Opens How Wassla works and turns through its three chapters, each laid out
+/// without an overflow.
+Future<void> expectHowItWorksFits(WidgetTester tester, GoRouter router) async {
+  router.push('/how-it-works');
+  await _settle(tester, 10);
+  expect(find.byType(BenefitsScreen), findsOneWidget);
+  expect(tester.takeException(), isNull, reason: 'chapter 1');
+  for (final chapter in [2, 3]) {
+    await tester.tap(
+      find.byWidgetPredicate(
+        (w) => w.runtimeType.toString() == '_AdvanceButton',
+      ),
+    );
+    await _settle(tester, 10);
+    expect(tester.takeException(), isNull, reason: 'chapter $chapter');
+  }
+  await _systemBack(tester);
 }

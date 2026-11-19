@@ -190,19 +190,27 @@ bool isPublicLocation(String path) => _publicLocations.any(
   (entry) => entry.endsWith('/') ? path.startsWith(entry) : path == entry,
 );
 
-/// Whether [location] is a place to return to after signing in.
-bool isSafePostLoginLocation(String? location) =>
-    location != null &&
-    location.startsWith('/') &&
-    !location.startsWith('//') &&
-    !location.startsWith('/auth/') &&
-    location != '/splash';
+/// Whether [location] is a place in this app to return to after signing in:
+/// a path of its own, never another host, the auth screens or the splash.
+bool isSafePostLoginLocation(String? location) {
+  if (location == null ||
+      !location.startsWith('/') ||
+      location.startsWith('//') ||
+      location.contains(r'\') ||
+      location.startsWith('/auth/') ||
+      location == '/splash') {
+    return false;
+  }
+  final uri = Uri.tryParse(location);
+  return uri != null && !uri.hasScheme && uri.host.isEmpty;
+}
 
-/// Sign-in that returns to [next] once it succeeds. As an account flow
-/// ([flow]) it closes itself and opens [next] above the screen beneath it.
-String _signInFor(String next, {bool flow = false}) => Uri(
+/// Sign-in, as an account flow, that returns to [next] once it succeeds: it
+/// closes itself and opens [next] above the screen beneath it, or in its
+/// place when it is the whole stack.
+String _signInFor(String next) => Uri(
   path: '/auth/sign-in',
-  queryParameters: {if (flow) 'continue': '1', 'next': next},
+  queryParameters: {'continue': '1', 'next': next},
 ).toString();
 
 /// Every location on the stack, the bottom one first: the base and each
@@ -234,7 +242,7 @@ void _leavePrivateScreens(GoRouter router) {
   ).where((location) => !isPublicLocation(location.path));
   if (private.isEmpty) return;
   router.go('/home');
-  router.push(_signInFor(private.last.toString(), flow: true));
+  router.push(_signInFor(private.last.toString()));
 }
 
 /// Where the router sends a person in [session] who asks for [uri], or null
@@ -250,7 +258,9 @@ String? _redirectFor(SessionState session, Uri uri) {
   }
 
   // Signed out is a guest. Home is the front page, and a place only a member
-  // can see asks them to sign in, then returns them there.
+  // can see asks them to sign in, as an account flow, which then opens it:
+  // above the screen they were on, or in place of the sign-in when a link
+  // brought them straight there.
   if (session is SessionSignedOut) {
     if (location == '/splash') return '/home';
     if (isPublicLocation(location)) return null;
@@ -263,7 +273,8 @@ String? _redirectFor(SessionState session, Uri uri) {
   // screen a signed-in person needs: confirming their own email, from
   // sign-up, from Profile, or when posting is refused. And the account flow
   // closes itself once it succeeds, so the action that opened it goes ahead
-  // on the screen underneath.
+  // on the screen underneath; reached by a member, it closes as it opens
+  // ([AccountFlowScreen]).
   if (location == '/auth/verify-email') return null;
   if (isAccountFlowLocation(uri)) return null;
   if (location == '/splash' || location.startsWith('/auth/')) {
@@ -320,30 +331,53 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
 
       // ---- Auth ----
+      // Each account-flow screen is wrapped in [AccountFlowScreen], which ends
+      // the flow at once for someone who reaches it already signed in.
       GoRoute(
         path: '/auth/continue',
         name: Routes.accountGate,
-        builder: (context, state) => AccountGateScreen(
-          reason: AccountReason.parse(state.uri.queryParameters['reason']),
+        builder: (context, state) => AccountFlowScreen(
+          flow: AccountFlow.of(state),
+          child: AccountGateScreen(
+            reason: AccountReason.parse(state.uri.queryParameters['reason']),
+          ),
         ),
       ),
       GoRoute(
         path: '/auth/sign-in',
         name: Routes.signIn,
-        builder: (context, state) => SignInScreen(flow: AccountFlow.of(state)),
+        builder: (context, state) {
+          final flow = AccountFlow.of(state);
+          return AccountFlowScreen(
+            flow: flow,
+            child: SignInScreen(flow: flow),
+          );
+        },
       ),
       GoRoute(
         path: '/auth/sign-up',
         name: Routes.signUp,
-        builder: (context, state) => SignUpScreen(flow: AccountFlow.of(state)),
+        builder: (context, state) {
+          final flow = AccountFlow.of(state);
+          return AccountFlowScreen(
+            flow: flow,
+            child: SignUpScreen(flow: flow),
+          );
+        },
       ),
       GoRoute(
         path: '/auth/forgot',
         name: Routes.forgotPassword,
-        builder: (context, state) => ForgotPasswordScreen(
-          initialEmail: state.uri.queryParameters['email'],
-          flow: AccountFlow.of(state),
-        ),
+        builder: (context, state) {
+          final flow = AccountFlow.of(state);
+          return AccountFlowScreen(
+            flow: flow,
+            child: ForgotPasswordScreen(
+              initialEmail: state.uri.queryParameters['email'],
+              flow: flow,
+            ),
+          );
+        },
       ),
       GoRoute(
         path: '/auth/verify-email',

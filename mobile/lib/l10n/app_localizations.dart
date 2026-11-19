@@ -10575,18 +10575,6 @@ abstract class L {
   /// **'We tell you when a trip or a parcel matches this route.'**
   String get accountReasonAlertBody;
 
-  /// No description provided for @accountReasonProposeTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Create your account\nto send an offer.'**
-  String get accountReasonProposeTitle;
-
-  /// No description provided for @accountReasonProposeBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Offers, chat and payment all happen inside your account.'**
-  String get accountReasonProposeBody;
-
   /// No description provided for @accountReasonReportTitle.
   ///
   /// In en, this message translates to:

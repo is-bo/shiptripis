@@ -38,6 +38,7 @@ Future<void> main() async {
 
   runApp(
     ProviderScope(
+      retry: appRetry,
       overrides: [pushMessagingProvider.overrideWithValue(pushMessaging)],
       child: const ShipTripApp(),
     ),

@@ -99,7 +99,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
       if (!mounted) return;
       AppSnack.success(context, l.authVerifyDone);
       if (widget.flow.active) {
-        completeAccountFlow(context, widget.flow);
+        finishSignIn(context, widget.flow);
         return;
       }
       // `true` tells whoever sent the person here that the email is confirmed.
@@ -124,9 +124,8 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
     return PopScope(
       canPop: !widget.flow.active,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && widget.flow.active) {
-          completeAccountFlow(context, widget.flow);
-        }
+        // The account exists already: leaving is the end of its sign-in.
+        if (!didPop) finishSignIn(context, widget.flow);
       },
       child: DismissKeyboardOnTap(
         child: AppScaffold(

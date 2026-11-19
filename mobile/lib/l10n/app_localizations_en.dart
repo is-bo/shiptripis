@@ -6130,14 +6130,6 @@ class LEn extends L {
       'We tell you when a trip or a parcel matches this route.';
 
   @override
-  String get accountReasonProposeTitle =>
-      'Create your account\nto send an offer.';
-
-  @override
-  String get accountReasonProposeBody =>
-      'Offers, chat and payment all happen inside your account.';
-
-  @override
   String get accountReasonReportTitle =>
       'Create your account\nto report a review.';
 
