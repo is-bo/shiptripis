@@ -11,6 +11,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.core.http_cache import public_catalog_response
+from apps.core.throttles import PUBLIC_READ_THROTTLES
 
 from .geography import normalize_search_name
 from .geography_serializers import GeographyCountrySerializer, GeographyPlaceSerializer
@@ -242,6 +243,7 @@ class GeographyPagination(PageNumberPagination):
 
 class GeographyCountryListView(APIView):
     permission_classes = (AllowAny,)
+    throttle_classes = PUBLIC_READ_THROTTLES
 
     def get(self, request: Request) -> Response:
         # ISO countries are a naturally small, stable reference catalogue;
@@ -254,6 +256,7 @@ class GeographyCountryListView(APIView):
 
 class GeographyPlaceSearchView(APIView):
     permission_classes = (AllowAny,)
+    throttle_classes = PUBLIC_READ_THROTTLES
     pagination_class = GeographyPagination
 
     def get(self, request: Request) -> Response:
@@ -439,6 +442,7 @@ class SeaCrossingListView(APIView):
     """
 
     permission_classes = (AllowAny,)
+    throttle_classes = PUBLIC_READ_THROTTLES
 
     def get(self, request: Request) -> Response:
         from apps.trips.transport_rules import sea_legs_enabled

@@ -206,6 +206,48 @@ class RuleTests(TestCase):
         user = self.sign_in()
         self.assertEqual(self.sign_in(email=None, email_verified=False), user)
 
+    def test_no_email_is_refused_as_missing_before_the_verified_flag_is_read(self):
+        for email in (None, ""):
+            with self.subTest(email=email):
+                self.assertRefused(400, "email_missing", email=email, email_verified=False)
+
+    def test_a_known_identity_with_an_empty_name_takes_the_next_name_once(self):
+        user = self.sign_in(name="")
+        self.assertEqual(user.full_name, "")
+        self.assertEqual(self.sign_in(name="  ").full_name, "")
+        filled = self.sign_in(name="Later Name", email=None, email_verified=False)
+        self.assertEqual(filled.full_name, "Later Name")
+        self.assertEqual(self.sign_in(name="Another Name").full_name, "Later Name")
+        user.refresh_from_db()
+        self.assertEqual(user.full_name, "Later Name")
+
+    def test_a_linked_confirmed_account_with_an_empty_name_takes_the_providers_name(self):
+        owner = User.objects.create_user(
+            username=EMAIL, email=EMAIL, password=PASSWORD, is_email_verified=True
+        )
+        self.assertEqual(self.sign_in(name="Social Person"), owner)
+        owner.refresh_from_db()
+        self.assertEqual(owner.full_name, "Social Person")
+        self.assertTrue(owner.check_password(PASSWORD))
+
+    def test_a_set_name_is_never_overwritten(self):
+        owner = User.objects.create_user(
+            username=EMAIL, email=EMAIL, password=PASSWORD, full_name="Owner Name",
+            is_email_verified=True,
+        )
+        self.sign_in(name="Social Person")
+        self.sign_in(name="Social Person Again")
+        owner.refresh_from_db()
+        self.assertEqual(owner.full_name, "Owner Name")
+
+    def test_a_switched_off_account_is_refused_before_its_name_is_filled(self):
+        user = self.sign_in(name="")
+        User.objects.filter(pk=user.pk).update(is_banned=True)
+        with self.assertRaises(social.SocialSignInRefused):
+            self.sign_in(name="Late Name")
+        user.refresh_from_db()
+        self.assertEqual(user.full_name, "")
+
     def test_losing_the_identity_race_resolves_to_the_identity_that_won(self):
         winner = User.objects.create_user(
             username=EMAIL, email=EMAIL, password=PASSWORD, is_email_verified=True

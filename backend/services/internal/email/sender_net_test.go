@@ -137,7 +137,14 @@ func TestSenderNetSendsReplyToOnlyWhenItDiffersFromFrom(t *testing.T) {
 	}{
 		{"", ""},
 		{"CONTACT@wassla.eu", ""},
+		{"contact@WASSLA.EU", ""},
+		// Parsed before comparing, as Django does: a display name or angle
+		// brackets around the From address are still the From address.
+		{"Wassla <contact@wassla.eu>", ""},
+		{"<CONTACT@Wassla.eu>", ""},
 		{"help@wassla.eu", "help@wassla.eu"},
+		{"<help@wassla.eu>", "help@wassla.eu"},
+		{"Help Desk <help@wassla.eu>", `"Help Desk" <help@wassla.eu>`},
 	} {
 		api := &senderNetAPI{status: http.StatusOK, answer: accepted}
 		sender := newSenderNetTest(t, api, SenderNetConfig{ReplyTo: tc.replyTo})
@@ -285,6 +292,8 @@ func TestSenderNetRefusesAnUnbuildableMessageBeforeTheNetwork(t *testing.T) {
 	for _, p := range []EmailPayload{
 		{EventID: "e", To: "not an <address", Subject: "s", Body: "b"},
 		{EventID: "e", To: testRecipient, Subject: "s\r\nBcc: other@example.com", Body: "b"},
+		// An empty subject is refused as Django refuses it (permanent).
+		{EventID: "e", To: testRecipient, Subject: "", Body: "b"},
 	} {
 		api := &senderNetAPI{status: http.StatusOK, answer: accepted}
 		err := newSenderNetTest(t, api, SenderNetConfig{}).Send(context.Background(), p)
@@ -303,6 +312,8 @@ func TestNewSenderNetSenderRequiresItsConfiguration(t *testing.T) {
 		{Endpoint: SenderNetEndpoint, Token: testSenderNetToken},
 		{Endpoint: "not a url", Token: testSenderNetToken, FromAddr: "contact@wassla.eu"},
 		{Endpoint: "ftp://api.sender.net/v2/message/send", Token: testSenderNetToken, FromAddr: "contact@wassla.eu"},
+		{Endpoint: SenderNetEndpoint, Token: testSenderNetToken, FromAddr: "contact@wassla.eu", ReplyTo: "not an <address"},
+		{Endpoint: SenderNetEndpoint, Token: testSenderNetToken, FromAddr: "not an address", ReplyTo: "help@wassla.eu"},
 	} {
 		if _, err := NewSenderNetSender(cfg, discardLog()); err == nil {
 			t.Fatalf("incomplete configuration accepted: endpoint %q", cfg.Endpoint)

@@ -107,7 +107,7 @@ if os.environ.get("LOADTEST_REDIS_URL"):
 
 # Every simulated user shares 127.0.0.1, so the per-IP anonymous budget would
 # measure the throttle rather than the server. Per-user and endpoint scopes
-# (matching discovery 10/min, chat 60/min) stay at their production values:
+# (matching discovery 60/min, chat 60/min) stay at their production values:
 # the traffic mix is shaped to respect them, and a 429 is reported as an error.
 REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]["anon"] = "100000/min"
 

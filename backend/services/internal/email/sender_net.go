@@ -68,6 +68,10 @@ func NewSenderNetSender(cfg SenderNetConfig, log *slog.Logger) (EmailSender, err
 	if cfg.FromAddr == "" {
 		return nil, errors.New("email: from address is required")
 	}
+	replyTo, err := senderNetReplyTo(cfg.FromAddr, cfg.ReplyTo)
+	if err != nil {
+		return nil, err
+	}
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = 10 * time.Second
 	}
@@ -92,9 +96,36 @@ func NewSenderNetSender(cfg SenderNetConfig, log *slog.Logger) (EmailSender, err
 		token:    cfg.Token,
 		from:     cfg.FromAddr,
 		name:     cfg.FromName,
-		replyTo:  cfg.ReplyTo,
+		replyTo:  replyTo,
 		log:      log,
 	}, nil
+}
+
+// senderNetReplyTo is the Reply-To header value to send, or "" when Reply-To
+// says nothing From does not: the shipped configuration uses one address for
+// both. Both are parsed and their addresses compared without case, as Django's
+// SenderNetEmailBackend does, so "Wassla <CONTACT@wassla.eu>" equals
+// "contact@wassla.eu". The value sent is the parsed address, with its display
+// name when it has one.
+func senderNetReplyTo(fromAddr, replyTo string) (string, error) {
+	if replyTo == "" {
+		return "", nil
+	}
+	from, err := mail.ParseAddress(fromAddr)
+	if err != nil {
+		return "", errors.New("email: from address must be an email address")
+	}
+	reply, err := mail.ParseAddress(replyTo)
+	if err != nil {
+		return "", errors.New("email: reply-to must be an email address")
+	}
+	if strings.EqualFold(reply.Address, from.Address) {
+		return "", nil
+	}
+	if reply.Name == "" {
+		return reply.Address, nil
+	}
+	return reply.String(), nil
 }
 
 type senderNetAddress struct {
@@ -112,10 +143,11 @@ type senderNetMessage struct {
 }
 
 // buildMessage is the pure (no-network) half of Send. Reply-To travels as a
-// custom header, and only when it differs from From: the shipped
-// configuration uses one address for both.
+// custom header, and only when it differs from From (senderNetReplyTo). An
+// empty subject is refused as Django refuses it: Sender would reject the
+// message, so it is permanent before the network.
 func (s *senderNetSender) buildMessage(p EmailPayload) (senderNetMessage, error) {
-	if strings.ContainsAny(p.Subject, "\r\n") {
+	if p.Subject == "" || strings.ContainsAny(p.Subject, "\r\n") {
 		return senderNetMessage{}, errors.New("invalid subject")
 	}
 	to, err := mail.ParseAddress(p.To)
@@ -129,7 +161,7 @@ func (s *senderNetSender) buildMessage(p EmailPayload) (senderNetMessage, error)
 		Text:    p.Body,
 		HTML:    p.HTML,
 	}
-	if s.replyTo != "" && !strings.EqualFold(s.replyTo, s.from) {
+	if s.replyTo != "" {
 		m.Headers = map[string]string{"Reply-To": s.replyTo}
 	}
 	return m, nil

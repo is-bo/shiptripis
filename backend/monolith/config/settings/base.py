@@ -200,8 +200,15 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon": env.str("DRF_ANON_THROTTLE_RATE", default="60/min"),
         "user": env.str("DRF_USER_THROTTLE_RATE", default="600/min"),
+        # Per member. Home alone makes two to four discovery reads.
         "matching_discovery": env.str(
-            "DRF_MATCHING_DISCOVERY_THROTTLE_RATE", default="10/min"
+            "DRF_MATCHING_DISCOVERY_THROTTLE_RATE", default="60/min"
+        ),
+        # Per address, for a guest browsing the public reads (discovery and
+        # geography) only. Mobile carriers put hundreds of people behind one
+        # IPv4 address, so this bucket is roomy (`apps.core.throttles`).
+        "discovery_guest": env.str(
+            "DRF_DISCOVERY_GUEST_THROTTLE_RATE", default="300/min"
         ),
         "journey_routes": env.str("DRF_JOURNEY_ROUTES_THROTTLE_RATE", default="10/min"),
         # A guest link is an unauthenticated capability, so the surface that
@@ -230,7 +237,12 @@ REST_FRAMEWORK = {
         ),
         # Authentication and capability endpoints are deliberately scoped
         # rather than sharing the broad anonymous/user defaults.
-        "registration": env.str("DRF_REGISTRATION_THROTTLE_RATE", default="5/hour"),
+        # Per address. Many people share one address behind a mobile
+        # carrier's NAT; each sign-up still needs a new email address, which
+        # gets one confirmation email, and an unconfirmed account cannot post.
+        "registration": env.str("DRF_REGISTRATION_THROTTLE_RATE", default="30/hour"),
+        # Per address, and the only bound on password guessing (there is no
+        # per-account lockout), so it stays tight.
         "login": env.str("DRF_LOGIN_THROTTLE_RATE", default="10/min"),
         "password_reset": env.str(
             "DRF_PASSWORD_RESET_THROTTLE_RATE", default="5/hour"
@@ -246,11 +258,13 @@ REST_FRAMEWORK = {
         "support_contact": env.str(
             "DRF_SUPPORT_CONTACT_THROTTLE_RATE", default="30/min"
         ),
+        # Per address. A provider sign-in needs a token the provider signed,
+        # so there is nothing to guess; the bound only stops a flood.
         "google_signin": env.str(
-            "DRF_GOOGLE_SIGNIN_THROTTLE_RATE", default="10/min"
+            "DRF_GOOGLE_SIGNIN_THROTTLE_RATE", default="30/min"
         ),
         "apple_signin": env.str(
-            "DRF_APPLE_SIGNIN_THROTTLE_RATE", default="10/min"
+            "DRF_APPLE_SIGNIN_THROTTLE_RATE", default="30/min"
         ),
         "media_upload": env.str("DRF_MEDIA_UPLOAD_THROTTLE_RATE", default="20/hour"),
         "chat_message": env.str("DRF_CHAT_MESSAGE_THROTTLE_RATE", default="60/min"),

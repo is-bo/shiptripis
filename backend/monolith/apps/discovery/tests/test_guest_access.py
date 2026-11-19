@@ -19,6 +19,7 @@ from rest_framework.test import APIClient
 from rest_framework.throttling import AnonRateThrottle, ScopedRateThrottle
 from rest_framework_simplejwt.tokens import AccessToken
 
+from apps.core.throttles import GuestRateThrottle
 from apps.discovery import urls as discovery_urls
 from apps.discovery import views
 from apps.discovery.models import PublicProfile, PublicProfileRoute, RouteAlert, TravelerInterest
@@ -203,7 +204,8 @@ class GuestMemberEndpointTests(DiscoveryWorld, TestCase):
         self.assertEqual(public | member, routed)
         for view in public:
             self.assertEqual(view.permission_classes, (AllowAny,), view.__name__)
-            self.assertIn(AnonRateThrottle, view.throttle_classes, view.__name__)
+            self.assertIn(GuestRateThrottle, view.throttle_classes, view.__name__)
+            self.assertNotIn(AnonRateThrottle, view.throttle_classes, view.__name__)
             self.assertEqual(view.throttle_scope, "matching_discovery", view.__name__)
         for view in member:
             self.assertEqual(view.permission_classes, (IsAuthenticated,), view.__name__)
@@ -222,7 +224,12 @@ class GuestMemberEndpointTests(DiscoveryWorld, TestCase):
 
 
 class GuestThrottleTests(DiscoveryWorld, TestCase):
-    """A guest is counted by address, on the discovery scope and the anonymous rate."""
+    """A guest is counted by address on `discovery_guest` only; a member never is.
+
+    Rewritten for the carrier-NAT review of plan EGS: a guest used to be
+    counted on `matching_discovery` by address and on the shared `anon` rate,
+    which hundreds of people behind one mobile carrier address would exhaust.
+    """
 
     ADDRESS = "198.51.100.7"
 
@@ -239,16 +246,28 @@ class GuestThrottleTests(DiscoveryWorld, TestCase):
         client.force_authenticate(user=self.other)
         return client
 
-    def test_the_discovery_scope_counts_a_guest_by_address(self):
-        with patch.dict(ScopedRateThrottle.THROTTLE_RATES, {"matching_discovery": "2/min"}):
+    def test_a_guest_is_counted_by_address_on_the_guest_scope(self):
+        with patch.dict(ScopedRateThrottle.THROTTLE_RATES, {"discovery_guest": "2/min"}):
             self.assertEqual(self.reads(APIClient(REMOTE_ADDR=self.ADDRESS), 3), [200, 200, 429])
             # The same address is the same guest, whatever the client.
             self.assertEqual(self.reads(APIClient(REMOTE_ADDR=self.ADDRESS), 1), [429])
             self.assertEqual(self.reads(APIClient(REMOTE_ADDR="198.51.100.8"), 2), [200, 200])
-            # A member at that address has their own count.
-            self.assertEqual(self.reads(self.member_at(self.ADDRESS), 2), [200, 200])
-
-    def test_a_guest_is_also_held_to_the_anonymous_rate(self):
-        with patch.dict(AnonRateThrottle.THROTTLE_RATES, {"anon": "2/min"}):
-            self.assertEqual(self.reads(APIClient(REMOTE_ADDR=self.ADDRESS), 3), [200, 200, 429])
+            # A member at that address is not a guest.
             self.assertEqual(self.reads(self.member_at(self.ADDRESS), 3), [200, 200, 200])
+
+    def test_a_guest_is_not_counted_on_the_anonymous_or_member_scopes(self):
+        tight = {"anon": "1/min", "user": "1/min", "matching_discovery": "1/min"}
+        with patch.dict(ScopedRateThrottle.THROTTLE_RATES, tight):
+            self.assertEqual(
+                self.reads(APIClient(REMOTE_ADDR=self.ADDRESS), 4), [200, 200, 200, 200]
+            )
+
+    def test_a_member_keeps_the_per_member_discovery_scope(self):
+        with patch.dict(
+            ScopedRateThrottle.THROTTLE_RATES,
+            {"matching_discovery": "2/min", "discovery_guest": "1/min"},
+        ):
+            self.assertEqual(self.reads(self.member_at(self.ADDRESS), 3), [200, 200, 429])
+            # Counted per member, not per address, and not on the guest scope.
+            self.assertEqual(self.reads(APIClient(REMOTE_ADDR=self.ADDRESS), 1), [200])
+            self.assertEqual(self.reads(self.member_at("198.51.100.9"), 1), [429])

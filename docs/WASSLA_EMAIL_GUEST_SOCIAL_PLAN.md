@@ -91,20 +91,33 @@ an account. Home renders a skeleton when there is no account.
 10. **Guest listings are the member cards, unchanged.** The six read endpoints (trips, requests,
     people, one person, a person's reviews, a trip's reviews) accept anonymous requests and answer the
     same allowlisted payloads. Personalised endpoints (matches, interest, own profile, alerts) stay
-    member-only. Anonymous reads are throttled by IP on the existing `matching_discovery` scope plus
-    the anonymous rate. The privacy tests run for anonymous requests too.
+    member-only. Anonymous reads, and the geography reads a guest uses while browsing, are throttled
+    by IP on their own roomy `discovery_guest` scope (300 a minute by default) instead of the shared
+    anonymous rate, because mobile carriers put hundreds of people behind one IPv4 address; a member
+    keeps the per-member `matching_discovery` (60 a minute) and `user` rates and is never counted on
+    the guest scope (backend review). The privacy tests run for anonymous requests too.
 11. **Apple on iOS only.** Apple's rule (App Store 4.8) applies to the iOS app, which offers Google.
     Apple's Android flow needs a Services ID and a server callback page; it is not built. Android shows
     Google only.
 12. **One rule for social sign-in** (`apps/accounts/social.py`), used by Google and Apple: find the
     identity by provider and subject; otherwise link to the account with that verified email (claiming
-    an unconfirmed one exactly as L18A does) or create one; refuse a disabled or banned account with the
-    same answer password sign-in gives. That closes the Google gap of section 0.
+    an unconfirmed one exactly as L18A does) or create one; refuse a disabled or banned account, before
+    any token is issued, with `403 {"code": "account_disabled", "detail": "This account is
+    disabled."}`. That is not the answer password sign-in gives (a switched-off account there gets
+    "Incorrect email or password.", because Django refuses an inactive account before the check);
+    a provider has already proved who the person is, so saying the account is disabled reveals
+    nothing new. That closes the Google gap of section 0. A token with no email signs in to an
+    identity already linked; it cannot link or open an account (`email_missing`).
 13. **No name from the provider means an empty name**, never the email's local part (the existing rule
     in `apps/matching/find_travelers.first_name`: "the local part of an email address is not a name").
     Apple gives the name only on the very first authorization; the app sends it with that request.
+    A blank name can be set once (backend review): by the member through `PATCH /api/me`
+    (`full_name`, 1 to 120 characters; once set, `400 name_already_set`), or by a later Google or
+    Apple sign-in that brings one. A set name is never overwritten.
 14. **Apple nonce.** The app makes a random nonce, gives Apple its SHA-256, and sends the raw nonce to
-    the server, which checks the token's `nonce` claim. The server accepts only RS256 tokens from
+    the server, which checks the token's `nonce` claim. The nonce binds the token to this sign-in
+    request and the token's short expiry bounds replay; it is not single-use, so a retry with the same
+    token after a failed first attempt (the only request that carries Apple's name) still works. The server accepts only RS256 tokens from
     `https://appleid.apple.com` whose `aud` is one of `APPLE_SIGN_IN_CLIENT_IDS` (the iOS bundle id).
 15. **Buttons appear only when configured.** Google needs `GOOGLE_SERVER_CLIENT_ID` (and on iOS
     `GOOGLE_IOS_CLIENT_ID`) as build defines; Apple needs `APPLE_SIGN_IN_ENABLED=true` on an iOS build.

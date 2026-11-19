@@ -57,8 +57,11 @@ Only the three `discovery` keys are read in L2A. The rest are read by the packag
     A member who sends a token is authenticated as before; an invalid or expired token answers `401`.
   - **Member endpoints** (`IsAuthenticated`, `401` without an account): matches, "I can carry this",
     the own profile and alerts.
-- Throttled with the existing `matching_discovery` scope and the existing `user` rate; a guest is
-  counted by address and is also held to the existing `anon` rate. No new throttle setting.
+- A member is throttled per member on the `matching_discovery` scope (`DRF_MATCHING_DISCOVERY_THROTTLE_RATE`,
+  60 a minute) and the `user` rate. A guest is counted by address on the `discovery_guest` scope only
+  (`DRF_DISCOVERY_GUEST_THROTTLE_RATE`, 300 a minute), shared with the geography reads a guest uses
+  (countries, place search, sea crossings), never on the `anon` rate: mobile carriers put hundreds of
+  people behind one IPv4 address (plan EGS, backend review; `apps/core/throttles.py`).
 - Every switch is read from the active policy on each request; nothing is cached.
 - A tier that is switched off answers **HTTP 200** with `{"state": "disabled", "results": [], "next_offset": null}`
   (the person page answers `{"state": "disabled"}`).
