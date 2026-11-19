@@ -42,6 +42,7 @@ import '../../domain/deal.dart';
 import '../../domain/journey.dart';
 import '../../l10n/app_localizations.dart';
 import '../auth/account_gate.dart';
+import '../auth/account_name_screen.dart';
 import '../auth/guest_states.dart';
 import '../common/delivery_card.dart';
 import '../common/status_copy.dart';
@@ -69,54 +70,56 @@ class HomeScreen extends ConsumerWidget {
 
     final isSender = role == RoleContext.sender;
 
-    return AppScaffold(
-      topBar: AppTopBar(
-        title: isSender ? l.homeSenderGreeting : l.homeTravelerGreeting,
-        subtitle: account.fullName.isEmpty ? null : account.fullName,
-        actions: const [NotificationBell()],
-      ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          refreshVolatileState(ref);
-          refreshDiscovery(ref);
-        },
-        child: ListView(
-          // Short on a quiet day, and still pull-to-refresh: the refresh also
-          // re-reads every discovery section.
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: AppScrollPadding.pageWithFooter(context),
-          children: [
-            if (canSwitch) ...[
-              _RoleSwitcher(role: role),
-              const SizedBox(height: AppSpace.xl),
-            ],
-
-            if (!isSender && !account.isKycVerified) ...[
-              _VerifyIdentityNotice(account: account),
-              const SizedBox(height: AppSpace.xl),
-            ],
-
-            const _AttentionSection(),
-            const SizedBox(height: AppSpace.xl),
-            const _InProgressSection(),
-            const SizedBox(height: AppSpace.xl),
-
-            if (isSender)
-              const _MyRequestsSection()
-            else
-              const _MyJourneysSection(),
-
-            // Discovery sits below what is the member's own. Each section is
-            // its own list child, so one scrolled far below the fold is not
-            // read until it is near the screen.
-            MatchesSection(isSender: isSender),
-            const ProfileOptInCard(),
-            ListingsSection(isSender: isSender),
-            PeopleSection(isSender: isSender),
-          ],
+    return AskForNameOnce(
+      child: AppScaffold(
+        topBar: AppTopBar(
+          title: isSender ? l.homeSenderGreeting : l.homeTravelerGreeting,
+          subtitle: account.fullName.isEmpty ? null : account.fullName,
+          actions: const [NotificationBell()],
         ),
+        body: RefreshIndicator(
+          onRefresh: () async {
+            refreshVolatileState(ref);
+            refreshDiscovery(ref);
+          },
+          child: ListView(
+            // Short on a quiet day, and still pull-to-refresh: the refresh also
+            // re-reads every discovery section.
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: AppScrollPadding.pageWithFooter(context),
+            children: [
+              if (canSwitch) ...[
+                _RoleSwitcher(role: role),
+                const SizedBox(height: AppSpace.xl),
+              ],
+
+              if (!isSender && !account.isKycVerified) ...[
+                _VerifyIdentityNotice(account: account),
+                const SizedBox(height: AppSpace.xl),
+              ],
+
+              const _AttentionSection(),
+              const SizedBox(height: AppSpace.xl),
+              const _InProgressSection(),
+              const SizedBox(height: AppSpace.xl),
+
+              if (isSender)
+                const _MyRequestsSection()
+              else
+                const _MyJourneysSection(),
+
+              // Discovery sits below what is the member's own. Each section is
+              // its own list child, so one scrolled far below the fold is not
+              // read until it is near the screen.
+              MatchesSection(isSender: isSender),
+              const ProfileOptInCard(),
+              ListingsSection(isSender: isSender),
+              PeopleSection(isSender: isSender),
+            ],
+          ),
+        ),
+        footer: _PostButton(isSender: isSender),
       ),
-      footer: _PostButton(isSender: isSender),
     );
   }
 }

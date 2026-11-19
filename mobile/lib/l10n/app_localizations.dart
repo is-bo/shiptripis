@@ -10724,6 +10724,78 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Settings'**
   String get guestSettings;
+
+  /// No description provided for @socialContinueWithApple.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue with Apple'**
+  String get socialContinueWithApple;
+
+  /// No description provided for @socialContinueWithGoogle.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue with Google'**
+  String get socialContinueWithGoogle;
+
+  /// No description provided for @socialOr.
+  ///
+  /// In en, this message translates to:
+  /// **'or'**
+  String get socialOr;
+
+  /// No description provided for @socialGoogleFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn’t sign you in with Google. Try again.'**
+  String get socialGoogleFailed;
+
+  /// No description provided for @socialAppleFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn’t sign you in with Apple. Try again.'**
+  String get socialAppleFailed;
+
+  /// No description provided for @socialGoogleUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in with Google is not available right now.'**
+  String get socialGoogleUnavailable;
+
+  /// No description provided for @socialAppleUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in with Apple is not available right now.'**
+  String get socialAppleUnavailable;
+
+  /// No description provided for @socialAccountDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'This account is disabled. Contact support if you think this is a mistake.'**
+  String get socialAccountDisabled;
+
+  /// No description provided for @accountNameStamp.
+  ///
+  /// In en, this message translates to:
+  /// **'Almost there'**
+  String get accountNameStamp;
+
+  /// No description provided for @accountNameTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What should we call you?'**
+  String get accountNameTitle;
+
+  /// No description provided for @accountNameBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your account has no name yet. The people you send or carry with see it on your offers and deliveries.'**
+  String get accountNameBody;
+
+  /// No description provided for @accountNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Your name'**
+  String get accountNameLabel;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

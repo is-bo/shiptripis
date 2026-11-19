@@ -21,6 +21,7 @@ import '../../core/session/session.dart';
 import '../../domain/communication_language.dart';
 import 'account_gate.dart';
 import 'auth_header.dart';
+import 'social_sign_in_buttons.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/forms.dart';
 import '../../design/components/primitives.dart';
@@ -135,6 +136,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                 ),
                 const SizedBox(height: AppSpace.lg),
               ],
+              SocialSignInButtons(flow: widget.flow, showOrDivider: true),
               AppTextField(
                 label: l.authFullName,
                 controller: _fullName,

@@ -385,6 +385,9 @@ jobs:
       - name: Static routes, links, and CSP compatibility
         run: python tools/check_static_web.py
 
+      - name: iOS sign-in configuration parses and carries no value
+        run: python tools/check_ios_config.py
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

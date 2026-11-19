@@ -40,6 +40,50 @@ four are absent, the workflow still builds but the app deliberately keeps push
 unavailable; a partial tuple fails validation. Never store the Firebase Admin
 service-account JSON in GitHub build variables or the mobile bundle.
 
+## Sign in with Google: the app's SHA-1 fingerprints
+
+On Android, `google_sign_in` needs only one value at run time: the **Web**
+(server) OAuth client id, passed as
+`--dart-define=GOOGLE_SERVER_CLIENT_ID=<id>.apps.googleusercontent.com`. It is
+a public identifier, the same one the server lists in
+`GOOGLE_OAUTH_CLIENT_IDS`. Without it the app shows email sign-in only. The
+repository holds no Google value and no `google-services.json` entry for it.
+
+Google also has to know which signing keys may ask for that id: create an
+**Android** OAuth client in Google Cloud (**APIs & Services → Credentials →
+Create credentials → OAuth client ID → Android**) for the package
+`com.shiptrip.shiptrip`, once per signing key, with that key's SHA-1. A build
+signed by a key Google does not know fails at the account picker with a
+configuration error, which the app reports as "We couldn't sign you in with
+Google".
+
+Debug key (each developer machine has its own, so each one is registered
+separately if it is used for sign-in):
+
+```sh
+keytool -list -v -alias androiddebugkey \
+  -keystore ~/.android/debug.keystore \
+  -storepass android -keypass android | grep 'SHA1:'
+```
+
+Release key (the same keystore as `ANDROID_KEYSTORE_BASE64`; run it on the
+machine that holds the keystore, never in a shared log):
+
+```sh
+keytool -list -v -keystore /path/to/release.keystore \
+  -alias "$ANDROID_KEY_ALIAS" | grep 'SHA1:'
+```
+
+Or, from `mobile/android`, for every variant Gradle can sign:
+
+```sh
+./gradlew signingReport
+```
+
+When the app is distributed through Google Play with Play App Signing, Google
+re-signs it with the **app signing key**: register that key's SHA-1 too,
+copied from **Play Console → Test and release → App integrity → App signing**.
+
 ## Build a signed pre-launch release
 
 1. Open the repository on GitHub.

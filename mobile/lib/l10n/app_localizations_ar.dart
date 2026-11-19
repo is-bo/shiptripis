@@ -6199,4 +6199,42 @@ class LAr extends L {
 
   @override
   String get guestSettings => 'الإعدادات';
+
+  @override
+  String get socialContinueWithApple => 'المتابعة مع Apple';
+
+  @override
+  String get socialContinueWithGoogle => 'المتابعة مع Google';
+
+  @override
+  String get socialOr => 'ولا';
+
+  @override
+  String get socialGoogleFailed => 'ما قدرناش ندخّلوك بـ Google. عاود جرّب.';
+
+  @override
+  String get socialAppleFailed => 'ما قدرناش ندخّلوك بـ Apple. عاود جرّب.';
+
+  @override
+  String get socialGoogleUnavailable => 'الدخول بـ Google ماشي متوفر دركة.';
+
+  @override
+  String get socialAppleUnavailable => 'الدخول بـ Apple ماشي متوفر دركة.';
+
+  @override
+  String get socialAccountDisabled =>
+      'هذا الحساب موقّف. اتصل بالدعم إذا تشوف بلي كاين غلطة.';
+
+  @override
+  String get accountNameStamp => 'قريب نكملو';
+
+  @override
+  String get accountNameTitle => 'واش نسمّوك؟';
+
+  @override
+  String get accountNameBody =>
+      'حسابك مازال ما عندوش اسم. الناس اللي تبعث ولا تحمل معاهم يشوفوه في العروض والتوصيلات تاعك.';
+
+  @override
+  String get accountNameLabel => 'اسمك';
 }

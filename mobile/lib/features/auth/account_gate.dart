@@ -23,6 +23,7 @@ import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../l10n/app_localizations.dart';
 import 'auth_header.dart';
+import 'social_sign_in_buttons.dart';
 
 /// Why the account screen opened. It names the headline and the one line
 /// under it, and travels in the route as [wire].
@@ -123,6 +124,7 @@ const _flowAuthRoutes = {
   Routes.signUp,
   Routes.forgotPassword,
   Routes.verifyEmail,
+  Routes.accountName,
 };
 
 bool _isAccountFlowRoute(Route<dynamic> route) {
@@ -164,7 +166,7 @@ Future<void> openSignIn(BuildContext context) => context.pushNamed<void>(
 );
 
 /// Ends the account moment: closes the gate and every sign-in, sign-up,
-/// password and verify screen opened from it, in one step.
+/// password, verify and name screen opened from it, in one step.
 ///
 /// The screen underneath is the one the guest asked from, and the future
 /// that opened the gate completes there. When the flow is the whole stack (it
@@ -229,7 +231,7 @@ class _AccountGateScreenState extends ConsumerState<AccountGateScreen> {
             stampColor: c.brandInk,
             showBack: false,
           ),
-          const AccountProviderButtons(),
+          const SocialSignInButtons(flow: _flow),
           AppButton(
             label: l.accountGateEmail,
             icon: Icons.mail_outline_rounded,
@@ -251,17 +253,4 @@ class _AccountGateScreenState extends ConsumerState<AccountGateScreen> {
       ),
     );
   }
-}
-
-/// The place for "Continue with Apple" and "Continue with Google" on the
-/// account screen, above "Continue with email".
-///
-/// It renders nothing until those sign-ins exist: the buttons go here, each
-/// followed by `SizedBox(height: AppSpace.sm)`, and a successful one calls
-/// [completeAccountFlow] like the email sign-in does.
-class AccountProviderButtons extends StatelessWidget {
-  const AccountProviderButtons({super.key});
-
-  @override
-  Widget build(BuildContext context) => const SizedBox.shrink();
 }
