@@ -53,9 +53,13 @@ class FakeSocialSignIn implements SocialSignIn {
   static T _next<T>(List<T Function()> answers) =>
       (answers.length > 1 ? answers.removeAt(0) : answers.single)();
 
+  /// While set, Google's answer waits for it: a sign-in still in flight.
+  Future<void>? holdGoogle;
+
   @override
   Future<GoogleCredential?> google() async {
     googleCalls++;
+    await holdGoogle;
     return _next(googleAnswers);
   }
 

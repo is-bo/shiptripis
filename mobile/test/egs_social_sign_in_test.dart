@@ -536,6 +536,7 @@ void main() {
 
       _expectRequestFormOverHome(container);
       expect(server.posts('/api/auth/oauth/google'), hasLength(1));
+      expect(find.byType(AccountNameScreen, skipOffstage: false), findsNothing);
 
       await _systemBack(tester);
       expect(_at(container).path, '/home');
@@ -872,12 +873,67 @@ void main() {
 
       expect(server.patches.single.body, {'full_name': 'Yacine Belkacem'});
       _expectRequestFormOverHome(container);
+      expect(
+        find.byType(RequestCreateScreen, skipOffstage: false),
+        findsOneWidget,
+        reason: 'the action resumes exactly once',
+      );
       expect(container.read(accountProvider)?.fullName, 'Yacine Belkacem');
 
       // Back on Home, nobody is asked again.
       await _systemBack(tester);
       expect(_at(container).path, '/home');
       expect(find.byType(AccountNameScreen), findsNothing);
+
+      await _shutdown(tester);
+    });
+
+    testWidgets('Back while a sign-in is in flight: the account screen '
+        'finishes it, and still asks for the name', (tester) async {
+      final hold = Completer<void>();
+      final social = FakeSocialSignIn()..holdGoogle = hold.future;
+      final container = await _boot(tester, _Server(name: ''), social: social);
+
+      await _openGate(tester);
+      await _tap(tester, find.text(_en.accountGateHaveAccount));
+      await tester.tap(_google());
+      await tester.pump();
+      await _systemBack(tester);
+      expect(find.byType(SignInScreen), findsNothing);
+      expect(find.byType(AccountGateScreen), findsOneWidget);
+
+      hold.complete();
+      await _settle(tester);
+
+      expect(find.byType(AccountNameScreen), findsOneWidget);
+      await tester.tap(find.byType(PaperCloseButton));
+      await _settle(tester);
+      _expectRequestFormOverHome(container);
+      expect(
+        find.byType(RequestCreateScreen, skipOffstage: false),
+        findsOneWidget,
+      );
+
+      await _shutdown(tester);
+    });
+
+    testWidgets('Back while a sign-in is in flight, named account: the '
+        'account screen completes at once', (tester) async {
+      final hold = Completer<void>();
+      final social = FakeSocialSignIn()..holdGoogle = hold.future;
+      final container = await _boot(tester, _Server(), social: social);
+
+      await _openGate(tester);
+      await _tap(tester, find.text(_en.accountGateHaveAccount));
+      await tester.tap(_google());
+      await tester.pump();
+      await _systemBack(tester);
+
+      hold.complete();
+      await _settle(tester);
+
+      _expectRequestFormOverHome(container);
+      expect(find.byType(AccountNameScreen, skipOffstage: false), findsNothing);
 
       await _shutdown(tester);
     });

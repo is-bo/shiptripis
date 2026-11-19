@@ -9,23 +9,19 @@
 ///
 /// Cancelling is silent. A failure is said under the buttons in the person's
 /// language: a refused account, a provider the server does not offer yet, or
-/// the generic copy. Once signed in, an account the provider left without a
-/// name goes to the name step first; inside the account moment the flow then
-/// completes, as the email sign-in does.
+/// the generic copy. Once signed in, the sign-in ends in [finishSignIn], as
+/// every other one does.
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart'
     show AppleLogoPainter;
 
 import '../../app/app_settings.dart';
-import '../../app/router.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/error_codes.dart';
 import '../../core/auth/social_sign_in.dart';
-import '../../core/session/session.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/primitives.dart';
 import '../../design/components/status.dart';
@@ -33,7 +29,6 @@ import '../../design/tokens.dart';
 import '../../domain/communication_language.dart';
 import '../../l10n/app_localizations.dart';
 import 'account_gate.dart';
-import 'account_name_screen.dart';
 
 class SocialSignInButtons extends ConsumerStatefulWidget {
   const SocialSignInButtons({
@@ -69,11 +64,16 @@ class _SocialSignInButtonsState extends ConsumerState<SocialSignInButtons> {
     );
     final auth = ref.read(socialAuthProvider);
     try {
-      final signedIn = switch (provider) {
-        SocialProvider.google => await auth.google(language),
-        SocialProvider.apple => await auth.apple(language),
-      };
-      if (signedIn && mounted) _signedIn();
+      // On the account screen this sign-in is finished here, below, not by
+      // the screen's own listener.
+      final signedIn = await AccountGateScreen.finishingHere(
+        context,
+        () => switch (provider) {
+          SocialProvider.google => auth.google(language),
+          SocialProvider.apple => auth.apple(language),
+        },
+      );
+      if (signedIn && mounted) finishSignIn(context, widget.flow);
     } on SocialSignInFailure {
       if (mounted) setState(() => _error = _failed(provider));
     } on ApiException catch (error) {
@@ -85,24 +85,6 @@ class _SocialSignInButtonsState extends ConsumerState<SocialSignInButtons> {
     } finally {
       if (mounted) setState(() => _busy = null);
     }
-  }
-
-  void _signedIn() {
-    final account = ref.read(accountProvider);
-    if (account != null && account.fullName.trim().isEmpty) {
-      // Inside the account moment the name step is the flow's last screen.
-      // On its own, the router takes the person on and Home asks.
-      if (widget.flow.active) {
-        ref.read(accountNameAskedProvider.notifier).markAsked();
-        context.pushNamed(
-          Routes.accountName,
-          queryParameters: widget.flow.parameters,
-        );
-      }
-      return;
-    }
-    // On its own, the router's redirect takes over from here.
-    if (widget.flow.active) completeAccountFlow(context, widget.flow);
   }
 
   String _failed(SocialProvider provider) {

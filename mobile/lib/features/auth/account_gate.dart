@@ -24,6 +24,7 @@ import '../../design/identity.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../l10n/app_localizations.dart';
+import 'account_name_screen.dart';
 import 'auth_header.dart';
 import 'social_sign_in_buttons.dart';
 
@@ -168,8 +169,18 @@ Future<bool> ensureAccount(BuildContext context, AccountReason reason) async {
           if (!closed.isCompleted) closed.complete();
         }),
   );
-  await closed.future;
-  return container.read(sessionProvider) is SessionSignedIn;
+  // Held across the wait, so the answer is read only from a container that
+  // is still alive: one disposed meanwhile (the app torn down with the
+  // screen) closes the subscription, and nobody is waiting on the answer.
+  // The caller's own widget may well be gone by then (guest Home becomes
+  // member Home), which is no reason to drop the action it asked for.
+  final answer = container.listen(sessionProvider, (_, _) {});
+  try {
+    await closed.future;
+    return !answer.closed && answer.read() is SessionSignedIn;
+  } finally {
+    answer.close();
+  }
 }
 
 /// Opens sign-in as an account flow, from a guest's own "Sign in".
@@ -207,11 +218,20 @@ void completeAccountFlow(BuildContext context, AccountFlow flow) {
 /// sign-in, confirming the email after sign-up, and the account screen.
 ///
 /// Inside the account flow it closes the flow, so the action or place it was
-/// opened for goes ahead. Outside one (the auth screen is the whole stack),
-/// the router's redirect has already moved the member on, and there is
-/// nothing to do.
+/// opened for goes ahead; an account without a name (a social sign-in that
+/// gave none) is asked for one first, as the flow's last screen, which then
+/// closes the flow itself. Outside one (the auth screen is the whole stack),
+/// the router's redirect has already moved the member on, and Home asks for a
+/// missing name ([AskForNameOnce]).
 void finishSignIn(BuildContext context, AccountFlow flow) {
-  if (!flow.active) return;
+  if (!flow.active || ModalRoute.of(context)?.isActive == false) return;
+  final container = ProviderScope.containerOf(context, listen: false);
+  final account = container.read(accountProvider);
+  if (account != null && account.fullName.trim().isEmpty) {
+    container.read(accountNameAskedProvider.notifier).markAsked();
+    context.pushNamed(Routes.accountName, queryParameters: flow.parameters);
+    return;
+  }
   completeAccountFlow(context, flow);
 }
 
