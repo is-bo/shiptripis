@@ -25,14 +25,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shiptrip/app/app.dart';
 import 'package:shiptrip/app/router.dart';
+import 'package:shiptrip/core/api/api_exception.dart';
+import 'package:shiptrip/core/api/error_codes.dart';
 import 'package:shiptrip/core/push/notification_socket.dart';
 import 'package:shiptrip/core/session/session.dart';
 import 'package:shiptrip/core/push/push_coordinator.dart';
+import 'package:shiptrip/design/components/feedback.dart';
 import 'package:shiptrip/design/components/forms.dart';
 import 'package:shiptrip/design/components/navigation.dart';
 import 'package:shiptrip/design/components/primitives.dart';
 import 'package:shiptrip/design/identity.dart';
 import 'package:shiptrip/features/auth/account_gate.dart';
+import 'package:shiptrip/features/discovery/discovery_widgets.dart';
 import 'package:shiptrip/features/auth/forgot_password_screen.dart';
 import 'package:shiptrip/features/auth/guest_states.dart';
 import 'package:shiptrip/features/auth/sign_in_screen.dart';
@@ -108,6 +112,17 @@ class _Store extends FakeTokenStore {
       _refresh = null;
     }
     return cleared;
+  }
+}
+
+/// A member's keystore whose snapshot delete takes its time once [slow].
+class _SlowKeystore extends _Store {
+  bool slow = false;
+
+  @override
+  Future<void> deleteAccountSnapshot() async {
+    if (slow) await Future<void>.delayed(const Duration(milliseconds: 250));
+    await super.deleteAccountSnapshot();
   }
 }
 
@@ -1247,6 +1262,68 @@ void main() {
 
       await _shutdown(tester);
     });
+
+    testWidgets('signing out on Home with a slow keystore and slow reads: the '
+        'guest\'s cards, no failure, nothing of the member\'s', (tester) async {
+      final server = _Server();
+      var slow = false;
+      // The member and the guest are shown different cards, so a card left
+      // over from the member is seen.
+      Future<FakeResponse> listing(
+        RecordedRequest r, {
+        required FakeResponse member,
+        required FakeResponse guest,
+      }) async {
+        if (r.headers.containsKey(_bearer)) return member;
+        if (slow) await Future<void>.delayed(const Duration(milliseconds: 400));
+        return guest;
+      }
+
+      server.backend
+        ..handle(
+          'GET',
+          '/api/discovery/trips',
+          (r) => listing(
+            r,
+            member: discoveryPage([tripCardFixture(12, name: 'Mounir')]),
+            guest: discoveryPage([tripCardFixture(11, name: 'Samira')]),
+          ),
+        )
+        ..handle(
+          'GET',
+          '/api/discovery/people',
+          (r) => listing(
+            r,
+            member: discoveryPage([
+              profileCardFixture(id: 'p-9', name: 'Karim'),
+            ]),
+            guest: discoveryPage([_personCard()]),
+          ),
+        );
+      final store = _SlowKeystore();
+      final container = await _boot(tester, server, store: store);
+      expect(container.read(sessionProvider), isA<SessionSignedIn>());
+      expect(find.text('Mounir', skipOffstage: false), findsWidgets);
+
+      slow = true;
+      store.slow = true;
+      final out = container.read(sessionProvider.notifier).signOut();
+      await _settle(tester);
+      await out;
+      await _settle(tester, 60);
+
+      expect(container.read(sessionProvider), isA<SessionSignedOut>());
+      expect(find.byType(HomeScreen), findsOneWidget);
+      expect(find.text('Samira', skipOffstage: false), findsWidgets);
+      expect(find.text('Nadia', skipOffstage: false), findsWidgets);
+      for (final member in ['Mounir', 'Karim']) {
+        expect(find.text(member, skipOffstage: false), findsNothing);
+      }
+      expect(find.byType(InlineFailure, skipOffstage: false), findsNothing);
+      expect(find.byType(StaleNote, skipOffstage: false), findsNothing);
+
+      await _shutdown(tester);
+    });
   });
 
   group('a guest\'s request', () {
@@ -1257,6 +1334,57 @@ void main() {
         const FakeResponse(401, {'detail': 'unauthorized'}),
       )
       ..on('POST', '/api/auth/refresh', const FakeResponse(401, {}));
+
+    test('a refusal is not retried; a cancelled or failed read is', () {
+      ApiException failure(ApiFailureKind kind) =>
+          ApiException(kind: kind, code: ApiErrorCode.unknown);
+      expect(appRetry(0, failure(ApiFailureKind.rateLimited)), isNull);
+      expect(appRetry(0, failure(ApiFailureKind.validation)), isNull);
+      for (final kind in [
+        ApiFailureKind.cancelled,
+        ApiFailureKind.server,
+        ApiFailureKind.offline,
+      ]) {
+        expect(appRetry(0, failure(kind)), isNotNull, reason: '$kind');
+      }
+    });
+
+    test(
+      'belongs to no login: answered after a sign-out or sign-in has '
+      'finished, it is still the answer; a member\'s read is voided',
+      () async {
+        for (final guest in [true, false]) {
+          final answer = Completer<FakeResponse>();
+          final backend = FakeBackend()
+            ..handle('GET', '/api/discovery/trips', (_) => answer.future);
+          final store = _Store()..bearerWithheld = guest;
+          final client = apiClientFor(backend, store);
+          addTearDown(() => client.raw.close(force: true));
+
+          final read = client.getObject('/api/discovery/trips');
+          while (backend.requests.isEmpty) {
+            await Future<void>.delayed(Duration.zero);
+          }
+          store.invalidateIdentity();
+          answer.complete(const FakeResponse(200, {'state': 'results'}));
+
+          if (guest) {
+            expect(await read, {'state': 'results'});
+          } else {
+            await expectLater(
+              read,
+              throwsA(
+                isA<ApiException>().having(
+                  (e) => e.kind,
+                  'kind',
+                  ApiFailureKind.cancelled,
+                ),
+              ),
+            );
+          }
+        }
+      },
+    );
 
     test('carries no bearer, and its 401 ends nothing and refreshes nothing, '
         'even with a member\'s bytes still stored', () async {

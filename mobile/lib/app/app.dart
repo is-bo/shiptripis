@@ -11,10 +11,15 @@ import 'router.dart';
 /// How a failed read is retried, for the whole app: `main` sets it on the
 /// scope the app runs in. A failure that waiting cannot mend (a throttle, a
 /// tier switched off, a refusal) is shown at once and asked again only when
-/// the person does; a network or server failure is retried the way Riverpod
-/// does by default. A provider that sets its own retry keeps it.
+/// the person does; a network or server failure, and a read cancelled
+/// before it answered (the server refused nothing), are retried the way
+/// Riverpod does by default. A provider that sets its own retry keeps it.
 Duration? appRetry(int retryCount, Object error) {
-  if (error is ApiException && !error.isRetryable) return null;
+  if (error is ApiException &&
+      !error.isRetryable &&
+      error.kind != ApiFailureKind.cancelled) {
+    return null;
+  }
   return ProviderContainer.defaultRetry(retryCount, error);
 }
 

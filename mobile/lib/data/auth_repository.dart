@@ -135,8 +135,15 @@ class AuthRepository {
   ///
   /// Local clearing happens regardless of the network result: a user who taps
   /// sign out on a train must actually be signed out on the device.
-  Future<void> signOut() async {
-    final signOutIdentity = _tokens.invalidateIdentity();
+  ///
+  /// [expectedIdentityGeneration] is the identity the caller already ended
+  /// the login with; given it, the sign-out ends nothing a second time, so a
+  /// guest read sent since is not cancelled. Without it, the sign-out ends
+  /// the login itself.
+  Future<void> signOut({int? expectedIdentityGeneration}) async {
+    final signOutIdentity =
+        expectedIdentityGeneration ?? _tokens.invalidateIdentity();
+    if (_tokens.identityGeneration != signOutIdentity) return;
     final refresh = await _tokens.readRefresh();
     if (_tokens.identityGeneration != signOutIdentity) return;
     if (refresh != null) {

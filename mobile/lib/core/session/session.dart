@@ -480,7 +480,7 @@ class SessionController extends Notifier<SessionState> {
     state = const SessionSignedOut();
     // In the same turn as the tap: from here on no response or snapshot
     // write started under this login is accepted.
-    _tokens.invalidateIdentity();
+    final identity = _tokens.invalidateIdentity();
     // Before the network call: the profile must not outlive the user's
     // decision to leave, even if the app is killed mid sign-out. Queued
     // behind any credential write already in flight, so a snapshot write
@@ -490,7 +490,7 @@ class SessionController extends Notifier<SessionState> {
     } on Object {
       // The credential clear below deletes it too.
     }
-    await _auth.signOut();
+    await _auth.signOut(expectedIdentityGeneration: identity);
   }
 
   /// Called by the API client when refresh has failed terminally.

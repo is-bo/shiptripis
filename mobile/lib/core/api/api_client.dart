@@ -392,7 +392,10 @@ class ApiClient {
           throw _AuthInterceptor.sessionChanged();
         }
         final response = await call(identityGeneration);
-        if (identityGeneration != _tokens.identityGeneration) {
+        // A read sent as a guest carried no bearer and belongs to no login,
+        // so a sign-in or sign-out finishing meanwhile does not void it.
+        if (identityGeneration != _tokens.identityGeneration &&
+            !_AuthInterceptor.wasSentAsGuest(response.requestOptions)) {
           throw _AuthInterceptor.sessionChanged(response.requestOptions);
         }
         final status = response.statusCode ?? 0;
@@ -581,6 +584,10 @@ class _AuthInterceptor extends Interceptor {
   }
 
   static const _sentAsGuest = 'st.sent_as_guest';
+
+  /// Whether [request] went without a bearer because nobody was signed in.
+  static bool wasSentAsGuest(RequestOptions request) =>
+      request.extra[_sentAsGuest] == true;
 
   static bool _isSignOut(String path) => path.contains('/api/auth/sign-out');
 

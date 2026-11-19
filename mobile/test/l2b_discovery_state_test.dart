@@ -29,6 +29,16 @@ Future<T> _ready<T>(AsyncValue<T> Function() read) async {
   throw StateError('never settled');
 }
 
+/// The provider's state once it is no longer loading, error or not.
+Future<AsyncValue<T>> _settled<T>(AsyncValue<T> Function() read) async {
+  for (var i = 0; i < 50; i++) {
+    await Future<void>.delayed(Duration.zero);
+    final value = read();
+    if (!value.isLoading) return value;
+  }
+  throw StateError('never settled');
+}
+
 Future<ProviderContainer> _signedIn(FakeBackend backend) async {
   final container = discoveryContainer(backend);
   addTearDown(container.dispose);
@@ -247,6 +257,62 @@ void main() {
       final b = await _ready(() => container.read(previewTripsProvider(null)));
       expect(b.results.single.traveler.displayName, 'B-card');
       expect(backend.to('GET', '/api/discovery/trips'), hasLength(3));
+    });
+
+    test('a read that fails for the guest after a sign-out shows the failure, '
+        'never the member\'s cards; one that fails for the same viewer keeps '
+        'what was read', () async {
+      var failing = false;
+      final backend = discoveryBackend()
+        ..handle(
+          'GET',
+          '/api/discovery/trips',
+          (_) => failing
+              ? const FakeResponse(500, {'detail': 'boom'})
+              : discoveryPage([tripCardFixture(1, name: 'member-card')]),
+        )
+        ..on('POST', '/api/auth/sign-out', const FakeResponse(200, {}));
+      final container = await _signedIn(backend);
+      const filter = BrowseFilter();
+      final subs = [
+        container.listen(previewTripsProvider(null), (_, _) {}),
+        container.listen(tripFeedProvider(filter), (_, _) {}),
+      ];
+      addTearDown(() {
+        for (final s in subs) {
+          s.close();
+        }
+      });
+      await _ready(() => container.read(previewTripsProvider(null)));
+      await _ready(() => container.read(tripFeedProvider(filter)));
+
+      // The same viewer's refresh fails: what was read stays, over the error.
+      failing = true;
+      container
+        ..invalidate(previewTripsProvider(null))
+        ..invalidate(tripFeedProvider(filter));
+      for (final value in [
+        await _settled(
+          () => container.read(previewTripsProvider(null)).ofCurrentAccount,
+        ),
+        await _settled(
+          () => container.read(tripFeedProvider(filter)).ofCurrentAccount,
+        ),
+      ]) {
+        expect(value.hasError, isTrue);
+        expect(value.hasValue, isTrue, reason: 'showing what we loaded');
+      }
+
+      // The guest's first read fails: the member's cards are not shown.
+      await container.read(sessionProvider.notifier).signOut();
+      for (final value in [
+        await _settled(() => container.read(previewTripsProvider(null))),
+        await _settled(() => container.read(tripFeedProvider(filter))),
+      ]) {
+        expect(value.hasValue, isTrue, reason: 'Riverpod keeps it');
+        expect(value.ofCurrentAccount.hasError, isTrue);
+        expect(value.ofCurrentAccount.hasValue, isFalse);
+      }
     });
 
     test('signed out, only the public listings are read', () async {
