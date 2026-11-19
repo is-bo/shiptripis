@@ -18,6 +18,7 @@ import '../../domain/account.dart';
 import '../../domain/communication_language.dart';
 import '../api/api_client.dart';
 import '../api/api_exception.dart';
+import '../api/error_codes.dart';
 import 'token_store.dart';
 
 // ---------------------------------------------------------------------------
@@ -35,11 +36,13 @@ class SessionRestoring extends SessionState {
   const SessionRestoring();
 }
 
+/// Nobody is signed in: the app is browsed as a guest.
 class SessionSignedOut extends SessionState {
   const SessionSignedOut({this.becauseExpired = false});
 
   /// True when a live session ended rather than the app simply starting
-  /// signed out. The sign-in screen explains the difference.
+  /// signed out, until the guest signs in again or dismisses the notice that
+  /// says so. The sign-in screen and the guest screens explain the difference.
   final bool becauseExpired;
 }
 
@@ -127,11 +130,18 @@ final roleContextProvider =
       RoleContextController.new,
     );
 
-/// True when the account may switch sides at all. Drives whether the switch
-/// affordance exists — not merely whether it is enabled.
-final canSwitchRoleProvider = Provider<bool>(
-  (ref) => ref.watch(accountProvider)?.role.canSwitch ?? false,
+/// True once the restore has settled on nobody being signed in.
+final isGuestProvider = Provider<bool>(
+  (ref) => ref.watch(sessionProvider) is SessionSignedOut,
 );
+
+/// True when the viewer may switch sides at all. Drives whether the switch
+/// affordance exists — not merely whether it is enabled. A guest may: they
+/// are only looking, and the choice carries into the account they make.
+final canSwitchRoleProvider = Provider<bool>((ref) {
+  if (ref.watch(isGuestProvider)) return true;
+  return ref.watch(accountProvider)?.role.canSwitch ?? false;
+});
 
 // ---------------------------------------------------------------------------
 // Controllers
@@ -178,6 +188,7 @@ class SessionController extends Notifier<SessionState> {
     // value nothing had yet produced. The splash's retry re-enters the same
     // method.
     ref.onDispose(() => _revalidation?.cancel());
+    listenSelf((_, next) => _tokens.bearerWithheld = next is SessionSignedOut);
     unawaited(restore());
     return const SessionRestoring();
   }
@@ -317,21 +328,14 @@ class SessionController extends Notifier<SessionState> {
     }
   }
 
-  Future<void> signIn({required String email, required String password}) async {
-    final generation = ++_generation;
-    final identity = _tokens.invalidateIdentity();
-    final account = await _auth.signIn(
-      email: email,
-      password: password,
-      expectedIdentityGeneration: identity,
-    );
-    if (generation != _generation) return;
-    await _adoptRoleContextFor(account);
-    if (generation != _generation) return;
-    state = SessionSignedIn(account, generation: generation);
-    _markAccountRead();
-    unawaited(_remember(account, identity));
-  }
+  Future<void> signIn({required String email, required String password}) =>
+      _authenticateWith(
+        (identity) => _auth.signIn(
+          email: email,
+          password: password,
+          expectedIdentityGeneration: identity,
+        ),
+      );
 
   Future<void> signUp({
     required String fullName,
@@ -340,10 +344,8 @@ class SessionController extends Notifier<SessionState> {
     required String phone,
     String? wilaya,
     required CommunicationLanguage preferredLanguage,
-  }) async {
-    final generation = ++_generation;
-    final identity = _tokens.invalidateIdentity();
-    final account = await _auth.signUp(
+  }) => _authenticateWith(
+    (identity) => _auth.signUp(
       fullName: fullName,
       email: email,
       password: password,
@@ -351,30 +353,44 @@ class SessionController extends Notifier<SessionState> {
       wilaya: wilaya,
       preferredLanguage: preferredLanguage,
       expectedIdentityGeneration: identity,
-    );
-    if (generation != _generation) return;
-    await _adoptRoleContextFor(account);
-    if (generation != _generation) return;
-    state = SessionSignedIn(account, generation: generation);
-    _markAccountRead();
-    unawaited(_remember(account, identity));
-  }
+    ),
+  );
 
   Future<void> signInWithGoogle({
     required String idToken,
-    String? phone,
-    String? wilaya,
-    CommunicationLanguage? preferredLanguage,
-  }) async {
-    final generation = ++_generation;
-    final identity = _tokens.invalidateIdentity();
-    final account = await _auth.signInWithGoogle(
+    required CommunicationLanguage preferredLanguage,
+  }) => _authenticateWith(
+    (identity) => _auth.signInWithGoogle(
       idToken: idToken,
-      phone: phone,
-      wilaya: wilaya,
       preferredLanguage: preferredLanguage,
       expectedIdentityGeneration: identity,
-    );
+    ),
+  );
+
+  Future<void> signInWithApple({
+    required String identityToken,
+    required String nonce,
+    required String fullName,
+    required CommunicationLanguage preferredLanguage,
+  }) => _authenticateWith(
+    (identity) => _auth.signInWithApple(
+      identityToken: identityToken,
+      nonce: nonce,
+      fullName: fullName,
+      preferredLanguage: preferredLanguage,
+      expectedIdentityGeneration: identity,
+    ),
+  );
+
+  /// Every sign-in's one path: a new generation and identity, so nothing
+  /// started under the previous login lands; the role context; the state;
+  /// the launch snapshot.
+  Future<void> _authenticateWith(
+    Future<Account> Function(int identity) authenticate,
+  ) async {
+    final generation = ++_generation;
+    final identity = _tokens.invalidateIdentity();
+    final account = await authenticate(identity);
     if (generation != _generation) return;
     await _adoptRoleContextFor(account);
     if (generation != _generation) return;
@@ -391,12 +407,33 @@ class SessionController extends Notifier<SessionState> {
   /// accepted. The state moves only once the server has answered, and it moves
   /// to the profile the server returned — never to the value that was asked
   /// for.
-  Future<void> updatePreferredLanguage(CommunicationLanguage language) async {
+  Future<void> updatePreferredLanguage(CommunicationLanguage language) =>
+      _updateProfile(() => _auth.updateProfile(preferredLanguage: language));
+
+  /// Names an account that has no name: a social sign-in that gave none.
+  ///
+  /// The server takes a name only while the account has none. When it
+  /// answers `name_already_set` (the name arrived another way, such as a
+  /// later sign-in that carried it) the account is re-read and the step is
+  /// done, the same as a success. Any other failure is the screen's to show.
+  Future<void> setFullName(String fullName) async {
+    try {
+      await _updateProfile(() => _auth.updateProfile(fullName: fullName));
+    } on ApiException catch (error) {
+      if (error.code != ApiErrorCode.nameAlreadySet) rethrow;
+      await refreshAccount();
+    }
+  }
+
+  /// Applies a profile change the server answered with the whole profile.
+  /// The state moves only once the server has answered, and to the profile it
+  /// returned, never to the value that was asked for.
+  Future<void> _updateProfile(Future<Account> Function() update) async {
     final current = state;
     if (current is! SessionSignedIn) return;
     final generation = _generation;
     final identity = _tokens.identityGeneration;
-    final account = await _auth.updatePreferredLanguage(language);
+    final account = await update();
     if (generation == _generation &&
         state is SessionSignedIn &&
         (state as SessionSignedIn).account.id == current.account.id &&
@@ -443,7 +480,7 @@ class SessionController extends Notifier<SessionState> {
     state = const SessionSignedOut();
     // In the same turn as the tap: from here on no response or snapshot
     // write started under this login is accepted.
-    _tokens.invalidateIdentity();
+    final identity = _tokens.invalidateIdentity();
     // Before the network call: the profile must not outlive the user's
     // decision to leave, even if the app is killed mid sign-out. Queued
     // behind any credential write already in flight, so a snapshot write
@@ -453,7 +490,7 @@ class SessionController extends Notifier<SessionState> {
     } on Object {
       // The credential clear below deletes it too.
     }
-    await _auth.signOut();
+    await _auth.signOut(expectedIdentityGeneration: identity);
   }
 
   /// Called by the API client when refresh has failed terminally.
@@ -470,6 +507,14 @@ class SessionController extends Notifier<SessionState> {
     _generation++;
     _revalidation?.cancel();
     state = const SessionSignedOut(becauseExpired: true);
+  }
+
+  /// The guest closed the "you were signed out" notice.
+  void dismissSignedOutNotice() {
+    final current = state;
+    if (current is SessionSignedOut && current.becauseExpired) {
+      state = const SessionSignedOut();
+    }
   }
 
   /// Picks the starting context for a freshly authenticated account: the
@@ -532,9 +577,10 @@ class RoleContextController extends Notifier<RoleContext> {
 
   /// Switches context. A no-op for accounts the server has restricted to one
   /// side, so a stale UI affordance can never put the user into a context
-  /// they are not allowed to act in.
+  /// they are not allowed to act in. A guest's choice is stored like a
+  /// member's, so the account they then make starts on the same side.
   void set(RoleContext next) {
-    if (!(ref.read(accountProvider)?.role.canSwitch ?? false)) return;
+    if (!ref.read(canSwitchRoleProvider)) return;
     if (state == next) return;
     _remembered = next;
     state = next;

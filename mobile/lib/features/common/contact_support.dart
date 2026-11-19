@@ -1,9 +1,10 @@
 /// Contact support: one action, one place that builds the email.
 ///
 /// The address comes from the server (`GET /api/support`), the one the emails
-/// already print. While the server has none, [supportEmailProvider] is null
-/// and everything here disappears: the app never shows a "contact support"
-/// label that leads nowhere.
+/// already print; the server always names one (contact@wassla.eu by default).
+/// Until it has loaded, or while it cannot be reached, [supportEmailProvider]
+/// is null and everything here disappears: the app never shows a "contact
+/// support" label that leads nowhere.
 library;
 
 import 'package:flutter/material.dart';
@@ -41,7 +42,7 @@ Future<void> openSupportEmail(
   }
 }
 
-/// The support address, or null when there is none to offer (not set, still
+/// The support address, or null when there is none to offer yet (still
 /// loading, or unreachable).
 String? supportEmailOf(WidgetRef ref) => ref.watch(supportEmailProvider).value;
 

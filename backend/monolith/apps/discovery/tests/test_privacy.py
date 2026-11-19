@@ -3,7 +3,8 @@
 Each test builds members with a distinctive surname, email, phone, street
 address, exact coordinates, a deal recipient and a KYC row, then walks the
 whole JSON answer: none of those strings and none of the forbidden keys may
-appear anywhere in it, at any depth.
+appear anywhere in it, at any depth. The four public reads are walked twice:
+as a member and as a guest without an account (plan EGS, decision 10).
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import json
 
 from django.test import TestCase
 from django.urls import reverse
+from rest_framework.test import APIClient
 
 from apps.deals.models import DealRecipient
 from apps.kyc.models import KycSubmission
@@ -144,34 +146,49 @@ class PublicPayloadPrivacyTests(DiscoveryWorld, TestCase):
         self.assertEqual(_keys(payload, set()) & FORBIDDEN_KEYS, set())
 
     def _get(self, viewer, name, *args, **query):
-        response = client_for(viewer).get(reverse(name, args=args), query)
+        """`viewer` `None` reads as a guest, without an account."""
+
+        client = APIClient() if viewer is None else client_for(viewer)
+        response = client.get(reverse(name, args=args), query)
         self.assertEqual(response.status_code, 200, response.data)
         return response.data
 
+    def readers(self):
+        """A member who owns nothing, then a guest."""
+
+        return ((self.other, "member"), (None, "guest"))
+
     def test_the_trip_listing_is_public_only(self):
-        payload = self._get(self.other, "discovery-trips")
-        self.assertPublic(payload, expect="Yacine")
+        for viewer, label in self.readers():
+            with self.subTest(viewer=label):
+                payload = self._get(viewer, "discovery-trips")
+                self.assertPublic(payload, expect="Yacine")
 
     def test_the_request_listing_is_public_only(self):
-        payload = self._get(self.other, "discovery-requests")
-        self.assertEqual(
-            [row["request_id"] for row in payload["results"]], [self.open_request.pk]
-        )
-        self.assertPublic(payload, expect="Samira")
+        for viewer, label in self.readers():
+            with self.subTest(viewer=label):
+                payload = self._get(viewer, "discovery-requests")
+                self.assertEqual(
+                    [row["request_id"] for row in payload["results"]], [self.open_request.pk]
+                )
+                self.assertPublic(payload, expect="Samira")
 
     def test_the_people_list_is_public_only(self):
-        travelers = self._get(self.other, "discovery-people", role="sender")
-        senders = self._get(self.other, "discovery-people", role="traveler")
-        self.assertPublic(travelers, expect="Yacine")
-        self.assertPublic(senders, expect="Samira")
+        for viewer, label in self.readers():
+            with self.subTest(viewer=label):
+                travelers = self._get(viewer, "discovery-people", role="sender")
+                senders = self._get(viewer, "discovery-people", role="traveler")
+                self.assertPublic(travelers, expect="Yacine")
+                self.assertPublic(senders, expect="Samira")
 
     def test_the_person_page_is_public_only(self):
-        for user, name in ((self.traveler, "Yacine"), (self.sender, "Samira")):
-            with self.subTest(name):
-                public_id = user.public_profile.public_id
-                payload = self._get(self.other, "discovery-person", public_id)
-                self.assertTrue(payload["trips"] or payload["requests"])
-                self.assertPublic(payload, expect=name)
+        for viewer, label in self.readers():
+            for user, name in ((self.traveler, "Yacine"), (self.sender, "Samira")):
+                with self.subTest(viewer=label, person=name):
+                    public_id = user.public_profile.public_id
+                    payload = self._get(viewer, "discovery-person", public_id)
+                    self.assertTrue(payload["trips"] or payload["requests"])
+                    self.assertPublic(payload, expect=name)
 
     def test_the_own_profile_preview_is_public_only(self):
         for user, name in ((self.traveler, "Yacine"), (self.sender, "Samira")):

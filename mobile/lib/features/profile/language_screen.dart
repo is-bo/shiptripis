@@ -129,42 +129,46 @@ class _LanguageScreenState extends ConsumerState<LanguageScreen> {
               onTap: () => ref.read(localeProvider.notifier).set(option.locale),
             ),
 
-          SectionHeader(
-            title: l.profileEmailLanguage,
-            subtitle: l.profileEmailLanguageHelp,
-          ),
-
-          if (_error != null) ...[
-            const SizedBox(height: AppSpace.xs),
-            _SaveFailure(
-              error: _error!,
-              onRetry: _failed == null
-                  ? null
-                  : () => _setEmailLanguage(_failed!),
+          // A guest has no account to write to yet: the language they sign
+          // up in becomes its first email language.
+          if (!ref.watch(isGuestProvider)) ...[
+            SectionHeader(
+              title: l.profileEmailLanguage,
+              subtitle: l.profileEmailLanguageHelp,
             ),
-            const SizedBox(height: AppSpace.sm),
-          ],
 
-          if (emailLanguage == null)
-            // Signed out, or the profile has not landed yet. A selector with
-            // nothing ticked would be worse than an honest placeholder.
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: AppSpace.md),
-              child: SkeletonBox(width: 120),
-            )
-          else
-            for (final language in CommunicationLanguage.values)
-              _Option(
-                label: language.nativeLabel,
-                selected: language == emailLanguage,
-                isRtlLabel: language.isRtlLabel,
-                isSaving: _saving == language,
-                // One write at a time. The rest of the list goes inert rather
-                // than queueing a second PATCH behind the first.
-                onTap: _saving != null
+            if (_error != null) ...[
+              const SizedBox(height: AppSpace.xs),
+              _SaveFailure(
+                error: _error!,
+                onRetry: _failed == null
                     ? null
-                    : () => _setEmailLanguage(language),
+                    : () => _setEmailLanguage(_failed!),
               ),
+              const SizedBox(height: AppSpace.sm),
+            ],
+
+            if (emailLanguage == null)
+              // The profile has not landed yet. A selector with
+              // nothing ticked would be worse than an honest placeholder.
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: AppSpace.md),
+                child: SkeletonBox(width: 120),
+              )
+            else
+              for (final language in CommunicationLanguage.values)
+                _Option(
+                  label: language.nativeLabel,
+                  selected: language == emailLanguage,
+                  isRtlLabel: language.isRtlLabel,
+                  isSaving: _saving == language,
+                  // One write at a time. The rest of the list goes inert rather
+                  // than queueing a second PATCH behind the first.
+                  onTap: _saving != null
+                      ? null
+                      : () => _setEmailLanguage(language),
+                ),
+          ],
         ],
       ),
     );

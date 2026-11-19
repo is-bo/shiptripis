@@ -175,7 +175,7 @@ resolve to English.
 | `POST /api/auth/sign-up` | Optional `preferred_language`; default `en`. |
 | `POST /api/auth/oauth/google` | Optional `preferred_language` for a newly created account; default `en`. Existing accounts keep their stored preference. |
 | `GET /api/me` | Returns resolved `preferred_language`. |
-| `PATCH /api/me` | Updates `preferred_language`; no other profile field becomes writable. |
+| `PATCH /api/me` | Updates `preferred_language`. Since EGS (2026-11-18) it also sets `full_name` (trimmed, 1 to 120 characters) once, while the stored name is blank; after that `400 {"code": "name_already_set"}`. No other profile field is writable. |
 | `PUT /api/deals/{id}/recipient` | Optional `communication_language`. New recipients omitted by an older client snapshot the sender's preference; updates that omit it preserve the existing choice. |
 | `POST /api/payments/orders/{public_reference}/guest-link` | Optional `communication_language`; omission snapshots the owner's preference. The response returns the resolved value. |
 | `POST /api/payments/guest/{token}/checkout` | Adds guest receipt `email`. It is required when transactional email is enabled and grants no account or Deal authority. |

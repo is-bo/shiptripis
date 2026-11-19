@@ -185,7 +185,7 @@ class LAr extends L {
 
   @override
   String validationTooLong(int max) {
-    return 'اجعل هذا أقل من $max حرفًا';
+    return '$max حرفًا على الأكثر';
   }
 
   @override
@@ -3263,33 +3263,7 @@ class LAr extends L {
   String get disputeEvidenceFileRequiredBody => 'اختر ملفًا أولاً.';
 
   @override
-  String get onboardingEyebrow => 'أهلاً بك';
-
-  @override
-  String get onboardingHeadline =>
-      'أرسل أي شيء،\nوالمسافرون\nيتكفّلون بالباقي.';
-
-  @override
-  String get onboardingBody =>
-      'ممر بين الجزائر وفرنسا. المسافرون ينقلون، والمرسلون يوفّرون، والمبلغ محجوز إلى حين الوصول.';
-
-  @override
   String get onboardingStamp => 'منذ 2026 · الجزائر ↔ فرنسا';
-
-  @override
-  String get onboardingTrust => 'هوية موثّقة · مبلغ محجوز · التسعير باليورو';
-
-  @override
-  String get onboardingRouteFrom => 'الجزائر';
-
-  @override
-  String get onboardingRouteTo => 'باريس';
-
-  @override
-  String get onboardingRouteMeta => 'مباشر · 2س 25د';
-
-  @override
-  String get benefitsSkip => 'تخطّي';
 
   @override
   String benefitsIndex(int current, int total) {
@@ -3389,9 +3363,6 @@ class LAr extends L {
   @override
   String get authVerifySubhead =>
       'أدخل الرمز المكوّن من ستة أرقام الذي أرسلناه إليك. هذه الخطوة الأخيرة.';
-
-  @override
-  String get onboardingGetStartedShort => 'لنبدأ';
 
   @override
   String get requestItemPhoto => 'صورة الغرض';
@@ -6105,4 +6076,158 @@ class LAr extends L {
 
   @override
   String get profileRating => 'التقييم';
+
+  @override
+  String get accountGateStamp => 'حسابك في Wassla';
+
+  @override
+  String get accountGateEmail => 'المتابعة بالبريد الإلكتروني';
+
+  @override
+  String get accountGateHaveAccount => 'عندي حساب من قبل';
+
+  @override
+  String get accountReasonPostRequestTitle => 'أنشئ حسابك\nباش تبعث طردك.';
+
+  @override
+  String get accountReasonPostRequestBody =>
+      'المسافرون يشوفو شكون يبعث. الدفع يبقى محجوز، والمسافر يتخلص 48 ساعة من بعد التوصيل.';
+
+  @override
+  String get accountReasonPostTripTitle => 'أنشئ حسابك\nباش تنشر رحلتك.';
+
+  @override
+  String get accountReasonPostTripBody =>
+      'المرسلون يختارو مسافرين يثقو فيهم: حسابك فيه التحقق من هويتك وتقييماتك.';
+
+  @override
+  String get accountReasonCarryTitle => 'أنشئ حسابك\nباش تحمل هذا الطرد.';
+
+  @override
+  String get accountReasonCarryBody =>
+      'المرسل يشوف شكون يعرض يحملو، والمبلغ يوصل لحسابك 48 ساعة من بعد التوصيل.';
+
+  @override
+  String get accountReasonAlertTitle => 'أنشئ حسابك\nباش توصلك تنبيهات المسار.';
+
+  @override
+  String get accountReasonAlertBody =>
+      'نعلموك كي تكون رحلة ولا طرد على هذا المسار.';
+
+  @override
+  String get accountReasonReportTitle => 'أنشئ حسابك\nباش تبلّغ على تقييم.';
+
+  @override
+  String get accountReasonReportBody =>
+      'البلاغات تجي من الأعضاء، باش نقدرو نراجعوها معاك.';
+
+  @override
+  String get accountReasonDeliveriesTitle => 'أنشئ حسابك\nباش تتابع التوصيلات.';
+
+  @override
+  String get accountReasonDeliveriesBody =>
+      'الطرود اللي تبعثها واللي تحملها تبان كامل في بلاصة وحدة.';
+
+  @override
+  String get accountReasonChatTitle => 'أنشئ حسابك\nباش تحكي.';
+
+  @override
+  String get accountReasonChatBody =>
+      'المحادثة تتفتح بين المرسل والمسافر كي يتخلص التوصيل.';
+
+  @override
+  String get accountReasonNotificationsTitle =>
+      'أنشئ حسابك\nباش توصلك الإشعارات.';
+
+  @override
+  String get accountReasonNotificationsBody =>
+      'العروض والرسائل وأخبار التوصيل توصلك هنا.';
+
+  @override
+  String get accountReasonGenericTitle => 'أنشئ حسابك\nباش تبدا.';
+
+  @override
+  String get accountReasonGenericBody =>
+      'ابعث طرد، ولا احمل واحد في رحلة راك رايح ليها من قبل.';
+
+  @override
+  String get guestSignedOutNotice => 'تسجّل خروجك. عاود سجّل الدخول.';
+
+  @override
+  String get guestNoticeDismiss => 'إغلاق';
+
+  @override
+  String get guestWelcomeTitle => 'ابعثها مع واحد راهو رايح في نفس الطريق.';
+
+  @override
+  String get guestWelcomeBody =>
+      'تفرّج: هذي رحلات وطرود حقيقية. الحساب يلزمك غير باش تنشر ولا تحمل ولا تفعّل التنبيهات ولا تبلّغ على تقييم.';
+
+  @override
+  String get guestHowItWorks => 'كيفاش تخدم Wassla';
+
+  @override
+  String get guestAccountAction => 'سجّل الدخول ولا أنشئ حساب';
+
+  @override
+  String get guestDeliveriesTitle => 'التوصيلات تاعك يبانو هنا';
+
+  @override
+  String get guestDeliveriesBody =>
+      'سجّل الدخول باش تتابع الطرود اللي تبعثها واللي تحملها.';
+
+  @override
+  String get guestChatTitle => 'المحادثات تاعك يبانو هنا';
+
+  @override
+  String get guestChatBody =>
+      'المحادثة تتفتح بين المرسل والمسافر كي يتخلص التوصيل.';
+
+  @override
+  String get guestProfileTitle => 'راك تتفرّج كضيف';
+
+  @override
+  String get guestProfileBody =>
+      'أنشئ حساب باش تبعث طرد ولا تحمل واحد. ياخذ دقيقتين برك.';
+
+  @override
+  String get guestSettings => 'الإعدادات';
+
+  @override
+  String get socialContinueWithApple => 'المتابعة باستخدام Apple';
+
+  @override
+  String get socialContinueWithGoogle => 'المتابعة باستخدام Google';
+
+  @override
+  String get socialOr => 'ولا';
+
+  @override
+  String get socialGoogleFailed => 'ما قدرناش ندخّلوك بـ Google. عاود جرّب.';
+
+  @override
+  String get socialAppleFailed => 'ما قدرناش ندخّلوك بـ Apple. عاود جرّب.';
+
+  @override
+  String get socialGoogleUnavailable => 'الدخول بـ Google ماشي متوفر دركة.';
+
+  @override
+  String get socialAppleUnavailable => 'الدخول بـ Apple ماشي متوفر دركة.';
+
+  @override
+  String get socialAccountDisabled =>
+      'هذا الحساب موقوف. اتصل بالدعم إذا تشوف بلي كاين غلطة.';
+
+  @override
+  String get accountNameStamp => 'قريب نكملو';
+
+  @override
+  String get accountNameTitle => 'واش نسمّوك؟';
+
+  @override
+  String get accountNameBody =>
+      'حسابك مازال ما عندوش اسم. الناس اللي تبعث ولا تحمل معاهم يشوفوه في العروض والتوصيلات تاعك.';
+
+  @override
+  String get accountNameLabel => 'اسمك';
 }

@@ -1,10 +1,25 @@
 """`/api/discovery/*`: the three Home tiers, a member's public profile, alerts.
 
-Contract: `docs/PHASE_L2A_DISCOVERY_CONTRACT.md`. Every endpoint is
-authenticated, throttled on the existing `matching_discovery` scope, and reads
-its switch from the marketplace policy at the moment of the request. A tier
-that is switched off answers HTTP 200 with `state: "disabled"`, because "this
-section is not offered" is a designed state, not a failure.
+Contract: `docs/PHASE_L2A_DISCOVERY_CONTRACT.md`. Two kinds of endpoint, each
+with its own base class so the rule is visible where a view is declared:
+
+- **Public reads** (`_PublicDiscoveryView`): trips, requests, people, one
+  person, a person's reviews, a trip's reviews. A guest reads them without an
+  account (plan EGS, decision 10) and gets the same allowlisted cards a member
+  gets; a member who sends a token is still authenticated, so their own items
+  stay out of their lists. Every guest branch is written out, never a query
+  run with a missing viewer.
+- **Member endpoints** (`_MemberDiscoveryView`): matches, "I can carry this",
+  the own profile and alerts. They are about the caller and need an account.
+
+A member is throttled on the `matching_discovery` scope and the `user` rate,
+both per member. A guest is counted by address on the `discovery_guest` scope
+only (`apps.core.throttles`): many people share one address behind a mobile
+carrier's NAT, so the guest bucket is roomy and is not the `anon` one. Every
+endpoint reads its switch from the marketplace policy at the moment of the
+request.
+A tier that is switched off answers HTTP 200 with `state: "disabled"`,
+because "this section is not offered" is a designed state, not a failure.
 """
 
 from __future__ import annotations
@@ -13,7 +28,7 @@ import logging
 
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
@@ -25,6 +40,7 @@ from apps.core.marketplace_policy import (
     MarketplacePolicy,
     marketplace_policy,
 )
+from apps.core.throttles import PUBLIC_READ_THROTTLES, MemberScopedRateThrottle
 from apps.matching.discovery import phase2_policy
 from apps.matching.find_travelers import TRUST_AS_TRAVELER, trust_signals
 from apps.matching.policy import InvalidPhase2Policy
@@ -156,13 +172,29 @@ def _profile_cards(profiles: list, *, at) -> list[dict]:
     return [profile_card(profile, trust=trust[profile.user_id]) for profile in profiles]
 
 
-class _DiscoveryView(APIView):
+def _viewer_id(request: Request) -> int | None:
+    """The member reading a public endpoint, or `None` for a guest."""
+
+    return request.user.pk if request.user.is_authenticated else None
+
+
+class _PublicDiscoveryView(APIView):
+    """A public read: open to a guest, the same cards for everyone."""
+
+    permission_classes = (AllowAny,)
+    throttle_classes = (*PUBLIC_READ_THROTTLES, MemberScopedRateThrottle)
+    throttle_scope = "matching_discovery"
+
+
+class _MemberDiscoveryView(APIView):
+    """About the caller: needs an account."""
+
     permission_classes = (IsAuthenticated,)
     throttle_classes = (UserRateThrottle, ScopedRateThrottle)
     throttle_scope = "matching_discovery"
 
 
-class MatchesView(_DiscoveryView):
+class MatchesView(_MemberDiscoveryView):
     """`GET /api/discovery/matches?role=sender|traveler`."""
 
     def get(self, request: Request) -> Response:
@@ -179,7 +211,7 @@ class MatchesView(_DiscoveryView):
             return _refusal(exc)
 
 
-class TripsView(_DiscoveryView):
+class TripsView(_PublicDiscoveryView):
     """`GET /api/discovery/trips`: published journeys, soonest departure first."""
 
     def get(self, request: Request) -> Response:
@@ -197,12 +229,13 @@ class TripsView(_DiscoveryView):
         except _UNAVAILABLE as exc:
             return _refusal(exc)
         departing_after = max(at, values.get("departing_after") or at)
+        queryset = listable_journeys(at=at, sea_legs_enabled=policy.sea_legs_enabled)
+        if (viewer_id := _viewer_id(request)) is not None:
+            queryset = queryset.exclude(traveler_id=viewer_id)
         queryset = (
-            listable_journeys(at=at, sea_legs_enabled=policy.sea_legs_enabled)
-            .exclude(traveler=request.user)
             # With an origin, "departing after" is about the pickup stop's own
             # leg; the trip may have started earlier somewhere else.
-            .filter(journey_route_exists(route, departing_after=departing_after))
+            queryset.filter(journey_route_exists(route, departing_after=departing_after))
             .order_by("next_departure", "pk")
         )
         if not route.has_origin:
@@ -211,7 +244,7 @@ class TripsView(_DiscoveryView):
         return Response(_page(_trip_cards(rows, at=at, policy=policy), next_offset))
 
 
-class RequestsView(_DiscoveryView):
+class RequestsView(_PublicDiscoveryView):
     """`GET /api/discovery/requests`: open requests, newest first."""
 
     def get(self, request: Request) -> Response:
@@ -227,12 +260,10 @@ class RequestsView(_DiscoveryView):
             return Response({"code": exc.code, "detail": str(exc)}, status=400)
         except _UNAVAILABLE as exc:
             return _refusal(exc)
-        queryset = (
-            listable_requests(at=at)
-            .exclude(sender=request.user)
-            .filter(request_route_q(route))
-            .order_by("-created_at", "-pk")
-        )
+        queryset = listable_requests(at=at)
+        if (viewer_id := _viewer_id(request)) is not None:
+            queryset = queryset.exclude(sender_id=viewer_id)
+        queryset = queryset.filter(request_route_q(route)).order_by("-created_at", "-pk")
         if departing_after := values.get("departing_after"):
             # "Ready to leave on or after": the parcel can still be handed over then.
             queryset = queryset.filter(ready_window_end__gte=departing_after)
@@ -240,7 +271,7 @@ class RequestsView(_DiscoveryView):
         return Response(_page([request_card(row) for row in rows], next_offset))
 
 
-class InterestView(_DiscoveryView):
+class InterestView(_MemberDiscoveryView):
     """`POST /api/discovery/requests/<id>/interest`: "I can carry this"."""
 
     def post(self, request: Request, pk: int) -> Response:
@@ -265,7 +296,7 @@ class InterestView(_DiscoveryView):
         )
 
 
-class PeopleView(_DiscoveryView):
+class PeopleView(_PublicDiscoveryView):
     """`GET /api/discovery/people?role=`: visible members on the other side."""
 
     def get(self, request: Request) -> Response:
@@ -282,12 +313,12 @@ class PeopleView(_DiscoveryView):
         except _UNAVAILABLE as exc:
             return _refusal(exc)
         side = ROLE_TRAVELER if values["role"] == ROLE_SENDER else ROLE_SENDER
-        queryset = people(side=side, route=route, viewer_id=request.user.pk, at=at)
+        queryset = people(side=side, route=route, viewer_id=_viewer_id(request), at=at)
         rows, next_offset = window(queryset, limit=values["limit"], offset=values["offset"])
         return Response(_page(_profile_cards(rows, at=at), next_offset))
 
 
-class PersonView(_DiscoveryView):
+class PersonView(_PublicDiscoveryView):
     """`GET /api/discovery/people/<public id>`: one card and what they have listed."""
 
     def get(self, request: Request, public_id) -> Response:
@@ -329,7 +360,7 @@ class PersonView(_DiscoveryView):
         )
 
 
-def _reviews_page(subject_id: int, *, side, viewer_id: int, values: dict, at) -> dict:
+def _reviews_page(subject_id: int, *, side, viewer_id: int | None, values: dict, at) -> dict:
     """One page of a person's reviews, with the rating their card shows.
 
     The summary is `trust_signals` itself, so the number above the list is the
@@ -351,7 +382,7 @@ def _reviews_page(subject_id: int, *, side, viewer_id: int, values: dict, at) ->
 _DISABLED_REVIEWS = {**_DISABLED_PAGE, "rating": None}
 
 
-class PersonReviewsView(_DiscoveryView):
+class PersonReviewsView(_PublicDiscoveryView):
     """`GET /api/discovery/people/<public id>/reviews`: both sides, like the profile card."""
 
     def get(self, request: Request, public_id) -> Response:
@@ -374,32 +405,33 @@ class PersonReviewsView(_DiscoveryView):
             _reviews_page(
                 profile.user_id,
                 side=None,
-                viewer_id=request.user.pk,
+                viewer_id=_viewer_id(request),
                 values=query.validated_data,
                 at=at,
             )
         )
 
 
-class TripReviewsView(_DiscoveryView):
+class TripReviewsView(_PublicDiscoveryView):
     """`GET /api/discovery/trips/<journey id>/reviews[?request=<id>]`.
 
     The traveler's ratings as a traveler, like the trip card and Find
     Travelers. Who may read them is `apps.ratings.public.trip_reviews_access`:
     the listings switch closes only the public path, and a sender coming from
     Find Travelers names their own open request (settled by the advisor on
-    2026-11-14).
+    2026-11-14). A guest has the public path only.
     """
 
     def get(self, request: Request, pk: int) -> Response:
         query = ReviewsQuerySerializer(data=request.query_params)
         query.is_valid(raise_exception=True)
         values = query.validated_data
+        viewer_id = _viewer_id(request)
         at = timezone.now()
         try:
             policy = marketplace_policy()
             access, owner_id = trip_reviews_access(
-                viewer_id=request.user.pk,
+                viewer_id=viewer_id,
                 journey_id=pk,
                 request_id=values.get("request"),
                 at=at,
@@ -417,12 +449,12 @@ class TripReviewsView(_DiscoveryView):
             )
         return Response(
             _reviews_page(
-                owner_id, side=SIDE_TRAVELER, viewer_id=request.user.pk, values=values, at=at
+                owner_id, side=SIDE_TRAVELER, viewer_id=viewer_id, values=values, at=at
             )
         )
 
 
-class OwnProfileView(_DiscoveryView):
+class OwnProfileView(_MemberDiscoveryView):
     """`GET`/`PUT /api/discovery/profile/me`: settings and the exact public card."""
 
     def _payload(self, user) -> dict:
@@ -469,7 +501,7 @@ class OwnProfileView(_DiscoveryView):
             return _refusal(exc)
 
 
-class AlertsView(_DiscoveryView):
+class AlertsView(_MemberDiscoveryView):
     """`GET`/`POST /api/discovery/alerts`."""
 
     def get(self, request: Request) -> Response:
@@ -503,7 +535,7 @@ class AlertsView(_DiscoveryView):
         )
 
 
-class AlertDetailView(_DiscoveryView):
+class AlertDetailView(_MemberDiscoveryView):
     """`DELETE /api/discovery/alerts/<id>`."""
 
     def delete(self, request: Request, pk: int) -> Response:

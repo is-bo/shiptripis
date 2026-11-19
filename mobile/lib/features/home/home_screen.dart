@@ -17,6 +17,9 @@
 /// `can_submit_*`, `can_rate`, a deal status that needs funding. This screen
 /// does not decide that something needs you; it reports that the server said
 /// so.
+///
+/// Without an account Home is the front page: the same listings and people,
+/// a short welcome, and the way in. Posting asks for an account first.
 library;
 
 import 'package:flutter/material.dart';
@@ -38,6 +41,9 @@ import '../../domain/account.dart';
 import '../../domain/deal.dart';
 import '../../domain/journey.dart';
 import '../../l10n/app_localizations.dart';
+import '../auth/account_gate.dart';
+import '../auth/account_name_screen.dart';
+import '../auth/guest_states.dart';
 import '../common/delivery_card.dart';
 import '../common/status_copy.dart';
 import '../journeys/progress_widgets.dart';
@@ -56,70 +62,170 @@ class HomeScreen extends ConsumerWidget {
     final canSwitch = ref.watch(canSwitchRoleProvider);
 
     if (account == null) {
-      // The router guard makes this unreachable in practice; rendering a
-      // skeleton rather than throwing keeps a race harmless.
+      if (ref.watch(isGuestProvider)) return _GuestHome(role: role);
+      // Still restoring: the router holds the splash, so this is only a race,
+      // and a skeleton keeps it harmless.
       return const AppScaffold(body: SkeletonDetail());
     }
 
     final isSender = role == RoleContext.sender;
 
+    return AskForNameOnce(
+      child: AppScaffold(
+        topBar: AppTopBar(
+          title: isSender ? l.homeSenderGreeting : l.homeTravelerGreeting,
+          subtitle: account.fullName.isEmpty ? null : account.fullName,
+          actions: const [NotificationBell()],
+        ),
+        body: RefreshIndicator(
+          onRefresh: () async {
+            refreshVolatileState(ref);
+            refreshDiscovery(ref);
+          },
+          child: ListView(
+            // Short on a quiet day, and still pull-to-refresh: the refresh also
+            // re-reads every discovery section.
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: AppScrollPadding.pageWithFooter(context),
+            children: [
+              if (canSwitch) ...[
+                _RoleSwitcher(role: role),
+                const SizedBox(height: AppSpace.xl),
+              ],
+
+              if (!isSender && !account.isKycVerified) ...[
+                _VerifyIdentityNotice(account: account),
+                const SizedBox(height: AppSpace.xl),
+              ],
+
+              const _AttentionSection(),
+              const SizedBox(height: AppSpace.xl),
+              const _InProgressSection(),
+              const SizedBox(height: AppSpace.xl),
+
+              if (isSender)
+                const _MyRequestsSection()
+              else
+                const _MyJourneysSection(),
+
+              // Discovery sits below what is the member's own. Each section is
+              // its own list child, so one scrolled far below the fold is not
+              // read until it is near the screen.
+              MatchesSection(isSender: isSender),
+              const ProfileOptInCard(),
+              ListingsSection(isSender: isSender),
+              PeopleSection(isSender: isSender),
+            ],
+          ),
+        ),
+        footer: _PostButton(isSender: isSender),
+      ),
+    );
+  }
+}
+
+/// The sun button. Home is the one screen with a single unambiguous marquee
+/// action, which is exactly the ration the accent was reserved for. For a
+/// guest it is the account moment first, then the same form.
+class _PostButton extends StatelessWidget {
+  const _PostButton({required this.isSender});
+
+  final bool isSender;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    return AppButton(
+      label: isSender ? l.homeCreateRequest : l.homeCreateJourney,
+      variant: AppButtonVariant.hero,
+      icon: isSender ? Icons.add_rounded : Icons.flight_takeoff_rounded,
+      onPressed: () =>
+          isSender ? context.openRequestCreate() : context.openJourneyCreate(),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Guest
+// ---------------------------------------------------------------------------
+
+/// Home for someone without an account: the listings and people a member
+/// sees, for the side they choose, and the way in. Nothing here is the
+/// member's own, so nothing private is read.
+class _GuestHome extends ConsumerWidget {
+  const _GuestHome({required this.role});
+
+  final RoleContext role;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = L.of(context);
+    final isSender = role == RoleContext.sender;
+
     return AppScaffold(
       topBar: AppTopBar(
-        title: isSender ? l.homeSenderGreeting : l.homeTravelerGreeting,
-        subtitle: account.fullName.isEmpty ? null : account.fullName,
-        actions: const [NotificationBell()],
+        title: l.appName,
+        showMark: true,
+        actions: [
+          TextButton(
+            onPressed: () => openSignIn(context),
+            child: Text(
+              l.authSignIn,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
       body: RefreshIndicator(
-        onRefresh: () async {
-          refreshVolatileState(ref);
-          refreshDiscovery(ref);
-        },
+        onRefresh: () async => refreshDiscovery(ref),
         child: ListView(
-          // Short on a quiet day, and still pull-to-refresh: the refresh also
-          // re-reads every discovery section.
           physics: const AlwaysScrollableScrollPhysics(),
           padding: AppScrollPadding.pageWithFooter(context),
           children: [
-            if (canSwitch) ...[
-              _RoleSwitcher(role: role),
-              const SizedBox(height: AppSpace.xl),
-            ],
-
-            if (!isSender && !account.isKycVerified) ...[
-              _VerifyIdentityNotice(account: account),
-              const SizedBox(height: AppSpace.xl),
-            ],
-
-            const _AttentionSection(),
+            const SignedOutNotice(),
+            const _GuestWelcome(),
             const SizedBox(height: AppSpace.xl),
-            const _InProgressSection(),
+            _RoleSwitcher(role: role),
             const SizedBox(height: AppSpace.xl),
-
-            if (isSender)
-              const _MyRequestsSection()
-            else
-              const _MyJourneysSection(),
-
-            // Discovery sits below what is the member's own. Each section is
-            // its own list child, so one scrolled far below the fold is not
-            // read until it is near the screen.
-            MatchesSection(isSender: isSender),
-            const ProfileOptInCard(),
             ListingsSection(isSender: isSender),
             PeopleSection(isSender: isSender),
           ],
         ),
       ),
-      // The sun button. Home is the one authenticated screen with a single
-      // unambiguous marquee action, which is exactly the ration the accent
-      // was reserved for.
-      footer: AppButton(
-        label: isSender ? l.homeCreateRequest : l.homeCreateJourney,
-        variant: AppButtonVariant.hero,
-        icon: isSender ? Icons.add_rounded : Icons.flight_takeoff_rounded,
-        onPressed: () => isSender
-            ? context.openRequestCreate()
-            : context.openJourneyCreate(),
+      footer: _PostButton(isSender: isSender),
+    );
+  }
+}
+
+class _GuestWelcome extends StatelessWidget {
+  const _GuestWelcome();
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final c = context.colors;
+    final text = Theme.of(context).textTheme;
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(l.guestWelcomeTitle, style: text.titleMedium),
+          const SizedBox(height: AppSpace.sm),
+          Text(
+            l.guestWelcomeBody,
+            style: text.bodyMedium?.copyWith(color: c.textSecondary),
+          ),
+          const SizedBox(height: AppSpace.md),
+          AppButton(
+            label: l.guestHowItWorks,
+            variant: AppButtonVariant.secondary,
+            icon: Icons.auto_stories_outlined,
+            expand: false,
+            onPressed: () => context.openHowItWorks(),
+          ),
+        ],
       ),
     );
   }

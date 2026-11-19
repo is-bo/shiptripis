@@ -106,11 +106,11 @@ func TestPostgresSMTPFailuresAndBackoffAreDurable(t *testing.T) {
 			}
 			var status, safeError string
 			pool.QueryRow(context.Background(), "SELECT status,last_error FROM notification_outbound_message WHERE transport_event_id=$1", p.EventID).Scan(&status, &safeError)
-			expected := "pending"
+			expected, expectedError := "pending", "provider_transient"
 			if reply[0] == '5' {
-				expected = "failed"
+				expected, expectedError = "failed", "provider_permanent"
 			}
-			if status != expected || (safeError != "smtp_transient" && safeError != "smtp_permanent") {
+			if status != expected || safeError != expectedError {
 				t.Fatal(status, safeError)
 			}
 			store.Deliver(context.Background(), p, func() error { t.Fatal("failure bypassed retry gate"); return nil })
@@ -229,5 +229,41 @@ func TestPostgresSMTPBurstDoesNotDeferMostOfTheBatchToRecovery(t *testing.T) {
 	c.wg.Wait()
 	if accepted.Load() != 20 {
 		t.Fatalf("only %d of 20 queued messages sent; batch was left waiting for recovery", accepted.Load())
+	}
+}
+
+// The Sender.net API sender writes the same durable outcomes through the
+// PostgreSQL guard as SMTP: 422 fails the obligation, 503 keeps it pending
+// with backoff, and an accepted send records the receipt once.
+func TestPostgresSenderNetOutcomesAreDurable(t *testing.T) {
+	for _, tc := range []struct {
+		status            int
+		answer            string
+		wantStatus, wantE string
+	}{
+		{200, accepted, "dispatched", ""},
+		{422, `{"message": "invalid"}`, "failed", "provider_permanent"},
+		{503, ``, "pending", "provider_transient"},
+	} {
+		t.Run(fmt.Sprint(tc.status), func(t *testing.T) {
+			pool := emailDatabase(t)
+			p := guardedObligation(t, pool)
+			store := guardStore(t, pool, DeliveryPolicy{RateLimitPerMinute: 60})
+			api := &senderNetAPI{status: tc.status, answer: tc.answer}
+			sender := newSenderNetTest(t, api, SenderNetConfig{})
+			ack, err := store.Deliver(context.Background(), p, func() error { return sender.Send(context.Background(), p) })
+			if !ack || (err == nil) != (tc.wantE == "") {
+				t.Fatalf("deliver: ack %v err %v", ack, err)
+			}
+			var status, safeError string
+			pool.QueryRow(context.Background(), "SELECT status,last_error FROM notification_outbound_message WHERE transport_event_id=$1", p.EventID).Scan(&status, &safeError)
+			if status != tc.wantStatus || safeError != tc.wantE {
+				t.Fatal(status, safeError)
+			}
+			store.Deliver(context.Background(), p, func() error { t.Fatal("outcome bypassed the guard"); return nil })
+			if api.hits.Load() != 1 {
+				t.Fatalf("API called %d times", api.hits.Load())
+			}
+		})
 	}
 }

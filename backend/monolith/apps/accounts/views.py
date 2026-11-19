@@ -16,10 +16,12 @@ from apps.notifications.models import OutboundMessage
 from apps.notifications.outbox import cancel_message, enqueue_secret_message
 from apps.notifications.push import unregister_push_device
 
+from .apple import AppleAuthError, AppleAuthUnavailable, verify_identity_token
 from .google import GoogleAuthError, GoogleAuthUnavailable, verify_id_token
 from .models import EmailVerificationCode, OAuthIdentity, PasswordResetCode, User
 from .sessions import end_all_sessions
 from .serializers import (
+    AppleSignInSerializer,
     GoogleSignInSerializer,
     MeSerializer,
     MeUpdateSerializer,
@@ -29,8 +31,14 @@ from .serializers import (
     SignUpSerializer,
     VerifyEmailSerializer,
 )
+from .social import SocialSignInRefused, sign_in_with_identity
 
 logger = logging.getLogger(__name__)
+
+#: The answer to a provider sign-in that cannot be checked right now (503):
+#: the provider is not configured on this server, or could not be reached.
+GOOGLE_SIGN_IN_UNAVAILABLE = "google_sign_in_unavailable"
+APPLE_SIGN_IN_UNAVAILABLE = "apple_sign_in_unavailable"
 
 
 def _tokens_for_user(user: User) -> dict[str, str]:
@@ -117,37 +125,21 @@ class SignOutView(APIView):
         return Response(status=status.HTTP_205_RESET_CONTENT)
 
 
-def _claim_unconfirmed_account(user: User, *, name: str, data: dict) -> None:
-    """Hand an unconfirmed account to the Google owner of its email (L18A, item 5).
+def _social_sign_in(*, provider: str, claims: dict, name, data: dict) -> Response:
+    """Sign a verified provider identity in through the one rule (`social.py`)."""
 
-    Google has just proved who owns the address; nobody ever proved that the
-    person who opened the account did, and anyone can sign up with someone
-    else's email. So the prover gets the account as if it were new: the
-    password stops working, every session and push device ends, and what the
-    unproven person typed is replaced (the name from Google; phone, wilaya and
-    language from this sign-in; the phone flag cleared). The owner can set a
-    password again through the reset email.
-    """
-
-    end_all_sessions(user)
-    user.set_unusable_password()
-    user.full_name = name
-    user.phone = data.get("phone", "")
-    user.wilaya = data.get("wilaya", "")
-    user.preferred_language = data["preferred_language"]
-    user.is_phone_verified = False
-    user.is_email_verified = True
-    user.save(
-        update_fields=(
-            "password",
-            "full_name",
-            "phone",
-            "wilaya",
-            "preferred_language",
-            "is_phone_verified",
-            "is_email_verified",
+    try:
+        user = sign_in_with_identity(
+            provider=provider,
+            subject=claims.get("sub"),
+            email=claims.get("email"),
+            email_verified=claims.get("email_verified"),
+            name=name,
+            data=data,
         )
-    )
+    except SocialSignInRefused as exc:
+        return Response(exc.payload, status=exc.status)
+    return Response({"user": MeSerializer(user).data, **_tokens_for_user(user)})
 
 
 class GoogleSignInView(APIView):
@@ -160,79 +152,56 @@ class GoogleSignInView(APIView):
         s.is_valid(raise_exception=True)
 
         try:
-            payload = verify_id_token(s.validated_data["id_token"])
+            claims = verify_id_token(s.validated_data["id_token"])
         except GoogleAuthError as exc:
             return Response(
                 {"detail": str(exc)}, status=status.HTTP_401_UNAUTHORIZED
             )
         except GoogleAuthUnavailable as exc:
-            # Google could not be reached; the token was never judged, so this
-            # is a retryable outage, not a rejected credential.
+            # Not configured, or Google could not be reached: the token was
+            # never judged, so this is not a rejected credential.
             return Response(
-                {"detail": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE
+                {"code": GOOGLE_SIGN_IN_UNAVAILABLE, "detail": str(exc)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
-
-        # Keep the policy at the view boundary as well as in the verifier. The
-        # duplicate check protects against a future alternate verifier and
-        # ensures an unverified claim can never link to an existing account.
-        if payload.get("email_verified") is not True:
-            return Response(
-                {"detail": "Google account email is not verified."},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-
-        sub = payload["sub"]
-        email = (payload.get("email") or "").lower().strip()
-        name = payload.get("name") or email.split("@")[0]
-        if not email:
-            return Response(
-                {"detail": "Google account has no verified email."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        identity = OAuthIdentity.objects.filter(
-            provider=OAuthIdentity.Provider.GOOGLE, subject=sub
-        ).first()
-
-        if identity is not None:
-            user = identity.user
-        else:
-            with transaction.atomic():
-                user = self._link(sub=sub, email=email, name=name, data=s.validated_data)
-
-        return Response({"user": MeSerializer(user).data, **_tokens_for_user(user)})
-
-    @staticmethod
-    def _link(*, sub: str, email: str, name: str, data: dict) -> User:
-        """Link this Google identity to the account with its email, or make one.
-
-        The account row is locked, so a claim and a concurrent sign-in or reset
-        on it serialize.
-        """
-
-        user = User.objects.select_for_update().filter(email__iexact=email).first()
-        if user is not None and not user.is_email_verified:
-            _claim_unconfirmed_account(user, name=name, data=data)
-        if user is None:
-            # Google said the email is verified, or the view refused earlier.
-            user = User.objects.create(
-                username=email,
-                email=email,
-                full_name=name,
-                phone=data.get("phone", ""),
-                wilaya=data.get("wilaya", ""),
-                preferred_language=data["preferred_language"],
-                is_email_verified=True,
-            )
-            user.set_unusable_password()
-            user.save(update_fields=("password",))
-        OAuthIdentity.objects.create(
-            user=user,
+        return _social_sign_in(
             provider=OAuthIdentity.Provider.GOOGLE,
-            subject=sub,
-            email_at_link=email,
+            claims=claims,
+            name=claims.get("name"),
+            data=s.validated_data,
         )
-        return user
+
+
+class AppleSignInView(APIView):
+    """`POST /api/auth/oauth/apple`: Sign in with Apple from the iOS app."""
+
+    permission_classes = (AllowAny,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "apple_signin"
+
+    def post(self, request: Request) -> Response:
+        s = AppleSignInSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+
+        try:
+            claims = verify_identity_token(
+                s.validated_data["identity_token"], raw_nonce=s.validated_data["nonce"]
+            )
+        except AppleAuthError as exc:
+            return Response(
+                {"detail": str(exc)}, status=status.HTTP_401_UNAUTHORIZED
+            )
+        except AppleAuthUnavailable as exc:
+            return Response(
+                {"code": APPLE_SIGN_IN_UNAVAILABLE, "detail": str(exc)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return _social_sign_in(
+            provider=OAuthIdentity.Provider.APPLE,
+            claims=claims,
+            name=s.validated_data["full_name"],
+            data=s.validated_data,
+        )
 
 
 class PasswordResetRequestView(APIView):

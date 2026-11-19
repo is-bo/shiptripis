@@ -16,6 +16,7 @@ from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
+from rest_framework.test import APIClient
 
 from apps.accounts.models import User
 from apps.admin_panel.models import AdminAuditLog
@@ -104,16 +105,21 @@ class ReviewsWorld(DiscoveryWorld):
     def moderate(self, rating, action, reason="Checked against the delivery"):
         return decide(rating_id=rating.pk, actor=self.staff, action=action, reason=reason)
 
-    def person_reviews(self, viewer=None, user=None, **query):
+    def reader(self, viewer=None, *, guest=False):
+        """`viewer`, else the member who owns nothing; a guest has no account."""
+
+        return APIClient() if guest else client_for(viewer or self.other)
+
+    def person_reviews(self, viewer=None, user=None, *, guest=False, **query):
         user = user or self.traveler
-        return client_for(viewer or self.other).get(
+        return self.reader(viewer, guest=guest).get(
             reverse("discovery-person-reviews", args=(user.public_profile.public_id,)),
             query,
         )
 
-    def trip_reviews(self, viewer=None, journey=None, **query):
+    def trip_reviews(self, viewer=None, journey=None, *, guest=False, **query):
         journey = journey or self.journey
-        return client_for(viewer or self.other).get(
+        return self.reader(viewer, guest=guest).get(
             reverse("discovery-trip-reviews", args=(journey.pk,)), query
         )
 
@@ -411,6 +417,19 @@ class ReviewsPrivacyTests(ReviewsWorld, TestCase):
 
     def test_the_trip_reviews_are_public_only(self):
         self.assertPublic(self.trip_reviews().data)
+
+    def test_a_guest_reads_both_lists_public_only_and_never_a_report_state(self):
+        # A member reported the review; a guest (plan EGS) has reported nothing.
+        self.assertEqual(self.report(self.visible).status_code, 201)
+        self.assertEqual(self.person_reviews().data["results"][0]["my_report"], "received")
+        for label, read in (("person", self.person_reviews), ("trip", self.trip_reviews)):
+            with self.subTest(label):
+                response = read(guest=True)
+                self.assertEqual(response.status_code, 200, response.data)
+                self.assertPublic(response.data)
+                self.assertEqual(
+                    [row["my_report"] for row in response.data["results"]], [None]
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -770,6 +789,14 @@ class ReviewsQueryCountTests(ReviewsWorld, TestCase):
 
     def test_trip_reviews(self):
         self.assertFlat(lambda: self.trip_reviews(limit=self.ROWS), pinned=7)
+
+    def test_person_reviews_for_a_guest(self):
+        # The same as a member's: the report state is part of the page's query.
+        self.assertFlat(lambda: self.person_reviews(guest=True, limit=self.ROWS), pinned=7)
+
+    def test_trip_reviews_for_a_guest(self):
+        # One fewer than a member's: a guest shares no match to look up.
+        self.assertFlat(lambda: self.trip_reviews(guest=True, limit=self.ROWS), pinned=6)
 
     def test_trip_reviews_from_find_travelers(self):
         activate_marketplace({"discovery": {"listings_enabled": False}})

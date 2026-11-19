@@ -24,7 +24,7 @@ import 'package:shiptrip/core/push/push_messaging.dart';
 import 'package:shiptrip/core/session/session.dart';
 import 'package:shiptrip/domain/account.dart';
 import 'package:shiptrip/domain/push.dart';
-import 'package:shiptrip/features/onboarding/onboarding_screen.dart';
+import 'package:shiptrip/features/home/home_screen.dart';
 import 'package:shiptrip/features/profile/notification_settings_screen.dart';
 import 'package:shiptrip/features/splash/splash_screen.dart';
 
@@ -180,7 +180,8 @@ void main() {
 
       final container = await _boot(
         tester,
-        backend: FakeBackend(),
+        // Signed out opens guest Home, which reads the public listings.
+        backend: FakeBackend()..emptyDiscovery(),
         tokens: _PushTokenStore(refresh: null),
         push: push,
       );
@@ -188,7 +189,7 @@ void main() {
       expect(paintedBeforeStart, isTrue);
 
       await _settle(tester);
-      expect(find.byType(OnboardingScreen), findsOneWidget);
+      expect(find.byType(HomeScreen), findsOneWidget);
       expect(
         container.read(pushCoordinatorProvider).availability,
         PushAvailability.initializing,

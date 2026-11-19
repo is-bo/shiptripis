@@ -216,6 +216,8 @@ jobs:
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
           FIREBASE_MESSAGING_SENDER_ID: ${{ vars.FIREBASE_MESSAGING_SENDER_ID }}
           FIREBASE_ANDROID_APP_ID: ${{ vars.FIREBASE_ANDROID_APP_ID }}
+          # Empty until Google sign-in is set up; the button stays hidden then.
+          GOOGLE_SERVER_CLIENT_ID: ${{ vars.GOOGLE_SERVER_CLIENT_ID }}
         run: |
           for name in ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
             if [ -z "${!name:-}" ]; then
@@ -233,8 +235,12 @@ jobs:
             "--dart-define=FIREBASE_MESSAGING_SENDER_ID=$FIREBASE_MESSAGING_SENDER_ID"
             "--dart-define=FIREBASE_ANDROID_APP_ID=$FIREBASE_ANDROID_APP_ID"
           )
-          flutter build apk --release "${apk_target[@]}" "${firebase_args[@]}" "--dart-define=API_BASE_URL=$API_BASE_URL"
-          flutter build appbundle --release "${firebase_args[@]}" "--dart-define=API_BASE_URL=$API_BASE_URL"
+          app_args=(
+            "--dart-define=API_BASE_URL=$API_BASE_URL"
+            "--dart-define=GOOGLE_SERVER_CLIENT_ID=$GOOGLE_SERVER_CLIENT_ID"
+          )
+          flutter build apk --release "${apk_target[@]}" "${firebase_args[@]}" "${app_args[@]}"
+          flutter build appbundle --release "${firebase_args[@]}" "${app_args[@]}"
 
       # PRIVATE PROFILE ARM64 — a device-performance artifact, never a
       # distributable one. Profile is Flutter's measurement mode: Dart is

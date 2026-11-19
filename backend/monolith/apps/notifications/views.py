@@ -144,10 +144,11 @@ class NotificationPreferenceView(APIView):
 class SupportContactView(APIView):
     """`GET /api/support`: where a member writes for help (L18A).
 
-    `{"email": <EMAIL_SUPPORT_ADDR> | null}`, the same server setting the
-    emails print in their footer. No address is invented: until the operator
-    sets one the answer is `null` and the app shows no support action. Open to
-    anyone and reading no credentials, so a stale token cannot break it.
+    `{"email": <EMAIL_SUPPORT_ADDR>}`, the same server setting the emails print
+    in their footer. The settings resolve a blank `EMAIL_SUPPORT_ADDR` to
+    contact@wassla.eu (`config/settings/base.py`), so the answer always names
+    an address, never `null`. Open to anyone and reading no credentials, so a
+    stale token cannot break it.
     """
 
     authentication_classes = ()
@@ -156,5 +157,4 @@ class SupportContactView(APIView):
     throttle_scope = "support_contact"
 
     def get(self, request: Request) -> Response:
-        email = str(getattr(settings, "EMAIL_SUPPORT_ADDR", "") or "").strip()
-        return Response({"email": email or None})
+        return Response({"email": settings.EMAIL_SUPPORT_ADDR})

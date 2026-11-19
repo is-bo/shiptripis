@@ -438,7 +438,7 @@ abstract class L {
   /// No description provided for @validationTooLong.
   ///
   /// In en, this message translates to:
-  /// **'Keep this under {max} characters'**
+  /// **'Use at most {max} characters'**
   String validationTooLong(int max);
 
   /// No description provided for @validationSelectOne.
@@ -5691,59 +5691,11 @@ abstract class L {
   /// **'Choose a file first.'**
   String get disputeEvidenceFileRequiredBody;
 
-  /// No description provided for @onboardingEyebrow.
-  ///
-  /// In en, this message translates to:
-  /// **'Welcome'**
-  String get onboardingEyebrow;
-
-  /// No description provided for @onboardingHeadline.
-  ///
-  /// In en, this message translates to:
-  /// **'Send anything,\nthe travelers\ndo the rest.'**
-  String get onboardingHeadline;
-
-  /// No description provided for @onboardingBody.
-  ///
-  /// In en, this message translates to:
-  /// **'A peer-to-peer corridor between Algeria and France. Travelers carry, senders save, and the money is held until it arrives.'**
-  String get onboardingBody;
-
   /// No description provided for @onboardingStamp.
   ///
   /// In en, this message translates to:
   /// **'EST. 2026 · ALG ↔ FR'**
   String get onboardingStamp;
-
-  /// No description provided for @onboardingTrust.
-  ///
-  /// In en, this message translates to:
-  /// **'ID verified · Payment held · Priced in euros'**
-  String get onboardingTrust;
-
-  /// No description provided for @onboardingRouteFrom.
-  ///
-  /// In en, this message translates to:
-  /// **'ALGIERS'**
-  String get onboardingRouteFrom;
-
-  /// No description provided for @onboardingRouteTo.
-  ///
-  /// In en, this message translates to:
-  /// **'PARIS'**
-  String get onboardingRouteTo;
-
-  /// No description provided for @onboardingRouteMeta.
-  ///
-  /// In en, this message translates to:
-  /// **'DIRECT · 2H 25M'**
-  String get onboardingRouteMeta;
-
-  /// No description provided for @benefitsSkip.
-  ///
-  /// In en, this message translates to:
-  /// **'Skip'**
-  String get benefitsSkip;
 
   /// Position marker in the onboarding chapter carousel.
   ///
@@ -5924,12 +5876,6 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Enter the six-digit code we emailed you. It\'s the last step.'**
   String get authVerifySubhead;
-
-  /// No description provided for @onboardingGetStartedShort.
-  ///
-  /// In en, this message translates to:
-  /// **'Get started'**
-  String get onboardingGetStartedShort;
 
   /// No description provided for @requestItemPhoto.
   ///
@@ -10562,6 +10508,282 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Rating'**
   String get profileRating;
+
+  /// No description provided for @accountGateStamp.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Wassla account'**
+  String get accountGateStamp;
+
+  /// No description provided for @accountGateEmail.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue with email'**
+  String get accountGateEmail;
+
+  /// No description provided for @accountGateHaveAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'I already have an account'**
+  String get accountGateHaveAccount;
+
+  /// No description provided for @accountReasonPostRequestTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create your account\nto send your parcel.'**
+  String get accountReasonPostRequestTitle;
+
+  /// No description provided for @accountReasonPostRequestBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Travelers see who is sending. Your payment is held, and the traveler is paid 48 hours after delivery.'**
+  String get accountReasonPostRequestBody;
+
+  /// No description provided for @accountReasonPostTripTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create your account\nto post your trip.'**
+  String get accountReasonPostTripTitle;
+
+  /// No description provided for @accountReasonPostTripBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Senders choose travelers they can trust: your account holds your ID check and your reviews.'**
+  String get accountReasonPostTripBody;
+
+  /// No description provided for @accountReasonCarryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create your account\nto carry this parcel.'**
+  String get accountReasonCarryTitle;
+
+  /// No description provided for @accountReasonCarryBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The sender sees who offers to carry it. You are paid into your account 48 hours after delivery.'**
+  String get accountReasonCarryBody;
+
+  /// No description provided for @accountReasonAlertTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create your account\nto get route alerts.'**
+  String get accountReasonAlertTitle;
+
+  /// No description provided for @accountReasonAlertBody.
+  ///
+  /// In en, this message translates to:
+  /// **'We tell you when a trip or a parcel matches this route.'**
+  String get accountReasonAlertBody;
+
+  /// No description provided for @accountReasonReportTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create your account\nto report a review.'**
+  String get accountReasonReportTitle;
+
+  /// No description provided for @accountReasonReportBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Reports come from members, so we can look into them with you.'**
+  String get accountReasonReportBody;
+
+  /// No description provided for @accountReasonDeliveriesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create your account\nto follow deliveries.'**
+  String get accountReasonDeliveriesTitle;
+
+  /// No description provided for @accountReasonDeliveriesBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The parcels you send and the ones you carry all appear in one place.'**
+  String get accountReasonDeliveriesBody;
+
+  /// No description provided for @accountReasonChatTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create your account\nto chat.'**
+  String get accountReasonChatTitle;
+
+  /// No description provided for @accountReasonChatBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat opens between a sender and a traveler once a delivery is paid for.'**
+  String get accountReasonChatBody;
+
+  /// No description provided for @accountReasonNotificationsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create your account\nto get notifications.'**
+  String get accountReasonNotificationsTitle;
+
+  /// No description provided for @accountReasonNotificationsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Offers, messages and delivery updates reach you here.'**
+  String get accountReasonNotificationsBody;
+
+  /// No description provided for @accountReasonGenericTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create your account\nto get started.'**
+  String get accountReasonGenericTitle;
+
+  /// No description provided for @accountReasonGenericBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Send a parcel, or carry one on a trip you are already making.'**
+  String get accountReasonGenericBody;
+
+  /// No description provided for @guestSignedOutNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'You were signed out. Sign in again.'**
+  String get guestSignedOutNotice;
+
+  /// No description provided for @guestNoticeDismiss.
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss'**
+  String get guestNoticeDismiss;
+
+  /// No description provided for @guestWelcomeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Send it with someone already making the trip.'**
+  String get guestWelcomeTitle;
+
+  /// No description provided for @guestWelcomeBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Look around: these are real trips and parcels. You need an account only to post, carry, set alerts or report a review.'**
+  String get guestWelcomeBody;
+
+  /// No description provided for @guestHowItWorks.
+  ///
+  /// In en, this message translates to:
+  /// **'How Wassla works'**
+  String get guestHowItWorks;
+
+  /// No description provided for @guestAccountAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in or create an account'**
+  String get guestAccountAction;
+
+  /// No description provided for @guestDeliveriesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your deliveries appear here'**
+  String get guestDeliveriesTitle;
+
+  /// No description provided for @guestDeliveriesBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to follow the parcels you send and the ones you carry.'**
+  String get guestDeliveriesBody;
+
+  /// No description provided for @guestChatTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your conversations appear here'**
+  String get guestChatTitle;
+
+  /// No description provided for @guestChatBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat opens between a sender and a traveler once a delivery is paid for.'**
+  String get guestChatBody;
+
+  /// No description provided for @guestProfileTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'You are looking around as a guest'**
+  String get guestProfileTitle;
+
+  /// No description provided for @guestProfileBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Create an account to send a parcel or to carry one. It takes two minutes.'**
+  String get guestProfileBody;
+
+  /// No description provided for @guestSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get guestSettings;
+
+  /// No description provided for @socialContinueWithApple.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue with Apple'**
+  String get socialContinueWithApple;
+
+  /// No description provided for @socialContinueWithGoogle.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue with Google'**
+  String get socialContinueWithGoogle;
+
+  /// No description provided for @socialOr.
+  ///
+  /// In en, this message translates to:
+  /// **'or'**
+  String get socialOr;
+
+  /// No description provided for @socialGoogleFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn’t sign you in with Google. Try again.'**
+  String get socialGoogleFailed;
+
+  /// No description provided for @socialAppleFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn’t sign you in with Apple. Try again.'**
+  String get socialAppleFailed;
+
+  /// No description provided for @socialGoogleUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in with Google is not available right now.'**
+  String get socialGoogleUnavailable;
+
+  /// No description provided for @socialAppleUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in with Apple is not available right now.'**
+  String get socialAppleUnavailable;
+
+  /// No description provided for @socialAccountDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'This account is disabled. Contact support if you think this is a mistake.'**
+  String get socialAccountDisabled;
+
+  /// No description provided for @accountNameStamp.
+  ///
+  /// In en, this message translates to:
+  /// **'Almost there'**
+  String get accountNameStamp;
+
+  /// No description provided for @accountNameTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What should we call you?'**
+  String get accountNameTitle;
+
+  /// No description provided for @accountNameBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your account has no name yet. The people you send or carry with see it on your offers and deliveries.'**
+  String get accountNameBody;
+
+  /// No description provided for @accountNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Your name'**
+  String get accountNameLabel;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

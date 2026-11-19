@@ -17,10 +17,10 @@ The parts:
 | Flutter app (iOS, Android; `mobile/`) | What senders, travelers and recipients' links use. Tabs: Home, Deliveries, Chat, Profile; bell for notices. English, French, Arabic (right-to-left). Never decides money or status; it only shows what the server says. | Django over HTTPS; Go services over WebSocket |
 | Django monolith (`backend/monolith`) | The brain. All rules, money, deals, matching, verification, disputes, the admin console and the AI helper API. One codebase, many "apps" (next section). | PostgreSQL, Redis, object storage, Stripe, Chargily, email, push |
 | PostgreSQL 16 and Redis 7 | PostgreSQL is the one source of truth. Redis is a fast message bus (live events, push and email queues), not the truth: Django also saves every obligation in the database. | Django, Go |
-| Go services (`backend/services`) | `notification` (live updates and push), `chat` (live chat relay), `kyc` (ID photo upload), `email` (sends queued mail). If they are down Django still works. | Redis, PostgreSQL, object storage, Firebase, mail server |
+| Go services (`backend/services`) | `notification` (live updates and push), `chat` (live chat relay), `kyc` (ID photo upload), `email` (sends queued mail). If they are down Django still works. | Redis, PostgreSQL, object storage, Firebase, Sender.net |
 | Object storage (S3-compatible) | Private buckets for parcel photos, ticket proofs, dispute evidence, ID photos, payout evidence. | Django, Go kyc |
 | Stripe and Chargily | Stripe: EUR cards, refunds, EUR payouts (connected accounts). Chargily: Algerian card / Edahabia, shown in DZD converted by the server from EUR. | Django (calls and webhooks) |
-| Firebase push and email (SMTP) | Phone notices when the app is closed; verification, reset, invitation, delivery-code and status emails. Both ship switched off (server flags `FCM_ENABLED` and `EMAIL_ENABLED` default to false) until the operator turns them on. | Go notification and email; Django |
+| Firebase push and email (Sender.net API) | Phone notices when the app is closed; verification, reset, invitation, delivery-code and status emails. Both ship switched off (server flags `FCM_ENABLED` and `EMAIL_ENABLED` default to false) until the operator turns them on. | Go notification and email; Django |
 | Landing site (`web/`) | Static pages in en, fr, ar plus terms, privacy, prohibited items, support. No build step. | Served by a small web server inside the app unit, reached through the edge |
 | Admin console (`/admin/`, part of Django) | Staff pages: verification, deals, disputes, payments, payouts, settings, audit. Also the AI helper pages. | Django, only from approved office addresses |
 | Caddy edge | The only public door (ports 80 and 443). Adds HTTPS, hides internal routes. | App container |
@@ -51,7 +51,7 @@ ASCII diagram of the system (show this one in a code block):
           | (truth)   |     | (bus)   | |storage | | Chargily  |
           +-----------+     +---------+ |(files) | +-----------+
                                         +--------+
-        Out to phones: Firebase push.  Out to inboxes: email (SMTP).
+        Out to phones: Firebase push.  Out to inboxes: email (Sender.net).
 ```
 
 Same picture in mermaid:
@@ -73,14 +73,15 @@ flowchart LR
     Django --> Stripe[Stripe]
     Django --> Chargily[Chargily]
     Go --> FCM[Firebase push]
-    Go --> Mail[Email SMTP]
+    Go --> Mail[Email: Sender.net API]
+    Django --> Mail
 ```
 
 ## What are the Django apps and what does each own?
 One line per folder in `backend/monolith/apps`. A member never sees these names; staff see them only in "Technical records".
 | App | Owns |
 |---|---|
-| `accounts` | People: sign-up, sign-in, tokens, email codes, ban state, Google link |
+| `accounts` | People: sign-up, sign-in, tokens, email codes, ban state, Google and Apple links |
 | `core` | Shared plumbing: business settings, policy defaults, scheduling of events, health, languages, locks that keep money steps in order |
 | `kyc` | ID verification records (Go `kyc` takes uploads; Django stores and reviews) |
 | `trips` | Journeys and legs, ticket proofs, leg progress, schedule changes (the old single `Trip` is history) |

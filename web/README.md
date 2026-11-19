@@ -81,12 +81,14 @@ does not attach those headers or rewrite clean legal URLs.
 ## Email boundary
 
 The website only links to support mailboxes. Transactional email remains on
-the existing durable Django `OutboundMessage` outbox and Go email worker. A
-Sender.net account is configured as an SMTP relay (`smtp.sender.net`, TLS on
-587) through environment variables; no credentials belong in this tree. The
+the existing durable Django `OutboundMessage` outbox and Go email worker, sent
+through Sender.net's REST API from contact@wassla.eu (`infra/vps/EMAIL.md`).
+Its API token lives only in the deployment's secret file; no credentials belong
+in this tree. The
 outbox resolves a delivery code only while rendering the final recipient
 message from its sealed `secret_ref`; it never stores it in Redis, an event
 payload, logs or a notification row.
 
 Production deliverability still requires a verified sending domain with SPF,
-DKIM and DMARC, valid TLS, and a monitored Sender.net account.
+DKIM and DMARC, a monitored contact@wassla.eu mailbox, and a monitored
+Sender.net account.

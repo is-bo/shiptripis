@@ -7,13 +7,19 @@
 ///   separate widgets, so one failing, or one switched off, never blanks the
 ///   page, and a section scrolled far below the fold does not read until it is
 ///   near the screen.
-/// * **They are `autoDispose` and tied to the signed-in session.** A listing
-///   goes stale the moment the app is backgrounded, and the previous account's
-///   cards must never survive a sign-out. Watching [accountSessionProvider]
+/// * **They are `autoDispose` and tied to who is looking.** A listing goes
+///   stale the moment the app is backgrounded, and the previous account's
+///   cards must never survive a sign-out. The public reads (listings, people,
+///   a person, reviews) watch [discoveryAudienceProvider], a guest or one
+///   member's sign-in; the personal ones (matches, the own profile, alerts)
+///   watch [accountSessionProvider] and read nothing for a guest. A change
 ///   rebuilds each of them and cancels its read. A rebuild keeps the previous
-///   value in Riverpod, so every reader goes through
-///   [AccountScopedValue.ofCurrentAccount], which drops it; and signed out, no
-///   read starts at all.
+///   value in Riverpod, even past a failed read, so every value and failure
+///   is marked with whom it was read for and every reader goes through
+///   [AccountScopedValue.ofCurrentAccount], which drops a value that is not
+///   the current read's. A guest who signs
+///   in is the one exception: their cards stay while each read is asked again
+///   for the member, so the screen they signed in from stays as it was.
 /// * **Lists page on the server's own cursor.** [FeedController] sends the
 ///   `next_offset` it was given and nothing else, and drops a row it already
 ///   holds, so an item that moved between two pages cannot show twice.
@@ -32,20 +38,109 @@ import '../domain/find_travelers.dart' show TravelerRating;
 import '../domain/reviews.dart';
 import 'app_state.dart';
 
-/// A read that has nobody to ask for. Signed out there is no account to read
-/// on behalf of, so nothing is sent and nothing ever answers; the screens that
-/// showed these reads are gone by then.
+/// A read that has nobody to ask for: a personal read for a guest, or any
+/// read while the session is still being restored. Nothing is sent and
+/// nothing ever answers.
 Future<T> _signedOut<T>() => Completer<T>().future;
+
+/// Who the public discovery reads are for, as their cache identity: a guest,
+/// or one member's sign-in. Null while the session is being restored, when
+/// nothing is read.
+///
+/// A member's sign-in ending, or another beginning, gives a new identity, so
+/// nothing read for one viewer is shown to the next. A guest signing in keeps
+/// the guest's identity: [_watchAudience] re-reads each listing for the new
+/// member by refresh, so the cards and the screen under the account moment
+/// stay mounted while it happens.
+final discoveryAudienceProvider = NotifierProvider<DiscoveryAudience, Object?>(
+  DiscoveryAudience.new,
+);
+
+class DiscoveryAudience extends Notifier<Object?> {
+  Object? _audience;
+  AccountSession? _member;
+
+  @override
+  Object? build() {
+    final session = ref.watch(sessionProvider);
+    final previous = _member;
+    final member = _member = session is SessionSignedIn
+        ? (accountId: session.account.id, generation: session.generation)
+        : null;
+    final fromGuest = previous == null && _audience is _Guest;
+    return _audience = switch (session) {
+      SessionRestoring() => null,
+      SessionSignedOut() => fromGuest ? _audience : _Guest(),
+      SessionSignedIn() =>
+        fromGuest || (previous == member && _audience != null)
+            ? _audience
+            : member,
+    };
+  }
+}
+
+/// A guest's identity. Never const: each spell signed out is its own.
+class _Guest {}
+
+/// The audience of a public read, and a re-read when a guest signs in.
+Object? _watchAudience(Ref ref) {
+  ref.listen(accountSessionProvider, (previous, next) {
+    if (previous == null && next != null) ref.invalidateSelf();
+  });
+  return ref.watch(discoveryAudienceProvider);
+}
+
+/// Whom each discovery value and failure was read for: the audience of a
+/// public read, the account session of a personal one.
+final _readFor = Expando<Object>('discovery reader');
+
+/// [read], with its value or its failure marked as read for [reader].
+Future<T> _readAs<T extends Object>(Object reader, Future<T> read) async {
+  final T value;
+  try {
+    value = await read;
+  } catch (error) {
+    _mark(error, reader);
+    rethrow;
+  }
+  return _mark(value, reader);
+}
+
+/// Marks [target] as read for [reader]; returns it.
+T _mark<T>(T target, Object? reader) {
+  if (_markable(target)) _readFor[target!] = reader;
+  return target;
+}
+
+Object? _readerOf(Object? target) =>
+    _markable(target) ? _readFor[target!] : null;
+
+/// What an [Expando] can hold: no primitive, no record.
+bool _markable(Object? target) =>
+    target != null &&
+    target is! num &&
+    target is! String &&
+    target is! bool &&
+    target is! Record;
 
 /// What a discovery read holds for the account that is signed in now.
 extension AccountScopedValue<T> on AsyncValue<T> {
   /// Riverpod keeps the previous value while a provider rebuilds because a
-  /// dependency changed, and the dependency here is the signed-in account. That
-  /// value is the previous account's, so it is dropped: a card read for one
-  /// member is never shown to the next. A refresh by `invalidate` is not a
-  /// reload and keeps its value, which is what lets a failed pull to refresh
-  /// say "showing what we loaded earlier".
-  AsyncValue<T> get ofCurrentAccount => isReloading ? unwrapPrevious() : this;
+  /// dependency changed, and the dependency here is who is looking. That
+  /// value is the previous viewer's, so it is dropped: a card read for one
+  /// member is never shown to a guest or to the next member. It is dropped
+  /// too when that rebuild fails, since the failure keeps it as well: a value
+  /// read for someone else than the failed read was is never shown over the
+  /// failure. A refresh by `invalidate` reads for the same viewer and keeps
+  /// its value, which is what lets a failed pull to refresh say "showing what
+  /// we loaded earlier".
+  AsyncValue<T> get ofCurrentAccount {
+    if (isReloading) return unwrapPrevious();
+    if (hasError && hasValue && _readerOf(error) != _readerOf(value)) {
+      return AsyncError<T>(error!, stackTrace!);
+    }
+    return this;
+  }
 }
 
 /// How many cards a Home section shows before "See all".
@@ -58,57 +153,77 @@ const homePeoplePreviewCount = 10;
 
 final senderMatchesProvider =
     FutureProvider.autoDispose<MatchesForYou<SenderMatchGroup>>((ref) {
-      if (ref.watch(accountSessionProvider) == null) return _signedOut();
-      return ref
-          .watch(discoveryRepositoryProvider)
-          .senderMatches(cancelToken: cancelOnDispose(ref));
+      final account = ref.watch(accountSessionProvider);
+      if (account == null) return _signedOut();
+      return _readAs(
+        account,
+        ref
+            .watch(discoveryRepositoryProvider)
+            .senderMatches(cancelToken: cancelOnDispose(ref)),
+      );
     });
 
 final travelerMatchesProvider =
     FutureProvider.autoDispose<MatchesForYou<TravelerMatchGroup>>((ref) {
-      if (ref.watch(accountSessionProvider) == null) return _signedOut();
-      return ref
-          .watch(discoveryRepositoryProvider)
-          .travelerMatches(cancelToken: cancelOnDispose(ref));
+      final account = ref.watch(accountSessionProvider);
+      if (account == null) return _signedOut();
+      return _readAs(
+        account,
+        ref
+            .watch(discoveryRepositoryProvider)
+            .travelerMatches(cancelToken: cancelOnDispose(ref)),
+      );
     });
 
 /// "Trips leaving soon", optionally narrowed to one corridor.
 final previewTripsProvider = FutureProvider.autoDispose
     .family<DiscoveryPage<TripCard>, Corridor?>((ref, corridor) {
-      if (ref.watch(accountSessionProvider) == null) return _signedOut();
-      return ref
-          .watch(discoveryRepositoryProvider)
-          .trips(
-            filter: corridor?.filter ?? const BrowseFilter(),
-            limit: homeListingsPreviewCount,
-            cancelToken: cancelOnDispose(ref),
-          );
+      final audience = _watchAudience(ref);
+      if (audience == null) return _signedOut();
+      return _readAs(
+        audience,
+        ref
+            .watch(discoveryRepositoryProvider)
+            .trips(
+              filter: corridor?.filter ?? const BrowseFilter(),
+              limit: homeListingsPreviewCount,
+              cancelToken: cancelOnDispose(ref),
+            ),
+      );
     });
 
 /// "Parcels looking for a traveler", optionally narrowed to one corridor.
 final previewRequestsProvider = FutureProvider.autoDispose
     .family<DiscoveryPage<RequestCard>, Corridor?>((ref, corridor) {
-      if (ref.watch(accountSessionProvider) == null) return _signedOut();
-      return ref
-          .watch(discoveryRepositoryProvider)
-          .requests(
-            filter: corridor?.filter ?? const BrowseFilter(),
-            limit: homeListingsPreviewCount,
-            cancelToken: cancelOnDispose(ref),
-          );
+      final audience = _watchAudience(ref);
+      if (audience == null) return _signedOut();
+      return _readAs(
+        audience,
+        ref
+            .watch(discoveryRepositoryProvider)
+            .requests(
+              filter: corridor?.filter ?? const BrowseFilter(),
+              limit: homeListingsPreviewCount,
+              cancelToken: cancelOnDispose(ref),
+            ),
+      );
     });
 
 /// The People row. Keyed by the **viewer's** side: a sender sees travelers.
 final previewPeopleProvider = FutureProvider.autoDispose
     .family<DiscoveryPage<ProfileCard>, bool>((ref, viewerIsSender) {
-      if (ref.watch(accountSessionProvider) == null) return _signedOut();
-      return ref
-          .watch(discoveryRepositoryProvider)
-          .people(
-            viewerIsSender: viewerIsSender,
-            limit: homePeoplePreviewCount,
-            cancelToken: cancelOnDispose(ref),
-          );
+      final audience = _watchAudience(ref);
+      if (audience == null) return _signedOut();
+      return _readAs(
+        audience,
+        ref
+            .watch(discoveryRepositoryProvider)
+            .people(
+              viewerIsSender: viewerIsSender,
+              limit: homePeoplePreviewCount,
+              cancelToken: cancelOnDispose(ref),
+            ),
+      );
     });
 
 /// Drops every discovery read, so a pull to refresh re-reads each Home
@@ -137,10 +252,14 @@ void refreshDiscovery(WidgetRef ref) {
 class OwnProfileController extends AsyncNotifier<OwnProfile> {
   @override
   Future<OwnProfile> build() {
-    if (ref.watch(accountSessionProvider) == null) return _signedOut();
-    return ref
-        .watch(discoveryRepositoryProvider)
-        .ownProfile(cancelToken: cancelOnDispose(ref));
+    final account = ref.watch(accountSessionProvider);
+    if (account == null) return _signedOut();
+    return _readAs(
+      account,
+      ref
+          .watch(discoveryRepositoryProvider)
+          .ownProfile(cancelToken: cancelOnDispose(ref)),
+    );
   }
 
   /// Turns the profile on or off. Turning it on records consent on the server.
@@ -159,7 +278,7 @@ class OwnProfileController extends AsyncNotifier<OwnProfile> {
     Future<OwnProfile> Function(DiscoveryRepository repo) write,
   ) async {
     final next = await write(ref.read(discoveryRepositoryProvider));
-    state = AsyncData(next);
+    state = AsyncData(_mark(next, _readerOf(state.value)));
   }
 }
 
@@ -168,11 +287,19 @@ final ownProfileProvider =
       OwnProfileController.new,
     );
 
+/// The member's route alerts. A guest has none, and asks for none: their
+/// switch on a person's page reads "off" and turning it on asks for an
+/// account first.
 final routeAlertsProvider = FutureProvider.autoDispose<List<RouteAlert>>((ref) {
-  if (ref.watch(accountSessionProvider) == null) return _signedOut();
-  return ref
-      .watch(discoveryRepositoryProvider)
-      .alerts(cancelToken: cancelOnDispose(ref));
+  if (ref.watch(isGuestProvider)) return Future.value(const []);
+  final account = ref.watch(accountSessionProvider);
+  if (account == null) return _signedOut();
+  return _readAs(
+    account,
+    ref
+        .watch(discoveryRepositoryProvider)
+        .alerts(cancelToken: cancelOnDispose(ref)),
+  );
 });
 
 /// One person's public page.
@@ -180,10 +307,14 @@ final personProvider = FutureProvider.autoDispose.family<PersonLookup, String>((
   ref,
   id,
 ) {
-  if (ref.watch(accountSessionProvider) == null) return _signedOut();
-  return ref
-      .watch(discoveryRepositoryProvider)
-      .person(id, cancelToken: cancelOnDispose(ref));
+  final audience = _watchAudience(ref);
+  if (audience == null) return _signedOut();
+  return _readAs(
+    audience,
+    ref
+        .watch(discoveryRepositoryProvider)
+        .person(id, cancelToken: cancelOnDispose(ref)),
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -246,24 +377,34 @@ abstract class FeedController<T> extends AsyncNotifier<DiscoveryFeed<T>> {
   @override
   Future<DiscoveryFeed<T>> build() async {
     final generation = ++_generation;
-    final signedIn = ref.watch(accountSessionProvider) != null;
+    final audience = _watchAudience(ref);
     ref.onDispose(() {
       _generation++;
       _more?.cancel();
     });
-    if (!signedIn) return _signedOut();
-    final page = await fetch(
-      ref.watch(discoveryRepositoryProvider),
-      0,
-      cancelOnDispose(ref),
+    if (audience == null) return _signedOut();
+    return _readAs(
+      audience,
+      _firstPage(ref.watch(discoveryRepositoryProvider), generation),
     );
-    if (generation != _generation) throw const _SupersededRead();
+  }
+
+  Future<DiscoveryFeed<T>> _firstPage(
+    DiscoveryRepository repo,
+    int generation,
+  ) async {
+    final page = await fetch(repo, 0, cancelOnDispose(ref));
+    if (generation != _generation) throw _SupersededRead();
     return DiscoveryFeed(
       items: page.results,
       nextOffset: page.nextOffset,
       disabled: page.isDisabled,
     );
   }
+
+  /// [next] in place of [current], read for the same viewer.
+  void _replace(DiscoveryFeed<T> current, DiscoveryFeed<T> next) =>
+      state = AsyncData(_mark(next, _readerOf(current)));
 
   /// Reads the next page. A no-op while one is in flight, when the server said
   /// there is nothing more, or before the first page landed.
@@ -274,7 +415,7 @@ abstract class FeedController<T> extends AsyncNotifier<DiscoveryFeed<T>> {
     final generation = _generation;
     _more?.cancel();
     final cancel = _more = CancelToken();
-    state = AsyncData(current.copyWith(loadingMore: true, clearError: true));
+    _replace(current, current.copyWith(loadingMore: true, clearError: true));
     try {
       final page = await fetch(
         ref.read(discoveryRepositoryProvider),
@@ -283,7 +424,8 @@ abstract class FeedController<T> extends AsyncNotifier<DiscoveryFeed<T>> {
       );
       if (generation != _generation) return;
       final seen = {for (final item in current.items) keyOf(item)};
-      state = AsyncData(
+      _replace(
+        current,
         current.copyWith(
           items: [
             ...current.items,
@@ -297,15 +439,17 @@ abstract class FeedController<T> extends AsyncNotifier<DiscoveryFeed<T>> {
       );
     } on Object catch (error) {
       if (generation != _generation) return;
-      state = AsyncData(
+      _replace(
+        current,
         current.copyWith(loadingMore: false, loadMoreError: error),
       );
     }
   }
 }
 
+/// Not const: each is marked with whom its read was for.
 class _SupersededRead implements Exception {
-  const _SupersededRead();
+  _SupersededRead();
 }
 
 class TripFeedController extends FeedController<TripCard> {
@@ -409,7 +553,8 @@ class ReviewsFeedController extends FeedController<PublicReview> {
   void markReported(int ratingId, MyReport report) {
     final current = state.value;
     if (current == null) return;
-    state = AsyncData(
+    _replace(
+      current,
       current.copyWith(
         items: [
           for (final review in current.items)

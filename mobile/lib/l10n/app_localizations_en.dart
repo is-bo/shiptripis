@@ -185,7 +185,7 @@ class LEn extends L {
 
   @override
   String validationTooLong(int max) {
-    return 'Keep this under $max characters';
+    return 'Use at most $max characters';
   }
 
   @override
@@ -3255,33 +3255,7 @@ class LEn extends L {
   String get disputeEvidenceFileRequiredBody => 'Choose a file first.';
 
   @override
-  String get onboardingEyebrow => 'Welcome';
-
-  @override
-  String get onboardingHeadline =>
-      'Send anything,\nthe travelers\ndo the rest.';
-
-  @override
-  String get onboardingBody =>
-      'A peer-to-peer corridor between Algeria and France. Travelers carry, senders save, and the money is held until it arrives.';
-
-  @override
   String get onboardingStamp => 'EST. 2026 · ALG ↔ FR';
-
-  @override
-  String get onboardingTrust => 'ID verified · Payment held · Priced in euros';
-
-  @override
-  String get onboardingRouteFrom => 'ALGIERS';
-
-  @override
-  String get onboardingRouteTo => 'PARIS';
-
-  @override
-  String get onboardingRouteMeta => 'DIRECT · 2H 25M';
-
-  @override
-  String get benefitsSkip => 'Skip';
 
   @override
   String benefitsIndex(int current, int total) {
@@ -3383,9 +3357,6 @@ class LEn extends L {
   @override
   String get authVerifySubhead =>
       'Enter the six-digit code we emailed you. It\'s the last step.';
-
-  @override
-  String get onboardingGetStartedShort => 'Get started';
 
   @override
   String get requestItemPhoto => 'Photo of the item';
@@ -6116,4 +6087,170 @@ class LEn extends L {
 
   @override
   String get profileRating => 'Rating';
+
+  @override
+  String get accountGateStamp => 'Your Wassla account';
+
+  @override
+  String get accountGateEmail => 'Continue with email';
+
+  @override
+  String get accountGateHaveAccount => 'I already have an account';
+
+  @override
+  String get accountReasonPostRequestTitle =>
+      'Create your account\nto send your parcel.';
+
+  @override
+  String get accountReasonPostRequestBody =>
+      'Travelers see who is sending. Your payment is held, and the traveler is paid 48 hours after delivery.';
+
+  @override
+  String get accountReasonPostTripTitle =>
+      'Create your account\nto post your trip.';
+
+  @override
+  String get accountReasonPostTripBody =>
+      'Senders choose travelers they can trust: your account holds your ID check and your reviews.';
+
+  @override
+  String get accountReasonCarryTitle =>
+      'Create your account\nto carry this parcel.';
+
+  @override
+  String get accountReasonCarryBody =>
+      'The sender sees who offers to carry it. You are paid into your account 48 hours after delivery.';
+
+  @override
+  String get accountReasonAlertTitle =>
+      'Create your account\nto get route alerts.';
+
+  @override
+  String get accountReasonAlertBody =>
+      'We tell you when a trip or a parcel matches this route.';
+
+  @override
+  String get accountReasonReportTitle =>
+      'Create your account\nto report a review.';
+
+  @override
+  String get accountReasonReportBody =>
+      'Reports come from members, so we can look into them with you.';
+
+  @override
+  String get accountReasonDeliveriesTitle =>
+      'Create your account\nto follow deliveries.';
+
+  @override
+  String get accountReasonDeliveriesBody =>
+      'The parcels you send and the ones you carry all appear in one place.';
+
+  @override
+  String get accountReasonChatTitle => 'Create your account\nto chat.';
+
+  @override
+  String get accountReasonChatBody =>
+      'Chat opens between a sender and a traveler once a delivery is paid for.';
+
+  @override
+  String get accountReasonNotificationsTitle =>
+      'Create your account\nto get notifications.';
+
+  @override
+  String get accountReasonNotificationsBody =>
+      'Offers, messages and delivery updates reach you here.';
+
+  @override
+  String get accountReasonGenericTitle =>
+      'Create your account\nto get started.';
+
+  @override
+  String get accountReasonGenericBody =>
+      'Send a parcel, or carry one on a trip you are already making.';
+
+  @override
+  String get guestSignedOutNotice => 'You were signed out. Sign in again.';
+
+  @override
+  String get guestNoticeDismiss => 'Dismiss';
+
+  @override
+  String get guestWelcomeTitle =>
+      'Send it with someone already making the trip.';
+
+  @override
+  String get guestWelcomeBody =>
+      'Look around: these are real trips and parcels. You need an account only to post, carry, set alerts or report a review.';
+
+  @override
+  String get guestHowItWorks => 'How Wassla works';
+
+  @override
+  String get guestAccountAction => 'Sign in or create an account';
+
+  @override
+  String get guestDeliveriesTitle => 'Your deliveries appear here';
+
+  @override
+  String get guestDeliveriesBody =>
+      'Sign in to follow the parcels you send and the ones you carry.';
+
+  @override
+  String get guestChatTitle => 'Your conversations appear here';
+
+  @override
+  String get guestChatBody =>
+      'Chat opens between a sender and a traveler once a delivery is paid for.';
+
+  @override
+  String get guestProfileTitle => 'You are looking around as a guest';
+
+  @override
+  String get guestProfileBody =>
+      'Create an account to send a parcel or to carry one. It takes two minutes.';
+
+  @override
+  String get guestSettings => 'Settings';
+
+  @override
+  String get socialContinueWithApple => 'Continue with Apple';
+
+  @override
+  String get socialContinueWithGoogle => 'Continue with Google';
+
+  @override
+  String get socialOr => 'or';
+
+  @override
+  String get socialGoogleFailed =>
+      'We couldn’t sign you in with Google. Try again.';
+
+  @override
+  String get socialAppleFailed =>
+      'We couldn’t sign you in with Apple. Try again.';
+
+  @override
+  String get socialGoogleUnavailable =>
+      'Sign in with Google is not available right now.';
+
+  @override
+  String get socialAppleUnavailable =>
+      'Sign in with Apple is not available right now.';
+
+  @override
+  String get socialAccountDisabled =>
+      'This account is disabled. Contact support if you think this is a mistake.';
+
+  @override
+  String get accountNameStamp => 'Almost there';
+
+  @override
+  String get accountNameTitle => 'What should we call you?';
+
+  @override
+  String get accountNameBody =>
+      'Your account has no name yet. The people you send or carry with see it on your offers and deliveries.';
+
+  @override
+  String get accountNameLabel => 'Your name';
 }

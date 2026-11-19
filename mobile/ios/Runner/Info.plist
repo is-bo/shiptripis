@@ -29,6 +29,23 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<!-- Sign in with Google: the URL scheme Google returns to, made from
+	     GOOGLE_IOS_CLIENT_PREFIX in ios/Flutter/SocialSignIn.xcconfig. The
+	     client id itself reaches GoogleSignIn from the app at run time (the
+	     GOOGLE_IOS_CLIENT_ID define, checked against the prefix by the
+	     "Check sign-in settings" build phase), so no GIDClientID is listed
+	     and an unconfigured build has no usable id. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.$(GOOGLE_IOS_CLIENT_PREFIX)</string>
+			</array>
+		</dict>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

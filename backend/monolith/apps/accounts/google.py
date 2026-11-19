@@ -6,7 +6,10 @@ public keys and check the `aud` claim is one of our configured client IDs.
 
 Returns the verified payload (with `sub`, `email`, `name`, ...) on success;
 raises `GoogleAuthError` on any verification failure, and
-`GoogleAuthUnavailable` when Google's signing keys cannot be fetched.
+`GoogleAuthUnavailable` when no client id is configured on this server or
+Google's signing keys cannot be fetched. Every message is fixed text: none
+carries the token, a claim or the library's own error text, and nothing here
+logs.
 """
 from __future__ import annotations
 
@@ -23,13 +26,15 @@ from google.oauth2 import id_token
 #: hold every slot for two minutes.
 CERTS_TIMEOUT_SECONDS = (3.05, 5.0)
 
+_INVALID = "The Google ID token is not valid."
+
 
 class GoogleAuthError(Exception):
     pass
 
 
 class GoogleAuthUnavailable(Exception):
-    """Google's certificate endpoint could not be reached in time."""
+    """Not configured here, or Google's certificate endpoint was not reached in time."""
 
 
 class _BoundedRequest(google_requests.Request):
@@ -62,7 +67,7 @@ def _transport() -> _BoundedRequest:
 
 def verify_id_token(token: str) -> dict:
     if not settings.GOOGLE_OAUTH_CLIENT_IDS:
-        raise GoogleAuthError("Google OAuth not configured on server")
+        raise GoogleAuthUnavailable("Sign in with Google is not available right now.")
 
     try:
         payload = id_token.verify_oauth2_token(
@@ -71,18 +76,20 @@ def verify_id_token(token: str) -> dict:
             audience=None,
         )
     except google_exceptions.TransportError as exc:
-        raise GoogleAuthUnavailable("Google sign-in is temporarily unavailable.") from exc
+        raise GoogleAuthUnavailable("Sign in with Google is temporarily unavailable.") from exc
     except ValueError as exc:
-        raise GoogleAuthError(f"invalid token: {exc}") from exc
+        # google-auth's text can quote the token's claims or segments, so it
+        # stays on the chained exception and never reaches the client.
+        raise GoogleAuthError(_INVALID) from exc
 
     aud = payload.get("aud")
     if aud not in settings.GOOGLE_OAUTH_CLIENT_IDS:
-        raise GoogleAuthError("token audience not accepted")
+        raise GoogleAuthError("The Google ID token is not for this app.")
 
     iss = payload.get("iss")
     if iss not in {"https://accounts.google.com", "accounts.google.com"}:
-        raise GoogleAuthError("token issuer not accepted")
+        raise GoogleAuthError("The Google ID token was not issued by Google.")
     if payload.get("email_verified") is not True:
-        raise GoogleAuthError("Google account email is not verified")
+        raise GoogleAuthError("Google account email is not verified.")
 
     return payload

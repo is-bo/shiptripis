@@ -10,7 +10,7 @@ Wording below is quoted from the app's English strings. The app also exists in F
 - Notifications are not a tab. They are the bell in the top bar of the tab screens ("Notifications", with the unread count). Inside: "Mark all as read". Empty state: "Nothing new / Offers, payments and delivery updates show up here."
 - Traveler "My journeys" and the parcels being carried are in the same Deliveries tab. There is no separate My Trips tab.
 - Task screens (post a parcel, pay, enter a code, open a dispute) open full screen above the tab bar.
-- Signed-out users land on a welcome screen with "Create an account" / "Sign in". An expired session sends the user to the sign-in screen ("Please sign in again").
+- Signed-out users land on the normal Home as a guest and can look around; the first account-only action opens the account screen (Continue with Apple or Google when set up, Continue with email, I already have an account). See accounts-and-verification.md, "How does browsing without an account work?". An expired session on a private screen sends the user to the sign-in screen ("Please sign in again"); on a public screen they stay a guest.
 - A guest payment link (`/guest/pay/...`) works without an account.
 <!-- src: mobile/lib/app/router.dart, mobile/lib/features/shell/app_shell.dart -->
 
@@ -115,7 +115,7 @@ Home > "Send a parcel" (or Deliveries > Sending section). Four steps: **Route**,
 ## How do pickup and delivery codes work in the app?
 - **Pickup**: the sender taps "Pickup" > "Show pickup code" and says it in person ("Don't send this code in a message."). The traveler taps "Pickup", enters the "Pickup code" and "Confirm pickup". Result: "Pickup confirmed / You're carrying this parcel now."
 - **Delivery code**: locked for 30 minutes after pickup ("Available in {countdown}", "For safety, the delivery code stays locked for 30 minutes after pickup. The recipient hasn't been emailed yet either."). After that Wassla emails the code to the recipient and the sender can "Show delivery code". The traveler is never shown it: "Only the recipient has this code. Ask them for it when you arrive." The traveler taps "Delivery", enters "Delivery code", "Confirm delivery". Result: "Delivery confirmed / Thank you. Your payout is being prepared."
-- Code length is 8 characters (Crockford base32) by default. The welcome screen caption says "Handover code" and names no number, because the length is an admin setting. 5 wrong attempts then a 15 minute lockout, up to 3 lockouts, 12 attempts per hour (seeded settings, handover section).
+- Code length is 8 characters (Crockford base32) by default. The app names no number in its wording, because the length is an admin setting. 5 wrong attempts then a 15 minute lockout, up to 3 lockouts, 12 attempts per hour (seeded settings, handover section).
 - Wrong code: "That code isn't right", "{n} attempts left". Locked: "Too many wrong attempts / Try again {when}." "Get a new code" (confirm "Issue a new code? The code you already shared will stop working immediately.") is for the sender only: the pickup code can be replaced before pickup (deal funded or ready for pickup), the delivery code only after the 30-minute lock and before delivery is confirmed.
 - If the sender has not added the recipient: "The sender hasn't added the recipient yet. Ask them to do that, then try the code again."
 - Chat shows "Never send a pickup or delivery code in chat."

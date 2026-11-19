@@ -44,7 +44,12 @@ before initial startup. Optional features remain disabled unless explicitly supp
 | `FINANCE_JOB_INTERVAL_SECONDS` | Single durable finance/lifecycle/outbox loop interval; 30 seconds. |
 | `GRPC_AUTH_MODE` | `bearer` over container loopback for retained combined topology. mTLS is already supported by the application for a future split. |
 | `GRPC_ALLOW_PRIVATE_BEARER` | Explicit `true` opt-in required by existing production safeguards. Token below is dedicated. |
-| `GOOGLE_OAUTH_CLIENT_IDS` | Optional owner-verified OAuth audience list; leave empty until configured. |
+| `GOOGLE_OAUTH_CLIENT_IDS` | Comma-separated Google OAuth client ids a Google ID token may name as its audience (list the Web client id the app is built with as `GOOGLE_SERVER_CLIENT_ID`, which Android tokens name, and the iOS client id, which an iPhone token can name depending on the version of Google's library; the Android client id is not needed). Empty keeps Sign in with Google off: `POST /api/auth/oauth/google` answers 503 `google_sign_in_unavailable`. |
+| `APPLE_SIGN_IN_CLIENT_IDS` | Comma-separated audiences accepted for Sign in with Apple: the iOS app's bundle id. Empty keeps Sign in with Apple off: `POST /api/auth/oauth/apple` answers 503 `apple_sign_in_unavailable`. Apple's signing keys are fetched from `https://appleid.apple.com/auth/keys`; no Apple secret is needed. |
+| `DRF_DISCOVERY_GUEST_THROTTLE_RATE` | Requests per address for a guest (no account) on the public discovery and geography reads; `300/min`. Mobile carriers put hundreds of people behind one IPv4 address, so this bucket replaces the shared `anon` rate there and is roomy. Members are never counted on it. |
+| `DRF_MATCHING_DISCOVERY_THROTTLE_RATE` | Discovery and Find Travelers reads per member; `60/min` (Home alone makes two to four). |
+| `DRF_REGISTRATION_THROTTLE_RATE` | Email sign-ups per address; `30/hour`. Each sign-up still needs a new email address and an unconfirmed account cannot post. |
+| `DRF_GOOGLE_SIGNIN_THROTTLE_RATE`, `DRF_APPLE_SIGNIN_THROTTLE_RATE` | Provider sign-ins per address; `30/min` each. Password sign-in (`DRF_LOGIN_THROTTLE_RATE`, `10/min`) stays tight: it is the only bound on password guessing. |
 | `LOG_LEVEL` | Go structured log level; `info` initially. |
 | `PERFORMANCE_ACCESS_LOG_ENABLED` | `true` to retain safe route-template/status/timing logs. |
 | `PERFORMANCE_DB_METRICS_ENABLED` | Optional query timing, initially `false` to avoid overhead. |
@@ -95,29 +100,28 @@ reachability and provider lifecycle policy are V3 verification items.
 | `STRIPE_CONNECT_ALLOWED_COUNTRIES` | Empty until reviewed TEST onboarding evidence, within existing application country ceiling. |
 | `STRIPE_CONNECT_PLATFORM_ACCOUNT_ID` | Owner-verified platform account; blank while disabled. |
 | `STRIPE_CONNECT_ONBOARDING_RETURN_URL`, `STRIPE_CONNECT_ONBOARDING_REFRESH_URL` | Distinct HTTPS URLs on public origin; blank while disabled. |
-| `EMAIL_ENABLED` | `false` by default; no V2 activation. |
-| `EMAIL_ACTIVATION_APPROVED` | `false`; independent VPS approval latch for eventual V3 activation. |
-| `EMAIL_ACTIVATION_NOT_BEFORE` | Empty while disabled. At V3 activation set an ISO timestamp with timezone; older rows require explicit review. |
-| `EMAIL_PROVIDER` | `sender_net`, using the existing SMTP interface. |
-| `EMAIL_USE_TLS` | `true` prepared for V2; no SMTP activation. |
-| `EMAIL_SENDING_DOMAIN_VERIFIED` | `false` until V2/V3 domain evidence. |
-| `EMAIL_SMTP_HOST` | `smtp.sender.net`, inert while disabled. |
-| `EMAIL_FROM_ADDR`, `EMAIL_SUPPORT_ADDR`, `EMAIL_REPLY_TO` | Blank; owner supplies verified-domain identities and a monitored support inbox. |
-| `EMAIL_SMTP_PORT` | Prepared default 587, inert. |
-| `EMAIL_SMTP_TIMEOUT_SECONDS` | 10, valid range 1–10; both senders bound SMTP connections. |
-| `EMAIL_RATE_LIMIT_PER_MINUTE` | 60 initially, valid 1–600; calibrate against the actual Sender account limit in V3. |
-| `EMAIL_FROM_NAME` | `Waçla` presentation name for eventual sending. |
+| `EMAIL_ENABLED` | `false` by default; set `true` only at the owner-approved activation. |
+| `EMAIL_ACTIVATION_APPROVED` | `false`; independent VPS approval latch for activation. |
+| `EMAIL_ACTIVATION_NOT_BEFORE` | Empty while disabled. At activation set an ISO timestamp with timezone; older rows require explicit review. |
+| `EMAIL_PROVIDER` | `sender_net`: Sender.net's REST API, with the token from `app.json`. No `EMAIL_SMTP_*` settings: production refuses an SMTP host with `sender_net`. |
+| `EMAIL_SENDING_DOMAIN_VERIFIED` | `false` until `wassla.eu` is verified in Sender. |
+| `EMAIL_FROM_ADDR`, `EMAIL_SUPPORT_ADDR` | `contact@wassla.eu` (a blank value means the same). It must be a monitored mailbox: Sender sends, it does not receive. |
+| `EMAIL_REPLY_TO` | Blank: replies go to the support address. |
+| `EMAIL_TIMEOUT_SECONDS` | 10, valid range 1–10; bounds one send on either provider. |
+| `EMAIL_RATE_LIMIT_PER_MINUTE` | 60 initially, valid 1–600; calibrate against the Sender account's limit. |
+| `EMAIL_FROM_NAME` | `Wassla`. |
 | `FRONTEND_BASE_URL` | Future HTTPS hosted origin; does not change mobile API origin. |
 | `FCM_ENABLED` | `false` initially. V3 must match server/mobile Firebase projects before enabling. |
 | `FCM_PROJECT_ID` | Optional actual Firebase project; blank while off. |
 
-V2 prepares the existing SMTP path while keeping both activation switches off.
-The mounted `app.json` secret allowlist now accepts `EMAIL_SMTP_USERNAME` and
-`EMAIL_SMTP_PASSWORD`; leave them empty in V2. Never place them in `stack.env`,
-images or Git. Follow [the email runbook](EMAIL.md) for backlog review, domain
-authentication, mailbox configuration and eventual V3 activation. Existing
-financial/provider guards remain enforced. Configuration validation needs no
-external provider call.
+Email ships with both activation switches off. The mounted `app.json` secret
+allowlist accepts `SENDER_NET_API_TOKEN` (and, for the generic `smtp` provider
+only, `EMAIL_SMTP_USERNAME` and `EMAIL_SMTP_PASSWORD`); leave the token empty
+until activation. Never place it in `stack.env`, images or Git. Follow
+[the email runbook](EMAIL.md) for the token, backlog review, domain
+authentication, the contact mailbox and activation. Existing financial/provider
+guards remain enforced. Configuration validation needs no external provider
+call.
 
 ## Secrets and generation
 
@@ -142,6 +146,7 @@ payment/payout encryption secrets from Go services and internal gateway children
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Optional matching TEST platform credential/signing pair; omit while inactive. Never LIVE. |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Optional distinct Connect destination signature secret, not platform webhook secret. |
 | `CHARGILY_SECRET_KEY`, `CHARGILY_WEBHOOK_SECRET` | Optional TEST key; webhook override must follow existing signing contract. |
+| `SENDER_NET_API_TOKEN` | Sender.net API token (Sender: Account settings, API access tokens); empty until email activation. Reaches Django and the Go email service only; the launcher withholds it from the other Go services and the gateway. |
 | `FCM_CREDENTIALS_JSON_BASE64` | Optional base64 service-account JSON from correct Firebase project; existing helper materializes private file under `/tmp`, drops payload before children. Never commit/download into public paths. |
 | `postgres-password` | ≥64 hex characters in host file; shared by PostgreSQL and app. Choose before database initialization. Changing file alone does not rotate the existing database role. |
 | `redis-password` | ≥64 hex characters; shared by Redis and runtime-derived URL. Rotation requires coordinated restart/client handling. |

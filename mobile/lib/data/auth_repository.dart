@@ -63,24 +63,38 @@ class AuthRepository {
     expectedIdentityGeneration: expectedIdentityGeneration,
   );
 
-  /// [preferredLanguage] is used only when Google creates a fresh account; the
-  /// server ignores it for an account that already exists, so a returning user
-  /// keeps whatever they chose.
+  /// [preferredLanguage] is used only when the sign-in creates a fresh
+  /// account; the server ignores it for an account that already exists, so a
+  /// returning user keeps whatever they chose.
   Future<Account> signInWithGoogle({
     required String idToken,
-    String? phone,
-    String? wilaya,
-    CommunicationLanguage? preferredLanguage,
+    required CommunicationLanguage preferredLanguage,
     int? expectedIdentityGeneration,
   }) async => _authenticate(
     await _api.postObject(
       '/api/auth/oauth/google',
+      body: {'id_token': idToken, 'preferred_language': preferredLanguage.wire},
+    ),
+    expectedIdentityGeneration: expectedIdentityGeneration,
+  );
+
+  /// [nonce] is the raw nonce whose SHA-256 Apple put in [identityToken].
+  /// [fullName] is the name Apple gave with its first authorization, or
+  /// `''`; the server uses it for a new account, or one whose name is empty.
+  Future<Account> signInWithApple({
+    required String identityToken,
+    required String nonce,
+    required String fullName,
+    required CommunicationLanguage preferredLanguage,
+    int? expectedIdentityGeneration,
+  }) async => _authenticate(
+    await _api.postObject(
+      '/api/auth/oauth/apple',
       body: {
-        'id_token': idToken,
-        if (phone != null && phone.isNotEmpty) 'phone': phone,
-        if (wilaya != null && wilaya.isNotEmpty) 'wilaya': wilaya,
-        if (preferredLanguage != null)
-          'preferred_language': preferredLanguage.wire,
+        'identity_token': identityToken,
+        'nonce': nonce,
+        if (fullName.isNotEmpty) 'full_name': fullName,
+        'preferred_language': preferredLanguage.wire,
       },
     ),
     expectedIdentityGeneration: expectedIdentityGeneration,
@@ -96,17 +110,24 @@ class AuthRepository {
     await _api.getObject('/api/me', share: true, fresh: fresh),
   );
 
-  /// The one writable field on the profile contract.
+  /// The profile's writable fields.
   ///
-  /// `PATCH /api/me` accepts `preferred_language` and nothing else, and answers
-  /// with the whole profile — so the caller replaces its `Account` from the
-  /// response rather than patching a local copy and hoping the two agree.
-  Future<Account> updatePreferredLanguage(
-    CommunicationLanguage language,
-  ) async => Account.fromJson(
+  /// `PATCH /api/me` accepts `preferred_language` at any time, and
+  /// `full_name` only while the account has no name (a social sign-in that
+  /// gave none); otherwise it answers `name_already_set`. It answers with the
+  /// whole profile, so the caller replaces its `Account` from the response
+  /// rather than patching a local copy and hoping the two agree.
+  Future<Account> updateProfile({
+    CommunicationLanguage? preferredLanguage,
+    String? fullName,
+  }) async => Account.fromJson(
     await _api.patchObject(
       '/api/me',
-      body: {'preferred_language': language.wire},
+      body: {
+        if (preferredLanguage != null)
+          'preferred_language': preferredLanguage.wire,
+        if (fullName != null) 'full_name': fullName.trim(),
+      },
     ),
   );
 
@@ -114,8 +135,15 @@ class AuthRepository {
   ///
   /// Local clearing happens regardless of the network result: a user who taps
   /// sign out on a train must actually be signed out on the device.
-  Future<void> signOut() async {
-    final signOutIdentity = _tokens.invalidateIdentity();
+  ///
+  /// [expectedIdentityGeneration] is the identity the caller already ended
+  /// the login with; given it, the sign-out ends nothing a second time, so a
+  /// guest read sent since is not cancelled. Without it, the sign-out ends
+  /// the login itself.
+  Future<void> signOut({int? expectedIdentityGeneration}) async {
+    final signOutIdentity =
+        expectedIdentityGeneration ?? _tokens.invalidateIdentity();
+    if (_tokens.identityGeneration != signOutIdentity) return;
     final refresh = await _tokens.readRefresh();
     if (_tokens.identityGeneration != signOutIdentity) return;
     if (refresh != null) {

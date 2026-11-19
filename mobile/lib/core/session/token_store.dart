@@ -49,6 +49,12 @@ class TokenStore {
   /// retaining the bytes long enough for best-effort server sign-out.
   int invalidateIdentity() => ++_identityGeneration;
 
+  /// True while nobody is signed in: requests then go without a bearer, even
+  /// while the previous member's bytes are still stored for the server
+  /// sign-out. Set by the session the moment it turns signed out, so a guest's
+  /// first read never carries the member's token.
+  bool bearerWithheld = false;
+
   static const _kAccess = 'auth.access';
   static const _kRefresh = 'auth.refresh';
   static const _kRoleContext = 'app.role_context';

@@ -1,6 +1,6 @@
 // Package email is the Go-side transactional-email service. Django renders
 // ordinary subject/body alternatives and XADDs a transport hint onto
-// `email:send`. Secret-bearing mail stays in Django's trusted SMTP boundary.
+// `email:send`. Secret-bearing mail stays in Django's trusted send boundary.
 // PostgreSQL OutboundMessage remains the obligation store for both paths.
 //
 // Why a durable stream (not pub/sub): Django's redis_bus.publish_after_commit
@@ -9,9 +9,10 @@
 // dead end. The stream (capped MAXLEN ~ 10000, per CLAUDE.md §G1) buffers
 // across a brief consumer outage and replays on reconnect.
 //
-// Scope boundary: this service is a pure SMTP transport. It NEVER owns email
-// copy, templates, or i18n — those stay in Django next to the product logic.
-// The payload arrives fully rendered.
+// Scope boundary: this service is a pure transport, over Sender.net's REST API
+// (EMAIL_PROVIDER=sender_net, sender_net.go) or SMTP (EMAIL_PROVIDER=smtp,
+// smtp_sender.go). It NEVER owns email copy, templates, or i18n — those stay
+// in Django next to the product logic. The payload arrives fully rendered.
 package email
 
 import (
@@ -22,26 +23,27 @@ import (
 	"log/slog"
 )
 
-// EmailSender is the swap point for the real SMTP backend. Mirrors the
-// notification service's FCMSender seam: cmd/email injects a concrete
-// smtpSender in production; tests inject a fake; LogOnlySender is the
+// EmailSender is the swap point for the real provider. Mirrors the
+// notification service's FCMSender seam: cmd/email injects senderNetSender or
+// smtpSender by EMAIL_PROVIDER; tests inject a fake; LogOnlySender is the
 // pre-config / dev stub.
 type EmailSender interface {
 	Send(ctx context.Context, p EmailPayload) error
 }
 
 // PermanentError marks a send failure that retrying the same stream entry
-// cannot fix: the SMTP server answered with a 5xx reply, or the message could
-// not be built at all. The consumer acks such an entry instead of leaving it
+// cannot fix: the SMTP server answered with a 5xx reply, Sender.net's API
+// answered 400 or 422, or the message could not be built at all. The consumer acks such an entry instead of leaving it
 // for the sweeper, which would otherwise resend it every ~60-90s for as long
 // as the stream holds it. Django's OutboundMessage keeps its own bounded
 // attempt budget and re-enqueues or fails the obligation, so the durable
 // retry policy stays in one place.
 type PermanentError struct {
 	Err error
-	// Code is the SMTP reply code, or 0 when the message never reached the
-	// server. The smtpSender wraps a SendFailure here, whose text is log-safe;
-	// callers still log SendFailureLogAttrs rather than the error.
+	// Code is the SMTP reply code or the HTTP status, or 0 when the message
+	// never reached the provider. The senders wrap a SendFailure or a
+	// SenderNetFailure here, whose text is log-safe; callers still log
+	// SendFailureLogAttrs rather than the error.
 	Code int
 }
 
@@ -72,7 +74,7 @@ type EmailPayload struct {
 	HTML string `json:"html,omitempty"`
 	// Kind identifies the Django notification template and is used only for
 	// log/metric labels. Go does not branch sending behaviour on it (all kinds
-	// are the same SMTP send).
+	// are the same provider send).
 	Kind string `json:"kind,omitempty"`
 }
 
@@ -120,9 +122,8 @@ func stringField(values map[string]any, key string) string {
 
 // LogOnlySender is the dev / pre-config stub. Logs the would-be send and
 // returns nil so the consumer flow can be exercised end-to-end without a real
-// SMTP server (mirrors notification.LogOnlySender). cmd/email installs it when
-// EMAIL_ENABLED is false; swap for the real smtpSender by passing a different
-// Sender to NewConsumer.
+// provider (mirrors notification.LogOnlySender). NewConsumer installs it when
+// ConsumerConfig.Sender is nil; cmd/email passes the real sender.
 type LogOnlySender struct {
 	Log *slog.Logger
 }

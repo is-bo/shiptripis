@@ -19,7 +19,9 @@ import '../../app/router.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/session/session.dart';
 import '../../domain/communication_language.dart';
+import 'account_gate.dart';
 import 'auth_header.dart';
+import 'social_sign_in_buttons.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/forms.dart';
 import '../../design/components/primitives.dart';
@@ -29,7 +31,9 @@ import '../../design/tokens.dart';
 import '../../l10n/app_localizations.dart';
 
 class SignUpScreen extends ConsumerStatefulWidget {
-  const SignUpScreen({super.key});
+  const SignUpScreen({this.flow = AccountFlow.none, super.key});
+
+  final AccountFlow flow;
 
   @override
   ConsumerState<SignUpScreen> createState() => _SignUpScreenState();
@@ -86,10 +90,14 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
       if (!mounted) return;
       // The account exists but is unverified, and the server has already sent
       // a code. Taking the user straight there is the difference between an
-      // email they act on and one they find a week later.
+      // email they act on and one they find a week later. Inside the account
+      // moment, confirming (or leaving) that screen ends the flow.
       context.pushNamed(
         Routes.verifyEmail,
-        queryParameters: {'email': _email.text.trim()},
+        queryParameters: {
+          ...widget.flow.parameters,
+          'email': _email.text.trim(),
+        },
       );
     } on ApiException catch (error) {
       if (!mounted) return;
@@ -128,6 +136,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                 ),
                 const SizedBox(height: AppSpace.lg),
               ],
+              SocialSignInButtons(flow: widget.flow, showOrDivider: true),
               AppTextField(
                 label: l.authFullName,
                 controller: _fullName,
@@ -198,7 +207,10 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
             AppButton(
               label: l.authHaveAccount,
               variant: AppButtonVariant.tertiary,
-              onPressed: () => context.pushReplacementNamed(Routes.signIn),
+              onPressed: () => context.pushReplacementNamed(
+                Routes.signIn,
+                queryParameters: widget.flow.parameters,
+              ),
             ),
           ],
         ),

@@ -24,7 +24,7 @@ are superseded. The L2A ``/api/discovery/*`` tiers are not modelled yet: no
 screen calls them until L2B puts them on Home.
 
 Populations: senders 60 %, travelers 38 %, operators 2 %. Think time is 2-8 s
-between screens. Per-user endpoint throttles (matching discovery 10/min, chat
+between screens. Per-user endpoint throttles (matching discovery 60/min, chat
 send 60/min) stay at production values; task weights keep one user inside them,
 so a 429 here is a real error. Relative screen frequencies are an assumption
 (there is no production analytics yet), anchored on the screen structure: the

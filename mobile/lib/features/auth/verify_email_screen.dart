@@ -20,12 +20,22 @@ import '../../design/components/status.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../l10n/app_localizations.dart';
+import 'account_gate.dart';
 import 'auth_header.dart';
 
 class VerifyEmailScreen extends ConsumerStatefulWidget {
-  const VerifyEmailScreen({required this.email, super.key});
+  const VerifyEmailScreen({
+    required this.email,
+    this.flow = AccountFlow.none,
+    super.key,
+  });
 
   final String email;
+
+  /// Inside the account moment the account already exists: confirming the
+  /// address, or leaving this screen, ends the flow and lets the action
+  /// that opened it go ahead.
+  final AccountFlow flow;
 
   @override
   ConsumerState<VerifyEmailScreen> createState() => _VerifyEmailScreenState();
@@ -88,6 +98,10 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
       await ref.read(sessionProvider.notifier).refreshAccount();
       if (!mounted) return;
       AppSnack.success(context, l.authVerifyDone);
+      if (widget.flow.active) {
+        finishSignIn(context, widget.flow);
+        return;
+      }
       // `true` tells whoever sent the person here that the email is confirmed.
       context.pop(true);
     } on ApiException catch (error) {
@@ -107,52 +121,59 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
     final l = L.of(context);
     final c = context.colors;
 
-    return DismissKeyboardOnTap(
-      child: AppScaffold(
-        body: ListView(
-          padding: AppScrollPadding.pageWithFooter(context, top: AppSpace.md),
-          children: [
-            AuthHeader(
-              stamp: l.authVerifyStamp,
-              headline: l.authVerifyEmailTitle,
-              subhead: l.authVerifySubhead,
-              stampColor: context.colors.brandInk,
-            ),
-            InfoNotice(
-              message: l.authVerifyEmailBody(_email),
-              tone: StatusTone.progress,
-              icon: Icons.mark_email_read_outlined,
-            ),
-            const SizedBox(height: AppSpace.xl),
-            CodeEntryField(
-              controller: _code,
-              label: l.authResetCodeLabel,
-              length: 6,
-              errorText: _error,
-              enabled: !_busy,
-              onSubmitted: (_) => _submit(),
-            ),
-            const SizedBox(height: AppSpace.md),
-            Text(
-              l.authVerifyNoCode,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: c.textTertiary),
-            ),
-            const SizedBox(height: AppSpace.md),
-            AppButton(
-              label: l.authVerifyResend,
-              icon: Icons.refresh_rounded,
-              variant: AppButtonVariant.tertiary,
-              isLoading: _resending,
-              onPressed: _busy ? null : _resend,
-            ),
-          ],
-        ),
-        footer: AppButton(
-          label: l.actionConfirm,
-          isLoading: _busy,
-          onPressed: _submit,
+    return PopScope(
+      canPop: !widget.flow.active,
+      onPopInvokedWithResult: (didPop, _) {
+        // The account exists already: leaving is the end of its sign-in.
+        if (!didPop) finishSignIn(context, widget.flow);
+      },
+      child: DismissKeyboardOnTap(
+        child: AppScaffold(
+          body: ListView(
+            padding: AppScrollPadding.pageWithFooter(context, top: AppSpace.md),
+            children: [
+              AuthHeader(
+                stamp: l.authVerifyStamp,
+                headline: l.authVerifyEmailTitle,
+                subhead: l.authVerifySubhead,
+                stampColor: context.colors.brandInk,
+              ),
+              InfoNotice(
+                message: l.authVerifyEmailBody(_email),
+                tone: StatusTone.progress,
+                icon: Icons.mark_email_read_outlined,
+              ),
+              const SizedBox(height: AppSpace.xl),
+              CodeEntryField(
+                controller: _code,
+                label: l.authResetCodeLabel,
+                length: 6,
+                errorText: _error,
+                enabled: !_busy,
+                onSubmitted: (_) => _submit(),
+              ),
+              const SizedBox(height: AppSpace.md),
+              Text(
+                l.authVerifyNoCode,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: c.textTertiary),
+              ),
+              const SizedBox(height: AppSpace.md),
+              AppButton(
+                label: l.authVerifyResend,
+                icon: Icons.refresh_rounded,
+                variant: AppButtonVariant.tertiary,
+                isLoading: _resending,
+                onPressed: _busy ? null : _resend,
+              ),
+            ],
+          ),
+          footer: AppButton(
+            label: l.actionConfirm,
+            isLoading: _busy,
+            onPressed: _submit,
+          ),
         ),
       ),
     );

@@ -200,8 +200,15 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon": env.str("DRF_ANON_THROTTLE_RATE", default="60/min"),
         "user": env.str("DRF_USER_THROTTLE_RATE", default="600/min"),
+        # Per member. Home alone makes two to four discovery reads.
         "matching_discovery": env.str(
-            "DRF_MATCHING_DISCOVERY_THROTTLE_RATE", default="10/min"
+            "DRF_MATCHING_DISCOVERY_THROTTLE_RATE", default="60/min"
+        ),
+        # Per address, for a guest browsing the public reads (discovery and
+        # geography) only. Mobile carriers put hundreds of people behind one
+        # IPv4 address, so this bucket is roomy (`apps.core.throttles`).
+        "discovery_guest": env.str(
+            "DRF_DISCOVERY_GUEST_THROTTLE_RATE", default="300/min"
         ),
         "journey_routes": env.str("DRF_JOURNEY_ROUTES_THROTTLE_RATE", default="10/min"),
         # A guest link is an unauthenticated capability, so the surface that
@@ -230,7 +237,12 @@ REST_FRAMEWORK = {
         ),
         # Authentication and capability endpoints are deliberately scoped
         # rather than sharing the broad anonymous/user defaults.
-        "registration": env.str("DRF_REGISTRATION_THROTTLE_RATE", default="5/hour"),
+        # Per address. Many people share one address behind a mobile
+        # carrier's NAT; each sign-up still needs a new email address, which
+        # gets one confirmation email, and an unconfirmed account cannot post.
+        "registration": env.str("DRF_REGISTRATION_THROTTLE_RATE", default="30/hour"),
+        # Per address, and the only bound on password guessing (there is no
+        # per-account lockout), so it stays tight.
         "login": env.str("DRF_LOGIN_THROTTLE_RATE", default="10/min"),
         "password_reset": env.str(
             "DRF_PASSWORD_RESET_THROTTLE_RATE", default="5/hour"
@@ -246,8 +258,13 @@ REST_FRAMEWORK = {
         "support_contact": env.str(
             "DRF_SUPPORT_CONTACT_THROTTLE_RATE", default="30/min"
         ),
+        # Per address. A provider sign-in needs a token the provider signed,
+        # so there is nothing to guess; the bound only stops a flood.
         "google_signin": env.str(
-            "DRF_GOOGLE_SIGNIN_THROTTLE_RATE", default="10/min"
+            "DRF_GOOGLE_SIGNIN_THROTTLE_RATE", default="30/min"
+        ),
+        "apple_signin": env.str(
+            "DRF_APPLE_SIGNIN_THROTTLE_RATE", default="30/min"
         ),
         "media_upload": env.str("DRF_MEDIA_UPLOAD_THROTTLE_RATE", default="20/hour"),
         "chat_message": env.str("DRF_CHAT_MESSAGE_THROTTLE_RATE", default="60/min"),
@@ -279,8 +296,18 @@ SIMPLE_JWT = {
     "BLACKLIST_AFTER_ROTATION": True,
 }
 
-# --- Google OAuth ---
-GOOGLE_OAUTH_CLIENT_IDS = env.list("GOOGLE_OAUTH_CLIENT_IDS", default=[])
+# --- Sign in with Google and Apple ---
+# Each list is the `aud` a provider's token must name; an empty list switches
+# that provider off (its endpoint answers 503 `<provider>_sign_in_unavailable`).
+# Comma-separated; spaces around an id are dropped.
+def _client_ids(name: str) -> list[str]:
+    return [value.strip() for value in env.list(name, default=[]) if value.strip()]
+
+
+# Google: every OAuth client id a Google ID token may name as its audience.
+GOOGLE_OAUTH_CLIENT_IDS = _client_ids("GOOGLE_OAUTH_CLIENT_IDS")
+# Apple: the iOS app's bundle id, which is the `aud` of its identity tokens.
+APPLE_SIGN_IN_CLIENT_IDS = _client_ids("APPLE_SIGN_IN_CLIENT_IDS")
 
 # --- Password reset ---
 PASSWORD_RESET_CODE_TTL_SECONDS = env.int(
@@ -298,29 +325,40 @@ EMAIL_VERIFY_MAX_ATTEMPTS = env.int("EMAIL_VERIFY_MAX_ATTEMPTS", default=5)
 
 # --- Email ---
 # Transactional obligations live in PostgreSQL. Ordinary rendered mail uses the
-# `email:send` stream and Go SMTP worker; secret-bearing verification, reset,
-# invitation and delivery-code messages use Django's trusted final SMTP adapter
-# so plaintext never enters Redis. DEFAULT_FROM_EMAIL applies to both paths.
-DEFAULT_FROM_EMAIL = env.str(
-    "DEFAULT_FROM_EMAIL", default="Wassla <noreply@example.invalid>"
-)
+# `email:send` stream and the Go email worker; secret-bearing verification,
+# reset, invitation and delivery-code messages use Django's trusted email
+# backend so plaintext never enters Redis. Both send through the provider that
+# `EMAIL_PROVIDER` names: `sender_net` (Sender.net's REST API, the production
+# provider) or `smtp` (any SMTP relay; MailHog in local development).
+TRANSACTIONAL_EMAIL_ENABLED = env.bool("EMAIL_ENABLED", default=False)
+TRANSACTIONAL_EMAIL_PROVIDER = env.str("EMAIL_PROVIDER", default="smtp").strip().lower()
+# The one Wassla address: From, Reply-To and support (the app's "Contact
+# support" and every email footer). A blank value means this default.
+WASSLA_CONTACT_ADDRESS = "contact@wassla.eu"
 # Public links and support identity used by transactional templates. These are
-# intentionally non-secret; SMTP/API credentials remain in the email worker's
-# environment and are never exposed to request handlers.
+# intentionally non-secret; provider credentials are injected from the
+# deployment's secret file and are never exposed to request handlers.
 FRONTEND_BASE_URL = env.str("FRONTEND_BASE_URL", default="")
-EMAIL_SUPPORT_ADDR = env.str("EMAIL_SUPPORT_ADDR", default="")
+EMAIL_SUPPORT_ADDR = (
+    env.str("EMAIL_SUPPORT_ADDR", default="").strip() or WASSLA_CONTACT_ADDRESS
+)
 EMAIL_REPLY_TO = env.str("EMAIL_REPLY_TO", default="").strip() or EMAIL_SUPPORT_ADDR
 EMAIL_FROM_NAME = env.str("EMAIL_FROM_NAME", default="Wassla").strip() or "Wassla"
-EMAIL_FROM_ADDR = env.str("EMAIL_FROM_ADDR", default="")
-if EMAIL_FROM_ADDR:
-    from email.utils import formataddr
-    DEFAULT_FROM_EMAIL = formataddr((EMAIL_FROM_NAME, EMAIL_FROM_ADDR))
+EMAIL_FROM_ADDR = env.str("EMAIL_FROM_ADDR", default="").strip() or WASSLA_CONTACT_ADDRESS
+from email.utils import formataddr  # noqa: E402
+
+DEFAULT_FROM_EMAIL = formataddr((EMAIL_FROM_NAME, EMAIL_FROM_ADDR))
+# Sender.net API token (`EMAIL_PROVIDER=sender_net`). A secret: only in the
+# mounted secret file, never in `stack.env`, images, logs or Git.
+SENDER_NET_API_TOKEN = env.str("SENDER_NET_API_TOKEN", default="").strip()
+# SMTP relay (`EMAIL_PROVIDER=smtp`).
 EMAIL_HOST = env.str("EMAIL_SMTP_HOST", default="")
 EMAIL_PORT = env.int("EMAIL_SMTP_PORT", default=587)
 EMAIL_HOST_USER = env.str("EMAIL_SMTP_USERNAME", default="")
 EMAIL_HOST_PASSWORD = env.str("EMAIL_SMTP_PASSWORD", default="")
 EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
-EMAIL_TIMEOUT = env.int("EMAIL_SMTP_TIMEOUT_SECONDS", default=10)
+# Bounds both providers: the SMTP socket and the API's connect and read.
+EMAIL_TIMEOUT = env.int("EMAIL_TIMEOUT_SECONDS", default=10)
 EMAIL_RATE_LIMIT_PER_MINUTE = env.int("EMAIL_RATE_LIMIT_PER_MINUTE", default=60)
 from django.utils.dateparse import parse_datetime  # noqa: E402
 _email_cutoff = env.str("EMAIL_ACTIVATION_NOT_BEFORE", default="")
@@ -331,8 +369,6 @@ if _email_cutoff and (
     raise RuntimeError("EMAIL_ACTIVATION_NOT_BEFORE must be an ISO timestamp with timezone.")
 if not 1 <= EMAIL_TIMEOUT <= 10 or not 1 <= EMAIL_RATE_LIMIT_PER_MINUTE <= 600:
     raise RuntimeError("Email timeout must be 1..10 seconds and rate must be 1..600 per minute.")
-TRANSACTIONAL_EMAIL_ENABLED = env.bool("EMAIL_ENABLED", default=False)
-TRANSACTIONAL_EMAIL_PROVIDER = env.str("EMAIL_PROVIDER", default="smtp").lower()
 # Separate encryption root for short-lived OTP/invitation delivery copies.
 # When unset, the outbox derives a key from SECRET_KEY; production deployments
 # should provide a rotated, dedicated secret instead.

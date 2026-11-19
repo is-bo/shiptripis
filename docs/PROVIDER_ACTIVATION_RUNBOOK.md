@@ -239,32 +239,42 @@ Rollback switch: disable Chargily for new checkouts via a new settings version. 
 
 ## Sender.net
 
+Wassla sends through Sender.net's REST API (`EMAIL_PROVIDER=sender_net`); the
+full procedure, failure classes and backlog review are in
+[`infra/vps/EMAIL.md`](../infra/vps/EMAIL.md).
+
 Environment placeholders:
 
 ```text
 EMAIL_ENABLED=true
+EMAIL_ACTIVATION_APPROVED=true
 EMAIL_PROVIDER=sender_net
-EMAIL_SMTP_HOST=<Sender.net supplied SMTP host>
-EMAIL_SMTP_PORT=587
-EMAIL_USE_TLS=true
-EMAIL_SMTP_USERNAME=<secret-manager reference>
-EMAIL_SMTP_PASSWORD=<secret-manager reference>
-EMAIL_FROM_ADDR=noreply@<verified-domain>
-EMAIL_FROM_NAME=ShipTrip
-DEFAULT_FROM_EMAIL=ShipTrip <noreply@<verified-domain>>
-EMAIL_SUPPORT_ADDR=support@<verified-domain>
+EMAIL_FROM_ADDR=contact@wassla.eu
+EMAIL_FROM_NAME=Wassla
+EMAIL_SUPPORT_ADDR=contact@wassla.eu
+EMAIL_REPLY_TO=
+EMAIL_TIMEOUT_SECONDS=10
 FRONTEND_BASE_URL=https://<PUBLIC-WEB-ORIGIN>
-TRANSACTIONAL_EMAIL_SECRET=<dedicated 32+-character secret>
 EMAIL_SENDING_DOMAIN_VERIFIED=true
+EMAIL_ACTIVATION_NOT_BEFORE=<UTC timestamp chosen at activation>
 ```
+
+Secret file (`secrets/app.json`) only:
+
+```text
+SENDER_NET_API_TOKEN=<Sender.net API token>
+TRANSACTIONAL_EMAIL_SECRET=<dedicated 32+-character secret>
+```
+
+No `EMAIL_SMTP_*` settings: production refuses an SMTP host with `sender_net`.
 
 Activation sequence:
 
-1. Verify the exact sending domain and From address in Sender.net.
+1. Verify the domain `wassla.eu` in Sender.net, and confirm contact@wassla.eu is a monitored mailbox at the mailbox provider (Sender sends, it does not receive).
 2. Publish and validate SPF and DKIM records. Publish a DMARC record in monitoring mode first, assign a monitored aggregate-report mailbox, then tighten policy only after reviewing legitimate traffic.
-3. Store credentials in the deployment secret store. Never use a personal mailbox password.
-4. With `EMAIL_ENABLED=false`, deploy the configuration except credentials flag and confirm the durable outbox remains visible and no external mail is sent.
-5. Add credentials/domain-verification flag and enable email in one approved deployment. Production rejects an enabled, unverified or incomplete configuration.
+3. Create the API token in Sender.net and store it only as `SENDER_NET_API_TOKEN` in the mounted secret file.
+4. With `EMAIL_ENABLED=false`, deploy the configuration except the activation flags and confirm the durable outbox remains visible and no external mail is sent.
+5. Add the domain-verification flag and enable email in one approved deployment. Production rejects an enabled, unverified or incomplete configuration (a missing or malformed token included).
 6. Send a non-secret transactional test to controlled EN/FR/AR mailboxes; verify subject/body, links, From/Reply handling, SPF/DKIM/DMARC results, delivery, bounce visibility, and no PII in provider metadata.
 7. Test email verification, password reset, and admin invitation. Confirm plaintext capabilities never enter Redis/logs and are invalid after use/expiry.
 8. Fund a controlled Deal and test the recipient delivery-code email after the 30-minute buffer. Confirm the traveler cannot retrieve it, the message is backed by `OutboundMessage`/`ScheduledJob`, and retries do not issue a second code.

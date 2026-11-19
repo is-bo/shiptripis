@@ -45,8 +45,23 @@ Only the three `discovery` keys are read in L2A. The rest are read by the packag
 
 ## 2. Common rules for every endpoint
 
-- Authenticated (`IsAuthenticated`), throttled with the existing `user` rate and the existing
-  `matching_discovery` scope. No new throttle setting.
+- **Who may call** (changed by package EGS on 2026-11-18, plan `docs/WASSLA_EMAIL_GUEST_SOCIAL_PLAN.md`
+  decision 10; L2A shipped every endpoint authenticated):
+  - **Public reads, open to a guest** (`AllowAny`): `GET /api/discovery/trips`,
+    `GET /api/discovery/requests`, `GET /api/discovery/people`, `GET /api/discovery/people/<uuid>`,
+    `GET /api/discovery/people/<uuid>/reviews` and `GET /api/discovery/trips/<id>/reviews` (both added
+    by L13A). A guest gets the same allowlisted cards and the same disabled states as a member; nothing
+    is left out of a guest's lists (a member's own trips, requests and profile are left out of theirs).
+    A review's `my_report` is always `null` for a guest, and a guest has only the public path to a
+    trip's reviews: a guest sending `request=` is answered `404 trip_not_found`, as an unknown trip.
+    A member who sends a token is authenticated as before; an invalid or expired token answers `401`.
+  - **Member endpoints** (`IsAuthenticated`, `401` without an account): matches, "I can carry this",
+    the own profile and alerts.
+- A member is throttled per member on the `matching_discovery` scope (`DRF_MATCHING_DISCOVERY_THROTTLE_RATE`,
+  60 a minute) and the `user` rate. A guest is counted by address on the `discovery_guest` scope only
+  (`DRF_DISCOVERY_GUEST_THROTTLE_RATE`, 300 a minute), shared with the geography reads a guest uses
+  (countries, place search, sea crossings), never on the `anon` rate: mobile carriers put hundreds of
+  people behind one IPv4 address (plan EGS, backend review; `apps/core/throttles.py`).
 - Every switch is read from the active policy on each request; nothing is cached.
 - A tier that is switched off answers **HTTP 200** with `{"state": "disabled", "results": [], "next_offset": null}`
   (the person page answers `{"state": "disabled"}`).
@@ -90,8 +105,8 @@ Query: `origin_country`, `destination_country`, `origin_place_id`, `destination_
 
 A journey is listed when all of these hold: it is discoverable (`trips.lifecycle.discoverable`), schema
 version 2 or later; the traveler is active, not banned, with a current approved KYC; no FLIGHT leg lacks
-an approved ticket proof; no leg still ahead is full; it has a leg still ahead; it is not the caller's.
-Order: soonest next departure, then id.
+an approved ticket proof; no leg still ahead is full; it has a leg still ahead; it is not the calling
+member's. Order: soonest next departure, then id.
 
 Route filters follow direction: the pickup is the origin of a leg that has not departed (after
 `departing_after` when given), and the drop-off is the destination of that leg or a later one. Without
@@ -120,7 +135,7 @@ The pro badge and business name (L6A) and the listed price (L4A) are added by th
 
 Same query. A request is listed when it is a schema-3 delivery request, `open`, not targeted at a
 traveler, its deadline and ready window have not passed, it has a weight, it has no active deal, its
-sender is active and not banned, and it is not the caller's. Order: newest first, then id.
+sender is active and not banned, and it is not the calling member's. Order: newest first, then id.
 `departing_after` keeps requests whose ready window ends on or after it.
 
 Request card: `request_id`, `sender {"display_name"}`, `pickup`, `delivery`, `title`, `category`,
@@ -149,7 +164,7 @@ depend on the traveler's time zone): `429 interest_daily_cap_reached`. Listings 
 `origin_place_id`, `destination_place_id`, `limit`, `offset`.
 
 Listed: profiles the member turned on, not hidden by staff, of active and not banned members, never the
-caller. A traveler is a member with a journey published in the last 365 days or a usual route; a sender
+calling member. A traveler is a member with a journey published in the last 365 days or a usual route; a sender
 likewise with a request created in the last 365 days (not awaiting deposit). With a route, a person is
 on it through a usual route or through those recent items. Order: most recent activity or consent first.
 

@@ -234,6 +234,7 @@ jobs:
       DRF_ANON_THROTTLE_RATE: 10000/min
       DRF_USER_THROTTLE_RATE: 10000/min
       DRF_MATCHING_DISCOVERY_THROTTLE_RATE: 10000/min
+      DRF_DISCOVERY_GUEST_THROTTLE_RATE: 10000/min
       DRF_JOURNEY_ROUTES_THROTTLE_RATE: 10000/min
       DRF_GUEST_PAYMENT_THROTTLE_RATE: 10000/min
       DRF_PAYMENT_CHECKOUT_THROTTLE_RATE: 10000/min
@@ -248,6 +249,7 @@ jobs:
       DRF_EMAIL_VERIFY_RESEND_THROTTLE_RATE: 10000/min
       DRF_SUPPORT_CONTACT_THROTTLE_RATE: 10000/min
       DRF_GOOGLE_SIGNIN_THROTTLE_RATE: 10000/min
+      DRF_APPLE_SIGNIN_THROTTLE_RATE: 10000/min
       DRF_MEDIA_UPLOAD_THROTTLE_RATE: 10000/min
       DRF_CHAT_MESSAGE_THROTTLE_RATE: 10000/min
       DRF_ADMIN_INVITATION_THROTTLE_RATE: 10000/min
@@ -382,6 +384,9 @@ jobs:
 
       - name: Static routes, links, and CSP compatibility
         run: python tools/check_static_web.py
+
+      - name: iOS sign-in configuration parses and carries no value
+        run: python tools/check_ios_config.py
 
       - uses: actions/setup-node@v4
         with:
