@@ -564,6 +564,13 @@ class _AuthInterceptor extends Interceptor {
       if (identityGeneration != _tokens.identityGeneration) {
         return handler.reject(sessionChanged(options));
       }
+      // Signed out, a read is a guest's. Only the sign-out call itself still
+      // speaks for the member who is leaving: the server needs to know whose
+      // refresh token it blacklists.
+      if (_tokens.bearerWithheld && !_isSignOut(options.path)) {
+        options.extra[_sentAsGuest] = true;
+        return handler.next(options);
+      }
       final access = await _tokens.readAccess();
       if (identityGeneration != _tokens.identityGeneration) {
         return handler.reject(sessionChanged(options));
@@ -572,6 +579,10 @@ class _AuthInterceptor extends Interceptor {
     }
     handler.next(options);
   }
+
+  static const _sentAsGuest = 'st.sent_as_guest';
+
+  static bool _isSignOut(String path) => path.contains('/api/auth/sign-out');
 
   @override
   Future<void> onResponse(
@@ -582,8 +593,10 @@ class _AuthInterceptor extends Interceptor {
     final shouldRefresh =
         response.statusCode == 401 &&
         !_isAuthEndpoint(request.path) &&
-        !request.path.contains('/api/auth/sign-out') &&
+        !_isSignOut(request.path) &&
         !_isGuestEndpoint(request.path) &&
+        // A guest has no session for a 401 to end, and nothing to refresh.
+        request.extra[_sentAsGuest] != true &&
         request.extra['st.retried'] != true;
 
     if (!shouldRefresh) return handler.next(response);
@@ -613,11 +626,7 @@ class _AuthInterceptor extends Interceptor {
       return handler.next(response);
     }
     if (refresh == null) {
-      // A request sent without a bearer is a guest's: its 401 ends no
-      // session, and clearing storage would only drop the guest's choices.
-      if (request.headers.containsKey('Authorization')) {
-        await _endSession(expectedIdentityGeneration: requestIdentity);
-      }
+      await _endSession(expectedIdentityGeneration: requestIdentity);
       return handler.next(response);
     }
 

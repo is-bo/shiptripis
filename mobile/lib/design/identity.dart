@@ -457,56 +457,55 @@ class PostageStamp extends StatelessWidget {
                 color: c.brand,
                 border: Border.all(color: c.seal, width: 1.4),
               ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // One line, shrunk to the stamp's face: "PAR AVION" or
-                  // "EMBARQUEMENT" wrapped at a large text size and pushed
-                  // the plane off the stamp.
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 3),
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        label.toUpperCase(),
-                        maxLines: 1,
-                        style: AppTypography.monoLabel(
-                          context,
-                          color: c.sealSoft,
-                          size: 9,
-                          tracking: 1.6,
+              // The face is a fixed size, as on a real stamp: at a large text
+              // size, or with a long label ("EMBARQUEMENT"), its print shrinks
+              // to fit rather than spilling off the stamp.
+              padding: const EdgeInsets.all(3),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label.toUpperCase(),
+                      maxLines: 1,
+                      style: AppTypography.monoLabel(
+                        context,
+                        color: c.sealSoft,
+                        size: 9,
+                        tracking: 1.6,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Container(
+                      width: width * 0.37,
+                      height: width * 0.37,
+                      decoration: BoxDecoration(
+                        color: c.accent,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: c.seal, width: 1.4),
+                      ),
+                      child: Center(
+                        child: Icon(
+                          Icons.airplanemode_active,
+                          size: width * 0.18,
+                          color: c.onAccent,
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Container(
-                    width: width * 0.37,
-                    height: width * 0.37,
-                    decoration: BoxDecoration(
-                      color: c.accent,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: c.seal, width: 1.4),
-                    ),
-                    child: Center(
-                      child: Icon(
-                        Icons.airplanemode_active,
-                        size: width * 0.18,
-                        color: c.onAccent,
+                    const SizedBox(height: 4),
+                    Text(
+                      denomination,
+                      maxLines: 1,
+                      style: AppTypography.monoLabel(
+                        context,
+                        color: c.sealSoft,
+                        size: 8,
+                        tracking: 1.2,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    denomination,
-                    style: AppTypography.monoLabel(
-                      context,
-                      color: c.sealSoft,
-                      size: 8,
-                      tracking: 1.2,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

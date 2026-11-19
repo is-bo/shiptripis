@@ -188,6 +188,7 @@ class SessionController extends Notifier<SessionState> {
     // value nothing had yet produced. The splash's retry re-enters the same
     // method.
     ref.onDispose(() => _revalidation?.cancel());
+    listenSelf((_, next) => _tokens.bearerWithheld = next is SessionSignedOut);
     unawaited(restore());
     return const SessionRestoring();
   }

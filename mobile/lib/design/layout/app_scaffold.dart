@@ -143,9 +143,8 @@ class AppScaffold extends StatelessWidget {
     // owns the status-bar inset for ordinary screens; routes without an
     // app bar (auth, the account screen, How Wassla works and splash) have
     // nothing else to protect their first row, so they opt in here. A route
-    // that
-    // deliberately paints behind its app bar also receives the top inset in
-    // its body, as promised by [extendBodyBehindTopBar].
+    // that deliberately paints behind its app bar also receives the top inset
+    // in its body, as promised by [extendBodyBehindTopBar].
     //
     // A footer owns its own bottom SafeArea. Screens without one consume the
     // bottom inset here so static content and non-scrolling surfaces cannot

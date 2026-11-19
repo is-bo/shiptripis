@@ -6115,13 +6115,6 @@ class LAr extends L {
       'نعلموك كي تكون رحلة ولا طرد على هذا المسار.';
 
   @override
-  String get accountReasonProposeTitle => 'أنشئ حسابك\nباش تبعث عرض.';
-
-  @override
-  String get accountReasonProposeBody =>
-      'العروض والمحادثة والدفع كلها تتم في حسابك.';
-
-  @override
   String get accountReasonReportTitle => 'أنشئ حسابك\nباش تبلّغ على تقييم.';
 
   @override

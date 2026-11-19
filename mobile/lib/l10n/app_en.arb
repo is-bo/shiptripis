@@ -3211,8 +3211,6 @@
   "accountReasonCarryBody": "The sender sees who offers to carry it, and your payout goes to your account after delivery.",
   "accountReasonAlertTitle": "Create your account\nto get route alerts.",
   "accountReasonAlertBody": "We tell you when a trip or a parcel matches this route.",
-  "accountReasonProposeTitle": "Create your account\nto send an offer.",
-  "accountReasonProposeBody": "Offers, chat and payment all happen inside your account.",
   "accountReasonReportTitle": "Create your account\nto report a review.",
   "accountReasonReportBody": "Reports come from members, so we can look into them with you.",
   "accountReasonDeliveriesTitle": "Create your account\nto follow deliveries.",

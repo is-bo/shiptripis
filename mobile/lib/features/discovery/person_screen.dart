@@ -257,13 +257,13 @@ class _RouteAlertRow extends ConsumerStatefulWidget {
 class _RouteAlertRowState extends ConsumerState<_RouteAlertRow> {
   bool _busy = false;
 
-  RouteAlert? _existing(List<RouteAlert> alerts) {
+  RouteAlert? _existing(List<RouteAlert> alerts, AlertWatch watches) {
     final route = widget.route;
     return alerts
         .where(
           (a) =>
               a.subjectProfileId == widget.profileId &&
-              a.watches == widget.watches &&
+              a.watches == watches &&
               a.origin.placeId == route.origin.placeId &&
               a.destination.placeId == route.destination.placeId,
         )
@@ -273,6 +273,10 @@ class _RouteAlertRowState extends ConsumerState<_RouteAlertRow> {
   Future<void> _toggle(bool on, RouteAlert? existing) async {
     final l = L.of(context);
     final wasGuest = ref.read(isGuestProvider);
+    // The side the person asked from. Signing in can move the page to the
+    // account's own side; the alert they asked for is still this one, and the
+    // server decides whether the account may hold it.
+    final watches = widget.watches;
     if (!await ensureAccount(context, AccountReason.alert) || !mounted) return;
     setState(() => _busy = true);
     try {
@@ -280,11 +284,14 @@ class _RouteAlertRowState extends ConsumerState<_RouteAlertRow> {
       var current = existing;
       if (wasGuest) {
         // Signed in just now: the member may already watch this route.
-        current = _existing(await ref.read(routeAlertsProvider.future));
+        current = _existing(
+          await ref.read(routeAlertsProvider.future),
+          watches,
+        );
       }
       if (on && current == null) {
         await repo.createAlert(
-          watches: widget.watches,
+          watches: watches,
           originPlaceId: widget.route.origin.placeId,
           destinationPlaceId: widget.route.destination.placeId,
           subjectProfileId: widget.profileId,
@@ -314,7 +321,9 @@ class _RouteAlertRowState extends ConsumerState<_RouteAlertRow> {
     final c = context.colors;
     final text = Theme.of(context).textTheme;
     final alerts = ref.watch(routeAlertsProvider).ofCurrentAccount;
-    final existing = alerts.hasValue ? _existing(alerts.requireValue) : null;
+    final existing = alerts.hasValue
+        ? _existing(alerts.requireValue, widget.watches)
+        : null;
     final stops = placeStops([widget.route.origin, widget.route.destination]);
 
     return Padding(

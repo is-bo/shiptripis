@@ -66,11 +66,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       await ref
           .read(sessionProvider.notifier)
           .signIn(email: _email.text, password: _password.text);
-      // On its own, the router's redirect takes over from here. Inside the
-      // account moment, the flow closes and the guest's action goes ahead.
-      if (mounted && widget.flow.active) {
-        completeAccountFlow(context, widget.flow);
-      }
+      if (mounted) finishSignIn(context, widget.flow);
     } on ApiException catch (error) {
       if (!mounted) return;
       setState(() {

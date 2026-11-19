@@ -1760,8 +1760,6 @@
   "accountReasonCarryBody": "L’expéditeur voit qui propose de le transporter, et votre paiement arrive sur votre compte après la livraison.",
   "accountReasonAlertTitle": "Créez votre compte\npour recevoir des alertes.",
   "accountReasonAlertBody": "Nous vous prévenons quand un trajet ou un colis correspond à cet itinéraire.",
-  "accountReasonProposeTitle": "Créez votre compte\npour envoyer une offre.",
-  "accountReasonProposeBody": "Les offres, le chat et le paiement se passent tous dans votre compte.",
   "accountReasonReportTitle": "Créez votre compte\npour signaler un avis.",
   "accountReasonReportBody": "Les signalements viennent des membres, pour que nous puissions les examiner avec vous.",
   "accountReasonDeliveriesTitle": "Créez votre compte\npour suivre vos livraisons.",

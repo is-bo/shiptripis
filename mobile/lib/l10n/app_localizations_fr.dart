@@ -6202,14 +6202,6 @@ class LFr extends L {
       'Nous vous prévenons quand un trajet ou un colis correspond à cet itinéraire.';
 
   @override
-  String get accountReasonProposeTitle =>
-      'Créez votre compte\npour envoyer une offre.';
-
-  @override
-  String get accountReasonProposeBody =>
-      'Les offres, le chat et le paiement se passent tous dans votre compte.';
-
-  @override
   String get accountReasonReportTitle =>
       'Créez votre compte\npour signaler un avis.';
 

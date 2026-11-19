@@ -1,11 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/api/api_exception.dart';
 import '../design/theme.dart';
 import '../core/push/push_coordinator.dart';
 import 'app_state.dart';
 import 'app_settings.dart';
 import 'router.dart';
+
+/// How a failed read is retried, for the whole app: `main` sets it on the
+/// scope the app runs in. A failure that waiting cannot mend (a throttle, a
+/// tier switched off, a refusal) is shown at once and asked again only when
+/// the person does; a network or server failure is retried the way Riverpod
+/// does by default. A provider that sets its own retry keeps it.
+Duration? appRetry(int retryCount, Object error) {
+  if (error is ApiException && !error.isRetryable) return null;
+  return ProviderContainer.defaultRetry(retryCount, error);
+}
 
 class ShipTripApp extends ConsumerWidget {
   const ShipTripApp({super.key});
