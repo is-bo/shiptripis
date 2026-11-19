@@ -419,18 +419,31 @@ unchanged. Nothing is sent while `EMAIL_ENABLED=false`.
    screen, the sign-up screen and the account screen's slot from part C. Busy state, cancel is silent,
    failures show the server's message or a translated generic one; `account_disabled` shows its own
    copy; the provider-unavailable codes show "Sign in with Google is not available right now".
-6. Native configuration, ready for Ismail's values and inert without them:
-   - iOS: `Runner.entitlements` with `com.apple.developer.applesignin` and `CODE_SIGN_ENTITLEMENTS`
-     in the Runner build settings; `Info.plist` `GIDClientID` and a URL type for the reversed iOS
-     client id, both from build settings defined in a checked-in `ios/Flutter/SocialSignIn.xcconfig`
-     (empty values) included by `Debug.xcconfig` and `Release.xcconfig`.
+6. Native configuration, ready for Ismail's values and inert without them (as built):
+   - iOS: `ios/Flutter/SocialSignIn.xcconfig` (included by `Debug.xcconfig` and `Release.xcconfig`,
+     empty values in Git) holds `GOOGLE_IOS_CLIENT_PREFIX`, the iOS client id without
+     `.apps.googleusercontent.com`; it alone drives the `Info.plist` URL scheme
+     (`com.googleusercontent.apps.<prefix>`). There is no `GIDClientID` in `Info.plist`, because the
+     Dart client id (`GOOGLE_IOS_CLIENT_ID`) wins. `APPLE_SIGN_IN_ENTITLEMENTS` is empty by default and
+     feeds `CODE_SIGN_ENTITLEMENTS`; Ismail sets it to `Runner/Runner.entitlements` (which carries
+     `com.apple.developer.applesignin`) once the App ID has the capability. The Runner build phase
+     `ios/scripts/check_social_sign_in.sh` fails a build whose defines and xcconfig disagree
+     (`GOOGLE_IOS_CLIENT_ID` without the matching prefix, or `APPLE_SIGN_IN_ENABLED=true` without the
+     entitlements). `tools/check_ios_config.py` parses the plist, entitlements and project in CI.
    - Android: nothing secret in the repository; `google_sign_in` on Android needs only the web
      (server) client id at runtime plus the app's SHA-1 registered by Ismail in Google Cloud.
-     Document the debug and release SHA-1 commands in `docs/ANDROID_BUILD_RUNBOOK.md`.
+     The debug, release and Play App Signing SHA-1 commands are in `docs/ANDROID_BUILD_RUNBOOK.md`.
+     The Android release workflow reads the repository variable `GOOGLE_SERVER_CLIENT_ID`.
 7. Tests: buttons hidden when unconfigured; shown per platform when configured; a successful Google
    and Apple sign-in through the fake signs in (and, from the account screen, completes the account
    moment); cancel does nothing; each failure shows its copy; the nonce sent to the server hashes to
    the one given to Apple.
+
+8. **The name step (added in the build).** A social account can have no name (decision 13). The app
+   asks once, on "What should we call you?" (`account_name_screen.dart`): as the last screen of the
+   account moment right after such a sign-in, and otherwise on Home once per app launch while the name
+   is empty. It can be closed; the action the person came for goes ahead. It calls `PATCH /api/me`
+   (`full_name`); `name_already_set` counts as success.
 
 **Done when**: the above in tests; whole Flutter suite, format, analyze green; iOS and Android
 configuration files valid (`plutil -lint` is not available here: parse `Info.plist` and the
@@ -484,6 +497,40 @@ Two independent reviewers, after A to D are merged into the package branch:
   session, RTL and small screens.
 
 Findings go back to the part's agent (or the orchestrator fixes them), then a second look confirms.
+
+---
+
+## Changes after review
+
+What the two reviews (section 9) and the fixes that followed changed in the plan above:
+
+- **Guest throttle.** Public discovery reads and the geography reads a guest uses are counted per IP on
+  their own scope `discovery_guest`, 300 a minute (`DRF_DISCOVERY_GUEST_THROTTLE_RATE`), because many
+  people share one mobile IPv4 address. A member keeps `matching_discovery` (60 a minute) and `user`,
+  and is never counted on the guest scope.
+- **Provider sign-in 30 a minute** per IP for Google and for Apple; **registration 30 an hour** per IP.
+  **Login stays 10 a minute** per IP: password guessing has no other bound (no per-account lockout).
+- **Set-once name:** `PATCH /api/me` sets `full_name` only while it is empty (`name_already_set`
+  otherwise); a later Google or Apple sign-in that brings a name fills an empty one; a set name is
+  never overwritten.
+- **Apple token without an email** signs in to an identity already linked; it cannot link or open an
+  account (`email_missing`).
+- **No single-use Apple nonce.** The nonce binds the token to the request and the token's short life
+  bounds replay; a retry with the same token must work because Apple's name travels only on the first
+  request.
+- **The bearer is withheld while signed out:** the app sends no `Authorization` header from a stale
+  token, so a guest read never fails on an expired one.
+- **A 429 is not retried** by the app's client.
+- **One `finishSignIn`** ends every sign-in path (email, Google, Apple, sign-up), so the account moment
+  completes the same way for all.
+- **iOS configuration:** one `GOOGLE_IOS_CLIENT_PREFIX`, Apple entitlements off by default, and a build
+  check (section 6, item 6).
+- **Copy review (Part E):** payout wording says payout waits 48 hours after delivery; guest welcome
+  names alerts and reports; French avoids gendered "connecté" and "invité"; `validationTooLong` reads
+  "at most {max}".
+- **Google sign-in audience:** both platforms pass the Web client id as the server client id, so the
+  token's audience is the Web client id and the server list needs only that one
+  (`GOOGLE_OAUTH_CLIENT_IDS`); the iOS and Android client ids stay in the app and in Google Cloud.
 
 ---
 

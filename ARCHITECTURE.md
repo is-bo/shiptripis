@@ -338,7 +338,7 @@ fetched. `manage.py check_object_storage` probes each class with its own key.
 |---|---|
 | `cmd/chat` | WebSocket relay for new chat messages (server to client only; Django is the write path) |
 | `cmd/notification` | WebSocket hub for notifications, presence, and the FCM stream consumer |
-| `cmd/email` | Consumer of the non-secret email stream |
+| `cmd/email` | Consumer of the non-secret email stream; sends through Sender.net's REST API (or SMTP in development) |
 | `cmd/kyc` | HTTP KYC upload, streams to object storage, records through Django gRPC |
 
 Shared via `services/pkg/`: `auth` (JWT verify with leeway), `config`, `db`
@@ -376,7 +376,7 @@ recommended reward) is specified in `docs/SHIPTRIP_V1_SPEC.md` section 8.
 | Redis WS fan-out | Pub/Sub, best-effort; the notification service subscribes to every channel in `apps/core/channels.py` |
 | Redis FCM queue | Stream + consumer group, MAXLEN cap, XAUTOCLAIM sweeper |
 | Presence | `presence:<user_id>` 15s TTL, refreshed on pong, DEL on disconnect |
-| Durable messages | Transactional email is a PostgreSQL outbox row; Redis only carries it |
+| Durable messages | Transactional email is a PostgreSQL outbox row; Redis only carries it. Provider `sender_net` (Sender.net REST API, token in `secrets/app.json`) in production, `smtp` in development; Django sends secret-bearing mail itself, the Go email service sends the rest |
 | Object storage | S3-compatible, one credential per storage class |
 | KYC upload path | Flutter → kyc-service → object storage + Django gRPC |
 | Pricing freeze | Snapshotted on the Offer and Deal, never retroactive |

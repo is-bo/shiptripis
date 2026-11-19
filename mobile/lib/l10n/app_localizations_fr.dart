@@ -187,7 +187,7 @@ class LFr extends L {
 
   @override
   String validationTooLong(int max) {
-    return 'Restez sous $max caractères';
+    return '$max caractères au maximum';
   }
 
   @override
@@ -6175,7 +6175,7 @@ class LFr extends L {
 
   @override
   String get accountReasonPostRequestBody =>
-      'Les voyageurs voient qui envoie, et votre paiement est retenu jusqu’à l’arrivée du colis.';
+      'Les voyageurs voient qui envoie. Votre paiement est retenu, puis versé au voyageur 48 heures après la livraison.';
 
   @override
   String get accountReasonPostTripTitle =>
@@ -6191,7 +6191,7 @@ class LFr extends L {
 
   @override
   String get accountReasonCarryBody =>
-      'L’expéditeur voit qui propose de le transporter, et votre paiement arrive sur votre compte après la livraison.';
+      'L’expéditeur voit qui propose de le transporter. Le paiement arrive sur votre compte 48 heures après la livraison.';
 
   @override
   String get accountReasonAlertTitle =>
@@ -6241,7 +6241,7 @@ class LFr extends L {
 
   @override
   String get guestSignedOutNotice =>
-      'Vous avez été déconnecté. Reconnectez-vous.';
+      'Votre session est fermée. Reconnectez-vous.';
 
   @override
   String get guestNoticeDismiss => 'Fermer';
@@ -6252,7 +6252,7 @@ class LFr extends L {
 
   @override
   String get guestWelcomeBody =>
-      'Faites un tour : ce sont de vrais trajets et de vrais colis. Un compte n’est nécessaire que pour publier ou transporter.';
+      'Faites un tour : ce sont de vrais trajets et de vrais colis. Un compte n’est nécessaire que pour publier, transporter, créer des alertes ou signaler un avis.';
 
   @override
   String get guestHowItWorks => 'Comment fonctionne Wassla';
@@ -6275,7 +6275,7 @@ class LFr extends L {
       'Le chat s’ouvre entre l’expéditeur et le voyageur une fois la livraison payée.';
 
   @override
-  String get guestProfileTitle => 'Vous visitez en tant qu’invité';
+  String get guestProfileTitle => 'Vous visitez sans compte';
 
   @override
   String get guestProfileBody =>

@@ -268,14 +268,19 @@ hours).
 ## 8. Open items for Ismail
 
 **Before real users** (release report section 10)
-1. A real, monitored support address in `EMAIL_SUPPORT_ADDR`. The app's "Contact support" appears
-   only when the server has one. `EMAIL_FROM_ADDR` and `EMAIL_REPLY_TO` need verified-domain
-   addresses.
-2. `web/support.html` still lists placeholder mailboxes at `shiptrip.example`.
+1. The support address is now set in the code and the examples: **contact@wassla.eu** (From,
+   Reply-To and support). It still needs a real monitored mailbox with MX records, because Sender.net
+   only sends.
+2. `web/support.html` shows contact@wassla.eu. `web/robots.txt` and `web/sitemap.xml` still name the
+   placeholder host `shiptrip.example` until the production domain is final.
 3. A terms page with recorded acceptance and the final prohibited-items list.
 4. If a CDN or another proxy is ever put in front of the web server, set the trusted proxies and the
    per-address limits for it first.
 5. The payout keyring must be provisioned before the first production start.
+6. Package EGS (email, guest browsing, Google and Apple sign-in) is built and off. Ismail's own steps,
+   in order, are in `docs/WASSLA_SETUP_FOR_ISMAIL.md`: Sender.net account, domain, DNS and token; the
+   mailbox; Google Cloud clients; Apple Developer; the app id decision; account deletion in the app
+   (not built, required by the App Store).
 
 **Open decisions** (release report section 11, plan 5.1f and 5.1g)
 1. Should staff be able to open a dispute? Today only the sender or the traveler can.

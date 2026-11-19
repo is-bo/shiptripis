@@ -24,7 +24,7 @@ budget.
 | `sender_net` | `POST https://api.sender.net/v2/message/send` with `Authorization: Bearer <token>` (Django `apps/notifications/sender_net.py`, Go `internal/email/sender_net.go`) | Production |
 | `smtp` | Any SMTP relay (`EMAIL_SMTP_*`, `EMAIL_USE_TLS`) | MailHog in local development, or any relay if ever preferred |
 
-**The API token.** Create it in Sender.net (Settings, API access tokens). It is
+**The API token.** Create it in Sender.net (Account settings, API access tokens, validity "Forever"). It is
 a secret: it goes only in the mounted `secrets/app.json` as
 `SENDER_NET_API_TOKEN`, never in `stack.env`, Docker build args, images, logs,
 tickets or Git. The runtime injects it once into the shared supervisor

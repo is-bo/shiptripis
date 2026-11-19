@@ -185,7 +185,7 @@ class LAr extends L {
 
   @override
   String validationTooLong(int max) {
-    return 'اجعل هذا أقل من $max حرفًا';
+    return '$max حرفًا على الأكثر';
   }
 
   @override
@@ -6091,7 +6091,7 @@ class LAr extends L {
 
   @override
   String get accountReasonPostRequestBody =>
-      'المسافرون يشوفو شكون يبعث، والدفع يبقى محجوز حتى يوصل الطرد.';
+      'المسافرون يشوفو شكون يبعث. الدفع يبقى محجوز، والمسافر يتخلص 48 ساعة من بعد التوصيل.';
 
   @override
   String get accountReasonPostTripTitle => 'أنشئ حسابك\nباش تنشر رحلتك.';
@@ -6105,7 +6105,7 @@ class LAr extends L {
 
   @override
   String get accountReasonCarryBody =>
-      'المرسل يشوف شكون يعرض يحملو، والمبلغ يوصل لحسابك بعد التوصيل.';
+      'المرسل يشوف شكون يعرض يحملو، والمبلغ يوصل لحسابك 48 ساعة من بعد التوصيل.';
 
   @override
   String get accountReasonAlertTitle => 'أنشئ حسابك\nباش توصلك تنبيهات المسار.';
@@ -6161,7 +6161,7 @@ class LAr extends L {
 
   @override
   String get guestWelcomeBody =>
-      'تفرّج: هذي رحلات وطرود حقيقية. الحساب يلزمك غير باش تنشر ولا تحمل.';
+      'تفرّج: هذي رحلات وطرود حقيقية. الحساب يلزمك غير باش تنشر ولا تحمل ولا تفعّل التنبيهات ولا تبلّغ على تقييم.';
 
   @override
   String get guestHowItWorks => 'كيفاش تخدم Wassla';
@@ -6216,7 +6216,7 @@ class LAr extends L {
 
   @override
   String get socialAccountDisabled =>
-      'هذا الحساب موقّف. اتصل بالدعم إذا تشوف بلي كاين غلطة.';
+      'هذا الحساب موقوف. اتصل بالدعم إذا تشوف بلي كاين غلطة.';
 
   @override
   String get accountNameStamp => 'قريب نكملو';

@@ -44,7 +44,7 @@ before initial startup. Optional features remain disabled unless explicitly supp
 | `FINANCE_JOB_INTERVAL_SECONDS` | Single durable finance/lifecycle/outbox loop interval; 30 seconds. |
 | `GRPC_AUTH_MODE` | `bearer` over container loopback for retained combined topology. mTLS is already supported by the application for a future split. |
 | `GRPC_ALLOW_PRIVATE_BEARER` | Explicit `true` opt-in required by existing production safeguards. Token below is dedicated. |
-| `GOOGLE_OAUTH_CLIENT_IDS` | Comma-separated Google OAuth client ids a Google ID token may name as its audience (the web/server client id the app is built with, and the iOS client id). Empty keeps Sign in with Google off: `POST /api/auth/oauth/google` answers 503 `google_sign_in_unavailable`. |
+| `GOOGLE_OAUTH_CLIENT_IDS` | Comma-separated Google OAuth client ids a Google ID token may name as its audience (the Web client id the app is built with as `GOOGLE_SERVER_CLIENT_ID`: Android and iOS tokens both name it as their audience, so the Android and iOS client ids are not needed here). Empty keeps Sign in with Google off: `POST /api/auth/oauth/google` answers 503 `google_sign_in_unavailable`. |
 | `APPLE_SIGN_IN_CLIENT_IDS` | Comma-separated audiences accepted for Sign in with Apple: the iOS app's bundle id. Empty keeps Sign in with Apple off: `POST /api/auth/oauth/apple` answers 503 `apple_sign_in_unavailable`. Apple's signing keys are fetched from `https://appleid.apple.com/auth/keys`; no Apple secret is needed. |
 | `DRF_DISCOVERY_GUEST_THROTTLE_RATE` | Requests per address for a guest (no account) on the public discovery and geography reads; `300/min`. Mobile carriers put hundreds of people behind one IPv4 address, so this bucket replaces the shared `anon` rate there and is roomy. Members are never counted on it. |
 | `DRF_MATCHING_DISCOVERY_THROTTLE_RATE` | Discovery and Find Travelers reads per member; `60/min` (Home alone makes two to four). |
@@ -146,7 +146,7 @@ payment/payout encryption secrets from Go services and internal gateway children
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Optional matching TEST platform credential/signing pair; omit while inactive. Never LIVE. |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Optional distinct Connect destination signature secret, not platform webhook secret. |
 | `CHARGILY_SECRET_KEY`, `CHARGILY_WEBHOOK_SECRET` | Optional TEST key; webhook override must follow existing signing contract. |
-| `SENDER_NET_API_TOKEN` | Sender.net API token (Sender: Settings, API access tokens); empty until email activation. Reaches Django and the Go email service only; the launcher withholds it from the other Go services and the gateway. |
+| `SENDER_NET_API_TOKEN` | Sender.net API token (Sender: Account settings, API access tokens); empty until email activation. Reaches Django and the Go email service only; the launcher withholds it from the other Go services and the gateway. |
 | `FCM_CREDENTIALS_JSON_BASE64` | Optional base64 service-account JSON from correct Firebase project; existing helper materializes private file under `/tmp`, drops payload before children. Never commit/download into public paths. |
 | `postgres-password` | ≥64 hex characters in host file; shared by PostgreSQL and app. Choose before database initialization. Changing file alone does not rotate the existing database role. |
 | `redis-password` | ≥64 hex characters; shared by Redis and runtime-derived URL. Rotation requires coordinated restart/client handling. |

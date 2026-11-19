@@ -36,7 +36,7 @@ See pricing.md and money.md for the full formulas.
 - Languages: English (default), French, Arabic (right to left) in the app and the home page. Emails follow the user's email language. The legal pages are English only for now.
 - Currency: EUR is the real currency (stored in cents). Chargily shows a DZD amount converted by the server from EUR (rate typed by an admin, shipped placeholder 150 DZD per EUR, minimum 75 DZD). Stripe pays in EUR.
 - Whether a country is actually "live" for users cannot be read from the code: signup asks for no country. Which payment rails are on is a setting (next section).
-- Not offered: sea legs (off by default), a wallet, phone or SMS sign-in, account deletion in the app. Google sign-in and Sign in with Apple exist on the server only (Apple stays off until the iOS bundle id is set); no app screen offers them yet.
+- Not offered: sea legs (off by default), a wallet, phone or SMS sign-in, account deletion in the app. Google sign-in and Sign in with Apple are built in the app and the server, and each stays off until its keys are set (Apple until the iOS bundle id is in `APPLE_SIGN_IN_CLIENT_IDS` and the build defines `APPLE_SIGN_IN_ENABLED=true`). Account deletion in the app, which the App Store requires, is not built yet. Visitors can browse without an account.
 <!-- src: apps/core/languages.py, apps/trips/transport_rules.py, apps/finance/policy.py, web/en/index.html -->
 
 ## What is switched on or off in the shipped settings, and where do I change it?
