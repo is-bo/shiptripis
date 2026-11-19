@@ -51,7 +51,7 @@ class GoogleUnavailableViewTests(APITestCase):
     @patch("apps.accounts.views.verify_id_token")
     def test_google_outage_is_a_retryable_503(self, mock_verify):
         mock_verify.side_effect = google.GoogleAuthUnavailable(
-            "Google sign-in is temporarily unavailable."
+            "Sign in with Google is temporarily unavailable."
         )
         resp = self.client.post(
             reverse("auth-oauth-google"), {"id_token": "fake"}, format="json"

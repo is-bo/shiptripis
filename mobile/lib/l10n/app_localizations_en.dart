@@ -185,7 +185,7 @@ class LEn extends L {
 
   @override
   String validationTooLong(int max) {
-    return 'Keep this under $max characters';
+    return 'Use at most $max characters';
   }
 
   @override
@@ -6103,7 +6103,7 @@ class LEn extends L {
 
   @override
   String get accountReasonPostRequestBody =>
-      'Travelers see who is sending, and your payment is held until the parcel arrives.';
+      'Travelers see who is sending. Your payment is held, and the traveler is paid 48 hours after delivery.';
 
   @override
   String get accountReasonPostTripTitle =>
@@ -6119,7 +6119,7 @@ class LEn extends L {
 
   @override
   String get accountReasonCarryBody =>
-      'The sender sees who offers to carry it, and your payout goes to your account after delivery.';
+      'The sender sees who offers to carry it. You are paid into your account 48 hours after delivery.';
 
   @override
   String get accountReasonAlertTitle =>
@@ -6180,7 +6180,7 @@ class LEn extends L {
 
   @override
   String get guestWelcomeBody =>
-      'Look around: these are real trips and parcels. You need an account only to post or to carry.';
+      'Look around: these are real trips and parcels. You need an account only to post, carry, set alerts or report a review.';
 
   @override
   String get guestHowItWorks => 'How Wassla works';

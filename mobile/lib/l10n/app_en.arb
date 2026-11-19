@@ -71,7 +71,7 @@
   "validationNumberInvalid": "Enter a number",
   "validationMoneyPrecision": "Use no more than 2 decimal places",
   "validationMustBePositive": "Enter a number greater than zero",
-  "validationTooLong": "Keep this under {max} characters",
+  "validationTooLong": "Use at most {max} characters",
   "@validationTooLong": {
     "placeholders": {
       "max": {
@@ -3204,11 +3204,11 @@
   "accountGateEmail": "Continue with email",
   "accountGateHaveAccount": "I already have an account",
   "accountReasonPostRequestTitle": "Create your account\nto send your parcel.",
-  "accountReasonPostRequestBody": "Travelers see who is sending, and your payment is held until the parcel arrives.",
+  "accountReasonPostRequestBody": "Travelers see who is sending. Your payment is held, and the traveler is paid 48 hours after delivery.",
   "accountReasonPostTripTitle": "Create your account\nto post your trip.",
   "accountReasonPostTripBody": "Senders choose travelers they can trust: your account holds your ID check and your reviews.",
   "accountReasonCarryTitle": "Create your account\nto carry this parcel.",
-  "accountReasonCarryBody": "The sender sees who offers to carry it, and your payout goes to your account after delivery.",
+  "accountReasonCarryBody": "The sender sees who offers to carry it. You are paid into your account 48 hours after delivery.",
   "accountReasonAlertTitle": "Create your account\nto get route alerts.",
   "accountReasonAlertBody": "We tell you when a trip or a parcel matches this route.",
   "accountReasonReportTitle": "Create your account\nto report a review.",
@@ -3224,7 +3224,7 @@
   "guestSignedOutNotice": "You were signed out. Sign in again.",
   "guestNoticeDismiss": "Dismiss",
   "guestWelcomeTitle": "Send it with someone already making the trip.",
-  "guestWelcomeBody": "Look around: these are real trips and parcels. You need an account only to post or to carry.",
+  "guestWelcomeBody": "Look around: these are real trips and parcels. You need an account only to post, carry, set alerts or report a review.",
   "guestHowItWorks": "How Wassla works",
   "guestAccountAction": "Sign in or create an account",
   "guestDeliveriesTitle": "Your deliveries appear here",

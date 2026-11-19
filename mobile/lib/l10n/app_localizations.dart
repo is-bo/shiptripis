@@ -438,7 +438,7 @@ abstract class L {
   /// No description provided for @validationTooLong.
   ///
   /// In en, this message translates to:
-  /// **'Keep this under {max} characters'**
+  /// **'Use at most {max} characters'**
   String validationTooLong(int max);
 
   /// No description provided for @validationSelectOne.
@@ -10536,7 +10536,7 @@ abstract class L {
   /// No description provided for @accountReasonPostRequestBody.
   ///
   /// In en, this message translates to:
-  /// **'Travelers see who is sending, and your payment is held until the parcel arrives.'**
+  /// **'Travelers see who is sending. Your payment is held, and the traveler is paid 48 hours after delivery.'**
   String get accountReasonPostRequestBody;
 
   /// No description provided for @accountReasonPostTripTitle.
@@ -10560,7 +10560,7 @@ abstract class L {
   /// No description provided for @accountReasonCarryBody.
   ///
   /// In en, this message translates to:
-  /// **'The sender sees who offers to carry it, and your payout goes to your account after delivery.'**
+  /// **'The sender sees who offers to carry it. You are paid into your account 48 hours after delivery.'**
   String get accountReasonCarryBody;
 
   /// No description provided for @accountReasonAlertTitle.
@@ -10656,7 +10656,7 @@ abstract class L {
   /// No description provided for @guestWelcomeBody.
   ///
   /// In en, this message translates to:
-  /// **'Look around: these are real trips and parcels. You need an account only to post or to carry.'**
+  /// **'Look around: these are real trips and parcels. You need an account only to post, carry, set alerts or report a review.'**
   String get guestWelcomeBody;
 
   /// No description provided for @guestHowItWorks.

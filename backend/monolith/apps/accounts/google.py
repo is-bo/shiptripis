@@ -76,7 +76,7 @@ def verify_id_token(token: str) -> dict:
             audience=None,
         )
     except google_exceptions.TransportError as exc:
-        raise GoogleAuthUnavailable("Google sign-in is temporarily unavailable.") from exc
+        raise GoogleAuthUnavailable("Sign in with Google is temporarily unavailable.") from exc
     except ValueError as exc:
         # google-auth's text can quote the token's claims or segments, so it
         # stays on the chained exception and never reaches the client.

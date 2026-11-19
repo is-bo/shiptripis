@@ -1,5 +1,20 @@
 # Waçla V1 Implementation Status
 
+## Wassla: Sender.net email, guest browsing, Google and Apple sign-in (2026-11-19)
+
+- Ismail's request of 2026-11-18, package EGS (`docs/WASSLA_EMAIL_GUEST_SOCIAL_PLAN.md`). Nothing deployed,
+  no provider contacted, every switch off.
+- Email: Sender.net's REST API on both transports (Django secret-bearing mail, Go stream mail); provider
+  `sender_net` is the API, `smtp` stays for development; one address, contact@wassla.eu, is From,
+  Reply-To and support. `EMAIL_TIMEOUT_SECONDS` replaces `EMAIL_SMTP_TIMEOUT_SECONDS`.
+- Accounts: one social sign-in rule for Google and Apple, Sign in with Apple, disabled accounts refused,
+  a name set once (`PATCH /api/me`).
+- Guests: the app opens on Home without an account; an account-only action opens one account screen and
+  then goes on; six discovery reads and the geography reads are public, on their own 300 a minute per IP.
+- App: "Continue with Google / Apple" when configured, the name step, iOS and Android configuration.
+- Copy reviewed in EN, FR and AR; `web/support.html` shows contact@wassla.eu; helper notes updated.
+- What Ismail must do: `docs/WASSLA_SETUP_FOR_ISMAIL.md`. Detail: `docs/PHASE_EGS_EMAIL_GUEST_SOCIAL.md`.
+
 ## Wassla: Algerian month names and Western digits in Arabic (2026-11-17)
 
 - Ismail's request: Arabic shows جانفي، فيفري ... أوت, never يناير or أغسطس, and 0-9, never ٠-٩.
