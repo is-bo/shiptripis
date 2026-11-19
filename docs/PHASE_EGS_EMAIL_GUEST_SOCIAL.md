@@ -67,7 +67,7 @@ generated getters).
 | Django, whole project | 3,567, all passing in CI (four shards) |
 | Go (`backend/services`, `go test ./...`) | 348 passed including subtests; integration tests need services |
 | `infra/vps/tests` | 32 unit tests, and the Docker integration test in CI |
-| Flutter | 1,628, all passing (1,521 before the package); format and analyze clean |
+| Flutter | 1,628, all passing (1,539 before the package); format and analyze clean |
 
 New or rewritten tests of the package are in `apps/notifications/tests/test_sender_net.py`,
 `test_email_inventory_render.py`, `apps/accounts/tests/test_{apple_sign_in,social_sign_in,me_name,google_verifier}.py`,
