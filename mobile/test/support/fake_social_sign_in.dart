@@ -20,7 +20,7 @@ AppleCredential appleCredential({
   String fullName = 'Yacine Belkacem',
   String? identityToken,
   String rawNonce = 'raw-nonce-0123456789abcdef',
-  String userIdentifier = 'apple-user',
+  String? userIdentifier = 'apple-user',
 }) => AppleCredential(
   identityToken:
       identityToken ??
@@ -48,6 +48,7 @@ class FakeSocialSignIn implements SocialSignIn {
 
   int googleCalls = 0;
   int appleCalls = 0;
+  int signOuts = 0;
 
   static T _next<T>(List<T Function()> answers) =>
       (answers.length > 1 ? answers.removeAt(0) : answers.single)();
@@ -63,4 +64,7 @@ class FakeSocialSignIn implements SocialSignIn {
     appleCalls++;
     return _next(appleAnswers);
   }
+
+  @override
+  Future<void> signOut() async => signOuts++;
 }

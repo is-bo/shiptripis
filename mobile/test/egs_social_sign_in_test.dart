@@ -20,6 +20,7 @@
 library;
 
 import 'dart:async';
+import 'dart:ui' show PictureRecorder;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -38,6 +39,7 @@ import 'package:shiptrip/features/auth/account_gate.dart';
 import 'package:shiptrip/features/auth/account_name_screen.dart';
 import 'package:shiptrip/features/auth/sign_in_screen.dart';
 import 'package:shiptrip/features/auth/sign_up_screen.dart';
+import 'package:shiptrip/features/auth/social_sign_in_buttons.dart';
 import 'package:shiptrip/features/home/home_screen.dart';
 import 'package:shiptrip/features/requests/request_create_screen.dart';
 import 'package:shiptrip/l10n/app_localizations.dart';
@@ -99,6 +101,9 @@ class _Server {
   /// The account's name on the server.
   String name;
 
+  /// The account's id: another id is another account.
+  int id = 42;
+
   /// A name that reaches the account between the step opening and its
   /// answer (a later sign-in that carried one), so the PATCH is refused.
   String? nameArrivesElsewhere;
@@ -107,7 +112,7 @@ class _Server {
   final google = <FakeResponse?>[null];
   final apple = <FakeResponse?>[null];
 
-  Map<String, dynamic> _me() => {...meFixture(), 'full_name': name};
+  Map<String, dynamic> _me() => {...meFixture(), 'id': id, 'full_name': name};
 
   FakeResponse _next(List<FakeResponse?> answers) {
     final answer = answers.length > 1 ? answers.removeAt(0) : answers.single;
@@ -979,6 +984,156 @@ void main() {
     });
   });
 
+  group('after the review', () {
+    testWidgets('any other failure (a sign-in overtaken, the keystore) has '
+        'the generic copy and escapes nowhere', (tester) async {
+      final social = FakeSocialSignIn()
+        ..googleAnswers[0] = () =>
+            throw StateError('The authenticated session changed.');
+      final container = await _boot(tester, _Server(), social: social);
+
+      await _openGate(tester);
+      await _tap(tester, _google());
+
+      expect(tester.takeException(), isNull);
+      expect(find.text(_en.socialGoogleFailed), findsOneWidget);
+      expect(container.read(sessionProvider), isA<SessionSignedOut>());
+
+      await _shutdown(tester);
+    });
+
+    testWidgets('signing out of the app signs out of Google too', (
+      tester,
+    ) async {
+      final social = FakeSocialSignIn();
+      final container = await _boot(tester, _Server(), social: social);
+      _router(container).go('/auth/sign-in');
+      await _settle(tester);
+      await _tap(tester, _google());
+      expect(container.read(sessionProvider), isA<SessionSignedIn>());
+      expect(social.signOuts, 0);
+
+      await container.read(sessionProvider.notifier).signOut();
+      await _settle(tester, 5);
+
+      expect(social.signOuts, 1);
+      expect(container.read(sessionProvider), isA<SessionSignedOut>());
+
+      await _shutdown(tester);
+    });
+
+    testWidgets('a kept Apple name is dropped once the session moves on', (
+      tester,
+    ) async {
+      final server = _Server()
+        ..apple.insert(0, const FakeResponse(503, {'detail': 'Unavailable.'}));
+      final social = FakeSocialSignIn()
+        ..appleAnswers.replaceRange(0, 1, [
+          appleCredential,
+          () => appleCredential(fullName: ''),
+        ]);
+      final container = await _boot(tester, server, social: social);
+
+      await _openGate(tester);
+      await _tap(tester, _apple());
+      // Someone signs in another way, then out again.
+      await _tap(tester, _google());
+      _expectRequestFormOverHome(container);
+      await container.read(sessionProvider.notifier).signOut();
+      await _settle(tester);
+
+      _router(container).go('/auth/sign-in');
+      await _settle(tester);
+      await _tap(tester, _apple());
+
+      expect(social.appleCalls, 2, reason: 'the kept token is gone too');
+      final body = server.posts('/api/auth/oauth/apple').last.body;
+      expect(body.containsKey('full_name'), isFalse);
+
+      await _shutdown(tester);
+    });
+
+    testWidgets('a kept name needs Apple\'s id on both attempts', (
+      tester,
+    ) async {
+      final server = _Server()
+        ..apple.insert(0, const FakeResponse(401, {'detail': 'Bad token.'}));
+      final social = FakeSocialSignIn()
+        ..appleAnswers.replaceRange(0, 1, [
+          () => appleCredential(userIdentifier: null),
+          () => appleCredential(fullName: '', userIdentifier: null),
+        ]);
+      await _boot(tester, server, social: social);
+
+      await _openGate(tester);
+      await _tap(tester, _apple());
+      await _tap(tester, _apple());
+
+      final body = server.posts('/api/auth/oauth/apple').last.body;
+      expect(body.containsKey('full_name'), isFalse);
+
+      await _shutdown(tester);
+    });
+
+    testWidgets('a second nameless account in the same launch is asked', (
+      tester,
+    ) async {
+      final server = _Server(name: '');
+      final container = await _boot(tester, server, social: FakeSocialSignIn());
+
+      await _openGate(tester);
+      await _tap(tester, _google());
+      expect(find.byType(AccountNameScreen), findsOneWidget);
+      await tester.tap(find.byType(PaperCloseButton));
+      await _settle(tester);
+      _expectRequestFormOverHome(container);
+
+      await container.read(sessionProvider.notifier).signOut();
+      await _settle(tester);
+      server.id = 43;
+      _router(container).go('/auth/sign-in');
+      await _settle(tester);
+      await _tap(tester, _google());
+
+      expect(container.read(accountProvider)?.id, 43);
+      expect(find.byType(AccountNameScreen), findsOneWidget);
+
+      await _shutdown(tester);
+    });
+
+    testWidgets('the "G" paints Google\'s four colours where they belong', (
+      tester,
+    ) async {
+      final pixels = await tester.runAsync(() async {
+        final recorder = PictureRecorder();
+        const GoogleLogoPainter().paint(
+          Canvas(recorder),
+          const Size.square(48),
+        );
+        final image = await recorder.endRecording().toImage(48, 48);
+        final data = await image.toByteData();
+        image.dispose();
+        return data!;
+      });
+      Color at(int x, int y) {
+        final i = (y * 48 + x) * 4;
+        return Color.fromARGB(
+          pixels!.getUint8(i + 3),
+          pixels.getUint8(i),
+          pixels.getUint8(i + 1),
+          pixels.getUint8(i + 2),
+        );
+      }
+
+      expect(at(24, 4), const Color(0xFFEA4335), reason: 'red, the top');
+      expect(at(42, 26), const Color(0xFF4285F4), reason: 'blue, the bar');
+      expect(at(4, 24), const Color(0xFFFBBC05), reason: 'yellow, the left');
+      expect(at(24, 44), const Color(0xFF34A853), reason: 'green, the bottom');
+      expect(at(18, 24).a, 0, reason: 'the middle is open');
+      expect(at(44, 14).a, 0, reason: 'the G opens at the upper right');
+    });
+  });
+
   group('the changed screens fit', () {
     const small = Size(320, 640);
 
@@ -1095,4 +1250,7 @@ class _Delegating implements SocialSignIn {
 
   @override
   Future<AppleCredential?> apple() => _platform.apple();
+
+  @override
+  Future<void> signOut() => _fake.signOut();
 }

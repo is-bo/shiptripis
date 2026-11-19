@@ -69,15 +69,19 @@ abstract final class AppConfig {
     'GOOGLE_SERVER_CLIENT_ID',
   );
 
-  /// Google's iOS client id. iOS offers Google only with it; it must match
-  /// `GOOGLE_IOS_CLIENT_ID` in `ios/Flutter/SocialSignIn.xcconfig`, whose
-  /// reversed form is the URL scheme Google returns to.
+  /// Google's iOS client id. iOS offers Google only with it. It must be
+  /// `GOOGLE_IOS_CLIENT_PREFIX` of `ios/Flutter/SocialSignIn.xcconfig`
+  /// followed by `.apps.googleusercontent.com`, because the URL scheme Google
+  /// returns to is made from that prefix; the Runner's "Check sign-in
+  /// settings" build phase fails a build where the two differ.
   static const googleIosClientId = String.fromEnvironment(
     'GOOGLE_IOS_CLIENT_ID',
   );
 
   /// Sign in with Apple, on iOS only, once the App ID has the capability and
-  /// the bundle id is in the server's `APPLE_SIGN_IN_CLIENT_IDS`.
+  /// the bundle id is in the server's `APPLE_SIGN_IN_CLIENT_IDS`. The build
+  /// must also sign with the entitlements (`APPLE_SIGN_IN_ENTITLEMENTS` in
+  /// `ios/Flutter/SocialSignIn.xcconfig`); the build phase checks it.
   static const appleSignInEnabled = bool.fromEnvironment(
     'APPLE_SIGN_IN_ENABLED',
   );
