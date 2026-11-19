@@ -1784,5 +1784,17 @@
   "guestChatBody": "Le chat s’ouvre entre l’expéditeur et le voyageur une fois la livraison payée.",
   "guestProfileTitle": "Vous visitez en tant qu’invité",
   "guestProfileBody": "Créez un compte pour envoyer un colis ou en transporter un. Cela prend deux minutes.",
-  "guestSettings": "Réglages"
+  "guestSettings": "Réglages",
+  "socialContinueWithApple": "Continuer avec Apple",
+  "socialContinueWithGoogle": "Continuer avec Google",
+  "socialOr": "ou",
+  "socialGoogleFailed": "La connexion avec Google n’a pas abouti. Réessayez.",
+  "socialAppleFailed": "La connexion avec Apple n’a pas abouti. Réessayez.",
+  "socialGoogleUnavailable": "La connexion avec Google n’est pas disponible pour le moment.",
+  "socialAppleUnavailable": "La connexion avec Apple n’est pas disponible pour le moment.",
+  "socialAccountDisabled": "Ce compte est désactivé. Contactez le support si vous pensez qu’il s’agit d’une erreur.",
+  "accountNameStamp": "Presque fini",
+  "accountNameTitle": "Comment devons-nous vous appeler ?",
+  "accountNameBody": "Votre compte n’a pas encore de nom. Les personnes avec qui vous envoyez ou transportez le voient sur vos offres et vos livraisons.",
+  "accountNameLabel": "Votre nom"
 }

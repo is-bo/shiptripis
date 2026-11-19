@@ -1784,5 +1784,17 @@
   "guestChatBody": "المحادثة تتفتح بين المرسل والمسافر كي يتخلص التوصيل.",
   "guestProfileTitle": "راك تتفرّج كضيف",
   "guestProfileBody": "أنشئ حساب باش تبعث طرد ولا تحمل واحد. ياخذ دقيقتين برك.",
-  "guestSettings": "الإعدادات"
+  "guestSettings": "الإعدادات",
+  "socialContinueWithApple": "المتابعة مع Apple",
+  "socialContinueWithGoogle": "المتابعة مع Google",
+  "socialOr": "ولا",
+  "socialGoogleFailed": "ما قدرناش ندخّلوك بـ Google. عاود جرّب.",
+  "socialAppleFailed": "ما قدرناش ندخّلوك بـ Apple. عاود جرّب.",
+  "socialGoogleUnavailable": "الدخول بـ Google ماشي متوفر دركة.",
+  "socialAppleUnavailable": "الدخول بـ Apple ماشي متوفر دركة.",
+  "socialAccountDisabled": "هذا الحساب موقّف. اتصل بالدعم إذا تشوف بلي كاين غلطة.",
+  "accountNameStamp": "قريب نكملو",
+  "accountNameTitle": "واش نسمّوك؟",
+  "accountNameBody": "حسابك مازال ما عندوش اسم. الناس اللي تبعث ولا تحمل معاهم يشوفوه في العروض والتوصيلات تاعك.",
+  "accountNameLabel": "اسمك"
 }

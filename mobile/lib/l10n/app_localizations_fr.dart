@@ -6291,4 +6291,46 @@ class LFr extends L {
 
   @override
   String get guestSettings => 'Réglages';
+
+  @override
+  String get socialContinueWithApple => 'Continuer avec Apple';
+
+  @override
+  String get socialContinueWithGoogle => 'Continuer avec Google';
+
+  @override
+  String get socialOr => 'ou';
+
+  @override
+  String get socialGoogleFailed =>
+      'La connexion avec Google n’a pas abouti. Réessayez.';
+
+  @override
+  String get socialAppleFailed =>
+      'La connexion avec Apple n’a pas abouti. Réessayez.';
+
+  @override
+  String get socialGoogleUnavailable =>
+      'La connexion avec Google n’est pas disponible pour le moment.';
+
+  @override
+  String get socialAppleUnavailable =>
+      'La connexion avec Apple n’est pas disponible pour le moment.';
+
+  @override
+  String get socialAccountDisabled =>
+      'Ce compte est désactivé. Contactez le support si vous pensez qu’il s’agit d’une erreur.';
+
+  @override
+  String get accountNameStamp => 'Presque fini';
+
+  @override
+  String get accountNameTitle => 'Comment devons-nous vous appeler ?';
+
+  @override
+  String get accountNameBody =>
+      'Votre compte n’a pas encore de nom. Les personnes avec qui vous envoyez ou transportez le voient sur vos offres et vos livraisons.';
+
+  @override
+  String get accountNameLabel => 'Votre nom';
 }

@@ -18,6 +18,7 @@ import '../../domain/account.dart';
 import '../../domain/communication_language.dart';
 import '../api/api_client.dart';
 import '../api/api_exception.dart';
+import '../api/error_codes.dart';
 import 'token_store.dart';
 
 // ---------------------------------------------------------------------------
@@ -326,21 +327,14 @@ class SessionController extends Notifier<SessionState> {
     }
   }
 
-  Future<void> signIn({required String email, required String password}) async {
-    final generation = ++_generation;
-    final identity = _tokens.invalidateIdentity();
-    final account = await _auth.signIn(
-      email: email,
-      password: password,
-      expectedIdentityGeneration: identity,
-    );
-    if (generation != _generation) return;
-    await _adoptRoleContextFor(account);
-    if (generation != _generation) return;
-    state = SessionSignedIn(account, generation: generation);
-    _markAccountRead();
-    unawaited(_remember(account, identity));
-  }
+  Future<void> signIn({required String email, required String password}) =>
+      _authenticateWith(
+        (identity) => _auth.signIn(
+          email: email,
+          password: password,
+          expectedIdentityGeneration: identity,
+        ),
+      );
 
   Future<void> signUp({
     required String fullName,
@@ -349,10 +343,8 @@ class SessionController extends Notifier<SessionState> {
     required String phone,
     String? wilaya,
     required CommunicationLanguage preferredLanguage,
-  }) async {
-    final generation = ++_generation;
-    final identity = _tokens.invalidateIdentity();
-    final account = await _auth.signUp(
+  }) => _authenticateWith(
+    (identity) => _auth.signUp(
       fullName: fullName,
       email: email,
       password: password,
@@ -360,30 +352,44 @@ class SessionController extends Notifier<SessionState> {
       wilaya: wilaya,
       preferredLanguage: preferredLanguage,
       expectedIdentityGeneration: identity,
-    );
-    if (generation != _generation) return;
-    await _adoptRoleContextFor(account);
-    if (generation != _generation) return;
-    state = SessionSignedIn(account, generation: generation);
-    _markAccountRead();
-    unawaited(_remember(account, identity));
-  }
+    ),
+  );
 
   Future<void> signInWithGoogle({
     required String idToken,
-    String? phone,
-    String? wilaya,
-    CommunicationLanguage? preferredLanguage,
-  }) async {
-    final generation = ++_generation;
-    final identity = _tokens.invalidateIdentity();
-    final account = await _auth.signInWithGoogle(
+    required CommunicationLanguage preferredLanguage,
+  }) => _authenticateWith(
+    (identity) => _auth.signInWithGoogle(
       idToken: idToken,
-      phone: phone,
-      wilaya: wilaya,
       preferredLanguage: preferredLanguage,
       expectedIdentityGeneration: identity,
-    );
+    ),
+  );
+
+  Future<void> signInWithApple({
+    required String identityToken,
+    required String nonce,
+    required String fullName,
+    required CommunicationLanguage preferredLanguage,
+  }) => _authenticateWith(
+    (identity) => _auth.signInWithApple(
+      identityToken: identityToken,
+      nonce: nonce,
+      fullName: fullName,
+      preferredLanguage: preferredLanguage,
+      expectedIdentityGeneration: identity,
+    ),
+  );
+
+  /// Every sign-in's one path: a new generation and identity, so nothing
+  /// started under the previous login lands; the role context; the state;
+  /// the launch snapshot.
+  Future<void> _authenticateWith(
+    Future<Account> Function(int identity) authenticate,
+  ) async {
+    final generation = ++_generation;
+    final identity = _tokens.invalidateIdentity();
+    final account = await authenticate(identity);
     if (generation != _generation) return;
     await _adoptRoleContextFor(account);
     if (generation != _generation) return;
@@ -400,12 +406,33 @@ class SessionController extends Notifier<SessionState> {
   /// accepted. The state moves only once the server has answered, and it moves
   /// to the profile the server returned — never to the value that was asked
   /// for.
-  Future<void> updatePreferredLanguage(CommunicationLanguage language) async {
+  Future<void> updatePreferredLanguage(CommunicationLanguage language) =>
+      _updateProfile(() => _auth.updateProfile(preferredLanguage: language));
+
+  /// Names an account that has no name: a social sign-in that gave none.
+  ///
+  /// The server takes a name only while the account has none. When it
+  /// answers `name_already_set` (the name arrived another way, such as a
+  /// later sign-in that carried it) the account is re-read and the step is
+  /// done, the same as a success. Any other failure is the screen's to show.
+  Future<void> setFullName(String fullName) async {
+    try {
+      await _updateProfile(() => _auth.updateProfile(fullName: fullName));
+    } on ApiException catch (error) {
+      if (error.code != ApiErrorCode.nameAlreadySet) rethrow;
+      await refreshAccount();
+    }
+  }
+
+  /// Applies a profile change the server answered with the whole profile.
+  /// The state moves only once the server has answered, and to the profile it
+  /// returned, never to the value that was asked for.
+  Future<void> _updateProfile(Future<Account> Function() update) async {
     final current = state;
     if (current is! SessionSignedIn) return;
     final generation = _generation;
     final identity = _tokens.identityGeneration;
-    final account = await _auth.updatePreferredLanguage(language);
+    final account = await update();
     if (generation == _generation &&
         state is SessionSignedIn &&
         (state as SessionSignedIn).account.id == current.account.id &&

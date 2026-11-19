@@ -1,0 +1,12 @@
+// Sign in with Google on iOS. Both values are public identifiers, not
+// secrets, and stay empty until the iOS OAuth client exists in Google Cloud.
+// While they are empty the app does not offer Google on iOS; the app also
+// needs the same client id as its GOOGLE_IOS_CLIENT_ID build define.
+//
+// GOOGLE_IOS_CLIENT_ID       the iOS client id, such as
+//                            1234567890-abcdef.apps.googleusercontent.com
+// GOOGLE_REVERSED_CLIENT_ID  the same id reversed, such as
+//                            com.googleusercontent.apps.1234567890-abcdef
+//                            (the URL scheme Google returns to the app on)
+GOOGLE_IOS_CLIENT_ID =
+GOOGLE_REVERSED_CLIENT_ID =

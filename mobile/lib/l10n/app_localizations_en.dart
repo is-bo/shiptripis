@@ -6219,4 +6219,46 @@ class LEn extends L {
 
   @override
   String get guestSettings => 'Settings';
+
+  @override
+  String get socialContinueWithApple => 'Continue with Apple';
+
+  @override
+  String get socialContinueWithGoogle => 'Continue with Google';
+
+  @override
+  String get socialOr => 'or';
+
+  @override
+  String get socialGoogleFailed =>
+      'We couldn’t sign you in with Google. Try again.';
+
+  @override
+  String get socialAppleFailed =>
+      'We couldn’t sign you in with Apple. Try again.';
+
+  @override
+  String get socialGoogleUnavailable =>
+      'Sign in with Google is not available right now.';
+
+  @override
+  String get socialAppleUnavailable =>
+      'Sign in with Apple is not available right now.';
+
+  @override
+  String get socialAccountDisabled =>
+      'This account is disabled. Contact support if you think this is a mistake.';
+
+  @override
+  String get accountNameStamp => 'Almost there';
+
+  @override
+  String get accountNameTitle => 'What should we call you?';
+
+  @override
+  String get accountNameBody =>
+      'Your account has no name yet. The people you send or carry with see it on your offers and deliveries.';
+
+  @override
+  String get accountNameLabel => 'Your name';
 }

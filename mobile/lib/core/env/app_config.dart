@@ -2,7 +2,8 @@
 ///
 /// Everything here is a `--dart-define`, never a checked-in secret. The client
 /// holds no provider keys at all: checkout is created server-side and the app
-/// only ever opens a URL the server handed it.
+/// only ever opens a URL the server handed it. The sign-in client ids are
+/// public identifiers, not secrets, and are empty unless a build defines them.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -59,6 +60,26 @@ abstract final class AppConfig {
   static const mapUserAgent = String.fromEnvironment(
     'MAP_USER_AGENT',
     defaultValue: 'com.shiptrip.app',
+  );
+
+  /// Google's Web client id, the audience of the ID token the server checks
+  /// (it is one of the server's `GOOGLE_OAUTH_CLIENT_IDS`). Empty: no Google
+  /// sign-in on any platform.
+  static const googleServerClientId = String.fromEnvironment(
+    'GOOGLE_SERVER_CLIENT_ID',
+  );
+
+  /// Google's iOS client id. iOS offers Google only with it; it must match
+  /// `GOOGLE_IOS_CLIENT_ID` in `ios/Flutter/SocialSignIn.xcconfig`, whose
+  /// reversed form is the URL scheme Google returns to.
+  static const googleIosClientId = String.fromEnvironment(
+    'GOOGLE_IOS_CLIENT_ID',
+  );
+
+  /// Sign in with Apple, on iOS only, once the App ID has the capability and
+  /// the bundle id is in the server's `APPLE_SIGN_IN_CLIENT_IDS`.
+  static const appleSignInEnabled = bool.fromEnvironment(
+    'APPLE_SIGN_IN_ENABLED',
   );
 
   static const requestTimeout = Duration(seconds: 20);

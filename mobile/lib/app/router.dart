@@ -38,6 +38,7 @@ import '../domain/progress.dart';
 import '../domain/public_discovery.dart';
 import '../domain/reviews.dart';
 import '../features/auth/account_gate.dart';
+import '../features/auth/account_name_screen.dart';
 import '../features/auth/forgot_password_screen.dart';
 import '../features/auth/sign_in_screen.dart';
 import '../features/auth/sign_up_screen.dart';
@@ -100,6 +101,7 @@ abstract final class Routes {
   static const signUp = 'sign-up';
   static const forgotPassword = 'forgot-password';
   static const verifyEmail = 'verify-email';
+  static const accountName = 'account-name';
 
   static const home = 'home';
   static const deliveries = 'deliveries';
@@ -260,11 +262,14 @@ String? _redirectFor(SessionState session, Uri uri) {
   // Signed in. The auth screens and the splash are no longer valid places to
   // be — but the guest payment link stays reachable, because a signed-in user
   // can perfectly well be paying somebody else's obligation. The one auth
-  // screen a signed-in person needs: confirming their own email, from
-  // sign-up, from Profile, or when posting is refused. And the account flow
-  // closes itself once it succeeds, so the action that opened it goes ahead
-  // on the screen underneath.
-  if (location == '/auth/verify-email') return null;
+  // screens a signed-in person needs: confirming their own email, from
+  // sign-up, from Profile, or when posting is refused; and naming an account
+  // a social sign-in left without a name. And the account flow closes itself
+  // once it succeeds, so the action that opened it goes ahead on the screen
+  // underneath.
+  if (location == '/auth/verify-email' || location == '/auth/name') {
+    return null;
+  }
   if (isAccountFlowLocation(uri)) return null;
   if (location == '/splash' || location.startsWith('/auth/')) {
     final next = uri.queryParameters['next'];
@@ -352,6 +357,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           email: state.uri.queryParameters['email'] ?? '',
           flow: AccountFlow.of(state),
         ),
+      ),
+      GoRoute(
+        path: '/auth/name',
+        name: Routes.accountName,
+        builder: (context, state) =>
+            AccountNameScreen(flow: AccountFlow.of(state)),
       ),
 
       // ---- Guest payment: anonymous, outside the shell ----

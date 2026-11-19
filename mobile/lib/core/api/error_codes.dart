@@ -38,6 +38,24 @@ class ApiErrorCode {
   );
 
   // ---------------------------------------------------------------------------
+  // Sign-in and the profile
+  // ---------------------------------------------------------------------------
+
+  /// A banned or disabled account, for a password and a social sign-in alike.
+  static const accountDisabled = ApiErrorCode('account_disabled');
+
+  /// The server has no client id for the provider yet.
+  static const googleSignInUnavailable = ApiErrorCode(
+    'google_sign_in_unavailable',
+  );
+  static const appleSignInUnavailable = ApiErrorCode(
+    'apple_sign_in_unavailable',
+  );
+
+  /// `PATCH /api/me` sets a name only while the account has none.
+  static const nameAlreadySet = ApiErrorCode('name_already_set');
+
+  // ---------------------------------------------------------------------------
   // Retired V1 surfaces. Reaching one of these means the client called
   // something that no longer exists — a bug in the app, not a user problem.
   // ---------------------------------------------------------------------------
