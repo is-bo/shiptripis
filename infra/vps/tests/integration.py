@@ -81,6 +81,9 @@ def main():
         "KYC_S3_ENDPOINT_URL": "https://storage.invalid", "KYC_S3_REGION": "test-region",
         "S3_BUCKET_PARCEL": "test-private-media", "S3_BUCKET_PROOF": "test-private-proof",
         "S3_BUCKET_DISPUTE": "test-private-dispute", "S3_BUCKET_KYC": "test-private-kyc",
+        # The client-identity check below needs a sign-up bucket it can empty in
+        # a few requests; the shipped rate is sized for carrier-grade NAT.
+        "DRF_REGISTRATION_THROTTLE_RATE": "5/hour",
     })
     envfile = root / "stack.env"
     envfile.write_text("\n".join(f"{k}={v}" for k, v in config.items()) + "\n")
