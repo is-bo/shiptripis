@@ -109,10 +109,11 @@ To turn email off in an emergency: `EMAIL_ENABLED=false`. Rows stay safe in the 
      - `mobile/ios/Flutter/SocialSignIn.xcconfig`: `GOOGLE_IOS_CLIENT_PREFIX = <prefix>` (the id without
        `.apps.googleusercontent.com`).
      The iOS build stops with a clear message if the two disagree.
-4. Does the server list need the Android and iOS ids? **No.** The app passes the Web client id as the
-   server client id on both platforms, so Google puts the Web id in the token and the server
-   (`apps/accounts/google.py`) accepts only ids in `GOOGLE_OAUTH_CLIENT_IDS`. List the Web id. Adding the
-   iOS id as well is harmless but not needed.
+4. Which ids go in the server list? **The Web id and the iOS id.** The server
+   (`apps/accounts/google.py`) accepts a token only when its audience is in `GOOGLE_OAUTH_CLIENT_IDS`.
+   On Android the token names the Web id. On iPhone, depending on the version of Google's library, the
+   token can name the iOS id instead, so list both, separated by a comma. The Android client id is not
+   needed there.
 5. Until `GOOGLE_OAUTH_CLIENT_IDS` is set the server answers `google_sign_in_unavailable`, and until the
    app is built with `GOOGLE_SERVER_CLIENT_ID` the button is hidden.
 
@@ -190,7 +191,7 @@ Nothing is deployed and nothing contacted Sender, Google or Apple.
 | `stack.env` | `EMAIL_ACTIVATION_APPROVED` | `true` at activation | 3 |
 | `stack.env` | `EMAIL_ENABLED` | `true` last | 3 |
 | `stack.env` | `EMAIL_RATE_LIMIT_PER_MINUTE` | match the Sender plan (default 60) | 3 |
-| `stack.env` | `GOOGLE_OAUTH_CLIENT_IDS` | the Web client id | 4 |
+| `stack.env` | `GOOGLE_OAUTH_CLIENT_IDS` | the Web client id and the iOS client id, comma-separated | 4 |
 | App build define | `GOOGLE_SERVER_CLIENT_ID` | the Web client id | 4 |
 | GitHub repository variable | `GOOGLE_SERVER_CLIENT_ID` | the Web client id (Android release workflow) | 4 |
 | App build define (iOS) | `GOOGLE_IOS_CLIENT_ID` | `<prefix>.apps.googleusercontent.com` | 4 |

@@ -88,5 +88,11 @@ New or rewritten tests of the package are in `apps/notifications/tests/test_send
 - Linking is by verified email: a new Google identity with the address of an existing account joins it.
   Accepted.
 - A nameless social account is asked for a name once per app launch until it has one.
+- When an Apple or Google sign-in claims an unconfirmed account and gives no name, an access token issued
+  to the earlier holder stays valid for up to its 5-minute lifetime and could set the name once. Accepted:
+  it needs a stranger who signed up with the victim's address inside that window; staff can correct a
+  name in the Django admin.
+- A `PATCH /api/me` that sends a name and a language together is refused whole once a name is set; the
+  app sends them separately.
 - The bundle and application id is still `com.shiptrip.shiptrip`; Google and Apple clients are tied to it.
 - Everything stays off until Ismail sets the keys and switches; no email has ever been sent.
