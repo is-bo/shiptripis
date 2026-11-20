@@ -23,7 +23,7 @@ from django.utils import timezone
 from apps.accounts.models import User
 from apps.admin_panel.models import AdminAuditLog
 from apps.admin_panel.permissions import assign_admin_roles
-from apps.boosts.models import BoostPurchase
+from apps.boosts.models import BoostIntentEvent
 from apps.core import channels
 from apps.core.marketplace_policy import (
     InvalidMarketplacePolicy,
@@ -62,7 +62,7 @@ UNTOUCHED_MODELS = (
     PaymentOrder,
     LedgerTransaction,
     LedgerEntry,
-    BoostPurchase,
+    BoostIntentEvent,
     Rating,
 )
 

@@ -2,6 +2,7 @@ from django.urls import path
 
 from apps.locations.sea_crossings import MANAGE_CROSSINGS_PERMISSION
 from apps.problems.services import VIEW_PROBLEMS_PERMISSION
+from apps.chat.moderation import MODERATE_PERMISSION as CHAT_MODERATE_PERMISSION
 from apps.ratings.moderation import MODERATE_PERMISSION
 
 from apps.admin_helper import console as helper_console
@@ -16,6 +17,7 @@ from .console_journey_pause import journey_pause_action
 from .console_notes import NOTE_ROUTE_CAPABILITIES, note_add
 from .console_people import person_profile
 from .console_problems import deal_no_show, problem_detail, problems
+from .console_chat_reports import chat_report_detail, chat_reports
 from .console_reviews import review_detail, reviews
 from .console_payout_reviews import (
     payout_review_detail,
@@ -167,6 +169,17 @@ urlpatterns = [
         "trust/reviews/<int:pk>/",
         capability_required(MODERATE_PERMISSION)(review_detail),
         name="review-detail",
+    ),
+    # Store readiness, App Store 1.2. Chat messages members reported.
+    path(
+        "trust/chat-reports/",
+        capability_required(CHAT_MODERATE_PERMISSION)(chat_reports),
+        name="chat-reports",
+    ),
+    path(
+        "trust/chat-reports/<int:pk>/",
+        capability_required(CHAT_MODERATE_PERMISSION)(chat_report_detail),
+        name="chat-report-detail",
     ),
     path("marketplace/requests/", views.delivery_requests, name="requests"),
     path("marketplace/journeys/", views.journeys, name="journeys"),

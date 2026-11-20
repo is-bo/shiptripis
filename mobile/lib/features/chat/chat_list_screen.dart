@@ -25,6 +25,7 @@ import '../auth/account_gate.dart';
 import '../auth/guest_states.dart';
 import '../common/formatters.dart';
 import '../shell/app_shell.dart';
+import 'chat_copy.dart';
 
 class ChatListScreen extends ConsumerWidget {
   const ChatListScreen({super.key});
@@ -98,12 +99,14 @@ class _ThreadRow extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final locale = Localizations.localeOf(context);
     final last = thread.lastMessageAt;
+    final name = chatCounterpartyName(l, thread);
+    final preview = thread.lastMessageRemoved
+        ? l.chatMessageRemoved
+        : thread.lastMessage;
 
     return Semantics(
       button: true,
-      label: thread.hasUnread
-          ? '${thread.counterpartyName}, ${thread.unreadCount}'
-          : thread.counterpartyName,
+      label: thread.hasUnread ? '$name, ${thread.unreadCount}' : name,
       onTap: () =>
           context.openChatThread(thread.matchId, dealId: thread.dealId),
       child: ExcludeSemantics(
@@ -115,10 +118,7 @@ class _ThreadRow extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                AppAvatar(
-                  initials: initialsFor(thread.counterpartyName),
-                  name: thread.counterpartyName,
-                ),
+                AppAvatar(initials: initialsFor(name), name: name),
                 const SizedBox(width: AppSpace.md),
                 Expanded(
                   child: Column(
@@ -128,7 +128,7 @@ class _ThreadRow extends StatelessWidget {
                         children: [
                           Expanded(
                             child: Text(
-                              thread.counterpartyName,
+                              name,
                               style: text.titleSmall?.copyWith(
                                 fontWeight: thread.hasUnread
                                     ? FontWeight.w700
@@ -156,15 +156,17 @@ class _ThreadRow extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      if (thread.lastMessage != null &&
-                          thread.lastMessage!.isNotEmpty) ...[
+                      if (preview != null && preview.isNotEmpty) ...[
                         const SizedBox(height: AppSpace.xs),
                         Text(
-                          thread.lastMessage!,
+                          preview,
                           style: text.bodyMedium?.copyWith(
                             color: thread.hasUnread
                                 ? c.textPrimary
                                 : c.textSecondary,
+                            fontStyle: thread.lastMessageRemoved
+                                ? FontStyle.italic
+                                : null,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -175,9 +177,13 @@ class _ThreadRow extends StatelessWidget {
                       if (!thread.canSend) ...[
                         const SizedBox(height: AppSpace.sm),
                         StatusPill(
-                          label: l.chatClosedTitle,
+                          label: thread.blockedByMe
+                              ? l.chatBlockedPill
+                              : l.chatClosedTitle,
                           tone: StatusTone.neutral,
-                          icon: Icons.lock_outline_rounded,
+                          icon: thread.blockedByMe
+                              ? Icons.block_rounded
+                              : Icons.lock_outline_rounded,
                           compact: true,
                         ),
                       ],

@@ -38,12 +38,19 @@ class SessionRestoring extends SessionState {
 
 /// Nobody is signed in: the app is browsed as a guest.
 class SessionSignedOut extends SessionState {
-  const SessionSignedOut({this.becauseExpired = false});
+  const SessionSignedOut({
+    this.becauseExpired = false,
+    this.becauseDeleted = false,
+  });
 
   /// True when a live session ended rather than the app simply starting
   /// signed out, until the guest signs in again or dismisses the notice that
   /// says so. The sign-in screen and the guest screens explain the difference.
   final bool becauseExpired;
+
+  /// True right after the member deleted their account, until they dismiss
+  /// the notice that confirms it or sign in again.
+  final bool becauseDeleted;
 }
 
 class SessionSignedIn extends SessionState {
@@ -493,6 +500,21 @@ class SessionController extends Notifier<SessionState> {
     await _auth.signOut(expectedIdentityGeneration: identity);
   }
 
+  /// The server deleted the account and ended every session: clear the
+  /// device as a sign-out does, without asking the server to sign out.
+  Future<void> accountDeleted() async {
+    _generation++;
+    _revalidation?.cancel();
+    state = const SessionSignedOut(becauseDeleted: true);
+    final identity = _tokens.invalidateIdentity();
+    try {
+      await _tokens.deleteAccountSnapshot();
+    } on Object {
+      // The credential clear below deletes it too.
+    }
+    await _tokens.clearIfIdentityCurrent(identity);
+  }
+
   /// Called by the API client when refresh has failed terminally.
   ///
   /// Nothing else needs resetting here. Private reads bind to
@@ -512,7 +534,8 @@ class SessionController extends Notifier<SessionState> {
   /// The guest closed the "you were signed out" notice.
   void dismissSignedOutNotice() {
     final current = state;
-    if (current is SessionSignedOut && current.becauseExpired) {
+    if (current is SessionSignedOut &&
+        (current.becauseExpired || current.becauseDeleted)) {
       state = const SessionSignedOut();
     }
   }

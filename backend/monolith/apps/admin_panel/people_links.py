@@ -62,6 +62,10 @@ RETURN_CONTEXTS: dict[str, tuple[tuple[str, str], ...]] = {
         ("Verification", "admin_console:verification"),
         ("Reported reviews", "admin_console:reviews"),
     ),
+    "chat-reports": (
+        ("Verification", "admin_console:verification"),
+        ("Reported chat messages", "admin_console:chat-reports"),
+    ),
     "payouts": (("Finance", "admin_console:finance-dashboard"), ("Payouts", "admin_console:payouts")),
 }
 

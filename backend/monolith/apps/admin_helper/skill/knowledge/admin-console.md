@@ -20,7 +20,7 @@ Five roles: Super Admin, Ops, Support, Finance, Trust / Verification. (No others
 | Ops | Marketplace operations | view_dashboard, view_requests, manage_requests, view_journeys, manage_journeys, view_matches, manage_matches, view_deals, manage_deals, manage_lifecycle, view_operational_incidents, view_support_context, view_ratings, view_boosts, view_audit_log, record_no_show, view_disputes, manage_disputes, view_provider_health |
 | Support | Helping members | view_dashboard, view_users, view_requests, view_journeys, view_deals, view_support_context, manage_cancellations, view_ratings, view_audit_log, view_disputes |
 | Finance | Money | export_finance, view_finance_summary, view_payout_sensitive, view_payout_evidence, review_payout_profiles, manage_payout_holds, retry_payouts, view_dashboard, view_deals, view_payment_orders, view_payment_attempts, view_provider_events, issue_refunds, settle_manual_refunds, view_payouts, settle_payouts, reconcile_finance, view_scheduled_jobs, view_provider_health, view_audit_log, view_disputes, resolve_disputes |
-| Trust / Verification | Identity, tickets, evidence, reviews | attest_payout_identity, manage_payout_holds, view_dashboard, view_users, view_user_sensitive, view_kyc, review_kyc, view_flight_proofs, review_flight_proofs, view_evidence, review_safety, record_no_show, view_deals, view_audit_log, view_disputes, manage_disputes, moderate_ratings |
+| Trust / Verification | Identity, tickets, evidence, reviews | attest_payout_identity, manage_payout_holds, view_dashboard, view_users, view_user_sensitive, view_kyc, review_kyc, view_flight_proofs, review_flight_proofs, view_evidence, review_safety, record_no_show, view_deals, view_audit_log, view_disputes, manage_disputes, moderate_ratings, moderate_chat |
 | Super Admin | Owner | Every capability, including the ones only Super Admin holds |
 
 Capabilities only Super Admin holds: manage_users (account ban, hide profile), view_settings, manage_settings (settings, sea crossings), manage_admins and manage_permissions (staff management), plus technical records.
@@ -41,6 +41,7 @@ Menu sections: Overview, People, Verification, Marketplace, Disputes, Finance, S
 | Verification (Tickets tab) | `verification/flight-proofs/` | view_flight_proofs | Trust, Super | Decide flight and ferry ticket proofs |
 | Payout identity checks | `verification/payout-identity/` | attest_payout_identity | Trust, Super | Confirm a traveler's legal name for DZD payout approval |
 | Reported reviews | `trust/reviews/` | moderate_ratings | Trust, Super | Decide reported reviews |
+| Reported chat messages | `trust/chat-reports/` | moderate_chat | Trust, Super | Dismiss reports, remove or restore a reported message |
 | Delivery requests | `marketplace/requests/` | view_requests | Ops, Support, Super | Read only list |
 | Journeys | `marketplace/journeys/` | view_journeys | Ops, Support, Super | Read; pause/resume needs manage_journeys (Ops, Super) |
 | Deals | `marketplace/deals/` | view_deals | Ops, Support, Finance, Trust, Super | Read; record no-show (Ops, Trust, Super); notes |
@@ -185,6 +186,11 @@ Tabs appear only if the role may read that data: Overview; Identity (view_users,
 - Four decisions, each with a required reason (max 500, internal): Dismiss the reports (review unchanged); Hide the comment (score still counts; text replaced by "Comment removed by Wassla"); Remove the rating (leaves public averages and lists; the rated person still sees it marked "Removed by Wassla, not counted"); Lift the decision (review shown as written again).
 - The reporter's identity is visible to staff only; the author is never told who reported.
 <!-- src: backend/monolith/apps/admin_panel/console_reviews.py, apps/ratings/moderation.py -->
+
+## How do reported chat messages work?
+- Reported chat messages page (moderate_chat: Trust, Super): messages members reported, open ones first. Only reported messages and the 5 before and after each are shown. See messages-and-notices for reasons and blocking.
+- Three decisions, each with a required internal reason (max 500, audited as `chat.reports_dismissed`, `chat.message_removed`, `chat.message_restored`): Dismiss the reports; Remove the message (members see "Removed by Wassla"); Restore the message.
+<!-- src: backend/monolith/apps/admin_panel/console_chat_reports.py, apps/chat/moderation.py -->
 
 ## How do payments, refunds and payouts work in the console?
 - Payments (Finance, Super): list of payment attempts; canonical EUR leads, provider settlement (e.g. DZD) beside it. Attempt states: Created, Checkout pending, Processing, Succeeded, Failed, Expired, Cancelled. Actions (reconcile_finance): "Retry payment reconciliation" (queues a re-check; does not mark paid) and "Resolve payment attention item" (archives the queue item only; unapplied money cannot be dismissed until fully refunded).

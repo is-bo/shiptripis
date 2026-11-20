@@ -59,7 +59,7 @@ abstract final class AppConfig {
   /// identifier rather than the default Dart one.
   static const mapUserAgent = String.fromEnvironment(
     'MAP_USER_AGENT',
-    defaultValue: 'com.shiptrip.app',
+    defaultValue: 'eu.wassla.app',
   );
 
   /// Google's Web client id, the audience of the ID token the server checks
@@ -80,7 +80,8 @@ abstract final class AppConfig {
 
   /// Sign in with Apple, on iOS only, once the App ID has the capability and
   /// the bundle id is in the server's `APPLE_SIGN_IN_CLIENT_IDS`. The build
-  /// must also sign with the entitlements (`APPLE_SIGN_IN_ENTITLEMENTS` in
+  /// must also sign with the Sign in with Apple entitlement
+  /// (`APPLE_SIGN_IN_CAPABILITY = YES` in
   /// `ios/Flutter/SocialSignIn.xcconfig`); the build phase checks it.
   static const appleSignInEnabled = bool.fromEnvironment(
     'APPLE_SIGN_IN_ENABLED',

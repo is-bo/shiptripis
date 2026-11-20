@@ -53,14 +53,15 @@ The seeded shape is::
                     "ranking_weight"}, ...]
     }
 
-`packages`, `traveler_share_bps` and `minimum_amount_eur_cents` describe the
-retired J1-era *paid visibility package*. They are still parsed so a historical
-`BoostPurchase` keeps explaining itself, and no new row is ever written with
-them. J2 Boost is the sender's own extra reward on the request, priced by
-`commission_rate_bps` and bounded by the `*_intent_*` keys.
+`packages`, `max_active_per_request`, `traveler_share_bps` and
+`minimum_amount_eur_cents` belong to the J1-era *paid visibility package*, which
+was removed from the code. Only the console's read-only settings display shows
+them; they are still validated so a stored revision keeps the shape it was
+written with until the approved cleanup removes them. J2 Boost is the sender's own extra reward on the request, priced
+by `commission_rate_bps` and bounded by the `*_intent_*` keys.
 
-Every duration and money value parsed here is snapshotted onto the Deal (or the
-BoostPurchase) at the moment it first applies, so a later revision can never
+Every duration and money value parsed here is snapshotted onto the Deal at the
+moment it first applies, so a later revision can never
 move a deadline or a price that a party has already been quoted.
 """
 
@@ -178,12 +179,12 @@ class BoostPackage:
 
 @dataclass(frozen=True, slots=True)
 class BoostPolicy:
-    """Both Boost models: the retired paid package and the J2 sender reward.
+    """The J2 sender reward, and the leftover keys of the removed paid boost.
 
-    `enabled`, `max_active_per_request`, `minimum_amount_eur_cents`,
-    `traveler_share_bps` and `packages` belong to the retired visibility
-    package. Nothing writes a new row with them; they are parsed so historical
-    purchases stay explicable and so a revision that predates J2 still loads.
+    `enabled` switches Boost on and off. `max_active_per_request`,
+    `minimum_amount_eur_cents`, `traveler_share_bps` and `packages` belong to the
+    removed paid visibility package: no rule uses them, and they are validated
+    only so a stored revision keeps its shape until the approved cleanup.
 
     The J2 fields describe the sender's editable extra reward:
 

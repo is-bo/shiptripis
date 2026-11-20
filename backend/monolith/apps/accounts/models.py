@@ -39,6 +39,9 @@ class User(AbstractUser):
     is_email_verified = models.BooleanField(default=False)
     is_kyc_verified = models.BooleanField(default=False)
     is_banned = models.BooleanField(default=False, db_index=True)
+    #: When the member deleted their account (`apps.accounts.deletion`). The
+    #: row stays, emptied, because deliveries and payments point at it.
+    deleted_at = models.DateTimeField(null=True, blank=True)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["username"]
@@ -195,3 +198,42 @@ class EmailVerificationCode(models.Model):
             self.attempts = current.attempts
             self.used_at = current.used_at
             return ok
+
+
+class UserBlock(models.Model):
+    """One member has blocked another (App Store 1.2; `apps.accounts.blocks`).
+
+    While either of two members blocks the other, neither can message the
+    other, propose to the other, accept the other's proposal or tell the other
+    "I can carry this". A delivery already funded goes on: its codes,
+    progress, problem reports and disputes do not need the chat.
+    """
+
+    blocker = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="blocks_made",
+    )
+    blocked = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="blocks_received",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "accounts_user_block"
+        ordering = ("-created_at", "-id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("blocker", "blocked"), name="accounts_user_block_once"
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(blocker=models.F("blocked")),
+                name="accounts_user_block_not_self",
+            ),
+        ]
+        indexes = [models.Index(fields=("blocked", "blocker"), name="accounts_block_rev_idx")]
+
+    def __str__(self) -> str:
+        return f"UserBlock({self.blocker_id} blocks {self.blocked_id})"

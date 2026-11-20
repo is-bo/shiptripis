@@ -227,9 +227,7 @@ def test_j2_economics_reconcile_in_the_finance_control_plane():
     # the balance still needed. The Boost is inside it, counted once.
     assert metrics["gross_funded"]["amount_eur_cents"] == EXPECTED_BALANCE
     assert metrics["deposits_collected"]["amount_eur_cents"] == DEPOSIT
-    # No J2 Boost has a payment order, so the retired-package metric is empty
-    # and the Boost commission is reported on its own.
-    assert metrics["boost_funded"]["amount_eur_cents"] == 0
+    # A Boost has no payment order, so its commission is reported on its own.
     assert metrics["boost_commission"]["amount_eur_cents"] == 200
     # Base commission and Boost commission are both pending until the Deal
     # closes, and neither is double counted.

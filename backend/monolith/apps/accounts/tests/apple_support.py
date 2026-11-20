@@ -24,7 +24,7 @@ from jwt.algorithms import RSAAlgorithm
 
 from apps.accounts import apple
 
-BUNDLE_ID = "com.shiptrip.shiptrip"
+BUNDLE_ID = "eu.wassla.app"
 KEY_ID = "apple-test-key-1"
 #: The raw nonce the app sends; Apple's token carries its SHA-256 hex.
 RAW_NONCE = "Qm9vdHN0cmFwLW5vbmNlLWZvci10ZXN0cw"

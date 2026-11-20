@@ -25,7 +25,7 @@ Each obligation is a payment order in EUR with a purpose:
 |---|---|
 | `posting_deposit` | Money paid up front to publish a request |
 | `deal_balance` | The deal total, after a traveler offer is accepted |
-| `boost` | Boost purchase (older paid packages; new Boosts are folded into the deal balance) |
+| `boost` | Not used. There is no paid boost: a Boost is folded into the deal balance. |
 
 Order fields staff see: amount owed, credited (covered by a deposit, no new cash), paid (cash captured), refunded. Outstanding = owed - credited - paid. The database refuses over-collecting and refunding more than was captured.
 
@@ -75,7 +75,7 @@ Rule: when payout profiles are on (deployment flag `PAYOUT_PROFILES_ENABLED`), t
 
 ## Who can request a refund and for what reasons?
 - Only staff with capability `issue_refunds` (Finance and Super Admin) can request a refund by hand: Finance > Payments, open a succeeded payment, "Request refund". Form: "Refund amount (€)" (min 0.01), "Reason", plus the tick-box "I understand the provider may receive this refund request immediately." Users cannot request refunds themselves; refunds also start automatically from the platform.
-- Reasons: Request expired unmatched (`deposit_expiry`), Sender cancelled before acceptance (`sender_cancelled`), Payment could not be applied (`unapplied_payment`), Deal cancelled before funding (`deal_cancelled`), Administrative refund (`admin`), Deal cancelled after funding (`deal_cancelled_funded`), Dispute resolution (`dispute_resolution`), Verified no-show (`no_show`), Boost paid but no longer usable (`boost_unusable`).
+- Reasons: Request expired unmatched (`deposit_expiry`), Sender cancelled before acceptance (`sender_cancelled`), Payment could not be applied (`unapplied_payment`), Deal cancelled before funding (`deal_cancelled`), Administrative refund (`admin`), Deal cancelled after funding (`deal_cancelled_funded`), Dispute resolution (`dispute_resolution`), Verified no-show (`no_show`).
 - Only a `succeeded` payment that an order took can be refunded ("Only a succeeded attempt can be refunded.").
 - Partial refunds are allowed. Total refunds on one payment can never exceed what it captured: "A refund cannot exceed the captured amount." Money already reserved for a traveler payout cannot also be refunded: "This capture is reserved for a Traveler payout and cannot also fund a refund of this size."
 - Asking twice for the same payment and reason returns the existing refund (no double refund).
@@ -95,7 +95,7 @@ Statuses: `pending`, `processing`, `succeeded`, `failed`.
 ## What refunds happen when a deal is cancelled or disputed?
 - Before funding: any captured money is refunded; orders cancelled.
 - After funding, sender cancellation: more than 24 h (86,400 s) before agreed pickup gets everything back (exactly 24 h or later counts as late). Inside that cutoff the traveler gets 10% of the base reward (`sender_late_compensation_bps` 1000, rounded up, boost not counted) capped at 15.00 EUR (1500 cents); the rest goes back to the sender; platform keeps nothing. These are stored settings shown read-only in Settings > "Lifecycle guardrails"; no console form changes them. They are copied onto each deal at funding. See deliveries.md for who can cancel.
-- Dispute resolution: an admin enters a "Sender refund (€)" and optionally a "Traveler payout (€)". The three shares (sender, traveler, platform) must add up to what was collected, and money already paid out cannot be clawed back. If no traveler payout is entered, the remainder not returned is shared between traveler and platform in the original ratio (`partial_split_fee_mode` proportional). If a traveler payout is entered, the platform keeps whatever remains (a negative remainder is refused). Refunds are taken from the balance order first, then the deposit, then Boost orders. Example: collected 10.00 EUR (reward 8, fee 2), sender refund 4.00 leaves 6.00; traveler gets 6 x 8/10 = 4.80, platform 1.20.
+- Dispute resolution: an admin enters a "Sender refund (€)" and optionally a "Traveler payout (€)". The three shares (sender, traveler, platform) must add up to what was collected, and money already paid out cannot be clawed back. If no traveler payout is entered, the remainder not returned is shared between traveler and platform in the original ratio (`partial_split_fee_mode` proportional). If a traveler payout is entered, the platform keeps whatever remains (a negative remainder is refused). Refunds are taken from the balance order first, then the deposit. Example: collected 10.00 EUR (reward 8, fee 2), sender refund 4.00 leaves 6.00; traveler gets 6 x 8/10 = 4.80, platform 1.20.
 - Errors: `settlement_refund_out_of_range`, `settlement_payout_out_of_range`, `settlement_exceeds_paid_out`, `settlement_does_not_reconcile`.
 <!-- src: finance/settlement.py, core/migrations/0006 -->
 

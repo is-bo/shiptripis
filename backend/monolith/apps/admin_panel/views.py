@@ -27,7 +27,6 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.accounts.models import User
-from apps.boosts.models import BoostPurchase
 from apps.core.business_settings import activate_business_settings
 from apps.core.models import BusinessSettingsVersion
 from apps.deals.cancellation import CancellationError
@@ -75,7 +74,6 @@ from . import tracking_search, two_step
 from .staff_api import StaffAPIView
 from .models import AdminAuditLog, AdminInvitation
 from .ops_serializers import (
-    AdminBoostSerializer,
     AdminDealDetailSerializer,
     AdminDealSerializer,
     AdminDisputeSerializer,
@@ -114,7 +112,6 @@ from .permissions import (
     CanSettleManualRefunds,
     CanSettlePayouts,
     CanViewAuditLog,
-    CanViewBoosts,
     CanViewDashboard,
     CanViewDeals,
     CanViewDisputes,
@@ -1005,17 +1002,6 @@ class AdminRatingListView(StaffAPIView):
                 )
             queryset = queryset.filter(Q(rater_id=user_id) | Q(ratee_id=user_id))
         return _paginate(request, queryset, AdminRatingSerializer)
-
-
-class AdminBoostListView(StaffAPIView):
-    permission_classes = (CanViewBoosts,)
-
-    def get(self, request):
-        return _paginate(
-            request,
-            _status_filter(BoostPurchase.objects.order_by("-created_at"), request),
-            AdminBoostSerializer,
-        )
 
 
 class AdminProviderHealthView(StaffAPIView):

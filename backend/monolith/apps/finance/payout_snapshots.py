@@ -114,17 +114,9 @@ def preflight(*, order, provider, policy):
 
 
 def source_order_ids(order):
-    from apps.boosts.models import BoostPurchase
-
     ids = [order.pk]
     if order.credit_source_id and order.credited_eur_cents:
         ids.append(order.credit_source_id)
-    if order.deal_id:
-        ids.extend(
-            BoostPurchase.objects.filter(deal_id=order.deal_id)
-            .order_by("pk")
-            .values_list("payment_order_id", flat=True)
-        )
     return [pk for pk in ids if pk is not None]
 
 

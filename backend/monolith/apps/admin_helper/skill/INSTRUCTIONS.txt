@@ -204,8 +204,16 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 | Banned | Staff banned them. Cannot sign in. |
 | Sign-in disabled | Account switched off without a ban: a staff account disabled on Staff & access, or any account switched off in the technical Django admin. Cannot sign in. |
 - A banned or disabled person who tries to sign in with a password sees "Incorrect email or password." The server refuses inactive accounts before its own "This account is disabled." check, so that message does not appear for a password. With Google or Apple they get `account_disabled` "This account is disabled." (see sign-in methods).
-- There is no self-service "delete account" or "deactivate account" in the app or API. Not in the app. The helper reports `deactivated` for an inactive non-banned account.
+- A member can delete their own account (see "How does a member delete their account?"). A deleted account shows as Sign-in disabled. The helper reports `deactivated` for an inactive non-banned account.
 - Users list filters: Active, Restricted (banned or disabled).
+
+## How does a member delete their account?
+- In the app: Profile > "Delete account" (under Sign out). On the web: the page /delete-account (English, French, Arabic) gives the steps and the email route (contact@wassla.eu, subject "Delete my account").
+- It is refused while anything is open, each listed in the app: a delivery not closed, an open dispute, a payout or refund not yet reached them, an open parcel request, a published or under-way trip. The member finishes or cancels those first; deletion never cancels anything or moves money.
+- The password is asked when the account has one (`password_incorrect` if wrong). An account with Sign in with Apple confirms with Apple on an iPhone; the server revokes Apple's token first, and if Apple refuses or cannot be reached nothing is deleted. On Android such an account is told to delete from an iPhone or write to support.
+- Deleting is immediate and permanent: every session ends; name, email (replaced by an address that cannot receive mail, so the real email can sign up again), phone, region, language, password, Google and Apple links, sign-in and email codes, push devices, inbox, notification settings, route alerts and public profile are erased; pending emails are cancelled.
+- Kept, pointing at the emptied account: deliveries, payments, refunds, payouts and payout details, ID check decisions, reviews, problem reports, disputes and chat history. Other members see "Deleted account" in chat.
+- Staff accounts cannot be deleted from the app (`staff_account`).
 
 ## What does a ban do, and what does restore do?
 - Who: only roles with `manage_users` (Super Admin). Console: person page, button "Ban account" or "Restore account". A reason is required (up to 500 characters), kept in the audit log, never shown to the person.
@@ -332,7 +340,7 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 ## Not covered here
 - A guaranteed review time for IDs or tickets: the code has none ("less than a day" is only app text).
 - Live values of the server environment limits above (sign-in lifetimes, code lifetimes, upload limits): only the shipped defaults are known here.
-- The app has no account deletion or self-deactivation, and nothing ever sets "phone verified".
+- Nothing ever sets "phone verified".
 
 
 ==== NOTES: knowledge/admin-console.md ====
@@ -358,7 +366,7 @@ Five roles: Super Admin, Ops, Support, Finance, Trust / Verification. (No others
 | Ops | Marketplace operations | view_dashboard, view_requests, manage_requests, view_journeys, manage_journeys, view_matches, manage_matches, view_deals, manage_deals, manage_lifecycle, view_operational_incidents, view_support_context, view_ratings, view_boosts, view_audit_log, record_no_show, view_disputes, manage_disputes, view_provider_health |
 | Support | Helping members | view_dashboard, view_users, view_requests, view_journeys, view_deals, view_support_context, manage_cancellations, view_ratings, view_audit_log, view_disputes |
 | Finance | Money | export_finance, view_finance_summary, view_payout_sensitive, view_payout_evidence, review_payout_profiles, manage_payout_holds, retry_payouts, view_dashboard, view_deals, view_payment_orders, view_payment_attempts, view_provider_events, issue_refunds, settle_manual_refunds, view_payouts, settle_payouts, reconcile_finance, view_scheduled_jobs, view_provider_health, view_audit_log, view_disputes, resolve_disputes |
-| Trust / Verification | Identity, tickets, evidence, reviews | attest_payout_identity, manage_payout_holds, view_dashboard, view_users, view_user_sensitive, view_kyc, review_kyc, view_flight_proofs, review_flight_proofs, view_evidence, review_safety, record_no_show, view_deals, view_audit_log, view_disputes, manage_disputes, moderate_ratings |
+| Trust / Verification | Identity, tickets, evidence, reviews | attest_payout_identity, manage_payout_holds, view_dashboard, view_users, view_user_sensitive, view_kyc, review_kyc, view_flight_proofs, review_flight_proofs, view_evidence, review_safety, record_no_show, view_deals, view_audit_log, view_disputes, manage_disputes, moderate_ratings, moderate_chat |
 | Super Admin | Owner | Every capability, including the ones only Super Admin holds |
 
 Capabilities only Super Admin holds: manage_users (account ban, hide profile), view_settings, manage_settings (settings, sea crossings), manage_admins and manage_permissions (staff management), plus technical records.
@@ -378,6 +386,7 @@ Menu sections: Overview, People, Verification, Marketplace, Disputes, Finance, S
 | Verification (Tickets tab) | `verification/flight-proofs/` | view_flight_proofs | Trust, Super | Decide flight and ferry ticket proofs |
 | Payout identity checks | `verification/payout-identity/` | attest_payout_identity | Trust, Super | Confirm a traveler's legal name for DZD payout approval |
 | Reported reviews | `trust/reviews/` | moderate_ratings | Trust, Super | Decide reported reviews |
+| Reported chat messages | `trust/chat-reports/` | moderate_chat | Trust, Super | Dismiss reports, remove or restore a reported message |
 | Delivery requests | `marketplace/requests/` | view_requests | Ops, Support, Super | Read only list |
 | Journeys | `marketplace/journeys/` | view_journeys | Ops, Support, Super | Read; pause/resume needs manage_journeys (Ops, Super) |
 | Deals | `marketplace/deals/` | view_deals | Ops, Support, Finance, Trust, Super | Read; record no-show (Ops, Trust, Super); notes |
@@ -507,6 +516,10 @@ Tabs appear only if the role may read that data: Overview; Identity (view_users,
 - Reported reviews page (moderate_ratings: Trust, Super): reviews with reports, open ones first. Report reasons: Offensive, Contains personal information, Not about this delivery, Untrue, Other.
 - Four decisions, each with a required reason (max 500, internal): Dismiss the reports (review unchanged); Hide the comment (score still counts; text replaced by "Comment removed by Wassla"); Remove the rating (leaves public averages and lists; the rated person still sees it marked "Removed by Wassla, not counted"); Lift the decision (review shown as written again).
 - The reporter's identity is visible to staff only; the author is never told who reported.
+
+## How do reported chat messages work?
+- Reported chat messages page (moderate_chat: Trust, Super): messages members reported, open ones first. Only reported messages and the 5 before and after each are shown. See messages-and-notices for reasons and blocking.
+- Three decisions, each with a required internal reason (max 500, audited as `chat.reports_dismissed`, `chat.message_removed`, `chat.message_restored`): Dismiss the reports; Remove the message (members see "Removed by Wassla"); Restore the message.
 
 ## How do payments, refunds and payouts work in the console?
 - Payments (Finance, Super): list of payment attempts; canonical EUR leads, provider settlement (e.g. DZD) beside it. Attempt states: Created, Checkout pending, Processing, Succeeded, Failed, Expired, Cancelled. Actions (reconcile_finance): "Retry payment reconciliation" (queues a re-check; does not mark paid) and "Resolve payment attention item" (archives the queue item only; unapplied money cannot be dismissed until fully refunded).
@@ -842,7 +855,7 @@ One line per folder in `backend/monolith/apps`. A member never sees these names;
 | `finance` | The real money system: payment orders and attempts, Stripe and Chargily, refunds, ledger, payouts, guest payment links, scheduled jobs, exports |
 | `handover` | Pickup and delivery codes, attempts, lockouts, rotation |
 | `disputes`, `problems` | Disputes with evidence and settlement; lighter problem reports (no-show, damage, delay) |
-| `ratings`, `boosts` | Two-sided blind reviews and moderation; the sender's extra reward (retired paid package is history) |
+| `ratings`, `boosts` | Two-sided blind reviews and moderation; the sender's extra reward (there is no paid boost) |
 | `discovery` | Home discovery: public profiles, route alerts, "I can carry this" |
 | `notifications` | Bell notices, push, email queue, delivery rules |
 | `chat` | One-to-one messages between sender and traveler of a match |
@@ -1141,7 +1154,7 @@ flowchart TD
 Jobs are durable rows in the database (status `pending`, `running`, `succeeded`, `failed`, `cancelled`), so a restart or a Redis flush loses nothing. One finance worker checks them every 30 seconds; one reservation releaser polls every 60 seconds. Staff see failures in System > Background jobs. These are the job kinds:
 - Money: `deposit_expiry_refund` (refund deposit when a request expires unmatched), `payment_grace_release` (free the space and expire the deal if unpaid), `attempt_expiry` (close an old checkout), `provider_reconcile` and `provider_event_process` (re-check payments, apply stored webhooks), `refund_reconcile` (check refund results).
 - Payout: `payout_release_check` (at protection end: `eligible`, `blocked` or `frozen`), `payout_execute`, `payout_reconcile`, `payout_account_refresh`, `payout_sweep` (automatic EUR payout steps, execution off by default).
-- Deal lifecycle: `delivery_code_release` (after the 30 min buffer, emails the recipient), `protection_expiry` (ends the 48 h and completes the deal), `rating_reveal`, `boost_expiry` (old retired packages).
+- Deal lifecycle: `delivery_code_release` (after the 30 min buffer, emails the recipient), `protection_expiry` (ends the 48 h and completes the deal), `rating_reveal`.
 - Messages: `outbound_message`, `notification_dispatch` (send queued email and notices).
 - Marketplace: `discovery_route_alerts`, `leg_reminder` (nudge traveler to report progress), `schedule_change_settle`, `offer_response_reminder` and `offer_expiry` (unanswered offer, 6 h default).
 - AI helper: `admin_helper_call_prune` (call log kept 30 days), `admin_helper_action_expiry` (prepared change unconfirmed, 24 h default).
@@ -1440,10 +1453,13 @@ Staff cannot unlock chat for an unfunded deal from the chat itself; the rule fol
 - History can be fetched in pages of 50 (up to 200) or by cursor ("latest", "after_id", "before_id"); bad cursors return 400 with a plain message.
 - Exact addresses are not part of chat; the chat does not reveal anything the deal has not already unlocked.
 
-## Is chat moderated? Can staff read it?
-- There is no automatic moderation, word filter, block or report-message button in the code.
-- Staff have no screen to read chat. Neither the admin console nor the Django admin has a chat page, and the AI helper has no chat tool. Dispute evidence bundles only record that a conversation existed (message count, first and last message time), not the text; the text stays in the chat table.
-- Users report abuse through support (see the support section) or by opening a problem report / dispute.
+## Is chat moderated? Can staff read it? (report and block)
+- No automatic moderation or word filter. Members report and block (App Store rule 1.2).
+- Report: in a conversation, the member presses and holds a message they received and picks a reason: Spam or advertising, Harassment or threats, A scam or a request to pay outside Wassla, Offensive or inappropriate, Something else; an optional note (up to 500 characters); and "Also block this member". Only the recipient can report a message, once (a second report answers the first). The sender is never told who reported.
+- Block: from the conversation's menu ("Block"), or with the report. Either member blocking stops, both ways: sending chat messages (403, reason `blocked`), new proposals, counter-offers and accepting a pending offer (403 `party_blocked`), and "I can carry this" (403 `party_blocked`). The conversation stays readable to both. A delivery already paid goes on as agreed (codes, progress, payout are unchanged). Only the blocker can unblock: from the conversation's notice ("Unblock") or Profile > Blocked people.
+- Staff read chat only through reports: console page "Reported chat messages" (Trust menu, `trust/chat-reports/`, capability `moderate_chat`: Trust and Super Admin). Only reported messages are shown, each with the 5 messages before and after it, every report with its reporter, reason and note. Decisions, each with a required internal reason (audited): Dismiss the reports (message unchanged), Remove the message (both members see "Removed by Wassla" instead; the text stays for staff and in the audit log), Restore the message. Every decision closes the message's open reports. A member who keeps sending abuse is banned from their person page (Super Admin).
+- The work list shows open chat reports ("Reported chat messages"), urgent after 24 hours. The AI helper sees only that count; chat contents never reach the helper, and it cannot decide a report.
+- Dispute evidence bundles only record that a conversation existed (message count, first and last message time), not the text.
 
 ## How does the notification bell work?
 - The bell is in the app header. It shows a count of active unread items. Screen reader label: "Notifications, N unread".
@@ -1643,7 +1659,7 @@ Each obligation is a payment order in EUR with a purpose:
 |---|---|
 | `posting_deposit` | Money paid up front to publish a request |
 | `deal_balance` | The deal total, after a traveler offer is accepted |
-| `boost` | Boost purchase (older paid packages; new Boosts are folded into the deal balance) |
+| `boost` | Not used. There is no paid boost: a Boost is folded into the deal balance. |
 
 Order fields staff see: amount owed, credited (covered by a deposit, no new cash), paid (cash captured), refunded. Outstanding = owed - credited - paid. The database refuses over-collecting and refunding more than was captured.
 
@@ -1687,7 +1703,7 @@ Rule: when payout profiles are on (deployment flag `PAYOUT_PROFILES_ENABLED`), t
 
 ## Who can request a refund and for what reasons?
 - Only staff with capability `issue_refunds` (Finance and Super Admin) can request a refund by hand: Finance > Payments, open a succeeded payment, "Request refund". Form: "Refund amount (€)" (min 0.01), "Reason", plus the tick-box "I understand the provider may receive this refund request immediately." Users cannot request refunds themselves; refunds also start automatically from the platform.
-- Reasons: Request expired unmatched (`deposit_expiry`), Sender cancelled before acceptance (`sender_cancelled`), Payment could not be applied (`unapplied_payment`), Deal cancelled before funding (`deal_cancelled`), Administrative refund (`admin`), Deal cancelled after funding (`deal_cancelled_funded`), Dispute resolution (`dispute_resolution`), Verified no-show (`no_show`), Boost paid but no longer usable (`boost_unusable`).
+- Reasons: Request expired unmatched (`deposit_expiry`), Sender cancelled before acceptance (`sender_cancelled`), Payment could not be applied (`unapplied_payment`), Deal cancelled before funding (`deal_cancelled`), Administrative refund (`admin`), Deal cancelled after funding (`deal_cancelled_funded`), Dispute resolution (`dispute_resolution`), Verified no-show (`no_show`).
 - Only a `succeeded` payment that an order took can be refunded ("Only a succeeded attempt can be refunded.").
 - Partial refunds are allowed. Total refunds on one payment can never exceed what it captured: "A refund cannot exceed the captured amount." Money already reserved for a traveler payout cannot also be refunded: "This capture is reserved for a Traveler payout and cannot also fund a refund of this size."
 - Asking twice for the same payment and reason returns the existing refund (no double refund).
@@ -1705,7 +1721,7 @@ Statuses: `pending`, `processing`, `succeeded`, `failed`.
 ## What refunds happen when a deal is cancelled or disputed?
 - Before funding: any captured money is refunded; orders cancelled.
 - After funding, sender cancellation: more than 24 h (86,400 s) before agreed pickup gets everything back (exactly 24 h or later counts as late). Inside that cutoff the traveler gets 10% of the base reward (`sender_late_compensation_bps` 1000, rounded up, boost not counted) capped at 15.00 EUR (1500 cents); the rest goes back to the sender; platform keeps nothing. These are stored settings shown read-only in Settings > "Lifecycle guardrails"; no console form changes them. They are copied onto each deal at funding. See deliveries.md for who can cancel.
-- Dispute resolution: an admin enters a "Sender refund (€)" and optionally a "Traveler payout (€)". The three shares (sender, traveler, platform) must add up to what was collected, and money already paid out cannot be clawed back. If no traveler payout is entered, the remainder not returned is shared between traveler and platform in the original ratio (`partial_split_fee_mode` proportional). If a traveler payout is entered, the platform keeps whatever remains (a negative remainder is refused). Refunds are taken from the balance order first, then the deposit, then Boost orders. Example: collected 10.00 EUR (reward 8, fee 2), sender refund 4.00 leaves 6.00; traveler gets 6 x 8/10 = 4.80, platform 1.20.
+- Dispute resolution: an admin enters a "Sender refund (€)" and optionally a "Traveler payout (€)". The three shares (sender, traveler, platform) must add up to what was collected, and money already paid out cannot be clawed back. If no traveler payout is entered, the remainder not returned is shared between traveler and platform in the original ratio (`partial_split_fee_mode` proportional). If a traveler payout is entered, the platform keeps whatever remains (a negative remainder is refused). Refunds are taken from the balance order first, then the deposit. Example: collected 10.00 EUR (reward 8, fee 2), sender refund 4.00 leaves 6.00; traveler gets 6 x 8/10 = 4.80, platform 1.20.
 - Errors: `settlement_refund_out_of_range`, `settlement_payout_out_of_range`, `settlement_exceeds_paid_out`, `settlement_does_not_reconcile`.
 
 ## How does a traveler get paid? The overall path
@@ -1911,7 +1927,7 @@ Other statuses:
 - Deal leg allocation (one slice of a deal per leg): `pending_payment`, `funded`, `in_transit`, `released`, `completed`, `cancelled`.
 - Early arrival report on a deal: `pending_confirmation` (sender must answer), `confirmed`, `declined`. It never moves money or the delivery code.
 - Boost today is a plain extra reward amount on the request (smallest non-zero Boost 1.00 EUR, Settings: boost). It has no status, timer or expiry of its own; it is frozen into the deal when an offer is accepted.
-- Boost purchase (old paid visibility package, retired; no new ones are created, the endpoint answers 410): `pending_payment`, `active`, `expired`, `cancelled` (before payment), `unusable` (paid but request no longer boostable), `refunded`. Old rows are kept as history.
+- There is no paid boost and no visibility package to buy.
 
 ## Glossary: journeys and legs
 
@@ -1927,11 +1943,11 @@ Other statuses:
 
 | Term | Meaning |
 |---|---|
-| Payment order | One amount to collect. Purpose: `posting_deposit`, `deal_balance`, `boost`. Status: `pending`, `partially_paid`, `paid`, `refund_pending`, `partially_refunded`, `refunded`, `cancelled`. |
+| Payment order | One amount to collect. Purpose: `posting_deposit`, `deal_balance` (`boost` exists but is not used). Status: `pending`, `partially_paid`, `paid`, `refund_pending`, `partially_refunded`, `refunded`, `cancelled`. |
 | Payment attempt | One try to pay an order at a provider. `created`, `checkout_pending`, `processing`, `succeeded`, `failed`, `expired`, `cancelled`. Checkout attempt lives 3600 s (Settings: Payments > Checkout). |
 | Provider | Stripe (EUR cards), Chargily (Algerian cards / Edahabia, DZD). A mock provider exists for tests only and is forbidden in production. |
-| Refund | Money back. Status `pending`, `processing`, `succeeded`, `failed`. Reasons: request expired unmatched, sender cancelled before acceptance, payment could not be applied, deal cancelled before funding, administrative, deal cancelled after funding, dispute resolution, verified no-show, boost paid but no longer usable (old boost packages). |
-| Ledger | Append-only money journal. Entry kinds: customer payment, deposit credit, deal funding, boost binding, boost allocation, refund, payout, correction. |
+| Refund | Money back. Status `pending`, `processing`, `succeeded`, `failed`. Reasons: request expired unmatched, sender cancelled before acceptance, payment could not be applied, deal cancelled before funding, administrative, deal cancelled after funding, dispute resolution, verified no-show. |
+| Ledger | Append-only money journal. Entry kinds: customer payment, deposit credit, deal funding, boost allocation, refund, payout, correction. |
 | Payout | What the traveler receives. Statuses below. |
 | Payout method | How a traveler is paid: Stripe connected account or manual settlement. Status `setup_required`, `pending_review`, `ready`, `needs_attention`, `unavailable`, `disabled`. |
 | Hold | Money locked for a deal (sender's funds in escrow until release or refund). Old wallet model: `open`, `released`, `reversed`. Also "payout hold" = finance blocks a payout manually. |
@@ -2086,7 +2102,7 @@ Server-side, per parcel and per matched route:
 - A boost is extra reward the sender adds on a request. The traveler receives 100% of it. Wassla's fee on the boost is charged on top to the sender, at its own rate (default 25%, separate from the delivery commission), rounded up to the cent.
 - Smallest boost 1.00 EUR, largest 1,000,000.00 EUR (100,000,000 cents). 0 means no boost. Refusals: `boost_amount_below_minimum`, `boost_amount_above_maximum` ("That boost is below the minimum." / "above the maximum.").
 - Worked example: reward 24.00 EUR, boost 5.00 EUR. Boost fee = 1.25. Traveler gets 24.00 + 5.00 = 29.00. Sender pays 30.00 (reward + fee) + 5.00 + 1.25 = 36.25.
-- Boost is not a timer or package. Its ranking effect lasts until the request's deadline, while the request is open for matching. The old paid visibility packages are retired: buying one answers `boost_package_retired`; old purchases only keep their effect until they expire.
+- Boost is not a timer or package. Its ranking effect lasts until the request's deadline, while the request is open for matching. There is no paid boost and no visibility package to buy.
 - Editable only while the request is awaiting deposit or open, by the sender, before its deadline. After an offer is accepted: "This request's boost is no longer editable." (`boost_request_not_active`); after deadline `boost_request_expired`. If boosts are switched off: `boost_disabled` ("Boosts are not available at the moment.").
 - Lowering a boost is refused if the posting deposit already paid would exceed the new total: `boost_below_prepaid_deposit`.
 - In the app, a boost is added after publishing (presets +5 EUR, +10 EUR, custom). The server also accepts one at posting.
@@ -2657,7 +2673,7 @@ Rank only orders results after compatibility. A boost never bypasses compatibili
 - Boost is the sender's own extra reward on a request. The traveler receives the whole boost; Wassla's boost commission is charged on top. Default boost commission 25% (2500 bps). Editable on the console (0 to 100%, "applies to future commitments only").
 - Smallest non-zero boost 1.00 EUR (limits 0.01 to 1,000 EUR); largest 1,000,000.00 EUR (the ceiling). Zero means no boost.
 - Ranking weight: weight = boost amount divided by 5.00 EUR (rounded up, at least 1), capped at 30 (max allowed 100). Only affects ranking, after compatibility.
-- Old "visibility packages" (24 h, 3 days, 7 days) and traveler_share_bps 75%, min amount 5.00 EUR are retired. They still parse for history. Nothing new is sold with them.
+- Old "visibility packages" (24 h, 3 days, 7 days) and traveler_share_bps 75%, min amount 5.00 EUR are left over from the removed paid boost. They stay in the stored settings and are still checked when a settings version loads, but nothing uses them and no boost is sold.
 
 ## Marketplace switches ("Discovery, routes, prices and proposals" form)
 Section `marketplace`. Absent means the defaults below. Unknown names are refused. Everything ships ON except sea legs.
@@ -2835,7 +2851,7 @@ See pricing.md and money.md for the full formulas.
 - Languages: English (default), French, Arabic (right to left) in the app and the home page. Emails follow the user's email language. The legal pages are English only for now.
 - Currency: EUR is the real currency (stored in cents). Chargily shows a DZD amount converted by the server from EUR (rate typed by an admin, shipped placeholder 150 DZD per EUR, minimum 75 DZD). Stripe pays in EUR.
 - Whether a country is actually "live" for users cannot be read from the code: signup asks for no country. Which payment rails are on is a setting (next section).
-- Not offered: sea legs (off by default), a wallet, phone or SMS sign-in, account deletion in the app. Google sign-in and Sign in with Apple are built in the app and the server, and each stays off until its keys are set (Apple until the iOS bundle id is in `APPLE_SIGN_IN_CLIENT_IDS` and the build defines `APPLE_SIGN_IN_ENABLED=true`). Account deletion in the app, which the App Store requires, is not built yet. Visitors can browse without an account.
+- Not offered: sea legs (off by default), a wallet, phone or SMS sign-in. Google sign-in and Sign in with Apple are built in the app and the server, and each stays off until its keys are set (Apple until the iOS bundle id is in `APPLE_SIGN_IN_CLIENT_IDS` and the build defines `APPLE_SIGN_IN_ENABLED=true`). Members delete their own account in the app (Profile > Delete account), as the App Store and Google Play require, and members can report a chat message and block someone. Visitors can browse without an account.
 
 ## What is switched on or off in the shipped settings, and where do I change it?
 | Thing | Shipped state | Where to change it |
@@ -2890,7 +2906,7 @@ See accounts-and-verification.md.
 See admin-console.md for the role table.
 
 ## How long is data kept? Can a user delete their account?
-- No account deletion or deactivation in the app or API. Privacy requests (access, correction, deletion) go to a support mailbox on the website (see legal pages below). The privacy page says retention periods are not yet decided and will be published before launch.
+- Yes: Profile > "Delete account" in the app, or the /delete-account web page (steps and an email route). It waits until nothing is open, then erases the person's details at once; records others and the law rely on stay without them (see accounts-and-verification). Other privacy requests (access, correction) go to the support mailbox on the website (see legal pages below). The privacy page says retention periods are not yet decided and will be published before launch.
 - Fixed in code: finished background-job rows are pruned after 90 days by default (never below 30; money records are never touched); AI helper calls kept 30 days; phones not seen for 180 days are switched off; unclaimed parcel photos are reclaimable after 48 hours; notifications, audit rows and ledger rows are never deleted.
 - Financial, safety and dispute records are kept (the privacy page says they may need to stay for legal reasons).
 - There is no data-retention policy in the code. The public privacy page states no retention periods. Say so, and say that it is an open business decision.

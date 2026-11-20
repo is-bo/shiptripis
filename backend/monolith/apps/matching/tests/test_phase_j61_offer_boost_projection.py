@@ -33,7 +33,6 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.boosts.services import set_boost_intent
-from apps.boosts.tests.test_boosts import legacy_purchase
 from apps.boosts.tests.test_j2_boost import set_boost_commission
 from apps.deals.models import Deal
 from apps.deals.tests.phase4_factories import enable_mock_rail
@@ -382,38 +381,6 @@ class HistoricalOfferProjectionTests(TestCase):
         result = OfferEconomicsReader().project(offer, match)
         assert result["boost_terms_status"] == "unavailable"
         assert result["traveler_total_minor"] is None
-
-    def test_a_paid_legacy_package_is_projected_exactly_as_acceptance_binds_it(self):
-        enable_mock_rail()
-        scenario = build_scenario(prefix="j61v")
-        purchase = legacy_purchase(
-            delivery_request=scenario.delivery_request,
-            buyer=scenario.sender,
-            amount_eur_cents=777,
-        )
-        pay_order_with_mock(self.client, purchase.payment_order)
-        match_id = propose(scenario)["match"]
-
-        shown = latest_offer(scenario.traveler, match_id)
-        assert projection(shown) == {
-            "boost_terms_status": "provisional",
-            "boost_economics_version": "traveler_split_v1",
-            "boost_amount_minor": 777,
-            "boost_traveler_bonus_minor": 582,
-            "boost_platform_fee_minor": 195,
-            "traveler_total_minor": 2_582,
-            # The package was paid on its own order, so the sender owed the
-            # Boost and nothing on top of it.
-            "sender_total_with_boost_minor": 3_277,
-        }
-        response = accept(scenario.traveler, shown["id"], **confirmed(shown))
-        assert response.status_code == 201, response.data
-        frozen = latest_offer(scenario.traveler, match_id)
-        assert frozen["boost_terms_status"] == "frozen"
-        for field in TERMS_FIELDS:
-            assert frozen[field] == shown[field] == response.data["terms"][field]
-        # J2 unchanged: the balance is the base sender total only.
-        assert scenario_balance(Deal.objects.get(pk=response.data["id"])) == 2_500
 
 
 class OfferProjectionQueryCostTests(TestCase):

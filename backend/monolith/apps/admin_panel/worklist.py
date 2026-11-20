@@ -16,8 +16,9 @@ checked" never look the same.
 **The rows are the count.** An item with a queue (`queue_type`) exposes the
 exact rows it counts through `rows(code, admin)`, each annotated with
 ``waiting_since``, so the helper's `queues/<code>` lists what the count counted.
-Items about documents (ID, tickets, payout methods, payout identity), the
-email queue (it holds recipients' addresses) and the changes waiting for the
+Items about documents (ID, tickets, payout methods, payout identity), reported
+chat messages (chat contents never reach the helper), the email queue (it holds
+recipients' addresses) and the changes waiting for the
 admin's own confirmation (L16) are a count and a link only.
 """
 
@@ -41,6 +42,7 @@ from django.db.models.functions import Coalesce
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.chat.models import ChatMessageReport
 from apps.disputes.models import Dispute
 from apps.finance.models import PaymentAttempt, PaymentRefund, Payout, ScheduledJob
 from apps.finance.operations import payment_attention_queryset
@@ -171,6 +173,19 @@ def _measure_reviews(admin=None):
     return totals["count"], totals["oldest"]
 
 
+def _chat_reports(admin=None):
+    return ChatMessageReport.objects.filter(status=ChatMessageReport.Status.OPEN)
+
+
+def _measure_chat_reports(admin=None):
+    # One row per message with an open report; its oldest open report is the
+    # oldest of them all.
+    totals = _chat_reports().aggregate(
+        count=Count("message_id", distinct=True), oldest=Min("created_at")
+    )
+    return totals["count"], totals["oldest"]
+
+
 def _payout_methods(admin=None):
     from .console_payout_reviews import awaiting_review
 
@@ -292,6 +307,19 @@ QUEUES: tuple[_Queue, ...] = (
         rows=_reviews,
         measure=_measure_reviews,
         queue_type="review_report",
+    ),
+    _Queue(
+        code="chat_reports",
+        permission=("moderate_chat",),
+        title="Reported chat messages",
+        hint="Members reported these messages. Dismiss the reports or remove the message.",
+        next_step="Open each reported message, read it in its conversation, then dismiss the reports or remove it.",
+        route="admin_console:chat-reports",
+        query="status=open",
+        # The stores ask for objectionable content to be acted on within a day.
+        severity=Severity(TODAY, urgent_after=timedelta(hours=24)),
+        measure=_measure_chat_reports,
+        # A count and a link only: chat contents never reach the AI helper.
     ),
     _Queue(
         code="payout_methods",

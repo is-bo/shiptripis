@@ -1251,6 +1251,7 @@ NEVER: dict[str, str] = {
     "job-bulk": "Deciding background jobs in bulk: the helper prepares one job at a time.",
     "sea-crossing-new": "Adding a sea crossing to the geography.",
     "finance-exports": "Finance exports: files for the admin, never for an assistant.",
+    "chat-report-detail": "Reported chat messages: chat contents never reach an assistant.",
 }
 
 #: Operations of a page in `CONSOLE_POSTS` that the helper still never does.

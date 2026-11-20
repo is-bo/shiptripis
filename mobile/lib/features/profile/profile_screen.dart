@@ -19,6 +19,7 @@ import '../../app/app_settings.dart';
 import '../../app/app_state.dart';
 import '../../app/router.dart';
 import '../../core/env/app_config.dart';
+import '../../core/env/app_version.dart';
 import '../../core/format/locale_formats.dart';
 import '../../core/session/session.dart';
 import '../../design/components/feedback.dart';
@@ -141,6 +142,11 @@ class ProfileScreen extends ConsumerWidget {
               value: _themeLabel(context, ref.watch(themeModeProvider)),
               onTap: () => context.pushNamed(Routes.profileAppearance),
             ),
+            _Row(
+              icon: Icons.block_rounded,
+              label: l.blockedPeopleTitle,
+              onTap: () => context.pushNamed(Routes.profileBlocked),
+            ),
             const SizedBox(height: AppSpace.xl),
 
             SectionHeader(title: l.profileSupport),
@@ -168,25 +174,20 @@ class ProfileScreen extends ConsumerWidget {
               icon: Icons.logout_rounded,
               onPressed: () => _signOut(context, ref),
             ),
-            const SizedBox(height: AppSpace.lg),
-            Center(
-              child: Text(
-                l.profileVersion(_appVersion),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: context.colors.textTertiary,
-                ),
-              ),
+            const SizedBox(height: AppSpace.sm),
+            AppButton(
+              label: l.profileDeleteAccount,
+              variant: AppButtonVariant.tertiary,
+              icon: Icons.delete_outline_rounded,
+              onPressed: () => context.pushNamed(Routes.profileDeleteAccount),
             ),
+            const SizedBox(height: AppSpace.lg),
+            const _VersionFooter(),
           ],
         ),
       ),
     );
   }
-
-  /// Pinned rather than read from the package at runtime: the value is
-  /// baked at build time and reading it asynchronously would make the whole
-  /// screen wait on a platform channel for a footnote.
-  static const _appVersion = '1.0.0';
 
   static String _localeLabel(BuildContext context, WidgetRef ref) {
     final l = L.of(context);
@@ -338,13 +339,29 @@ class _GuestProfile extends ConsumerWidget {
               onTap: () => openSupportEmail(context, supportEmail),
             ),
           const SizedBox(height: AppSpace.lg),
-          Center(
-            child: Text(
-              l.profileVersion(ProfileScreen._appVersion),
-              style: text.bodySmall?.copyWith(color: c.textTertiary),
-            ),
-          ),
+          const _VersionFooter(),
         ],
+      ),
+    );
+  }
+}
+
+/// The installed version and build, as the platform reports them. Only this
+/// line waits on the platform; until it answers, or if it cannot, the footer
+/// is simply absent.
+class _VersionFooter extends ConsumerWidget {
+  const _VersionFooter();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final version = ref.watch(appVersionProvider).value;
+    if (version == null) return const SizedBox.shrink();
+    return Center(
+      child: Text(
+        L.of(context).profileVersion(version),
+        style: Theme.of(
+          context,
+        ).textTheme.bodySmall?.copyWith(color: context.colors.textTertiary),
       ),
     );
   }

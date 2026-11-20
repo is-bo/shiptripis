@@ -8,7 +8,6 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from apps.accounts.models import User
-from apps.boosts.models import BoostPurchase
 from apps.core.models import BusinessSettingsVersion
 from apps.deals.models import Deal
 from apps.disputes.models import Dispute, DisputeEvidence
@@ -604,7 +603,6 @@ class AdminPaymentOrderSerializer(serializers.ModelSerializer):
             "outstanding_eur_cents",
             "delivery_request_id",
             "deal_id",
-            "boost_reference",
             "business_settings_version_id",
             "paid_at",
             "created_at",
@@ -802,36 +800,6 @@ class AdminRatingSerializer(serializers.ModelSerializer):
             return obj.moderation.state
         except RatingModeration.DoesNotExist:
             return None
-
-
-class AdminBoostSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = BoostPurchase
-        fields = (
-            "id",
-            "public_reference",
-            "delivery_request_id",
-            "buyer_id",
-            "payment_order_id",
-            "package_code",
-            "package_snapshot",
-            "duration_seconds",
-            "amount_eur_cents",
-            "ranking_weight",
-            "economics_version",
-            "traveler_share_bps",
-            "traveler_boost_eur_cents",
-            "platform_boost_eur_cents",
-            "deal_id",
-            "status",
-            "activated_at",
-            "expires_at",
-            "cancelled_at",
-            "disposition_reason",
-            "created_at",
-            "updated_at",
-        )
-        read_only_fields = fields
 
 
 class AdminSettingsSerializer(serializers.ModelSerializer):

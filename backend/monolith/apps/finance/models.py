@@ -111,6 +111,9 @@ class PaymentOrder(models.Model):
     class Purpose(models.TextChoices):
         POSTING_DEPOSIT = "posting_deposit", "Posting deposit"
         DEAL_BALANCE = "deal_balance", "Deal balance"
+        #: The removed paid boost's order. Nothing creates one; it stays only
+        #: because `fin_order_reference_required` names it, and that constraint
+        #: changes in the owner-approved cleanup that drops `boosts_purchase`.
         BOOST = "boost", "Boost"
 
     class Status(models.TextChoices):
@@ -189,7 +192,8 @@ class PaymentOrder(models.Model):
         on_delete=models.PROTECT,
         related_name="payment_orders",
     )
-    #: Set by `apps.boosts` to the purchase this obligation pays for.
+    #: Unused: the removed paid boost wrote it. Dropped in the owner-approved
+    #: cleanup that drops `boosts_purchase`.
     boost_reference = models.CharField(max_length=64, blank=True, default="")
 
     #: The posting-deposit order whose funds were credited into this one. The
@@ -301,7 +305,7 @@ class PaymentOrder(models.Model):
         """The number of the parcel this obligation is for (spec 16).
 
         Every purpose names a parcel (`fin_order_reference_required`): a deposit
-        and a Boost through their request, a balance through its deal. For the
+        through its request, a balance through its deal. For the
         owner and staff only; a guest payer is never shown it.
         """
 
@@ -673,7 +677,6 @@ class PaymentRefund(models.Model):
         )
         DISPUTE_RESOLUTION = "dispute_resolution", "Dispute resolution"
         NO_SHOW = "no_show", "Verified no-show"
-        BOOST_UNUSABLE = "boost_unusable", "Boost paid but no longer usable"
 
     order = models.ForeignKey(
         PaymentOrder, on_delete=models.PROTECT, related_name="refunds"
@@ -870,7 +873,6 @@ class LedgerTransaction(models.Model):
         CUSTOMER_PAYMENT = "customer_payment", "Customer payment"
         DEPOSIT_CREDIT = "deposit_credit", "Posting-deposit credit"
         DEAL_FUNDING = "deal_funding", "Deal funding"
-        BOOST_BINDING = "boost_binding", "Boost funds binding"
         BOOST_ALLOCATION = "boost_allocation", "Boost allocation"
         REFUND = "refund", "Refund"
         PAYOUT = "payout", "Payout"
@@ -1354,7 +1356,7 @@ class ScheduledJob(models.Model):
 
     Phase 3 introduced it for financial obligations. Phase 4 adds the rest of
     the lifecycle — the 30-minute delivery-code release, the 48-hour protection
-    expiry, the rating reveal, boost expiry and outbound messages — because the
+    expiry, the rating reveal and outbound messages — because the
     guarantee they need is the same one, and a second scheduler would be a
     second thing that can silently stop.
 
@@ -1377,7 +1379,6 @@ class ScheduledJob(models.Model):
         DELIVERY_CODE_RELEASE = "delivery_code_release", "Delivery code release"
         PROTECTION_EXPIRY = "protection_expiry", "Protection window expiry"
         RATING_REVEAL = "rating_reveal", "Rating reveal"
-        BOOST_EXPIRY = "boost_expiry", "Boost expiry"
         OUTBOUND_MESSAGE = "outbound_message", "Outbound message dispatch"
         NOTIFICATION_DISPATCH = "notification_dispatch", "Notification dispatch"
         # --- Phase 8F-H3 automatic EUR payout execution ---

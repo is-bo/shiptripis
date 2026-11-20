@@ -11,6 +11,7 @@ import 'package:shiptrip/domain/find_travelers.dart';
 import 'package:shiptrip/domain/rating.dart';
 import 'package:shiptrip/features/profile/profile_screen.dart';
 
+import 'flutter_test_config.dart';
 import 'support/fake_api.dart';
 import 'support/harness.dart';
 
@@ -130,6 +131,22 @@ void main() {
     expect(find.text('No ratings yet'), findsOneWidget);
     expect(find.textContaining('With Wassla since'), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('footer names the installed version and build', (tester) async {
+    final container = _container(
+      account: _account(),
+      completedDeals: 0,
+      ratings: const [],
+    );
+
+    await pumpApp(tester, const ProfileScreen(), container: container);
+    await tester.pumpAndSettle();
+
+    final footer = find.text('Version $testAppVersion ($testBuildNumber)');
+    await tester.scrollUntilVisible(footer, 300);
+    expect(footer, findsOneWidget);
+    expect(find.text('Version 1.0.0'), findsNothing);
   });
 }
 

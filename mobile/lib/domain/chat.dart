@@ -26,6 +26,10 @@ enum ChatBlockReason {
 
   matchClosed,
   productRequestRetired,
+
+  /// One of the two members blocks the other. The conversation stays
+  /// readable; only sending stops.
+  blocked,
   unknown;
 
   static ChatBlockReason parse(Object? raw) => readEnum(
@@ -39,6 +43,17 @@ enum ChatBlockReason {
   bool get isFixableByFunding => this == paymentPending;
 }
 
+/// Why a member reports a message. The server's codes.
+enum ChatReportReason {
+  spam,
+  harassment,
+  scam,
+  inappropriate,
+  other;
+
+  String get code => name;
+}
+
 /// The server's pre-flight answer for one conversation.
 ///
 /// This is intentionally fetched before history. An unfunded match has no
@@ -49,6 +64,7 @@ class ChatEligibility {
     required this.eligible,
     required this.reason,
     required this.matchId,
+    this.blockedByMe = false,
   });
 
   factory ChatEligibility.fromJson(Map<String, dynamic> json) =>
@@ -56,15 +72,22 @@ class ChatEligibility {
         eligible: readBool(json['eligible']),
         reason: ChatBlockReason.parse(json['reason']),
         matchId: readInt(json['match_id']) ?? 0,
+        blockedByMe: readBool(json['blocked_by_me']),
       );
 
   final bool eligible;
   final ChatBlockReason reason;
   final int matchId;
 
-  /// Closed conversations remain readable even though they are not writable.
-  /// All other blocked states have no history surface before funding.
-  bool get canReadHistory => eligible || reason == ChatBlockReason.matchClosed;
+  /// The viewer blocks the other member, so the app offers to unblock.
+  final bool blockedByMe;
+
+  /// Closed and blocked conversations remain readable even though they are
+  /// not writable. All other refused states have no history before funding.
+  bool get canReadHistory =>
+      eligible ||
+      reason == ChatBlockReason.matchClosed ||
+      reason == ChatBlockReason.blocked;
 }
 
 class ChatThread {
@@ -79,6 +102,9 @@ class ChatThread {
     this.dealId,
     this.lastMessage,
     this.lastMessageAt,
+    this.lastMessageRemoved = false,
+    this.counterpartyDeleted = false,
+    this.blockedByMe = false,
   });
 
   factory ChatThread.fromJson(Map<String, dynamic> json) => ChatThread(
@@ -92,7 +118,10 @@ class ChatThread {
     canSend: readBool(json['can_send']),
     lastMessage: readString(json['last_message']),
     lastMessageAt: readDate(json['last_message_at']),
+    lastMessageRemoved: readBool(json['last_message_removed']),
     unreadCount: readInt(json['unread_count']) ?? 0,
+    counterpartyDeleted: readBool(json['counterparty_deleted']),
+    blockedByMe: readBool(json['blocked_by_me']),
   );
 
   final int matchId;
@@ -111,7 +140,16 @@ class ChatThread {
 
   final String? lastMessage;
   final DateTime? lastMessageAt;
+
+  /// Wassla removed the last message; its text is never sent.
+  final bool lastMessageRemoved;
   final int unreadCount;
+
+  /// The other member deleted their account; the app names them so.
+  final bool counterpartyDeleted;
+
+  /// The viewer blocks the other member.
+  final bool blockedByMe;
 
   bool get hasUnread => unreadCount > 0;
 }
@@ -122,6 +160,7 @@ class ChatMessage {
     required this.matchId,
     required this.senderId,
     required this.body,
+    this.removed = false,
     this.createdAt,
     this.readAt,
     this.clientMessageId,
@@ -132,6 +171,7 @@ class ChatMessage {
     matchId: readInt(json['match_id']) ?? 0,
     senderId: readInt(json['sender_id']) ?? 0,
     body: readText(json['body']),
+    removed: readBool(json['removed']),
     createdAt: readDate(json['created_at']),
     readAt: readDate(json['read_at']),
     clientMessageId: readString(json['client_message_id']),
@@ -141,6 +181,9 @@ class ChatMessage {
   final int matchId;
   final int senderId;
   final String body;
+
+  /// Wassla removed this message after a report; [body] is empty.
+  final bool removed;
   final DateTime? createdAt;
   final DateTime? readAt;
   final String? clientMessageId;
@@ -216,4 +259,28 @@ class PendingChatMessage {
 
   PendingChatMessage retrying() =>
       PendingChatMessage(localId: localId, body: body, createdAt: createdAt);
+}
+
+/// Someone the viewer blocks, as Profile lists them.
+class BlockedPerson {
+  const BlockedPerson({
+    required this.userId,
+    required this.name,
+    required this.deleted,
+    this.blockedAt,
+  });
+
+  factory BlockedPerson.fromJson(Map<String, dynamic> json) => BlockedPerson(
+    userId: readInt(json['user_id']) ?? 0,
+    name: readText(json['name']),
+    deleted: readBool(json['deleted']),
+    blockedAt: readDate(json['blocked_at']),
+  );
+
+  final int userId;
+  final String name;
+
+  /// They deleted their account since.
+  final bool deleted;
+  final DateTime? blockedAt;
 }

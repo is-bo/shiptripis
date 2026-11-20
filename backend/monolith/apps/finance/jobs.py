@@ -149,18 +149,11 @@ def handle_deposit_expiry_refund(payload: dict) -> str:
             .exclude(status=PaymentOrder.Status.CANCELLED)
             .order_by("pk")
         )
-        locked_orders_by_id = {order.pk: order for order in locked_orders}
 
-        from apps.boosts.services import unwind_boosts
+        from apps.boosts.services import close_request_boost
 
-        unwind_boosts(
-            locked_purchases=graph.boost_purchases,
-            reason="request_expired_unmatched",
-            locked_orders=locked_orders_by_id,
-            delivery_request=graph.request,
-            # Expired unmatched: the unpaid J2 Boost expires with the request.
-            clear_intent=True,
-        )
+        # Expired unmatched: the unpaid Boost expires with the request.
+        close_request_boost(delivery_request=graph.request)
 
         order = next(
             (
@@ -539,31 +532,6 @@ def handle_rating_reveal(payload: dict) -> str:
     return result
 
 
-def handle_boost_expiry(payload: dict) -> str:
-    """Retire a boost whose paid window has ended, keeping its history."""
-
-    from apps.boosts.services import expire_boost
-
-    purchase_id = payload.get("boost_purchase_id")
-    if not isinstance(purchase_id, int):
-        raise PermanentJobError(
-            "boost_expiry needs an integer boost_purchase_id.", code="invalid_payload"
-        )
-    result = expire_boost(purchase_id=purchase_id)
-    if result == "not_due":
-        # Fired early. Recording that as success would mark the obligation
-        # discharged without doing it, leaving the purchase `active` forever.
-        # Ranking would still end on time -- the hook compares against
-        # `expires_at` -- but the row and the derived columns would go stale,
-        # and a stale row is what an operator or a dispute later reads.
-        raise JobDeferred(
-            "The boost window has not closed yet.",
-            code="boost_window_open",
-            delay=timedelta(minutes=15),
-        )
-    return result
-
-
 def handle_outbound_message(payload: dict) -> str:
     """Carry one durable transactional message to the email transport."""
 
@@ -788,7 +756,6 @@ HANDLERS = {
     ScheduledJob.Kind.DELIVERY_CODE_RELEASE: handle_delivery_code_release,
     ScheduledJob.Kind.PROTECTION_EXPIRY: handle_protection_expiry,
     ScheduledJob.Kind.RATING_REVEAL: handle_rating_reveal,
-    ScheduledJob.Kind.BOOST_EXPIRY: handle_boost_expiry,
     ScheduledJob.Kind.OUTBOUND_MESSAGE: handle_outbound_message,
     ScheduledJob.Kind.PAYOUT_EXECUTE: handle_payout_execute,
     ScheduledJob.Kind.PAYOUT_RECONCILE: handle_payout_reconcile,

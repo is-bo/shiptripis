@@ -110,6 +110,9 @@ ADMIN_PERMISSION_CODES: tuple[str, ...] = (
     # L14, spec 19.2: download the finance exports (transactions,
     # commissions, payouts).
     "export_finance",
+    # Store readiness, App Store 1.2: decide reported chat messages (dismiss,
+    # remove the message, restore it).
+    "moderate_chat",
 )
 
 # Explicit least-privilege matrix.  ``super_admin`` receives every code in the
@@ -198,6 +201,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "view_disputes",
             "manage_disputes",
             "moderate_ratings",
+            "moderate_chat",
         }
     ),
     AdminRole.SUPER_ADMIN: frozenset(ADMIN_PERMISSION_CODES),
@@ -449,7 +453,6 @@ CanViewPayouts = _permission_class("CanViewPayouts", "view_payouts")
 CanSettlePayouts = _permission_class("CanSettlePayouts", "settle_payouts")
 CanViewScheduledJobs = _permission_class("CanViewScheduledJobs", "view_scheduled_jobs")
 CanViewRatings = _permission_class("CanViewRatings", "view_ratings")
-CanViewBoosts = _permission_class("CanViewBoosts", "view_boosts")
 CanViewProviderHealth = _permission_class(
     "CanViewProviderHealth", "view_provider_health"
 )

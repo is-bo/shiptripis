@@ -1,11 +1,17 @@
 from rest_framework import serializers
 
-from .models import ChatMessage
+from .models import ChatMessage, ChatMessageReport
 
 
 class ChatMessageSerializer(serializers.ModelSerializer):
+    """One message. A message staff removed keeps its place in the thread
+    with `removed` true and an empty body: what it said never leaves the
+    server again (`apps.chat.moderation`)."""
+
     sender_id = serializers.IntegerField(read_only=True)
     match_id = serializers.IntegerField(read_only=True)
+    body = serializers.SerializerMethodField()
+    removed = serializers.SerializerMethodField()
 
     class Meta:
         model = ChatMessage
@@ -14,11 +20,28 @@ class ChatMessageSerializer(serializers.ModelSerializer):
             "match_id",
             "sender_id",
             "body",
+            "removed",
             "client_message_id",
             "created_at",
             "read_at",
         )
         read_only_fields = fields
+
+    def get_body(self, obj) -> str:
+        return "" if obj.removed_at is not None else obj.body
+
+    def get_removed(self, obj) -> bool:
+        return obj.removed_at is not None
+
+
+class ChatReportSerializer(serializers.Serializer):
+    """A member's report on a message they received, and whether to block."""
+
+    reason = serializers.ChoiceField(choices=ChatMessageReport.Reason.choices)
+    note = serializers.CharField(
+        required=False, allow_blank=True, max_length=500, default=""
+    )
+    block = serializers.BooleanField(required=False, default=False)
 
 
 class ChatSendSerializer(serializers.Serializer):
@@ -49,7 +72,10 @@ class ChatThreadSerializer(serializers.Serializer):
     route = serializers.SerializerMethodField()
     status = serializers.CharField(read_only=True)
     can_send = serializers.SerializerMethodField()
-    last_message = serializers.CharField(source="last_body", read_only=True)
+    last_message = serializers.SerializerMethodField()
+    last_message_removed = serializers.SerializerMethodField()
+    counterparty_deleted = serializers.SerializerMethodField()
+    blocked_by_me = serializers.BooleanField(source="blocked_by_viewer", read_only=True)
     last_message_at = serializers.DateTimeField(source="last_at", read_only=True)
     unread_count = serializers.IntegerField(source="unread", read_only=True)
 
@@ -74,6 +100,17 @@ class ChatThreadSerializer(serializers.Serializer):
 
     def get_counterparty_name(self, obj) -> str:
         return self._counterparty(obj).full_name
+
+    def get_counterparty_deleted(self, obj) -> bool:
+        """The other member deleted their account; the app names them so."""
+
+        return self._counterparty(obj).deleted_at is not None
+
+    def get_last_message(self, obj) -> str | None:
+        return "" if obj.last_removed else obj.last_body
+
+    def get_last_message_removed(self, obj) -> bool:
+        return bool(obj.last_removed)
 
     def get_route(self, obj) -> str:
         """Coarse route label.

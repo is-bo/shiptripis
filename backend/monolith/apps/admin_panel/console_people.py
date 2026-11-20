@@ -794,7 +794,6 @@ def _offers_list(request, person, caps, source):
     page = _page(request, queryset)
     offers = list(page.object_list)
     reader = OfferEconomicsReader()
-    reader.prime([offer.match for offer in offers])
     rows = []
     for offer in offers:
         match = offer.match

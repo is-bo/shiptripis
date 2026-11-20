@@ -132,6 +132,16 @@ def check_edge_routing() -> list[str]:
         if "<h1>Privacy Policy</h1>" not in privacy_text:
             errors.append("web/privacy.html missing Privacy Policy header")
 
+    deletion_file = WEB / "delete-account.html"
+    if not deletion_file.exists():
+        errors.append("web/delete-account.html does not exist")
+    else:
+        deletion_text = deletion_file.read_text(encoding="utf-8")
+        # Google Play asks that the page name the app and give the steps.
+        for needed in ("<h1>Delete your Wassla account.</h1>", 'id="fr" lang="fr"', 'id="ar" lang="ar" dir="rtl"'):
+            if needed not in deletion_text:
+                errors.append(f"web/delete-account.html missing {needed!r}")
+
     # 2. Check each Caddyfile for clean URL support
     for caddyfile in CADDYFILES:
         name = caddyfile.relative_to(ROOT)
@@ -148,12 +158,20 @@ def check_edge_routing() -> list[str]:
         public_paths = match.group(1).split()
 
         # Ensure required canonical clean paths are covered
-        for required_path in ("/terms", "/privacy", "/terms.html", "/privacy.html"):
+        for required_path in (
+            "/terms",
+            "/privacy",
+            "/terms.html",
+            "/privacy.html",
+            # Google Play's account deletion link.
+            "/delete-account",
+            "/delete-account.html",
+        ):
             if required_path not in public_paths:
                 errors.append(f"{name}: @public path matcher missing required route '{required_path}'")
 
         # Ensure trailing slash variants are also covered
-        for slash_path in ("/terms/", "/privacy/"):
+        for slash_path in ("/terms/", "/privacy/", "/delete-account/"):
             if slash_path not in public_paths:
                 errors.append(f"{name}: @public path matcher missing trailing slash route '{slash_path}'")
 
@@ -163,6 +181,8 @@ def check_edge_routing() -> list[str]:
             ("/terms/", "/terms.html"),
             ("/privacy", "/privacy.html"),
             ("/privacy/", "/privacy.html"),
+            ("/delete-account", "/delete-account.html"),
+            ("/delete-account/", "/delete-account.html"),
         ):
             expected_directive = f"rewrite {route} {target}"
             if expected_directive not in text:

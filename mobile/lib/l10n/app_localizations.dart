@@ -10784,6 +10784,426 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Your name'**
   String get accountNameLabel;
+
+  /// No description provided for @chatSafetyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Safety'**
+  String get chatSafetyTitle;
+
+  /// No description provided for @chatSafetySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'To report a message, press and hold it.'**
+  String get chatSafetySubtitle;
+
+  /// No description provided for @chatBlockAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Block'**
+  String get chatBlockAction;
+
+  /// No description provided for @chatBlockActionDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop messages and new deliveries between you.'**
+  String get chatBlockActionDetail;
+
+  /// No description provided for @chatUnblockAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Unblock'**
+  String get chatUnblockAction;
+
+  /// No description provided for @chatUnblockActionDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'You can message each other again.'**
+  String get chatUnblockActionDetail;
+
+  /// No description provided for @chatBlockConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Block this member?'**
+  String get chatBlockConfirmTitle;
+
+  /// No description provided for @chatBlockConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Neither of you will be able to send messages here, and neither of you can start a new delivery with the other. A delivery that is already paid goes on as agreed. You can unblock them from Profile at any time.'**
+  String get chatBlockConfirmBody;
+
+  /// No description provided for @chatBlockDone.
+  ///
+  /// In en, this message translates to:
+  /// **'You blocked this member.'**
+  String get chatBlockDone;
+
+  /// No description provided for @chatUnblockDone.
+  ///
+  /// In en, this message translates to:
+  /// **'You unblocked this member.'**
+  String get chatUnblockDone;
+
+  /// No description provided for @chatBlockedByMeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'You blocked this member'**
+  String get chatBlockedByMeTitle;
+
+  /// No description provided for @chatBlockedByMeBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Neither of you can send messages here. A delivery that is already paid goes on as agreed.'**
+  String get chatBlockedByMeBody;
+
+  /// No description provided for @chatBlockedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Messaging is off'**
+  String get chatBlockedTitle;
+
+  /// No description provided for @chatBlockedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'You can no longer send messages in this conversation. A delivery that is already paid goes on as agreed.'**
+  String get chatBlockedBody;
+
+  /// No description provided for @chatBlockedPill.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocked'**
+  String get chatBlockedPill;
+
+  /// No description provided for @chatReportTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Report this message'**
+  String get chatReportTitle;
+
+  /// No description provided for @chatReportSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Wassla’s team reviews every report within a day. The sender is not told who reported it.'**
+  String get chatReportSubtitle;
+
+  /// No description provided for @chatReportReasonLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'What’s wrong with it?'**
+  String get chatReportReasonLabel;
+
+  /// No description provided for @chatReportReasonSpam.
+  ///
+  /// In en, this message translates to:
+  /// **'Spam or advertising'**
+  String get chatReportReasonSpam;
+
+  /// No description provided for @chatReportReasonHarassment.
+  ///
+  /// In en, this message translates to:
+  /// **'Harassment or threats'**
+  String get chatReportReasonHarassment;
+
+  /// No description provided for @chatReportReasonScam.
+  ///
+  /// In en, this message translates to:
+  /// **'A scam, or a request to pay outside Wassla'**
+  String get chatReportReasonScam;
+
+  /// No description provided for @chatReportReasonInappropriate.
+  ///
+  /// In en, this message translates to:
+  /// **'Offensive or inappropriate'**
+  String get chatReportReasonInappropriate;
+
+  /// No description provided for @chatReportReasonOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Something else'**
+  String get chatReportReasonOther;
+
+  /// No description provided for @chatReportChooseReason.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a reason.'**
+  String get chatReportChooseReason;
+
+  /// No description provided for @chatReportNoteLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Anything to add? (optional)'**
+  String get chatReportNoteLabel;
+
+  /// No description provided for @chatReportAlsoBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Also block this member'**
+  String get chatReportAlsoBlock;
+
+  /// No description provided for @chatReportAlsoBlockDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Neither of you can send messages here any more.'**
+  String get chatReportAlsoBlockDetail;
+
+  /// No description provided for @chatReportSend.
+  ///
+  /// In en, this message translates to:
+  /// **'Send report'**
+  String get chatReportSend;
+
+  /// No description provided for @chatReportSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Thanks. Wassla’s team will review it.'**
+  String get chatReportSent;
+
+  /// No description provided for @chatMessageRemoved.
+  ///
+  /// In en, this message translates to:
+  /// **'Removed by Wassla'**
+  String get chatMessageRemoved;
+
+  /// No description provided for @chatDeletedAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted account'**
+  String get chatDeletedAccount;
+
+  /// No description provided for @partyBlockedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Not possible with this member'**
+  String get partyBlockedTitle;
+
+  /// No description provided for @partyBlockedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'One of you blocked the other, so neither of you can start a delivery with the other. You can see the people you block in Profile.'**
+  String get partyBlockedBody;
+
+  /// No description provided for @blockedPeopleTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocked people'**
+  String get blockedPeopleTitle;
+
+  /// No description provided for @blockedPeopleBody.
+  ///
+  /// In en, this message translates to:
+  /// **'You and these people can’t message each other or start a new delivery together. Unblocking lets you do both again.'**
+  String get blockedPeopleBody;
+
+  /// No description provided for @blockedPeopleEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'You haven’t blocked anyone'**
+  String get blockedPeopleEmptyTitle;
+
+  /// No description provided for @blockedPeopleEmptyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'When you block someone from a chat, they appear here.'**
+  String get blockedPeopleEmptyBody;
+
+  /// No description provided for @blockedPeopleSince.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocked on {date}'**
+  String blockedPeopleSince(String date);
+
+  /// No description provided for @profileDeleteAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete account'**
+  String get profileDeleteAccount;
+
+  /// No description provided for @deleteAccountTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete your account'**
+  String get deleteAccountTitle;
+
+  /// No description provided for @deleteAccountIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleting your account is permanent. You can’t sign in to it again, and we erase your name, email, phone number, sign-in methods, notifications, alerts and public profile.'**
+  String get deleteAccountIntro;
+
+  /// No description provided for @deleteAccountKeptTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What we keep'**
+  String get deleteAccountKeptTitle;
+
+  /// No description provided for @deleteAccountKeptBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The records other people and the law rely on stay, without your contact details: past deliveries, payments, payouts, ID check decisions, reviews, disputes and chat messages.'**
+  String get deleteAccountKeptBody;
+
+  /// No description provided for @deleteAccountBlockedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish these first'**
+  String get deleteAccountBlockedTitle;
+
+  /// No description provided for @deleteAccountBlockedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your account can be deleted once nothing is still open.'**
+  String get deleteAccountBlockedBody;
+
+  /// No description provided for @deleteAccountBlockerDeliveries.
+  ///
+  /// In en, this message translates to:
+  /// **'A delivery that hasn’t finished'**
+  String get deleteAccountBlockerDeliveries;
+
+  /// No description provided for @deleteAccountBlockerDisputes.
+  ///
+  /// In en, this message translates to:
+  /// **'A dispute that is still open'**
+  String get deleteAccountBlockerDisputes;
+
+  /// No description provided for @deleteAccountBlockerPayouts.
+  ///
+  /// In en, this message translates to:
+  /// **'A payout that hasn’t reached you yet'**
+  String get deleteAccountBlockerPayouts;
+
+  /// No description provided for @deleteAccountBlockerRefunds.
+  ///
+  /// In en, this message translates to:
+  /// **'A refund that hasn’t reached you yet'**
+  String get deleteAccountBlockerRefunds;
+
+  /// No description provided for @deleteAccountBlockerRequests.
+  ///
+  /// In en, this message translates to:
+  /// **'A parcel request that is still open. Cancel it from Deliveries.'**
+  String get deleteAccountBlockerRequests;
+
+  /// No description provided for @deleteAccountBlockerJourneys.
+  ///
+  /// In en, this message translates to:
+  /// **'A trip that is published or under way. Cancel or finish it from Deliveries.'**
+  String get deleteAccountBlockerJourneys;
+
+  /// No description provided for @deleteAccountBlockerOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Something still open on your account'**
+  String get deleteAccountBlockerOther;
+
+  /// No description provided for @deleteAccountOpenDeliveries.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Deliveries'**
+  String get deleteAccountOpenDeliveries;
+
+  /// No description provided for @deleteAccountCheckAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Check again'**
+  String get deleteAccountCheckAgain;
+
+  /// No description provided for @deleteAccountAppleNote.
+  ///
+  /// In en, this message translates to:
+  /// **'You use Sign in with Apple. Apple asks you to confirm, then Wassla stops using your Apple ID.'**
+  String get deleteAccountAppleNote;
+
+  /// No description provided for @deleteAccountAppleElsewhereTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete it from an iPhone'**
+  String get deleteAccountAppleElsewhereTitle;
+
+  /// No description provided for @deleteAccountAppleElsewhereBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your account uses Sign in with Apple, and only Apple can confirm its deletion. Open Wassla on an iPhone or iPad to delete it, or write to support.'**
+  String get deleteAccountAppleElsewhereBody;
+
+  /// No description provided for @deleteAccountPasswordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Your password'**
+  String get deleteAccountPasswordLabel;
+
+  /// No description provided for @deleteAccountPasswordHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'To confirm it’s you.'**
+  String get deleteAccountPasswordHelp;
+
+  /// No description provided for @deleteAccountPasswordMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your password.'**
+  String get deleteAccountPasswordMissing;
+
+  /// No description provided for @deleteAccountPasswordIncorrect.
+  ///
+  /// In en, this message translates to:
+  /// **'That password isn’t right.'**
+  String get deleteAccountPasswordIncorrect;
+
+  /// No description provided for @deleteAccountAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete my account'**
+  String get deleteAccountAction;
+
+  /// No description provided for @deleteAccountConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete your account?'**
+  String get deleteAccountConfirmTitle;
+
+  /// No description provided for @deleteAccountConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This can’t be undone. You will be signed out on every device.'**
+  String get deleteAccountConfirmBody;
+
+  /// No description provided for @deleteAccountConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get deleteAccountConfirm;
+
+  /// No description provided for @deleteAccountChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'Something changed on your account. Check the list again.'**
+  String get deleteAccountChanged;
+
+  /// No description provided for @deleteAccountAppleRefused.
+  ///
+  /// In en, this message translates to:
+  /// **'Apple didn’t confirm. Nothing was deleted. Try again.'**
+  String get deleteAccountAppleRefused;
+
+  /// No description provided for @deleteAccountAppleUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn’t reach Apple. Nothing was deleted. Try again in a few minutes.'**
+  String get deleteAccountAppleUnavailable;
+
+  /// No description provided for @deleteAccountStaff.
+  ///
+  /// In en, this message translates to:
+  /// **'A staff account is closed by a Super Admin, not from the app.'**
+  String get deleteAccountStaff;
+
+  /// No description provided for @deleteAccountDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Your account is deleted.'**
+  String get deleteAccountDone;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

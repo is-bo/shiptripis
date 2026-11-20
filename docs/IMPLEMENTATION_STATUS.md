@@ -1,5 +1,21 @@
 # Waçla V1 Implementation Status
 
+## Wassla: what the App Store and Google Play need from the code (2026-11-20)
+
+- Ismail's request of 2026-11-20, from the store readiness report. Nothing deployed or published, no
+  store or provider contacted, map provider unchanged.
+- Account deletion in the app (`GET/POST /api/me/deletion`): waits for anything open, empties the
+  account row, revokes the Apple token first; the web page `/delete-account` for Google Play.
+- Chat report and block (App Store 1.2): report a received message, block or unblock, "Blocked people"
+  in Profile, staff queue Trust > "Reported chat messages" (`moderate_chat`); a block stops proposals,
+  counters, acceptance and "I can carry this" with `party_blocked`.
+- iPhone: Google only with Sign in with Apple; push entitlement and background mode; privacy manifest;
+  Info.plist strings in three languages. App id `eu.wassla.app` on both platforms.
+- Smaller fixes: real version in Profile, iOS release workflow, Android backup rules and icons, and the
+  retired paid boost code removed (its table stays for an approved cleanup).
+- Migrations: accounts 0006, chat 0004, admin_panel 0009, finance 0033 and 0034. Detail:
+  `docs/PHASE_STORE_READINESS.md`.
+
 ## Wassla: Sender.net email, guest browsing, Google and Apple sign-in (2026-11-19)
 
 - Ismail's request of 2026-11-18, package EGS (`docs/WASSLA_EMAIL_GUEST_SOCIAL_PLAN.md`). Nothing deployed,

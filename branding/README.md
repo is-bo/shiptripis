@@ -9,7 +9,10 @@ Run `python tools/branding/build_assets.py` with CairoSVG and Pillow installed
 to reproduce web/admin vectors, Flutter PNGs, native icons and launch artwork.
 The PNGs are proportional exports, not replacement designs. iOS icons are
 composited on the supplied navy to meet the opaque-icon requirement. Android
-12's launch symbol is padded inside the system mask's safe area.
+12's launch symbol is padded inside the system mask's safe area. Android 8 and
+newer use an adaptive launcher icon made of vector layers: the app icon's navy
+surface, the ivory-and-yellow W inside the 66 dp safe circle, and a one-colour
+W that Android 13 tints for themed icons.
 
 The landing page and email retain their existing light presentation even under
 a dark system preference. Flutter, the admin and hosted payment pages retain
@@ -18,8 +21,9 @@ Email uses a PNG from the existing `FRONTEND_BASE_URL` origin, with alt text and
 a text-only fallback when no absolute public origin is configured. No delivery
 settings, sender addresses, domains or transport code are changed.
 
-Compatibility names intentionally remain in package/bundle IDs, import paths,
-storage keys, notification channels, URLs, migrations and provider requests.
+Compatibility names intentionally remain in import paths, storage keys,
+notification channels, URLs, migrations and provider requests. The app id
+(Android application id and iOS bundle id) is `eu.wassla.app`.
 In particular, historical Stripe account and checkout descriptions participate
 in persisted fingerprints and idempotent replay. The integrated V1/V2 provider
 strings retain Waçla byte-for-byte; the app's guest-payment description converts

@@ -87,7 +87,7 @@ Server-side, per parcel and per matched route:
 - A boost is extra reward the sender adds on a request. The traveler receives 100% of it. Wassla's fee on the boost is charged on top to the sender, at its own rate (default 25%, separate from the delivery commission), rounded up to the cent.
 - Smallest boost 1.00 EUR, largest 1,000,000.00 EUR (100,000,000 cents). 0 means no boost. Refusals: `boost_amount_below_minimum`, `boost_amount_above_maximum` ("That boost is below the minimum." / "above the maximum.").
 - Worked example: reward 24.00 EUR, boost 5.00 EUR. Boost fee = 1.25. Traveler gets 24.00 + 5.00 = 29.00. Sender pays 30.00 (reward + fee) + 5.00 + 1.25 = 36.25.
-- Boost is not a timer or package. Its ranking effect lasts until the request's deadline, while the request is open for matching. The old paid visibility packages are retired: buying one answers `boost_package_retired`; old purchases only keep their effect until they expire.
+- Boost is not a timer or package. Its ranking effect lasts until the request's deadline, while the request is open for matching. There is no paid boost and no visibility package to buy.
 - Editable only while the request is awaiting deposit or open, by the sender, before its deadline. After an offer is accepted: "This request's boost is no longer editable." (`boost_request_not_active`); after deadline `boost_request_expired`. If boosts are switched off: `boost_disabled` ("Boosts are not available at the moment.").
 - Lowering a boost is refused if the posting deposit already paid would exceed the new total: `boost_below_prepaid_deposit`.
 - In the app, a boost is added after publishing (presets +5 EUR, +10 EUR, custom). The server also accepts one at posting.

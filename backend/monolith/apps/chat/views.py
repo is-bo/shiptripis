@@ -26,11 +26,14 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from django.db.models import Count, OuterRef, Q, Subquery
+from django.db.models import Count, Exists, OuterRef, Q, Subquery
 
+from apps.accounts.blocks import block, unblock
+from apps.accounts.models import UserBlock
 from apps.core import channels, redis_bus
 from apps.matching.models import Match
 from apps.matching.services import (
+    REASON_BLOCKED,
     REASON_NOT_A_PARTY,
     REASON_OK,
     chat_eligibility,
@@ -39,8 +42,10 @@ from apps.matching.services import (
 )
 
 from .models import ChatMessage
+from .moderation import ChatModerationError, file_report
 from .serializers import (
     ChatMessageSerializer,
+    ChatReportSerializer,
     ChatSendSerializer,
     ChatThreadSerializer,
 )
@@ -249,12 +254,13 @@ class ChatMessagesView(ListAPIView, APIView):
         )
         eligible, reason = chat_eligibility(match, request.user.id)
         if not eligible:
-            # not_a_party is an authorization failure (403); every other reason
-            # is "the deal isn't ready for chat yet" (402 payment-required, with
-            # the stable reason code so the client can render the right copy).
+            # not_a_party and blocked are authorization failures (403); every
+            # other reason is "the deal isn't ready for chat yet" (402
+            # payment-required, with the stable reason code so the client can
+            # render the right copy).
             code = (
                 http.HTTP_403_FORBIDDEN
-                if reason == REASON_NOT_A_PARTY
+                if reason in (REASON_NOT_A_PARTY, REASON_BLOCKED)
                 else http.HTTP_402_PAYMENT_REQUIRED
             )
             return Response({"reason": reason, "match_id": match.id}, status=code)
@@ -330,6 +336,20 @@ class ChatThreadsView(APIView):
             .annotate(
                 last_body=Subquery(last_msg.values("body")[:1]),
                 last_at=Subquery(last_msg.values("created_at")[:1]),
+                last_removed=Subquery(last_msg.values("removed_at")[:1]),
+                # Read by `chat_eligibility`, so the block costs no query per row.
+                parties_blocked=Exists(
+                    UserBlock.objects.filter(
+                        Q(blocker_id=OuterRef("sender_id"), blocked_id=OuterRef("traveler_id"))
+                        | Q(blocker_id=OuterRef("traveler_id"), blocked_id=OuterRef("sender_id"))
+                    )
+                ),
+                blocked_by_viewer=Exists(
+                    UserBlock.objects.filter(blocker_id=uid).filter(
+                        Q(blocked_id=OuterRef("sender_id"))
+                        | Q(blocked_id=OuterRef("traveler_id"))
+                    )
+                ),
                 unread=Count(
                     "chat_messages",
                     filter=Q(chat_messages__read_at__isnull=True)
@@ -364,3 +384,107 @@ class ChatThreadsView(APIView):
             page, many=True, context={"viewer_id": uid}
         ).data
         return paginator.get_paginated_response(data)
+
+
+def _readable_match(request: Request, pk: int) -> Match:
+    """The match, when the caller is a party who may read its conversation."""
+
+    from rest_framework.exceptions import PermissionDenied
+
+    match = get_object_or_404(
+        Match.objects.select_related("parcel", "deal"), pk=pk
+    )
+    visible, reason = chat_history_visible(match, request.user.id)
+    if not visible:
+        raise PermissionDenied(reason)
+    return match
+
+
+def _other_party_id(match: Match, user_id: int) -> int:
+    return match.traveler_id if user_id == match.sender_id else match.sender_id
+
+
+class ChatMessageReportView(APIView):
+    """POST /api/chat/messages/<id>/report — report a message you received.
+
+    Answers 201 with the report the first time and 200 with the same report
+    after, so a second tap changes nothing. With `block` true the sender is
+    blocked too (`apps.accounts.blocks`). The reporter is never named to the
+    person reported.
+    """
+
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request: Request, pk: int) -> Response:
+        message = get_object_or_404(ChatMessage.objects.only("id", "match_id", "sender_id"), pk=pk)
+        match = _readable_match(request, message.match_id)
+        serializer = ChatReportSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            report, created = file_report(
+                message=message,
+                reporter=request.user,
+                reason=serializer.validated_data["reason"],
+                note=serializer.validated_data["note"],
+            )
+        except ChatModerationError as exc:
+            return Response({"code": exc.code, "detail": str(exc)}, status=exc.status)
+        if serializer.validated_data["block"]:
+            block(blocker=request.user, blocked_id=_other_party_id(match, request.user.id))
+        return Response(
+            {"id": report.pk, "status": report.status},
+            status=http.HTTP_201_CREATED if created else http.HTTP_200_OK,
+        )
+
+
+class MatchBlockView(APIView):
+    """POST   /api/matches/<id>/block — block the other party of this match.
+    DELETE /api/matches/<id>/block — lift that block.
+
+    Both answer 204 and are idempotent. Only a party who may read the
+    conversation can block from it.
+    """
+
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request: Request, pk: int) -> Response:
+        match = _readable_match(request, pk)
+        block(blocker=request.user, blocked_id=_other_party_id(match, request.user.id))
+        return Response(status=http.HTTP_204_NO_CONTENT)
+
+    def delete(self, request: Request, pk: int) -> Response:
+        match = _readable_match(request, pk)
+        unblock(blocker=request.user, blocked_id=_other_party_id(match, request.user.id))
+        return Response(status=http.HTTP_204_NO_CONTENT)
+
+
+class MyBlocksView(APIView):
+    """GET /api/me/blocks — the people the caller blocks, newest first."""
+
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request: Request) -> Response:
+        rows = UserBlock.objects.filter(blocker=request.user).select_related("blocked")
+        return Response(
+            {
+                "results": [
+                    {
+                        "user_id": row.blocked_id,
+                        "name": row.blocked.full_name,
+                        "deleted": row.blocked.deleted_at is not None,
+                        "blocked_at": row.created_at.isoformat(),
+                    }
+                    for row in rows
+                ]
+            }
+        )
+
+
+class MyBlockView(APIView):
+    """DELETE /api/me/blocks/<user_id> — lift one block. 204, idempotent."""
+
+    permission_classes = (IsAuthenticated,)
+
+    def delete(self, request: Request, user_id: int) -> Response:
+        unblock(blocker=request.user, blocked_id=user_id)
+        return Response(status=http.HTTP_204_NO_CONTENT)

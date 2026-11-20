@@ -15,7 +15,7 @@ abstract final class ShipTripFirebaseOptions {
   static const iosAppId = String.fromEnvironment('FIREBASE_IOS_APP_ID');
   static const iosBundleId = String.fromEnvironment(
     'FIREBASE_IOS_BUNDLE_ID',
-    defaultValue: 'com.shiptrip.shiptrip',
+    defaultValue: 'eu.wassla.app',
   );
 
   static FirebaseOptions? get current {

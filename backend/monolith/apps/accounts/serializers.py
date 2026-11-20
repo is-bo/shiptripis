@@ -249,3 +249,19 @@ class MeUpdateSerializer(serializers.ModelSerializer):
             # back a blank name over one a concurrent request just set.
             instance.save(update_fields=["preferred_language"])
         return instance
+
+
+class AccountDeletionSerializer(serializers.Serializer):
+    """The member's confirmation of an account deletion.
+
+    `password` is checked when the account has one. `apple_authorization_code`
+    is the fresh code the app gets from Apple, needed when the account has an
+    Apple identity (`apps.accounts.deletion`).
+    """
+
+    password = serializers.CharField(
+        required=False, allow_blank=True, trim_whitespace=False, max_length=128
+    )
+    apple_authorization_code = serializers.CharField(
+        required=False, allow_blank=True, max_length=1024
+    )

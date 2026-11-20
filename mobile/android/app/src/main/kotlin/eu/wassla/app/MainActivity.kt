@@ -1,4 +1,4 @@
-package com.shiptrip.shiptrip
+package eu.wassla.app
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -14,7 +14,7 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
-            "com.shiptrip.shiptrip/notification_permission",
+            "eu.wassla.app/notification_permission",
         ).setMethodCallHandler { call, result ->
             if (call.method == "runtimePermissionSupported") {
                 result.success(Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)

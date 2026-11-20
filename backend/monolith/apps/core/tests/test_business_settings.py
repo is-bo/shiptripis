@@ -27,8 +27,8 @@ class BusinessSettingsTests(TestCase):
 
         assert active.version == 7
         assert active.pricing_version == "v1-j2-boost-reward-1"
-        # J2 adds its own commercial inputs without rewriting the retired
-        # package's: a historical BoostPurchase still reads the split.
+        # J2 adds its own commercial inputs without rewriting the seeded keys
+        # of the removed paid boost, which stay until the approved cleanup.
         assert active.policy["boost"]["commission_rate_bps"] == 2_500
         assert active.policy["boost"]["minimum_intent_eur_cents"] == 100
         assert active.policy["payments"]["posting_deposit"]["chosen_min_eur_cents"] == (
@@ -260,7 +260,7 @@ class BusinessSettingsTests(TestCase):
         phase4.unseed_phase4_business_settings(django_apps, None)
 
         assert get_active_business_settings().version == 3
-        # Retired, never deleted: Deals and BoostPurchases point at it.
+        # Retired, never deleted: Deals point at it.
         assert BusinessSettingsVersion.objects.get(version=4).status == (
             BusinessSettingsVersion.Status.RETIRED
         )

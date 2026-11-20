@@ -152,6 +152,20 @@ TASKS: tuple[Task, ...] = (
         route="admin_console:reviews",
         covers=("reviews", "review-detail"),
     ),
+    Task(
+        code="moderate_chat_message",
+        title="Decide a reported chat message",
+        asks=("Someone reported a chat message. What do I do?", "How do I remove an abusive message?"),
+        steps=(
+            "Open Verification, then Reported chat messages. The oldest report is first; act within a day.",
+            "Open a message and read it with the messages around it and the reports about it.",
+            "Choose Dismiss the reports or Remove the message, write the reason and confirm. A removed message can be restored.",
+            "If the sender keeps sending abuse, suspend them from their person page.",
+        ),
+        permission=("moderate_chat",),
+        route="admin_console:chat-reports",
+        covers=("chat-reports", "chat-report-detail"),
+    ),
     # --- marketplace --------------------------------------------------------------
     Task(
         code="find_request",

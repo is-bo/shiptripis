@@ -24,9 +24,11 @@ class SignedOutNotice extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
-    if (session is! SessionSignedOut || !session.becauseExpired) {
+    if (session is! SessionSignedOut ||
+        !(session.becauseExpired || session.becauseDeleted)) {
       return const SizedBox.shrink();
     }
+    final deleted = session.becauseDeleted;
     final l = L.of(context);
     final style = StatusStyle.of(context, StatusTone.waiting);
     final text = Theme.of(context).textTheme;
@@ -49,7 +51,13 @@ class SignedOutNotice extends ConsumerWidget {
           ),
           child: Row(
             children: [
-              Icon(Icons.logout_rounded, size: 19, color: style.accent),
+              Icon(
+                deleted
+                    ? Icons.check_circle_outline_rounded
+                    : Icons.logout_rounded,
+                size: 19,
+                color: style.accent,
+              ),
               const SizedBox(width: AppSpace.md),
               Expanded(
                 child: Padding(
@@ -59,15 +67,16 @@ class SignedOutNotice extends ConsumerWidget {
                     spacing: AppSpace.xs,
                     children: [
                       Text(
-                        l.guestSignedOutNotice,
+                        deleted ? l.deleteAccountDone : l.guestSignedOutNotice,
                         style: text.bodySmall?.copyWith(
                           color: style.foreground,
                         ),
                       ),
-                      TextButton(
-                        onPressed: () => openSignIn(context),
-                        child: Text(l.authSignIn),
-                      ),
+                      if (!deleted)
+                        TextButton(
+                          onPressed: () => openSignIn(context),
+                          child: Text(l.authSignIn),
+                        ),
                     ],
                   ),
                 ),

@@ -54,6 +54,20 @@ class OfferAuthorizationError(V1OfferError):
     code = "not_authorized"
 
 
+class PartiesBlocked(OfferAuthorizationError):
+    """One of the two members blocks the other (`apps.accounts.blocks`), so
+    neither can propose, counter or accept. A funded Deal goes on."""
+
+    code = "party_blocked"
+
+
+def _refuse_blocked(first_id: int, second_id: int) -> None:
+    from apps.accounts.blocks import blocked_between
+
+    if blocked_between(first_id, second_id):
+        raise PartiesBlocked("One of you blocked the other.")
+
+
 class OfferStateError(V1OfferError):
     """Generic state failure.
 
@@ -673,6 +687,7 @@ def create_sender_offer(
         raise OfferAuthorizationError(
             "This private delivery request targets a different traveler."
         )
+    _refuse_blocked(sender.id, journey_row.traveler_id)
     journey_row._matching_legs = list(
         JourneyLeg.objects.select_related("origin", "destination")
         .filter(journey=journey_row)
@@ -741,6 +756,7 @@ def _create_sender_offer_locked(
         raise OfferAuthorizationError(
             "This private delivery request targets a different traveler."
         )
+    _refuse_blocked(sender.id, journey_row.traveler_id)
 
     locked_legs = _lock_journey_legs(journey_row)
     journey_row._matching_legs = locked_legs
@@ -821,6 +837,7 @@ def counter_offer(
         raise OfferAuthorizationError("Only a party may counter this offer.")
     if current.proposer_id == actor.id:
         raise OfferAuthorizationError("The proposer cannot counter their own offer.")
+    _refuse_blocked(match.sender_id, match.traveler_id)
     _refuse_lapsed(current, at=timezone.now())
     if current.status != Offer.Status.PENDING:
         raise OfferNotPending("The offer is no longer pending.")
@@ -888,6 +905,7 @@ def _counter_offer_locked(
         raise OfferAuthorizationError("Only a party may counter this offer.")
     if current.proposer_id == actor.id:
         raise OfferAuthorizationError("The proposer cannot counter their own offer.")
+    _refuse_blocked(match.sender_id, match.traveler_id)
     _refuse_lapsed(current, at=timezone.now())
     if current.status != Offer.Status.PENDING:
         raise OfferNotPending("The offer is no longer pending.")
@@ -998,6 +1016,7 @@ def accept_offer(
         raise OfferNotPending("The offer is no longer pending.")
     if match.status != Match.Status.PENDING:
         raise MatchNotPending("The negotiation is no longer pending.")
+    _refuse_blocked(match.sender_id, match.traveler_id)
     if (
         match.journey_id is None
         or match.start_leg_id is None
@@ -1090,6 +1109,7 @@ def _accept_offer_locked(
         raise OfferNotPending("The offer is no longer pending.")
     if match.status != Match.Status.PENDING:
         raise MatchNotPending("The negotiation is no longer pending.")
+    _refuse_blocked(match.sender_id, match.traveler_id)
     if (
         match.journey_id is None
         or match.start_leg_id is None
@@ -1101,15 +1121,6 @@ def _accept_offer_locked(
         raise RequestAlreadyMatched(
             "The delivery request is already matched or closed."
         )
-    # Boosts sit after offers and before journey in the canonical financial
-    # lock graph. Paid economics are bound only after the Deal row exists.
-    from apps.boosts.models import BoostPurchase  # noqa: WPS433
-
-    request_boosts = tuple(
-        BoostPurchase.objects.select_for_update(no_key=True)
-        .filter(delivery_request_id=request_row.pk)
-        .order_by("pk")
-    )
     journey = (
         Journey.objects.select_for_update(no_key=True, of=("self",))
         .select_related("traveler")
@@ -1176,27 +1187,19 @@ def _accept_offer_locked(
 
     # --- Boost freezes here, and only here --------------------------------
     #
-    # This is the commitment boundary. Whichever Boost model applies, the
-    # amount and the rate are copied onto the Deal now, so a later Admin change
-    # to the Boost commission cannot reach a Deal that already exists.
-    # `resolve_committed_boost` decides which model applies; see it for why the
-    # two can never both count.
+    # This is the commitment boundary. The Boost amount and its rate are
+    # copied onto the Deal now, so a later Admin change to the Boost commission
+    # cannot reach a Deal that already exists.
     #
-    # The terms are resolved *before* the Deal exists, from the rows this
+    # The terms are resolved *before* the Deal exists, from the request row this
     # transaction holds locked, because the acceptor's confirmation has to be
     # checked against exactly what will be written (J6.1). The Offer projection
     # builds the same unsaved row through the same two functions, which is what
     # makes "the figure shown" and "the figure frozen" one computation.
-    from apps.boosts.services import (  # noqa: WPS433
-        bind_paid_boosts_to_deal,
-        resolve_committed_boost,
-        unbound_paid_boost_totals,
-    )
+    from apps.boosts.services import resolve_committed_boost  # noqa: WPS433
     from apps.boosts.models import BoostIntentEvent  # noqa: WPS433
 
-    paid_boost = unbound_paid_boost_totals(request_boosts)
     boost = resolve_committed_boost(
-        paid_boost=paid_boost,
         boost_intent_eur_cents=request_row.boost_eur_cents,
     )
     terms = commitment_terms(current, boost)
@@ -1211,22 +1214,6 @@ def _accept_offer_locked(
         traveler_id=match.traveler_id,
         status=Deal.Status.PAYMENT_REQUIRED,
     )
-    bound_boost = bind_paid_boosts_to_deal(
-        locked_purchases=request_boosts,
-        deal=deal,
-    )
-    if bound_boost != paid_boost:
-        # A retired package's order turned paid between the unlocked preview and
-        # the locked bind. Rare, but the confirmed figures no longer describe
-        # what would commit, so nothing commits.
-        raise OfferEconomicsChanged(
-            "This offer's amounts changed. Review them before accepting.",
-            current={
-                "boost_amount_minor": int(bound_boost["amount_eur_cents"]),
-                "traveler_total_minor": None,
-                "sender_total_with_boost_minor": None,
-            },
-        )
     terms.deal = deal
     terms.save(force_insert=True)
     now = timezone.now()
@@ -1290,16 +1277,10 @@ def _accept_offer_locked(
     # accepts cleanly after a policy change.
     payment_policy = phase3_policy()
     # The balance is what the sender owes *in total*: the agreed reward, its
-    # commission, and -- under J2 -- the Boost with its own commission. A J2
-    # Boost has no payment order of its own, so if it were left out of this
-    # number the Traveler would be promised a bonus nobody was ever charged
-    # for. A retired paid package contributes nothing here because its cash was
-    # collected before the Deal existed.
-    boost_due = 0
-    if boost.economics_version == (
-        DealTermsSnapshot.BoostEconomics.ADDITIVE_COMMISSION_V2
-    ):
-        boost_due = boost.amount_eur_cents + boost.platform_fee_eur_cents
+    # commission, and the Boost with its own commission. A Boost has no payment
+    # order of its own, so if it were left out of this number the Traveler
+    # would be promised a bonus nobody was ever charged for.
+    boost_due = boost.amount_eur_cents + boost.platform_fee_eur_cents
     create_deal_balance_order(
         deal=deal,
         sender_total_eur_cents=int(current.sender_total_minor) + boost_due,

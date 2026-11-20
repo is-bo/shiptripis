@@ -252,7 +252,6 @@ STAFF_API_ROUTES = frozenset(
         "api/admin/payouts/<int:pk>/complete",
         "api/admin/scheduled-jobs",
         "api/admin/ratings",
-        "api/admin/boosts",
         "api/admin/provider-health",
         "api/admin/health/deep",
         "api/admin/settings",

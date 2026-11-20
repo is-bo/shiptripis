@@ -95,6 +95,16 @@ FailureCopy describeFailure(BuildContext context, Object? error) {
     );
   }
 
+  if (error.code == ApiErrorCode.partyBlocked) {
+    return FailureCopy(
+      title: l.partyBlockedTitle,
+      body: l.partyBlockedBody,
+      icon: Icons.block_rounded,
+      tone: StatusTone.neutral,
+      canRetry: false,
+    );
+  }
+
   if (error.code.isProviderUnavailable) {
     return FailureCopy(
       title: l.paymentProviderUnavailable,
