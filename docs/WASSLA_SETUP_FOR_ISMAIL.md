@@ -7,9 +7,10 @@ The last section is a table of every variable and file.
 
 ## Decide first: the app id
 
-The app id is still `com.shiptrip.shiptrip` (Android application id and iOS bundle id). Google and Apple
-clients are tied to it. If you ever want a different id, change it **before** step 3. Changing it later
-means creating new Google and Apple clients and rebuilding.
+The app id is `eu.wassla.app` (Android application id and iOS bundle id). Google, Apple and Firebase
+clients are tied to it, and the stores never let a published app change it. If you ever want a
+different id, change it **before** step 4. Changing it later means creating new Google, Apple and
+Firebase clients and rebuilding.
 
 ## 1. The contact@wassla.eu mailbox (do this before Sender)
 
@@ -99,13 +100,14 @@ To turn email off in an emergency: `EMAIL_ENABLED=false`. Rows stay safe in the 
      - app build: `--dart-define=GOOGLE_SERVER_CLIENT_ID=<that id>` (iOS and local builds);
      - GitHub: repository variable `GOOGLE_SERVER_CLIENT_ID` (Settings, Secrets and variables, Actions,
        Variables). The Android release workflow reads it.
-   - **Android**: package name `com.shiptrip.shiptrip` and a SHA-1. One client per signing key: the
+   - **Android**: package name `eu.wassla.app` and a SHA-1. One client per signing key: the
      **debug** key, the **release** key, and the **Play App Signing** key (Play Console, Test and
      release, App integrity). Commands to read each SHA-1: `docs/ANDROID_BUILD_RUNBOOK.md`. Nothing from
      this client goes into the app or the server; Google just needs to know the keys.
-   - **iOS**: bundle id `com.shiptrip.shiptrip`. Its client id (`<prefix>.apps.googleusercontent.com`)
+   - **iOS**: bundle id `eu.wassla.app`. Its client id (`<prefix>.apps.googleusercontent.com`)
      goes in two places that must match:
-     - app build: `--dart-define=GOOGLE_IOS_CLIENT_ID=<prefix>.apps.googleusercontent.com`;
+     - app build: `--dart-define=GOOGLE_IOS_CLIENT_ID=<prefix>.apps.googleusercontent.com` (the iOS
+       release workflow reads it from the repository variable `GOOGLE_IOS_CLIENT_ID`);
      - `mobile/ios/Flutter/SocialSignIn.xcconfig`: `GOOGLE_IOS_CLIENT_PREFIX = <prefix>` (the id without
        `.apps.googleusercontent.com`).
      The iOS build stops with a clear message if the two disagree.
@@ -120,23 +122,35 @@ To turn email off in an emergency: `EMAIL_ENABLED=false`. Rows stay safe in the 
 ## 5. Apple Developer: Sign in with Apple (iPhone only)
 
 1. developer.apple.com, Certificates, Identifiers & Profiles, Identifiers: open the App ID
-   `com.shiptrip.shiptrip`, tick **Sign In with Apple**, Save. Regenerate the provisioning profiles.
-2. Server: `APPLE_SIGN_IN_CLIENT_IDS=com.shiptrip.shiptrip` (the bundle id) in `stack.env`.
+   `eu.wassla.app`, tick **Sign In with Apple**, Save. Regenerate the provisioning profiles.
+2. Server: `APPLE_SIGN_IN_CLIENT_IDS=eu.wassla.app` (the bundle id) in `stack.env`, **with the key
+   that revokes Apple sign-in when a member deletes their account** (production refuses to start with
+   the first and not the others). developer.apple.com, Keys: create a key, tick **Sign in with Apple**,
+   configure it for the App ID `eu.wassla.app`, download the `.p8` file once. Then in `stack.env`:
+   - `APPLE_TEAM_ID`: the 10-character team id (top right of the developer account);
+   - `APPLE_SIGN_IN_KEY_ID`: the key's 10-character id;
+   - `APPLE_SIGN_IN_PRIVATE_KEY`: the whole `.p8` content on one line, each line break written as `\n`.
 3. App, **both together** (one without the other fails the iOS build on purpose):
-   - build define `--dart-define=APPLE_SIGN_IN_ENABLED=true`;
-   - `mobile/ios/Flutter/SocialSignIn.xcconfig`: `APPLE_SIGN_IN_ENTITLEMENTS = Runner/Runner.entitlements`.
+   - build define `--dart-define=APPLE_SIGN_IN_ENABLED=true` (the iOS release workflow reads it from the
+     repository variable `APPLE_SIGN_IN_ENABLED`);
+   - `mobile/ios/Flutter/SocialSignIn.xcconfig`: `APPLE_SIGN_IN_CAPABILITY = YES`. The app is then signed
+     with `Runner/RunnerAppleSignIn.entitlements` instead of `Runner/Runner.entitlements`; both carry push.
 4. Android does not offer Apple (it would need a Services ID and a web callback page; not built).
 
 ## 6. App Store rules that follow
 
 - **Guideline 4.8:** an iOS app that offers Google must offer Sign in with Apple as an equal option.
   Already built: both buttons are shown together on iPhone.
-- **Guideline 5.1.1(v): account deletion inside the app is required.** It is **not built yet**. Apple
-  will reject an app that lets people create accounts without a way to delete them. For people who signed
-  in with Apple, deletion must also **revoke the token with Apple's REST API**, which needs a Sign in
-  with Apple private key (`.p8`, created under Keys in the Apple developer account) kept on the server.
-  Ask for this package before the first App Store submission. Google Play has a similar rule
-  (an in-app way to delete, plus a web link).
+- **Guideline 5.1.1(v): account deletion inside the app.** Built: Profile, "Delete account". It waits
+  until nothing is open (deliveries, disputes, payouts or refunds on their way, open requests, published
+  trips), asks for the password, and for an Apple account asks Apple, then revokes the Apple token with
+  the key from step 5.2 before deleting. In App Store Connect, the review notes can say: "Profile >
+  Delete account".
+- **Guideline 1.2: reporting and blocking in chat.** Built: press and hold a message to report it, the
+  chat menu blocks, and staff decide reports in the console (Trust > Reported chat messages) within a day.
+- **Google Play, Data safety, "Delete account" link:** `https://<your domain>/delete-account`. The page
+  (`web/delete-account.html`, in English, French and Arabic) gives the steps in the app and the email
+  route.
 
 ## 7. Rate limits you can tune, and why
 
@@ -176,10 +190,67 @@ Nothing is deployed and nothing contacted Sender, Google or Apple.
 | --- | --- | --- |
 | Email | `EMAIL_ENABLED=false`, `EMAIL_ACTIVATION_APPROVED=false`, `EMAIL_SENDING_DOMAIN_VERIFIED=false` | Step 3 |
 | Google button and server | empty `GOOGLE_OAUTH_CLIENT_IDS` and no `GOOGLE_SERVER_CLIENT_ID` define | Step 4 |
-| Apple button and server | empty `APPLE_SIGN_IN_CLIENT_IDS`, no `APPLE_SIGN_IN_ENABLED` define, empty entitlements | Step 5 |
+| Apple button and server | empty `APPLE_SIGN_IN_CLIENT_IDS`, no `APPLE_SIGN_IN_ENABLED` define, `APPLE_SIGN_IN_CAPABILITY = NO` | Step 5 |
 | Guest browsing | always on (no switch); the marketplace's own listing switches still apply | n/a |
 
-## 10. Every variable and file
+## 10. The iPhone app: App ID, push, signing and the App Store build
+
+Android's release secrets (keystore and passwords) are in `docs/ANDROID_BUILD_RUNBOOK.md`. These are the
+iPhone ones. Nothing here is deployed or uploaded until you run the workflow and tick the upload box.
+
+1. **App ID.** developer.apple.com, Certificates, Identifiers & Profiles, Identifiers, **+**, App IDs,
+   App, explicit bundle id `eu.wassla.app`. Tick **Push Notifications** (every build of the app is signed
+   with push, so the App ID must have it) and, when you get to step 5, **Sign In with Apple**.
+2. **Push key for Firebase.** Keys, **+**, tick **Apple Push Notifications service (APNs)**, Continue,
+   Register, download the `.p8` (only once) and note its Key ID. In the Firebase console, add an **iOS
+   app** with bundle id `eu.wassla.app`, then Project settings, Cloud Messaging, Apple app configuration,
+   **APNs Authentication Key**: upload the `.p8` with its Key ID and your Team ID. Do not add
+   `GoogleService-Info.plist` to the app: the build passes Firebase's values as defines.
+3. **Firebase iOS app id.** Copy the iOS app's App ID (`1:…:ios:…`) into the repository variable
+   `FIREBASE_IOS_APP_ID` (Settings, Secrets and variables, Actions, Variables). `FIREBASE_API_KEY`,
+   `FIREBASE_PROJECT_ID` and `FIREBASE_MESSAGING_SENDER_ID` are the same variables Android uses. All four
+   or none: with none, the build works and push stays off.
+4. **Distribution certificate.** Certificates, **+**, **Apple Distribution**, upload a certificate
+   signing request made in Keychain Access on a Mac (Certificate Assistant, Request a Certificate From a
+   Certificate Authority, saved to disk). Download the certificate, double-click it, then in Keychain
+   Access export it **with its private key** as a `.p12` with a strong password.
+5. **Provisioning profile.** Profiles, **+**, Distribution, **App Store Connect**, App ID
+   `eu.wassla.app`, the certificate from step 4. Download the `.mobileprovision`. Make a new profile
+   whenever the App ID's capabilities change (for example when you turn on Sign in with Apple).
+6. **The app record.** appstoreconnect.apple.com, Apps, **+**, New App, iOS, name Wassla, bundle id
+   `eu.wassla.app`, a SKU of your choice.
+7. **TestFlight upload key (optional).** App Store Connect, Users and Access, Integrations, App Store
+   Connect API, Team Keys, **+**, access **App Manager**. Download the `.p8` (only once), note the Key ID
+   and the Issuer ID shown above the list.
+8. **GitHub secrets** (Settings, Secrets and variables, Actions, Secrets, New repository secret). On a
+   Mac, `base64 -i <file> | pbcopy` copies a file as one base64 line.
+
+   | Secret | Value |
+   | --- | --- |
+   | `IOS_DISTRIBUTION_CERTIFICATE_BASE64` | the `.p12` from step 4, base64 |
+   | `IOS_DISTRIBUTION_CERTIFICATE_PASSWORD` | its password |
+   | `IOS_PROVISIONING_PROFILE_BASE64` | the `.mobileprovision` from step 5, base64 |
+   | `IOS_TEAM_ID` | the 10-character Team ID (developer.apple.com, Account, Membership details) |
+   | `APP_STORE_CONNECT_API_KEY_ID` | the Key ID from step 7 (TestFlight upload only) |
+   | `APP_STORE_CONNECT_API_ISSUER_ID` | the Issuer ID from step 7 (TestFlight upload only) |
+   | `APP_STORE_CONNECT_API_KEY_BASE64` | the `.p8` from step 7, base64 (TestFlight upload only) |
+
+   Never put these files or passwords in the repository, a variable, a chat or a ticket.
+9. **Build.** GitHub, Actions, **Build iOS**, Run workflow. It runs only when you start it, never on a
+   push or a pull request. Fill in `api_base_url` (the gateway origin, no path), a `build_number` higher
+   than the last one you uploaded (App Store Connect refuses a repeated number; empty uses the pubspec's),
+   and tick `upload_to_testflight` only if you want it sent to App Store Connect (it then needs the three
+   API key secrets). The workflow refuses a profile that is not an App Store profile for `eu.wassla.app`
+   with push, checks that the signed app carries production push, and keeps the IPA and its
+   `SHA256SUMS.txt` as a workflow artifact for 30 days.
+10. **Before the first submission**, in App Store Connect: App Privacy answers that match
+    `mobile/ios/Runner/PrivacyInfo.xcprivacy` (no tracking; email, name, phone, user id, photos and
+    videos, messages, other user content, payout details as payment info, purchase history and the
+    push device id, all linked to the person and used only for the app's functions). Export compliance
+    is answered by the app itself (it uses no encryption beyond Apple's HTTPS), so App Store Connect does
+    not ask for each build.
+
+## 11. Every variable and file
 
 | Where | Name | Value | Step |
 | --- | --- | --- | --- |
@@ -196,10 +267,17 @@ Nothing is deployed and nothing contacted Sender, Google or Apple.
 | GitHub repository variable | `GOOGLE_SERVER_CLIENT_ID` | the Web client id (Android release workflow) | 4 |
 | App build define (iOS) | `GOOGLE_IOS_CLIENT_ID` | `<prefix>.apps.googleusercontent.com` | 4 |
 | `mobile/ios/Flutter/SocialSignIn.xcconfig` | `GOOGLE_IOS_CLIENT_PREFIX` | `<prefix>` | 4 |
-| Google Cloud | Android clients | `com.shiptrip.shiptrip` + SHA-1 of debug, release, Play App Signing keys | 4 |
-| `stack.env` | `APPLE_SIGN_IN_CLIENT_IDS` | `com.shiptrip.shiptrip` | 5 |
+| Google Cloud | Android clients | `eu.wassla.app` + SHA-1 of debug, release, Play App Signing keys | 4 |
+| `stack.env` | `APPLE_SIGN_IN_CLIENT_IDS` | `eu.wassla.app` | 5 |
+| `stack.env` | `APPLE_TEAM_ID`, `APPLE_SIGN_IN_KEY_ID`, `APPLE_SIGN_IN_PRIVATE_KEY` | the team id, the Sign in with Apple key id and its `.p8` | 5 |
 | App build define (iOS) | `APPLE_SIGN_IN_ENABLED` | `true` | 5 |
-| `mobile/ios/Flutter/SocialSignIn.xcconfig` | `APPLE_SIGN_IN_ENTITLEMENTS` | `Runner/Runner.entitlements` | 5 |
+| `mobile/ios/Flutter/SocialSignIn.xcconfig` | `APPLE_SIGN_IN_CAPABILITY` | `YES` | 5 |
+| GitHub repository variable | `GOOGLE_IOS_CLIENT_ID`, `APPLE_SIGN_IN_ENABLED` | as the iOS defines above (iOS release workflow) | 4, 5 |
+| GitHub repository variable | `FIREBASE_IOS_APP_ID` | the Firebase iOS app id | 10 |
+| GitHub secret | `IOS_DISTRIBUTION_CERTIFICATE_BASE64`, `IOS_DISTRIBUTION_CERTIFICATE_PASSWORD` | the Apple Distribution `.p12`, base64, and its password | 10 |
+| GitHub secret | `IOS_PROVISIONING_PROFILE_BASE64` | the App Store profile for `eu.wassla.app`, base64 | 10 |
+| GitHub secret | `IOS_TEAM_ID` | the Apple team id | 10 |
+| GitHub secret | `APP_STORE_CONNECT_API_KEY_ID`, `APP_STORE_CONNECT_API_ISSUER_ID`, `APP_STORE_CONNECT_API_KEY_BASE64` | the App Store Connect API key (TestFlight upload only) | 10 |
 | `stack.env` | `DRF_*_THROTTLE_RATE` | see section 7 | 7 |
 
 Sources used for Sender's steps: Sender's help pages "How to set up SPF, DKIM and DMARC",

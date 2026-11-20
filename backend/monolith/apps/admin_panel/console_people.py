@@ -280,7 +280,9 @@ def _header(request, person, caps, *, source):
     submissions = list(person.kyc_submissions.order_by("-created_at")[:10])
     kyc = _kyc_summary(submissions)
     account = (
-        ("Banned", "bad")
+        ("Deleted", "muted")
+        if person.deleted_at is not None
+        else ("Banned", "bad")
         if person.is_banned
         else ("Active", "ok")
         if person.is_active
@@ -794,7 +796,6 @@ def _offers_list(request, person, caps, source):
     page = _page(request, queryset)
     offers = list(page.object_list)
     reader = OfferEconomicsReader()
-    reader.prime([offer.match for offer in offers])
     rows = []
     for offer in offers:
         match = offer.match

@@ -156,3 +156,51 @@ class Account {
         .toUpperCase();
   }
 }
+
+/// What stands before deleting an account, as the server reads it.
+enum AccountDeletionBlocker {
+  openDeliveries,
+  openDisputes,
+  pendingPayouts,
+  pendingRefunds,
+  openRequests,
+  activeJourneys,
+  unknown;
+
+  static AccountDeletionBlocker parse(Object? raw) => readEnum(
+    raw,
+    AccountDeletionBlocker.values,
+    fallback: AccountDeletionBlocker.unknown,
+  );
+}
+
+/// `GET /api/me/deletion`: whether the account can be deleted now, and what
+/// the confirmation needs.
+class AccountDeletionCheck {
+  const AccountDeletionCheck({
+    required this.blockers,
+    required this.passwordRequired,
+    required this.appleAuthorizationRequired,
+  });
+
+  factory AccountDeletionCheck.fromJson(Map<String, dynamic> json) =>
+      AccountDeletionCheck(
+        blockers: [
+          for (final raw in (json['blockers'] as List? ?? const []))
+            AccountDeletionBlocker.parse(raw),
+        ],
+        passwordRequired: readBool(json['password_required']),
+        appleAuthorizationRequired: readBool(
+          json['apple_authorization_required'],
+        ),
+      );
+
+  /// In the order to show them. Empty when nothing stands in the way.
+  final List<AccountDeletionBlocker> blockers;
+  final bool passwordRequired;
+
+  /// The account signs in with Apple, so deleting it asks Apple first.
+  final bool appleAuthorizationRequired;
+
+  bool get canDelete => blockers.isEmpty;
+}

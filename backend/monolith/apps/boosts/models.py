@@ -1,6 +1,6 @@
-"""Sender boosts: the J2 reward intent, and the retired paid package.
+"""Sender Boost: the J2 reward intent, and one table kept for a cleanup.
 
-One rule outranks everything else here and survives both models:
+One rule outranks everything else here:
 
     a boost changes where a compatible request appears in a list.
     It never makes an incompatible request compatible.
@@ -18,13 +18,7 @@ is frozen into the Deal's terms at the commitment boundary and collected inside
 the Deal balance, so it refunds, settles and reconciles as part of the reward it
 belongs to. `BoostIntentEvent` is its append-only audit trail.
 
-**`BoostPurchase` is the retired J1-era paid visibility package.** No new row is
-ever written: `purchase_boost` is gone and the endpoint answers 410. Existing
-rows stay exactly as they were sold -- amount, split, package, duration, weight
-and settings version -- because a settled payment's terms are not something a
-later product decision gets to reinterpret. Any still-active row keeps its
-ranking effect until it expires, and a payment already in flight when J2 shipped
-still reconciles through `activate_paid_boost`.
+`BoostPurchase` is not a product. See its docstring.
 """
 
 from __future__ import annotations
@@ -35,13 +29,17 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
-from django.utils import timezone
 
 
 class BoostPurchase(models.Model):
-    """One retired J1-era paid visibility and delivery-earnings commitment.
+    """The table of the removed J1-era paid visibility boost. Nothing uses it.
 
-    Historical only. See the module docstring: nothing writes a new row.
+    No code reads or writes this model. The paid boost was removed from the
+    code (a paid in-app boost would need Apple and Google billing, and it does
+    not come back), and the app has never been in production, so the table holds
+    no row. It stays only because a table is dropped in a cleanup task the owner
+    has approved, never inside a feature; that cleanup deletes this class, its
+    table and the `boost_purchase` relation names with it.
     """
 
     class EconomicsVersion(models.TextChoices):
@@ -56,9 +54,6 @@ class BoostPurchase(models.Model):
         #: Paid, but the request was no longer boostable when the money landed.
         UNUSABLE = "unusable", "Paid but unusable"
         REFUNDED = "refunded", "Refunded"
-
-    #: Statuses that still occupy a slot against `max_active_per_request`.
-    OCCUPYING_STATUSES = ("pending_payment", "active")
 
     public_reference = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     delivery_request = models.ForeignKey(
@@ -172,19 +167,8 @@ class BoostPurchase(models.Model):
             models.Index(fields=["buyer", "-created_at"], name="boosts_buyer_idx"),
         ]
 
-    def is_active(self, *, at=None) -> bool:
-        at = at or timezone.now()
-        return bool(
-            self.status == self.Status.ACTIVE
-            and self.expires_at is not None
-            and self.expires_at > at
-        )
-
     def __str__(self) -> str:
-        return (
-            f"BoostPurchase#{self.pk} request={self.delivery_request_id} "
-            f"{self.package_code} ({self.status})"
-        )
+        return f"BoostPurchase#{self.pk}"
 
 
 class BoostIntentEvent(models.Model):

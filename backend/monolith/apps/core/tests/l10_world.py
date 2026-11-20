@@ -147,6 +147,29 @@ class AcceptanceWorld(SeaWorld):
     def post_parcel(
         self, origin, destination, *, ready_from, ready_until, deliver_by, weight="2.00"
     ) -> DeliveryRequest:
+        response = api(self.sender).post(
+            reverse("parcels-delivery-v1-create"),
+            self.parcel_payload(
+                origin,
+                destination,
+                ready_from=ready_from,
+                ready_until=ready_until,
+                deliver_by=deliver_by,
+                weight=weight,
+            ),
+            format="json",
+        )
+        assert response.status_code == 201, response.data
+        parcel = DeliveryRequest.objects.get(pk=response.data["id"])
+        self.tracking = response.data["tracking_number"]
+        assert self.tracking and self.tracking == parcel.tracking_number
+        return parcel
+
+    def parcel_payload(
+        self, origin, destination, *, ready_from, ready_until, deliver_by, weight="2.00"
+    ) -> dict:
+        """A complete request body, with a fresh staged photo of the sender's."""
+
         photo = ParcelMedia.objects.create(
             parcel=None,
             uploaded_by=self.sender,
@@ -156,39 +179,30 @@ class AcceptanceWorld(SeaWorld):
             content_type="image/jpeg",
             bytes=2048,
         )
-        response = api(self.sender).post(
-            reverse("parcels-delivery-v1-create"),
-            {
-                "pickup_place_id": origin.pk,
-                "delivery_place_id": destination.pk,
-                "ready_window_start": ready_from.isoformat(),
-                "ready_window_end": ready_until.isoformat(),
-                "deadline_at": deliver_by.isoformat(),
-                "actual_weight_kg": weight,
-                "length_cm": "20",
-                "width_cm": "15",
-                "height_cm": "10",
-                "declared_value_eur_cents": 10_000,
-                "sender_proposed_reward_eur_cents": 1_500,
-                "title": "Urgent documents",
-                "description": "A sealed folder needed today.",
-                "category": "documents",
-                "handling_notes": "",
-                "fragile": False,
-                "description_is_accurate": True,
-                "item_is_legal": True,
-                "no_prohibited_goods": True,
-                "declared_value_is_accurate": True,
-                "customs_responsibilities_understood": True,
-                "item_photo_media_id": photo.pk,
-            },
-            format="json",
-        )
-        assert response.status_code == 201, response.data
-        parcel = DeliveryRequest.objects.get(pk=response.data["id"])
-        self.tracking = response.data["tracking_number"]
-        assert self.tracking and self.tracking == parcel.tracking_number
-        return parcel
+        return {
+            "pickup_place_id": origin.pk,
+            "delivery_place_id": destination.pk,
+            "ready_window_start": ready_from.isoformat(),
+            "ready_window_end": ready_until.isoformat(),
+            "deadline_at": deliver_by.isoformat(),
+            "actual_weight_kg": weight,
+            "length_cm": "20",
+            "width_cm": "15",
+            "height_cm": "10",
+            "declared_value_eur_cents": 10_000,
+            "sender_proposed_reward_eur_cents": 1_500,
+            "title": "Urgent documents",
+            "description": "A sealed folder needed today.",
+            "category": "documents",
+            "handling_notes": "",
+            "fragile": False,
+            "description_is_accurate": True,
+            "item_is_legal": True,
+            "no_prohibited_goods": True,
+            "declared_value_is_accurate": True,
+            "customs_responsibilities_understood": True,
+            "item_photo_media_id": photo.pk,
+        }
 
     def pay_deposit(self, parcel: DeliveryRequest) -> None:
         order = PaymentOrder.objects.get(

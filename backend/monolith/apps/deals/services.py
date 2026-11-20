@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from django.db import transaction
-from django.db.models import Min, Q
+from django.db.models import Min
 from django.utils import timezone
 
 from apps.core import channels, redis_bus
@@ -117,32 +117,17 @@ def release_pending_deal_reservation(
     )
     from apps.finance.models import PaymentOrder  # noqa: WPS433
 
-    bound_boosts = [
-        row for row in aggregate.request_graph.boost_purchases if row.deal_id == deal.pk
-    ]
-    boost_order_ids = [
-        row.payment_order_id for row in bound_boosts if row.payment_order_id is not None
-    ]
-    locked_orders = tuple(
+    # Every order of this Deal, ascending id, before any of them is closed.
+    tuple(
         PaymentOrder.objects.select_for_update(no_key=True)
-        .filter(Q(deal_id=deal.pk) | Q(pk__in=boost_order_ids))
+        .filter(deal_id=deal.pk)
         .order_by("pk")
     )
-    locked_orders_by_id = {order.pk: order for order in locked_orders}
-
     cancel_deal_balance_orders(deal_id=deal.pk, reason=reason)
-    from apps.boosts.services import unwind_boosts  # noqa: WPS433
-
-    unwind_boosts(
-        locked_purchases=bound_boosts,
-        reason=reason,
-        locked_orders=locked_orders_by_id,
-        delivery_request=request_row,
-        # Deliberately not `clear_intent`. The request is going back to the
-        # open pool, and an unpaid J2 Boost belongs to the request, not to the
-        # traveler who never funded it -- so it revives with the request. A
-        # Boost that *was* funded is already zero here: `fund_deal` cleared it.
-    )
+    # The Boost is deliberately not closed here. The request is going back to
+    # the open pool, and an unpaid Boost belongs to the request, not to the
+    # traveler who never funded it -- so it revives with the request. A Boost
+    # that *was* funded is already zero here: `fund_deal` cleared it.
     if (
         request_row.status == ParcelRequest.Status.OPEN
         and int(getattr(request_row, "boost_eur_cents", 0) or 0) > 0

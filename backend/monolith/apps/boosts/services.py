@@ -1,6 +1,6 @@
-"""Sender Boost: the J2 reward intent, its economics, and the retired package.
+"""Sender Boost: the J2 reward intent and its economics.
 
-One rule outranks everything else in this module and survives both models:
+One rule outranks everything else in this module:
 
     a boost changes where a *compatible* request appears in a list.
     It never makes an incompatible request compatible.
@@ -39,35 +39,27 @@ J2. The amount and its commission ride inside the Deal balance, so the Boost
 funds, refunds, settles and reconciles through exactly the same path as the base
 reward, and no orphan Boost revenue can exist.
 
-**The retired package.** `BoostPurchase`, its payment order and its
-Traveler/platform split were the J1-era paid visibility product. Purchasing is
-gone -- the endpoint answers 410. Existing rows keep their snapshot, keep their
-ranking effect until they expire, and a payment already in flight still
-reconciles through `activate_paid_boost`. `recompute_request_boost` derives the
-request's ranking columns from whichever of the two is stronger, so the two
-models cannot fight over the same column.
+There is no paid Boost. The J1-era paid visibility package (`BoostPurchase`) is
+gone from the code; a paid in-app boost would need Apple and Google billing, and
+it does not come back.
 """
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from django.db import transaction
-from django.db.models import Max, Q
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.core import channels, redis_bus
 from apps.core.financial_locks import lock_request_graph
 from apps.core.phase4_policy import Phase4Policy, phase4_policy
-from apps.finance.models import PaymentOrder, PaymentRefund, ScheduledJob
-from apps.finance.services import refund_order_in_full, schedule_job
+from apps.finance.models import PaymentOrder
 from apps.parcels.models import DeliveryRequest, ParcelRequest
 
-from .models import BoostIntentEvent, BoostPurchase
-
-logger = logging.getLogger(__name__)
+from .models import BoostIntentEvent
 
 
 class BoostError(RuntimeError):
@@ -108,14 +100,6 @@ RANKING_FIELDS = ("ranking_boost_weight", "ranking_boost_expires_at")
 EDITABLE_STATUSES = (
     ParcelRequest.Status.AWAITING_DEPOSIT,
     ParcelRequest.Status.OPEN,
-)
-
-#: Statuses that are already decided. Activation is a no-op for all of them.
-_SETTLED_STATUSES = (
-    BoostPurchase.Status.ACTIVE,
-    BoostPurchase.Status.EXPIRED,
-    BoostPurchase.Status.REFUNDED,
-    BoostPurchase.Status.UNUSABLE,
 )
 
 # PostgreSQL BIGINT storage ceiling. A representation guard, not a product
@@ -482,113 +466,14 @@ def record_boost_transition(
     )
 
 
-# --- the retired package ------------------------------------------------------
-
-
-class BoostPurchaseRetired(BoostError):
-    """The J1-era paid visibility package is no longer sold."""
-
-    code = "boost_package_retired"
-
-
-def purchase_boost(*args, **kwargs):
-    """Refuse. J2 replaced the paid package with the sender's reward Boost.
-
-    Kept as an explicit refusal rather than deleted: a caller that still reaches
-    for it gets a named answer instead of an `AttributeError`, and the
-    retirement stays visible where the old product lived.
-    """
-
-    del args, kwargs
-    raise BoostPurchaseRetired(
-        "Boost packages are retired. Set the request's boost reward instead."
-    )
-
-
-def _bindable_paid_boosts(purchases) -> list[BoostPurchase]:
-    """Retired-package rows that bind to the next Deal once their order is paid."""
-
-    return [
-        row
-        for row in purchases
-        if row.deal_id is None
-        and row.economics_version == BoostPurchase.EconomicsVersion.TRAVELER_SPLIT_V1
-        and row.status in (BoostPurchase.Status.ACTIVE, BoostPurchase.Status.EXPIRED)
-        and row.payment_order_id is not None
-    ]
-
-
-def _paid_boost_totals(bound) -> dict:
-    return {
-        "purchase_ids": [row.pk for row in bound],
-        "amount_eur_cents": sum(int(row.amount_eur_cents) for row in bound),
-        "traveler_boost_eur_cents": sum(
-            int(row.traveler_boost_eur_cents) for row in bound
-        ),
-        "platform_boost_eur_cents": sum(
-            int(row.platform_boost_eur_cents) for row in bound
-        ),
-    }
-
-
-def unbound_paid_boost_totals(purchases) -> dict:
-    """What `bind_paid_boosts_to_deal` would bind from these rows, bound nowhere.
-
-    Read-only: payment orders are read without a lock, because acceptance calls
-    this before the Deal exists and payment orders are only ever locked after
-    it. Acceptance compares this preview with what it actually binds and
-    refuses on any difference, so an order that turns paid in between cannot
-    change the terms under the figures a party confirmed.
-    """
-
-    candidates = _bindable_paid_boosts(purchases)
-    if not candidates:
-        return _paid_boost_totals([])
-    paid_order_ids = set(
-        PaymentOrder.objects.filter(
-            pk__in=sorted(row.payment_order_id for row in candidates),
-            status=PaymentOrder.Status.PAID,
-        ).values_list("pk", flat=True)
-    )
-    return _paid_boost_totals(
-        [row for row in candidates if row.payment_order_id in paid_order_ids]
-    )
-
-
-def unbound_paid_boost_totals_by_request(delivery_request_ids) -> dict[int, dict]:
-    """`unbound_paid_boost_totals` for many requests in one query."""
-
-    ids = sorted({int(pk) for pk in delivery_request_ids})
-    if not ids:
-        return {}
-    # The database filter only narrows the read; `_bindable_paid_boosts` below
-    # is still the rule, so this path cannot drift from what binding does.
-    rows = (
-        BoostPurchase.objects.filter(
-            delivery_request_id__in=ids,
-            deal__isnull=True,
-            economics_version=BoostPurchase.EconomicsVersion.TRAVELER_SPLIT_V1,
-            status__in=(BoostPurchase.Status.ACTIVE, BoostPurchase.Status.EXPIRED),
-            payment_order__isnull=False,
-        )
-        .select_related("payment_order")
-        .order_by("pk")
-    )
-    bound: dict[int, list[BoostPurchase]] = {pk: [] for pk in ids}
-    for row in _bindable_paid_boosts(rows):
-        if row.payment_order.status == PaymentOrder.Status.PAID:
-            bound[row.delivery_request_id].append(row)
-    return {pk: _paid_boost_totals(rows_for) for pk, rows_for in bound.items()}
-
-
 @dataclass(frozen=True, slots=True)
 class CommittedBoost:
-    """The Boost an acceptance commits right now, under whichever model applies.
+    """The Boost an acceptance commits right now.
 
     `resolve_committed_boost` is the only place that decides it. Acceptance
     freezes its result into `DealTermsSnapshot`, and the Offer projection
     publishes the same result before acceptance, so the two cannot disagree
-    about which model wins or what it costs.
+    about what it costs.
     """
 
     economics_version: str
@@ -597,22 +482,18 @@ class CommittedBoost:
     platform_fee_eur_cents: int
     commission_rate_bps: int
     snapshot: dict
-    #: The J2 reward when one was priced; `None` for no Boost or a paid package.
+    #: The J2 reward when one was priced; `None` for no Boost.
     reward: BoostReward | None
 
 
 def resolve_committed_boost(
-    *, paid_boost: dict, boost_intent_eur_cents: int, policy_loader=None
+    *, boost_intent_eur_cents: int, policy_loader=None
 ) -> CommittedBoost:
     """Decide the Boost terms a commitment freezes. Integer cents only.
 
-    The two models are mutually exclusive by construction. A retired paid
-    package was charged before J2 and binds as it always did; a J2 reward Boost
-    is unpaid and rides into the Deal balance. A request cannot carry both,
-    because `purchase_boost` is retired -- but if a historical paid package does
-    bind, it wins and the J2 branch is not taken, so no cent is counted twice.
+    A J2 reward Boost is unpaid and rides into the Deal balance.
 
-    The Phase 4 policy is read only when there is a J2 Boost to price. An offer
+    The Phase 4 policy is read only when there is a Boost to price. An offer
     negotiated under a revision that predates Phase 4 still accepts cleanly,
     and a request could not have acquired a Boost under such a revision in the
     first place, because `set_boost_intent` fails closed on one.
@@ -620,16 +501,6 @@ def resolve_committed_boost(
 
     from apps.deals.models import DealTermsSnapshot  # noqa: WPS433
 
-    if int(paid_boost["amount_eur_cents"]) > 0:
-        return CommittedBoost(
-            economics_version=DealTermsSnapshot.BoostEconomics.TRAVELER_SPLIT_V1,
-            amount_eur_cents=int(paid_boost["amount_eur_cents"]),
-            traveler_bonus_eur_cents=int(paid_boost["traveler_boost_eur_cents"]),
-            platform_fee_eur_cents=int(paid_boost["platform_boost_eur_cents"]),
-            commission_rate_bps=0,
-            snapshot={**paid_boost, "economics_version": "traveler_split_v1"},
-            reward=None,
-        )
     intent = int(boost_intent_eur_cents or 0)
     load_policy = policy_loader or phase4_policy
     reward = (
@@ -652,266 +523,24 @@ def resolve_committed_boost(
     )
 
 
-def bind_paid_boosts_to_deal(*, locked_purchases, deal) -> dict:
-    """Freeze paid economic boosts into a Deal; caller holds request/boost rows.
+def close_request_boost(*, delivery_request, actor_id: int | None = None) -> None:
+    """The request itself has ended: its unpaid J2 Boost ends with it.
 
-    Payment orders are acquired only after the Deal exists, preserving the
-    canonical request -> boost -> journey -> deal -> payment order lock order.
+    Called where the *request* ends -- sender cancellation, expiry unmatched --
+    and deliberately not where an unfunded reservation is released, because
+    there the request returns to the open pool and an unpaid Boost belongs to
+    it, not to the traveler who walked away. Caller holds the request.
     """
 
-    candidates = _bindable_paid_boosts(locked_purchases)
-    order_ids = sorted(row.payment_order_id for row in candidates)
-    paid_order_ids = set(
-        PaymentOrder.objects.select_for_update(no_key=True)
-        .filter(pk__in=order_ids, status=PaymentOrder.Status.PAID)
-        .values_list("pk", flat=True)
-    )
-    bound = [row for row in candidates if row.payment_order_id in paid_order_ids]
-    for row in bound:
-        row.deal = deal
-        row.save(update_fields=["deal", "updated_at"])
-    if paid_order_ids:
-        PaymentOrder.objects.filter(pk__in=paid_order_ids).update(deal=deal)
-        from apps.finance import ledger  # noqa: WPS433
-
-        for row in bound:
-            ledger.record_boost_binding(
-                deal_id=deal.pk,
-                order_id=row.payment_order_id,
-                purchase_id=row.pk,
-                amount_eur_cents=int(row.amount_eur_cents),
-            )
-    return _paid_boost_totals(bound)
-
-
-def unwind_boosts(
-    *,
-    locked_purchases,
-    reason: str,
-    requested_by_id: int | None = None,
-    locked_orders: dict[int, PaymentOrder] | None = None,
-    delivery_request=None,
-    clear_intent: bool = False,
-) -> int:
-    """Close out a request's boosts. Idempotent.
-
-    Retired purchases are cancelled when unpaid and refunded in full when paid,
-    exactly as before -- a settled payment for something that can no longer earn
-    goes back.
-
-    `clear_intent` additionally zeroes the J2 reward Boost and records why. It
-    is set only where the *request itself* ends -- sender cancellation, expiry
-    unmatched -- and deliberately not where an unfunded reservation is released,
-    because there the request returns to the open pool and an unpaid Boost
-    belongs to it, not to the traveler who walked away.
-    """
-
-    from apps.finance.services import cancel_order
-
-    terminal_statuses = (
-        BoostPurchase.Status.REFUNDED,
-        BoostPurchase.Status.UNUSABLE,
-        BoostPurchase.Status.CANCELLED,
-    )
-    order_ids = sorted(
-        purchase.payment_order_id
-        for purchase in locked_purchases
-        if purchase.payment_order_id is not None
-        and purchase.status not in terminal_statuses
-    )
-    if locked_orders is None:
-        locked_orders = {
-            order.pk: order
-            for order in PaymentOrder.objects.select_for_update(no_key=True)
-            .filter(pk__in=order_ids)
-            .order_by("pk")
-        }
-    elif any(order_id not in locked_orders for order_id in order_ids):
-        raise ValueError("Every boost PaymentOrder must be locked before unwind.")
-
-    changed = 0
-    at = timezone.now()
-    for purchase in locked_purchases:
-        if purchase.status in terminal_statuses:
-            continue
-        if purchase.payment_order_id is None:
-            purchase.status = BoostPurchase.Status.CANCELLED
-            purchase.cancelled_at = at
-            purchase.disposition_reason = reason[:64]
-            purchase.save(
-                update_fields=[
-                    "status",
-                    "cancelled_at",
-                    "disposition_reason",
-                    "updated_at",
-                ]
-            )
-            changed += 1
-            continue
-        order = locked_orders.get(purchase.payment_order_id)
-        if order is not None and int(order.paid_eur_cents) > 0:
-            refund_order_in_full(
-                order_id=order.pk,
-                reason=PaymentRefund.Reason.BOOST_UNUSABLE,
-                requested_by_id=requested_by_id,
-            )
-            purchase.status = BoostPurchase.Status.REFUNDED
-        else:
-            purchase.status = BoostPurchase.Status.CANCELLED
-            purchase.cancelled_at = at
-        purchase.disposition_reason = reason[:64]
-        purchase.save(
-            update_fields=["status", "cancelled_at", "disposition_reason", "updated_at"]
+    if int(delivery_request.boost_eur_cents or 0) > 0:
+        record_boost_transition(
+            delivery_request=delivery_request,
+            reason=BoostIntentEvent.Reason.REQUEST_CLOSED,
+            amount_eur_cents=0,
+            actor_id=actor_id,
         )
-        cancel_order(order_id=purchase.payment_order_id, reason=reason[:64])
-        changed += 1
-    if delivery_request is not None:
-        if clear_intent and int(delivery_request.boost_eur_cents or 0) > 0:
-            record_boost_transition(
-                delivery_request=delivery_request,
-                reason=BoostIntentEvent.Reason.REQUEST_CLOSED,
-                amount_eur_cents=0,
-                actor_id=requested_by_id,
-            )
-        elif changed or clear_intent:
-            recompute_request_boost(delivery_request, at=at)
-    return changed
-
-
-# --- activation ---------------------------------------------------------------
-
-
-def _unusable_reason(request: DeliveryRequest | None, *, at: datetime) -> str:
-    """Why this request can no longer carry a boost, or an empty string."""
-
-    if request is None:
-        return "request_missing"
-    if request.status != ParcelRequest.Status.OPEN:
-        return f"request_{request.status}"[:64]
-    if request.deadline_at is None or request.deadline_at <= at:
-        return "request_deadline_passed"
-    return ""
-
-
-def _refund_unusable(purchase: BoostPurchase, *, order_id: int, reason: str) -> None:
-    """Mark a paid-but-unusable purchase and send every captured cent back.
-
-    Two saves rather than one, in this order: the purchase is `unusable` with
-    its reason recorded *before* the refund is raised, so a failure between the
-    two leaves an operator a row that says what happened and why, rather than a
-    purchase that still looks payable.
-    """
-
-    purchase.status = BoostPurchase.Status.UNUSABLE
-    purchase.disposition_reason = reason[:64]
-    purchase.save(update_fields=["status", "disposition_reason", "updated_at"])
-    logger.warning(
-        "boosts.paid_but_unusable purchase=%s order=%s reason=%s",
-        purchase.pk,
-        order_id,
-        reason,
-    )
-    refund_order_in_full(order_id=order_id, reason=PaymentRefund.Reason.BOOST_UNUSABLE)
-    purchase.status = BoostPurchase.Status.REFUNDED
-    purchase.save(update_fields=["status", "updated_at"])
-
-
-def activate_paid_boost(*, order_id: int) -> bool:
-    """Start the paid window for one boost order. Idempotent.
-
-    Called from inside `reconcile_attempt`'s transaction, with the request
-    graph and the order already locked, so this neither opens a transaction nor
-    acquires a lock out of order.
-
-    Returns True only when this call is the one that made the boost active. A
-    replayed webhook, a duplicated provider event and a manual re-reconcile all
-    return False without moving an expiry or re-arming a job.
-    """
-
-    purchase = BoostPurchase.objects.filter(payment_order_id=order_id).first()
-    if purchase is None:
-        # A BOOST order with no purchase behind it is a data defect, not a
-        # payment problem: the money is real, so it stays visible rather than
-        # being silently absorbed.
-        logger.error("boosts.order_without_purchase order=%s", order_id)
-        return False
-    if purchase.status in _SETTLED_STATUSES:
-        return False
-
-    at = timezone.now()
-    request = DeliveryRequest.objects.filter(pk=purchase.delivery_request_id).first()
-
-    if purchase.status == BoostPurchase.Status.CANCELLED:
-        # Cancelled before the money landed. Activating it would sell something
-        # the buyer withdrew from, so the cash goes back instead.
-        _refund_unusable(purchase, order_id=order_id, reason="purchase_cancelled")
-        return False
-
-    reason = _unusable_reason(request, at=at)
-    if reason:
-        _refund_unusable(purchase, order_id=order_id, reason=reason)
-        return False
-
-    purchase.status = BoostPurchase.Status.ACTIVE
-    purchase.activated_at = at
-    purchase.expires_at = at + timedelta(seconds=int(purchase.duration_seconds))
-    purchase.save(update_fields=["status", "activated_at", "expires_at", "updated_at"])
-    recompute_request_boost(request, at=at)
-    # The expiry is an obligation in the database, not a timer in a worker's
-    # memory: stop every process for a week and the boost still retires.
-    schedule_job(
-        kind=ScheduledJob.Kind.BOOST_EXPIRY,
-        key=f"boost_expiry:{purchase.pk}",
-        run_at=purchase.expires_at,
-        payload={"boost_purchase_id": purchase.pk},
-    )
-    return True
-
-
-# --- expiry -------------------------------------------------------------------
-
-
-def expire_boost(*, purchase_id: int, at: datetime | None = None) -> str:
-    """Retire a boost whose paid window has ended. Idempotent.
-
-    Refuses to expire early: the stored `expires_at` is the authority, not the
-    schedule, so a job whose `run_at` was moved forward or a worker whose clock
-    drifted cannot cut a paid window short.
-
-    History is never deleted. The row stays, `expired`, with its snapshot -- the
-    ranking effect goes away because `recompute_request_boost` stops counting
-    it, not because the evidence was removed.
-    """
-
-    at = at or timezone.now()
-    snapshot = (
-        BoostPurchase.objects.filter(pk=purchase_id)
-        .values("delivery_request_id")
-        .first()
-    )
-    if snapshot is None:
-        return "purchase_missing"
-
-    with transaction.atomic():
-        # Through the request graph so boost rows are taken after the request,
-        # in the canonical order, exactly as a purchase takes them.
-        graph = lock_request_graph(
-            snapshot["delivery_request_id"], include_negotiation=False
-        )
-        purchase = next(
-            (row for row in graph.boost_purchases if row.pk == purchase_id), None
-        )
-        if purchase is None:
-            return "purchase_missing"
-        if purchase.status != BoostPurchase.Status.ACTIVE:
-            return f"purchase_{purchase.status}"
-        if purchase.expires_at is not None and purchase.expires_at > at:
-            return "not_due"
-
-        purchase.status = BoostPurchase.Status.EXPIRED
-        purchase.save(update_fields=["status", "updated_at"])
-        recompute_request_boost(graph.request, at=at)
-    return "expired"
+    else:
+        recompute_request_boost(delivery_request)
 
 
 # --- the ranking columns ------------------------------------------------------
@@ -923,15 +552,14 @@ def recompute_request_boost(
     at: datetime | None = None,
     policy: Phase4Policy | None = None,
 ) -> None:
-    """Derive the request's two ranking columns from both Boost models.
+    """Derive the request's two ranking columns from its J2 Boost.
 
-    Derived, never incremented. The weight is the larger of what the J2 reward
-    Boost is worth and what any still-active historical purchase bought, and the
-    expiry is the later of the request's own deadline and those purchases'. With
-    neither contributing, both columns are cleared together, which is what
+    Derived, never incremented. The weight is what the Boost amount is worth
+    and the expiry is the request's own deadline. With no Boost, or a deadline
+    already passed, both columns are cleared together, which is what
     `parcels_ranking_boost_pair` requires.
 
-    The J2 side deliberately has no expiry of its own: `deadline_at` is the
+    The Boost deliberately has no expiry of its own: `deadline_at` is the
     instant the request stops being matchable at all, so pairing the weight with
     it is the honest way to say "this lasts as long as the request does" inside
     a constraint that demands a pair. It is not a Boost timer, and no job
@@ -953,40 +581,19 @@ def recompute_request_boost(
 
     intent = int(delivery_request.boost_eur_cents or 0)
     deadline = delivery_request.deadline_at
-    intent_weight = 0
+    weight = 0
     if intent > 0 and deadline is not None and deadline > at:
         if policy is None:
             try:
                 policy = phase4_policy()
             except Exception:  # noqa: BLE001 - a broken revision must not strand
                 policy = None
-        intent_weight = (
+        weight = (
             policy.boost.ranking_weight_for(intent)
             if policy is not None
             else int(delivery_request.ranking_boost_weight or 0)
         )
-
-    legacy = BoostPurchase.objects.filter(
-        delivery_request_id=delivery_request.pk,
-        status=BoostPurchase.Status.ACTIVE,
-        expires_at__gt=at,
-    ).aggregate(weight=Max("ranking_weight"), expires_at=Max("expires_at"))
-    legacy_weight = int(legacy["weight"] or 0)
-
-    weight = max(intent_weight, legacy_weight)
-    expires_at = None
-    if weight:
-        candidates = []
-        if intent_weight:
-            candidates.append(deadline)
-        if legacy_weight and legacy["expires_at"] is not None:
-            candidates.append(legacy["expires_at"])
-        expires_at = max(candidates) if candidates else None
-    if weight and expires_at is None:
-        # Cannot happen while both branches above hold, but the pair constraint
-        # is absolute: an unpaired weight is dropped rather than written.
-        logger.error("boosts.weight_without_expiry request=%s", delivery_request.pk)
-        weight = 0
+    expires_at = deadline if weight else None
 
     DeliveryRequest.objects.filter(pk=delivery_request.pk).update(
         ranking_boost_weight=weight, ranking_boost_expires_at=expires_at
@@ -998,37 +605,6 @@ def recompute_request_boost(
 
 
 # --- read model ---------------------------------------------------------------
-
-
-def _projection(purchase: BoostPurchase, *, at: datetime) -> dict:
-    order = purchase.payment_order
-    return {
-        "public_reference": str(purchase.public_reference),
-        "package_code": purchase.package_code,
-        "package_snapshot": dict(purchase.package_snapshot or {}),
-        "status": purchase.status,
-        "is_active": purchase.is_active(at=at),
-        "amount_eur_cents": int(purchase.amount_eur_cents),
-        "economics_version": purchase.economics_version,
-        "traveler_share_bps": int(purchase.traveler_share_bps),
-        "traveler_boost_eur_cents": int(purchase.traveler_boost_eur_cents),
-        "platform_boost_eur_cents": int(purchase.platform_boost_eur_cents),
-        "currency": "EUR",
-        "duration_seconds": int(purchase.duration_seconds),
-        "ranking_weight": int(purchase.ranking_weight),
-        "activated_at": purchase.activated_at,
-        "expires_at": purchase.expires_at,
-        "cancelled_at": purchase.cancelled_at,
-        "disposition_reason": purchase.disposition_reason,
-        "created_at": purchase.created_at,
-        "payment_order_reference": (
-            str(order.public_reference) if order is not None else None
-        ),
-        "payment_status": order.status if order is not None else None,
-        "payment_outstanding_eur_cents": (
-            order.outstanding_eur_cents if order is not None else None
-        ),
-    }
 
 
 def boost_state(*, delivery_request: DeliveryRequest, viewer_id: int) -> dict:
@@ -1068,11 +644,6 @@ def boost_state(*, delivery_request: DeliveryRequest, viewer_id: int) -> dict:
         ).as_dict()
         policy_payload = boost_policy_payload(policy)
 
-    rows = list(
-        BoostPurchase.objects.filter(delivery_request_id=delivery_request.pk)
-        .select_related("payment_order")
-        .order_by("-created_at", "-id")
-    )
     events = list(
         BoostIntentEvent.objects.filter(
             delivery_request_id=delivery_request.pk
@@ -1110,11 +681,4 @@ def boost_state(*, delivery_request: DeliveryRequest, viewer_id: int) -> dict:
             }
             for row in events
         ],
-        # The retired paid package, retained for audit. Empty for every request
-        # created since J2.
-        "active_count": sum(1 for row in rows if row.is_active(at=at)),
-        "occupied_slots": sum(
-            1 for row in rows if row.status in BoostPurchase.OCCUPYING_STATUSES
-        ),
-        "purchases": [_projection(row, at=at) for row in rows],
     }

@@ -6,7 +6,6 @@ in this order::
     DeliveryRequest/ParcelRequest
     -> Match (ascending id)
     -> Offer (ascending id)
-    -> BoostPurchase (ascending id)
     -> Journey
     -> JourneyLeg (position, id)
     -> KYC/proof/User eligibility witnesses (acceptance only)
@@ -28,9 +27,8 @@ in this order::
     -> append-only ledger rows
     -> ScheduledJob
 
-A Deal's money can sit in several obligations -- its balance order, the
-posting-deposit order whose cash was credited into that balance, and paid boost
-orders. Any transition that reaches more than one acquires the complete set in
+A Deal's money can sit in two obligations -- its balance order and the
+posting-deposit order whose cash was credited into that balance. Any transition that reaches more than one acquires the complete set in
 ascending id order before processing them in its domain-specific refund order.
 
 H1 profile writers lock User then method only. They never lock prior Deals;
@@ -75,10 +73,7 @@ to every service that locks one of these rows directly (`apps.finance`,
 `apps.finance.tests.test_phase8df_lock_order`, which walks those modules' ASTs.
 
 **Phase 4 placement.** Everything Phase 4 adds sits between `Deal` and
-`PaymentOrder`, except `BoostPurchase`, which sits with the request graph it
-belongs to and is bound forward to a Deal only while that graph is held. That
-single decision is what keeps
-the new edges acyclic:
+`PaymentOrder`. That single decision is what keeps the new edges acyclic:
 
 * Handover confirmation locks Deal then codes, never codes then Deal. The
   legacy `apps.verification` path, which did the opposite (`HandoverCode`
@@ -110,7 +105,6 @@ class LockedRequestGraph:
     request: object
     matches: tuple[object, ...]
     offers: tuple[object, ...]
-    boost_purchases: tuple[object, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,24 +191,6 @@ class LockedPaymentAggregate:
     deal_aggregate: LockedDealAggregate | None
 
 
-def _lock_boost_purchases(request_id: int) -> tuple[object, ...]:
-    """Boost rows for one request, ascending id.
-
-    Taken with the request graph rather than next to `PaymentOrder`. Locking it
-    here means purchase, Deal binding and every payment flow approach the
-    shared `PaymentOrder` from the same direction. The extra indexed query is
-    the price of that guarantee.
-    """
-
-    from apps.boosts.models import BoostPurchase
-
-    return tuple(
-        BoostPurchase.objects.select_for_update(no_key=True)
-        .filter(delivery_request_id=request_id)
-        .order_by("pk")
-    )
-
-
 def lock_request_graph(
     request_id: int, *, include_negotiation: bool
 ) -> LockedRequestGraph:
@@ -229,12 +205,7 @@ def lock_request_graph(
         .get(pk=request_id)
     )
     if not include_negotiation:
-        return LockedRequestGraph(
-            request=request,
-            matches=(),
-            offers=(),
-            boost_purchases=_lock_boost_purchases(request_id),
-        )
+        return LockedRequestGraph(request=request, matches=(), offers=())
 
     matches = tuple(
         Match.objects.select_for_update(no_key=True)
@@ -246,12 +217,7 @@ def lock_request_graph(
         .filter(match_id__in=[row.pk for row in matches])
         .order_by("pk")
     )
-    return LockedRequestGraph(
-        request=request,
-        matches=matches,
-        offers=offers,
-        boost_purchases=_lock_boost_purchases(request_id),
-    )
+    return LockedRequestGraph(request=request, matches=matches, offers=offers)
 
 
 def lock_deal_aggregate(deal_id: int) -> LockedDealAggregate:

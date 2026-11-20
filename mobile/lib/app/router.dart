@@ -74,6 +74,8 @@ import '../features/notifications/notifications_screen.dart';
 import '../features/offers/negotiation_screen.dart';
 import '../features/onboarding/benefits_screen.dart';
 import '../features/profile/appearance_screen.dart';
+import '../features/profile/blocked_people_screen.dart';
+import '../features/profile/delete_account_screen.dart';
 import '../features/profile/dzd_setup_screen.dart';
 import '../features/profile/language_screen.dart';
 import '../features/profile/notification_settings_screen.dart';
@@ -153,6 +155,8 @@ abstract final class Routes {
   static const profileLanguage = 'profile-language';
   static const profileNotifications = 'profile-notifications';
   static const profileAppearance = 'profile-appearance';
+  static const profileBlocked = 'profile-blocked';
+  static const profileDeleteAccount = 'profile-delete-account';
   static const profileRatings = 'profile-ratings';
   static const profilePublic = 'profile-public';
   static const profileAlerts = 'profile-alerts';
@@ -761,6 +765,18 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: Routes.profileAppearance,
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const AppearanceScreen(),
+      ),
+      GoRoute(
+        path: '/profile/blocked',
+        name: Routes.profileBlocked,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const BlockedPeopleScreen(),
+      ),
+      GoRoute(
+        path: '/profile/delete-account',
+        name: Routes.profileDeleteAccount,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const DeleteAccountScreen(),
       ),
       GoRoute(
         path: '/profile/public',

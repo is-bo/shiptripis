@@ -7,10 +7,16 @@
          without one (they can upload an existing scan instead). -->
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <uses-feature android:name="android.hardware.camera.front" android:required="false"/>
+    <!-- No backup and no transfer to a new phone: the secure-storage sign-in
+         tokens are encrypted with a key held by this phone's keystore and
+         could not be decrypted anywhere else. -->
     <application
         android:label="Wassla"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:usesCleartextTraffic="false">
         <activity
             android:name=".MainActivity"

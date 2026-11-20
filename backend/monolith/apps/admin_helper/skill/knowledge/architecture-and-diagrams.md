@@ -92,7 +92,7 @@ One line per folder in `backend/monolith/apps`. A member never sees these names;
 | `finance` | The real money system: payment orders and attempts, Stripe and Chargily, refunds, ledger, payouts, guest payment links, scheduled jobs, exports |
 | `handover` | Pickup and delivery codes, attempts, lockouts, rotation |
 | `disputes`, `problems` | Disputes with evidence and settlement; lighter problem reports (no-show, damage, delay) |
-| `ratings`, `boosts` | Two-sided blind reviews and moderation; the sender's extra reward (retired paid package is history) |
+| `ratings`, `boosts` | Two-sided blind reviews and moderation; the sender's extra reward (there is no paid boost) |
 | `discovery` | Home discovery: public profiles, route alerts, "I can carry this" |
 | `notifications` | Bell notices, push, email queue, delivery rules |
 | `chat` | One-to-one messages between sender and traveler of a match |
@@ -400,7 +400,7 @@ flowchart TD
 Jobs are durable rows in the database (status `pending`, `running`, `succeeded`, `failed`, `cancelled`), so a restart or a Redis flush loses nothing. One finance worker checks them every 30 seconds; one reservation releaser polls every 60 seconds. Staff see failures in System > Background jobs. These are the job kinds:
 - Money: `deposit_expiry_refund` (refund deposit when a request expires unmatched), `payment_grace_release` (free the space and expire the deal if unpaid), `attempt_expiry` (close an old checkout), `provider_reconcile` and `provider_event_process` (re-check payments, apply stored webhooks), `refund_reconcile` (check refund results).
 - Payout: `payout_release_check` (at protection end: `eligible`, `blocked` or `frozen`), `payout_execute`, `payout_reconcile`, `payout_account_refresh`, `payout_sweep` (automatic EUR payout steps, execution off by default).
-- Deal lifecycle: `delivery_code_release` (after the 30 min buffer, emails the recipient), `protection_expiry` (ends the 48 h and completes the deal), `rating_reveal`, `boost_expiry` (old retired packages).
+- Deal lifecycle: `delivery_code_release` (after the 30 min buffer, emails the recipient), `protection_expiry` (ends the 48 h and completes the deal), `rating_reveal`.
 - Messages: `outbound_message`, `notification_dispatch` (send queued email and notices).
 - Marketplace: `discovery_route_alerts`, `leg_reminder` (nudge traveler to report progress), `schedule_change_settle`, `offer_response_reminder` and `offer_expiry` (unanswered offer, 6 h default).
 - AI helper: `admin_helper_call_prune` (call log kept 30 days), `admin_helper_action_expiry` (prepared change unconfirmed, 24 h default).

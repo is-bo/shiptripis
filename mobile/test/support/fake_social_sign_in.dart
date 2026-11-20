@@ -69,6 +69,18 @@ class FakeSocialSignIn implements SocialSignIn {
     return _next(appleAnswers);
   }
 
+  /// What the next request for a fresh Apple authorization code answers.
+  final appleCodeAnswers = <String? Function()>[
+    () => 'apple-authorization-code',
+  ];
+  int appleCodeCalls = 0;
+
+  @override
+  Future<String?> appleAuthorizationCode() async {
+    appleCodeCalls++;
+    return _next(appleCodeAnswers);
+  }
+
   @override
   Future<void> signOut() async => signOuts++;
 }

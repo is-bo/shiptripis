@@ -176,6 +176,7 @@ class RetiredProductBoundaryTests(APITestCase):
             "eligible": False,
             "reason": "product_request_retired",
             "match_id": self.match.pk,
+            "blocked_by_me": False,
         }
         assert counter.status_code == 410
         assert accept.status_code == 410

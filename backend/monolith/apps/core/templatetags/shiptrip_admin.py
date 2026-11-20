@@ -142,6 +142,13 @@ NAVIGATION = (
                 ("moderate_ratings",),
                 ("reviews", "review-detail"),
             ),
+            # Store readiness, App Store 1.2. Chat messages members reported.
+            (
+                "Reported chat messages",
+                "admin_console:chat-reports",
+                ("moderate_chat",),
+                ("chat-reports", "chat-report-detail"),
+            ),
         ),
     ),
     (

@@ -12,8 +12,8 @@ from .queries import Queries
 from .snapshot import consistent_read
 
 
-#: The parcel behind an order, through its request (deposit, Boost and, since
-#: J2, a balance) or, for a balance, through its deal.
+#: The parcel behind an order, through its request (a deposit and, since J2, a
+#: balance) or, for a balance, through its deal.
 _ORDER_TRACKING_NUMBER = (
     "order__delivery_request__tracking_number",
     "order__deal__delivery_request__tracking_number",
@@ -190,7 +190,7 @@ def _drilldown(
             fields |= {"recognition_at", "effective_at"}
         if metric == "payouts_settled":
             fields.add("settlement_at")
-        if metric in {"gross_funded", "deposits_collected", "boost_funded"}:
+        if metric in {"gross_funded", "deposits_collected"}:
             fields.add("attempt__succeeded_at")
     offset = (page - 1) * page_size
     selected = list(

@@ -255,6 +255,10 @@ def publish_journey(*, journey: Journey, actor) -> Journey:
             "journey_not_owned",
             "Only the journey owner can publish it.",
         )
+    from apps.accounts.deletion import hold_active_member
+
+    if not hold_active_member(actor.pk):
+        raise JourneyDomainError("account_inactive", "This account is no longer active.")
     if locked.status not in {
         Journey.Status.DRAFT,
         Journey.Status.PENDING_VERIFICATION,

@@ -6230,4 +6230,236 @@ class LAr extends L {
 
   @override
   String get accountNameLabel => 'اسمك';
+
+  @override
+  String get chatSafetyTitle => 'الأمان';
+
+  @override
+  String get chatSafetySubtitle => 'للإبلاغ عن رسالة، اضغط عليها مطوّلًا.';
+
+  @override
+  String get chatBlockAction => 'حظر';
+
+  @override
+  String get chatBlockActionDetail =>
+      'لا رسائل ولا توصيلات جديدة بينكما بعد الآن.';
+
+  @override
+  String get chatUnblockAction => 'إلغاء الحظر';
+
+  @override
+  String get chatUnblockActionDetail => 'يمكنكما تبادل الرسائل من جديد.';
+
+  @override
+  String get chatBlockConfirmTitle => 'حظر هذا العضو؟';
+
+  @override
+  String get chatBlockConfirmBody =>
+      'لن يتمكن أيّ منكما من إرسال رسائل هنا، ولا من بدء توصيل جديد مع الآخر. يستمر التوصيل المدفوع مسبقًا كما اتُّفق عليه. يمكنك إلغاء الحظر في أي وقت من الملف الشخصي.';
+
+  @override
+  String get chatBlockDone => 'حظرت هذا العضو.';
+
+  @override
+  String get chatUnblockDone => 'ألغيت حظر هذا العضو.';
+
+  @override
+  String get chatBlockedByMeTitle => 'حظرت هذا العضو';
+
+  @override
+  String get chatBlockedByMeBody =>
+      'لا يمكن لأيّ منكما إرسال رسائل هنا. يستمر التوصيل المدفوع مسبقًا كما اتُّفق عليه.';
+
+  @override
+  String get chatBlockedTitle => 'المراسلة متوقفة';
+
+  @override
+  String get chatBlockedBody =>
+      'لم يعد بإمكانك إرسال رسائل في هذه المحادثة. يستمر التوصيل المدفوع مسبقًا كما اتُّفق عليه.';
+
+  @override
+  String get chatBlockedPill => 'محظور';
+
+  @override
+  String get chatReportTitle => 'الإبلاغ عن هذه الرسالة';
+
+  @override
+  String get chatReportSubtitle =>
+      'يراجع فريق Wassla كل بلاغ خلال يوم واحد. لا يُخبَر صاحب الرسالة بمن أبلغ عنها.';
+
+  @override
+  String get chatReportReasonLabel => 'ما المشكلة فيها؟';
+
+  @override
+  String get chatReportReasonSpam => 'رسائل مزعجة أو إعلانات';
+
+  @override
+  String get chatReportReasonHarassment => 'تحرّش أو تهديد';
+
+  @override
+  String get chatReportReasonScam => 'احتيال، أو طلب الدفع خارج Wassla';
+
+  @override
+  String get chatReportReasonInappropriate => 'مسيء أو غير لائق';
+
+  @override
+  String get chatReportReasonOther => 'شيء آخر';
+
+  @override
+  String get chatReportChooseReason => 'اختر سببًا.';
+
+  @override
+  String get chatReportNoteLabel => 'هل تريد إضافة شيء؟ (اختياري)';
+
+  @override
+  String get chatReportAlsoBlock => 'حظر هذا العضو أيضًا';
+
+  @override
+  String get chatReportAlsoBlockDetail =>
+      'لن يتمكن أيّ منكما من إرسال رسائل هنا بعد الآن.';
+
+  @override
+  String get chatReportSend => 'إرسال البلاغ';
+
+  @override
+  String get chatReportSent => 'شكرًا. سيراجعه فريق Wassla.';
+
+  @override
+  String get chatMessageRemoved => 'أزالتها Wassla';
+
+  @override
+  String get chatDeletedAccount => 'حساب محذوف';
+
+  @override
+  String get partyBlockedTitle => 'غير ممكن مع هذا العضو';
+
+  @override
+  String get partyBlockedBody =>
+      'حظر أحدكما الآخر، لذا لا يمكن لأيّ منكما بدء توصيل مع الآخر. تجد الأشخاص الذين تحظرهم في الملف الشخصي.';
+
+  @override
+  String get blockedPeopleTitle => 'الأشخاص المحظورون';
+
+  @override
+  String get blockedPeopleBody =>
+      'لا يمكنك أنت وهؤلاء الأشخاص تبادل الرسائل ولا بدء توصيل جديد معًا. إلغاء الحظر يعيد الأمرين.';
+
+  @override
+  String get blockedPeopleEmptyTitle => 'لم تحظر أحدًا';
+
+  @override
+  String get blockedPeopleEmptyBody => 'عندما تحظر شخصًا من محادثة، يظهر هنا.';
+
+  @override
+  String blockedPeopleSince(String date) {
+    return 'محظور منذ $date';
+  }
+
+  @override
+  String get profileDeleteAccount => 'حذف الحساب';
+
+  @override
+  String get deleteAccountTitle => 'حذف حسابك';
+
+  @override
+  String get deleteAccountIntro =>
+      'حذف حسابك نهائي. لن تتمكن من تسجيل الدخول إليه مجددًا، ونمحو اسمك وبريدك الإلكتروني ورقم هاتفك وطرق تسجيل الدخول والإشعارات والتنبيهات وملفك العام.';
+
+  @override
+  String get deleteAccountKeptTitle => 'ما نحتفظ به';
+
+  @override
+  String get deleteAccountKeptBody =>
+      'تبقى السجلات التي يحتاجها الآخرون ويفرضها القانون، دون بيانات التواصل الخاصة بك: التوصيلات السابقة والمدفوعات والتحويلات وقرارات التحقق من الهوية والتقييمات والنزاعات ورسائل المحادثة.';
+
+  @override
+  String get deleteAccountBlockedTitle => 'أنهِ هذه أولًا';
+
+  @override
+  String get deleteAccountBlockedBody =>
+      'يمكن حذف حسابك عندما لا يبقى شيء مفتوح.';
+
+  @override
+  String get deleteAccountBlockerDeliveries => 'توصيل لم ينتهِ بعد';
+
+  @override
+  String get deleteAccountBlockerDisputes => 'نزاع لا يزال مفتوحًا';
+
+  @override
+  String get deleteAccountBlockerPayouts => 'تحويل لم يصلك بعد';
+
+  @override
+  String get deleteAccountBlockerRefunds => 'استرداد لم يصلك بعد';
+
+  @override
+  String get deleteAccountBlockerRequests =>
+      'طلب إرسال طرد لا يزال مفتوحًا. ألغِه من التوصيلات.';
+
+  @override
+  String get deleteAccountBlockerJourneys =>
+      'رحلة منشورة أو جارية. ألغِها أو أنهِها من التوصيلات.';
+
+  @override
+  String get deleteAccountBlockerOther => 'شيء لا يزال مفتوحًا في حسابك';
+
+  @override
+  String get deleteAccountOpenDeliveries => 'فتح التوصيلات';
+
+  @override
+  String get deleteAccountCheckAgain => 'التحقق من جديد';
+
+  @override
+  String get deleteAccountAppleNote =>
+      'تستخدم تسجيل الدخول عبر Apple. ستطلب Apple تأكيدك، ثم تتوقف Wassla عن استخدام معرّف Apple الخاص بك.';
+
+  @override
+  String get deleteAccountAppleElsewhereTitle => 'احذفه من جهاز iPhone';
+
+  @override
+  String get deleteAccountAppleElsewhereBody =>
+      'يستخدم حسابك تسجيل الدخول عبر Apple، ولا يمكن تأكيد حذفه إلا عبر Apple. افتح Wassla على iPhone أو iPad لحذفه، أو راسل الدعم.';
+
+  @override
+  String get deleteAccountPasswordLabel => 'كلمة المرور';
+
+  @override
+  String get deleteAccountPasswordHelp => 'للتأكد من أنك صاحب الحساب.';
+
+  @override
+  String get deleteAccountPasswordMissing => 'أدخل كلمة المرور.';
+
+  @override
+  String get deleteAccountPasswordIncorrect => 'كلمة المرور غير صحيحة.';
+
+  @override
+  String get deleteAccountAction => 'حذف حسابي';
+
+  @override
+  String get deleteAccountConfirmTitle => 'حذف حسابك؟';
+
+  @override
+  String get deleteAccountConfirmBody =>
+      'لا يمكن التراجع عن ذلك. سيُسجَّل خروجك من كل أجهزتك.';
+
+  @override
+  String get deleteAccountConfirm => 'حذف';
+
+  @override
+  String get deleteAccountChanged =>
+      'تغيّر شيء في حسابك. راجع القائمة من جديد.';
+
+  @override
+  String get deleteAccountAppleRefused =>
+      'لم تؤكد Apple. لم يُحذف شيء. حاول مجددًا.';
+
+  @override
+  String get deleteAccountAppleUnavailable =>
+      'تعذّر الوصول إلى Apple. لم يُحذف شيء. حاول مجددًا بعد بضع دقائق.';
+
+  @override
+  String get deleteAccountStaff =>
+      'يُغلق حساب الفريق من قِبل المشرف العام، لا من التطبيق.';
+
+  @override
+  String get deleteAccountDone => 'حُذف حسابك.';
 }

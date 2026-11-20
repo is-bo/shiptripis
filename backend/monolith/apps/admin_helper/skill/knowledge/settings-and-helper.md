@@ -117,7 +117,7 @@ Rank only orders results after compatibility. A boost never bypasses compatibili
 - Boost is the sender's own extra reward on a request. The traveler receives the whole boost; Wassla's boost commission is charged on top. Default boost commission 25% (2500 bps). Editable on the console (0 to 100%, "applies to future commitments only").
 - Smallest non-zero boost 1.00 EUR (limits 0.01 to 1,000 EUR); largest 1,000,000.00 EUR (the ceiling). Zero means no boost.
 - Ranking weight: weight = boost amount divided by 5.00 EUR (rounded up, at least 1), capped at 30 (max allowed 100). Only affects ranking, after compatibility.
-- Old "visibility packages" (24 h, 3 days, 7 days) and traveler_share_bps 75%, min amount 5.00 EUR are retired. They still parse for history. Nothing new is sold with them.
+- Old "visibility packages" (24 h, 3 days, 7 days) and traveler_share_bps 75%, min amount 5.00 EUR are left over from the removed paid boost. They stay in the stored settings and are still checked when a settings version loads, but nothing uses them and no boost is sold.
 <!-- src: core/phase4_policy.py, migrations 0009, 0010, console_forms.py -->
 
 ## Marketplace switches ("Discovery, routes, prices and proposals" form)

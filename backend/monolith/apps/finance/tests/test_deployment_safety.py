@@ -425,6 +425,22 @@ class ProductionEntrypointTests(SimpleTestCase):
             assert result.returncode != 0, f"{variable} did not stop the boot"
             assert variable in result.stderr
 
+    def test_sign_in_with_apple_needs_the_key_that_revokes_it_at_deletion(self):
+        apple = {"APPLE_SIGN_IN_CLIENT_IDS": "eu.wassla.app"}
+        key = {
+            "APPLE_TEAM_ID": "TEAM123456",
+            "APPLE_SIGN_IN_KEY_ID": "KEY1234567",
+            "APPLE_SIGN_IN_PRIVATE_KEY": "-----BEGIN PRIVATE KEY-----\\nx\\n-----END PRIVATE KEY-----",
+        }
+        for missing in key:
+            partial = {name: value for name, value in key.items() if name != missing}
+            result = boot_production(PROD_ENTRYPOINT_BOOT, **apple, **partial)
+            assert result.returncode != 0, f"booted without {missing}"
+            assert "APPLE_SIGN_IN_CLIENT_IDS needs" in result.stderr
+        assert boot_production(PROD_ENTRYPOINT_BOOT, **apple, **key).returncode == 0
+        # Apple switched off needs no key.
+        assert boot_production(PROD_ENTRYPOINT_BOOT).returncode == 0
+
     def test_production_request_formatter_redacts_concrete_capability_paths(self):
         result = boot_production(
             "import logging; "

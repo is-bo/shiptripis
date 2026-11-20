@@ -96,7 +96,7 @@ Other statuses:
 - Deal leg allocation (one slice of a deal per leg): `pending_payment`, `funded`, `in_transit`, `released`, `completed`, `cancelled`.
 - Early arrival report on a deal: `pending_confirmation` (sender must answer), `confirmed`, `declined`. It never moves money or the delivery code.
 - Boost today is a plain extra reward amount on the request (smallest non-zero Boost 1.00 EUR, Settings: boost). It has no status, timer or expiry of its own; it is frozen into the deal when an offer is accepted.
-- Boost purchase (old paid visibility package, retired; no new ones are created, the endpoint answers 410): `pending_payment`, `active`, `expired`, `cancelled` (before payment), `unusable` (paid but request no longer boostable), `refunded`. Old rows are kept as history.
+- There is no paid boost and no visibility package to buy.
 <!-- src: apps/deals/models.py, apps/parcels/models.py, apps/matching/models.py, apps/boosts/models.py (module docstring), apps/core/migrations/0010_seed_j2_boost_commission.py -->
 
 ## Glossary: journeys and legs
@@ -114,11 +114,11 @@ Other statuses:
 
 | Term | Meaning |
 |---|---|
-| Payment order | One amount to collect. Purpose: `posting_deposit`, `deal_balance`, `boost`. Status: `pending`, `partially_paid`, `paid`, `refund_pending`, `partially_refunded`, `refunded`, `cancelled`. |
+| Payment order | One amount to collect. Purpose: `posting_deposit`, `deal_balance` (`boost` exists but is not used). Status: `pending`, `partially_paid`, `paid`, `refund_pending`, `partially_refunded`, `refunded`, `cancelled`. |
 | Payment attempt | One try to pay an order at a provider. `created`, `checkout_pending`, `processing`, `succeeded`, `failed`, `expired`, `cancelled`. Checkout attempt lives 3600 s (Settings: Payments > Checkout). |
 | Provider | Stripe (EUR cards), Chargily (Algerian cards / Edahabia, DZD). A mock provider exists for tests only and is forbidden in production. |
-| Refund | Money back. Status `pending`, `processing`, `succeeded`, `failed`. Reasons: request expired unmatched, sender cancelled before acceptance, payment could not be applied, deal cancelled before funding, administrative, deal cancelled after funding, dispute resolution, verified no-show, boost paid but no longer usable (old boost packages). |
-| Ledger | Append-only money journal. Entry kinds: customer payment, deposit credit, deal funding, boost binding, boost allocation, refund, payout, correction. |
+| Refund | Money back. Status `pending`, `processing`, `succeeded`, `failed`. Reasons: request expired unmatched, sender cancelled before acceptance, payment could not be applied, deal cancelled before funding, administrative, deal cancelled after funding, dispute resolution, verified no-show. |
+| Ledger | Append-only money journal. Entry kinds: customer payment, deposit credit, deal funding, boost allocation, refund, payout, correction. |
 | Payout | What the traveler receives. Statuses below. |
 | Payout method | How a traveler is paid: Stripe connected account or manual settlement. Status `setup_required`, `pending_review`, `ready`, `needs_attention`, `unavailable`, `disabled`. |
 | Hold | Money locked for a deal (sender's funds in escrow until release or refund). Old wallet model: `open`, `released`, `reversed`. Also "payout hold" = finance blocks a payout manually. |

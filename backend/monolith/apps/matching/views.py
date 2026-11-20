@@ -34,6 +34,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.accounts.blocks import blocks
 from apps.core import channels, redis_bus
 from apps.core.event_resources import match_resources
 from apps.core.pagination import paginated_array_response
@@ -47,7 +48,7 @@ from .serializers import (
     MatchSerializer,
     OfferSerializer,
 )
-from .services import chat_eligibility
+from .services import chat_eligibility, is_party
 
 
 # ---------- helpers ----------
@@ -146,10 +147,8 @@ class MatchListView(APIView):
             qs = qs.filter(status=s)
         def serialize(page):
             matches = list(page)
-            # One read of the retired paid-package rows for every open
-            # negotiation on this page, instead of one per serialized row.
+            # One reader for the whole page, so the Boost policy is read once.
             economics = OfferEconomicsReader()
-            economics.prime(matches)
             return MatchListSerializer(
                 matches,
                 many=True,
@@ -360,7 +359,10 @@ class MatchChatEligibilityView(APIView):
     Returned shape is stable so the Go chat-service can call it before
     upgrading a WebSocket without parsing free-form errors:
 
-      { "eligible": bool, "reason": str, "match_id": int }
+      { "eligible": bool, "reason": str, "match_id": int, "blocked_by_me": bool }
+
+    ``blocked_by_me`` says whether the caller blocks the other party, so the
+    app can offer to lift it; it is false for anyone who is not a party.
 
     Reasons (caller may surface verbatim):
       ok                    -- chat allowed
@@ -368,6 +370,7 @@ class MatchChatEligibilityView(APIView):
       no_accepted_offer     -- match has no accepted offer yet
       payment_pending       -- accepted offer exists but its payment is not funded
       match_closed          -- match cancelled / expired
+      blocked               -- one of the parties blocks the other
     """
 
     permission_classes = (IsAuthenticated,)
@@ -387,7 +390,18 @@ class MatchChatEligibilityView(APIView):
         # 200 with eligible=false (not 403) -- caller may be the Go chat-service
         # calling on behalf of a user; we want a uniform shape it can cache.
         eligible, reason = chat_eligibility(match, request.user.id)
-        return Response({"eligible": eligible, "reason": reason, "match_id": match.id})
+        blocked_by_me = is_party(match, request.user.id) and blocks(
+            request.user.id,
+            match.traveler_id if request.user.id == match.sender_id else match.sender_id,
+        )
+        return Response(
+            {
+                "eligible": eligible,
+                "reason": reason,
+                "match_id": match.id,
+                "blocked_by_me": blocked_by_me,
+            }
+        )
 
 
 class OfferWithdrawView(APIView):

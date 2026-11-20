@@ -6325,4 +6325,245 @@ class LFr extends L {
 
   @override
   String get accountNameLabel => 'Votre nom';
+
+  @override
+  String get chatSafetyTitle => 'Sécurité';
+
+  @override
+  String get chatSafetySubtitle =>
+      'Pour signaler un message, appuyez longuement dessus.';
+
+  @override
+  String get chatBlockAction => 'Bloquer';
+
+  @override
+  String get chatBlockActionDetail =>
+      'Plus de messages ni de nouvelles livraisons entre vous.';
+
+  @override
+  String get chatUnblockAction => 'Débloquer';
+
+  @override
+  String get chatUnblockActionDetail => 'Vous pourrez de nouveau vous écrire.';
+
+  @override
+  String get chatBlockConfirmTitle => 'Bloquer ce membre ?';
+
+  @override
+  String get chatBlockConfirmBody =>
+      'Aucun de vous deux ne pourra plus envoyer de message ici, ni commencer une nouvelle livraison avec l’autre. Une livraison déjà payée continue comme convenu. Vous pouvez le débloquer à tout moment depuis votre profil.';
+
+  @override
+  String get chatBlockDone => 'Vous avez bloqué ce membre.';
+
+  @override
+  String get chatUnblockDone => 'Vous avez débloqué ce membre.';
+
+  @override
+  String get chatBlockedByMeTitle => 'Vous avez bloqué ce membre';
+
+  @override
+  String get chatBlockedByMeBody =>
+      'Aucun de vous deux ne peut envoyer de message ici. Une livraison déjà payée continue comme convenu.';
+
+  @override
+  String get chatBlockedTitle => 'Messagerie désactivée';
+
+  @override
+  String get chatBlockedBody =>
+      'Vous ne pouvez plus envoyer de message dans cette conversation. Une livraison déjà payée continue comme convenu.';
+
+  @override
+  String get chatBlockedPill => 'Bloqué';
+
+  @override
+  String get chatReportTitle => 'Signaler ce message';
+
+  @override
+  String get chatReportSubtitle =>
+      'L’équipe Wassla examine chaque signalement sous 24 heures. L’expéditeur du message ne sait pas qui l’a signalé.';
+
+  @override
+  String get chatReportReasonLabel => 'Quel est le problème ?';
+
+  @override
+  String get chatReportReasonSpam => 'Spam ou publicité';
+
+  @override
+  String get chatReportReasonHarassment => 'Harcèlement ou menaces';
+
+  @override
+  String get chatReportReasonScam =>
+      'Une arnaque, ou une demande de paiement hors de Wassla';
+
+  @override
+  String get chatReportReasonInappropriate => 'Offensant ou inapproprié';
+
+  @override
+  String get chatReportReasonOther => 'Autre chose';
+
+  @override
+  String get chatReportChooseReason => 'Choisissez un motif.';
+
+  @override
+  String get chatReportNoteLabel => 'Quelque chose à ajouter ? (facultatif)';
+
+  @override
+  String get chatReportAlsoBlock => 'Bloquer aussi ce membre';
+
+  @override
+  String get chatReportAlsoBlockDetail =>
+      'Aucun de vous deux ne pourra plus envoyer de message ici.';
+
+  @override
+  String get chatReportSend => 'Envoyer le signalement';
+
+  @override
+  String get chatReportSent => 'Merci. L’équipe Wassla va l’examiner.';
+
+  @override
+  String get chatMessageRemoved => 'Supprimé par Wassla';
+
+  @override
+  String get chatDeletedAccount => 'Compte supprimé';
+
+  @override
+  String get partyBlockedTitle => 'Impossible avec ce membre';
+
+  @override
+  String get partyBlockedBody =>
+      'L’un de vous a bloqué l’autre : aucun de vous deux ne peut commencer une livraison avec l’autre. Les personnes que vous bloquez sont dans votre profil.';
+
+  @override
+  String get blockedPeopleTitle => 'Personnes bloquées';
+
+  @override
+  String get blockedPeopleBody =>
+      'Vous et ces personnes ne pouvez ni vous écrire ni commencer une nouvelle livraison ensemble. Débloquer rétablit les deux.';
+
+  @override
+  String get blockedPeopleEmptyTitle => 'Vous n’avez bloqué personne';
+
+  @override
+  String get blockedPeopleEmptyBody =>
+      'Quand vous bloquez quelqu’un depuis une conversation, il apparaît ici.';
+
+  @override
+  String blockedPeopleSince(String date) {
+    return 'Bloqué le $date';
+  }
+
+  @override
+  String get profileDeleteAccount => 'Supprimer le compte';
+
+  @override
+  String get deleteAccountTitle => 'Supprimer votre compte';
+
+  @override
+  String get deleteAccountIntro =>
+      'La suppression de votre compte est définitive. Vous ne pourrez plus vous y connecter, et nous effaçons votre nom, votre e-mail, votre numéro de téléphone, vos moyens de connexion, vos notifications, vos alertes et votre profil public.';
+
+  @override
+  String get deleteAccountKeptTitle => 'Ce que nous conservons';
+
+  @override
+  String get deleteAccountKeptBody =>
+      'Les données dont les autres membres et la loi ont besoin restent, sans vos coordonnées : livraisons passées, paiements, versements, décisions de vérification d’identité, avis, litiges et messages.';
+
+  @override
+  String get deleteAccountBlockedTitle => 'Terminez d’abord ceci';
+
+  @override
+  String get deleteAccountBlockedBody =>
+      'Votre compte pourra être supprimé quand plus rien ne sera en cours.';
+
+  @override
+  String get deleteAccountBlockerDeliveries =>
+      'Une livraison qui n’est pas terminée';
+
+  @override
+  String get deleteAccountBlockerDisputes => 'Un litige encore ouvert';
+
+  @override
+  String get deleteAccountBlockerPayouts =>
+      'Un versement qui ne vous est pas encore parvenu';
+
+  @override
+  String get deleteAccountBlockerRefunds =>
+      'Un remboursement qui ne vous est pas encore parvenu';
+
+  @override
+  String get deleteAccountBlockerRequests =>
+      'Une demande d’envoi encore ouverte. Annulez-la depuis Livraisons.';
+
+  @override
+  String get deleteAccountBlockerJourneys =>
+      'Un trajet publié ou en cours. Annulez-le ou terminez-le depuis Livraisons.';
+
+  @override
+  String get deleteAccountBlockerOther =>
+      'Quelque chose encore en cours sur votre compte';
+
+  @override
+  String get deleteAccountOpenDeliveries => 'Ouvrir Livraisons';
+
+  @override
+  String get deleteAccountCheckAgain => 'Vérifier à nouveau';
+
+  @override
+  String get deleteAccountAppleNote =>
+      'Vous utilisez Se connecter avec Apple. Apple vous demandera de confirmer, puis Wassla cessera d’utiliser votre identifiant Apple.';
+
+  @override
+  String get deleteAccountAppleElsewhereTitle =>
+      'Supprimez-le depuis un iPhone';
+
+  @override
+  String get deleteAccountAppleElsewhereBody =>
+      'Votre compte utilise Se connecter avec Apple, et seul Apple peut en confirmer la suppression. Ouvrez Wassla sur un iPhone ou un iPad pour le supprimer, ou écrivez au support.';
+
+  @override
+  String get deleteAccountPasswordLabel => 'Votre mot de passe';
+
+  @override
+  String get deleteAccountPasswordHelp => 'Pour confirmer que c’est bien vous.';
+
+  @override
+  String get deleteAccountPasswordMissing => 'Saisissez votre mot de passe.';
+
+  @override
+  String get deleteAccountPasswordIncorrect =>
+      'Ce mot de passe n’est pas le bon.';
+
+  @override
+  String get deleteAccountAction => 'Supprimer mon compte';
+
+  @override
+  String get deleteAccountConfirmTitle => 'Supprimer votre compte ?';
+
+  @override
+  String get deleteAccountConfirmBody =>
+      'C’est irréversible. Vous serez déconnecté sur tous vos appareils.';
+
+  @override
+  String get deleteAccountConfirm => 'Supprimer';
+
+  @override
+  String get deleteAccountChanged =>
+      'Quelque chose a changé sur votre compte. Vérifiez à nouveau la liste.';
+
+  @override
+  String get deleteAccountAppleRefused =>
+      'Apple n’a pas confirmé. Rien n’a été supprimé. Réessayez.';
+
+  @override
+  String get deleteAccountAppleUnavailable =>
+      'Impossible de joindre Apple. Rien n’a été supprimé. Réessayez dans quelques minutes.';
+
+  @override
+  String get deleteAccountStaff =>
+      'Un compte de l’équipe est fermé par un super administrateur, pas depuis l’application.';
+
+  @override
+  String get deleteAccountDone => 'Votre compte est supprimé.';
 }

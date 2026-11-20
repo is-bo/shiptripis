@@ -67,9 +67,18 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 | Banned | Staff banned them. Cannot sign in. |
 | Sign-in disabled | Account switched off without a ban: a staff account disabled on Staff & access, or any account switched off in the technical Django admin. Cannot sign in. |
 - A banned or disabled person who tries to sign in with a password sees "Incorrect email or password." The server refuses inactive accounts before its own "This account is disabled." check, so that message does not appear for a password. With Google or Apple they get `account_disabled` "This account is disabled." (see sign-in methods).
-- There is no self-service "delete account" or "deactivate account" in the app or API. Not in the app. The helper reports `deactivated` for an inactive non-banned account.
+- A member can delete their own account (see "How does a member delete their account?"). A deleted account shows as Sign-in disabled. The helper reports `deactivated` for an inactive non-banned account.
 - Users list filters: Active, Restricted (banned or disabled).
-<!-- src: backend/monolith/apps/admin_panel/console_people.py (_header), console_views.py, admin_helper/resources.py, mobile (no delete feature) -->
+<!-- src: backend/monolith/apps/admin_panel/console_people.py (_header), console_views.py, admin_helper/resources.py, apps/accounts/deletion.py -->
+
+## How does a member delete their account?
+- In the app: Profile > "Delete account" (under Sign out). On the web: the page /delete-account (English, French, Arabic) gives the steps and the email route (contact@wassla.eu, subject "Delete my account").
+- It is refused while anything is open, each listed in the app: a delivery not closed, an open dispute, a payout or refund not yet reached them, an open parcel request, a published or under-way trip. The member finishes or cancels those first; deletion never cancels anything or moves money.
+- The password is asked when the account has one (`password_incorrect` if wrong). An account with Sign in with Apple confirms with Apple on an iPhone; the server revokes Apple's token first, and if Apple refuses or cannot be reached nothing is deleted. On Android such an account is told to delete from an iPhone or write to support.
+- Deleting is immediate and permanent: every session ends; name, email (replaced by an address that cannot receive mail, so the real email can sign up again), phone, region, language, password, Google and Apple links, sign-in and email codes, push devices, inbox, notification settings, route alerts and public profile are erased; pending emails are cancelled.
+- Kept, pointing at the emptied account: deliveries, payments, refunds, payouts and payout details, ID check decisions, reviews, problem reports, disputes and chat history. Other members see "Deleted account" in chat.
+- Staff accounts cannot be deleted from the app (`staff_account`).
+<!-- src: backend/monolith/apps/accounts/deletion.py, apple_revoke.py, views.py (AccountDeletionView), mobile/lib/features/profile/delete_account_screen.dart, web/delete-account.html -->
 
 ## What does a ban do, and what does restore do?
 - Who: only roles with `manage_users` (Super Admin). Console: person page, button "Ban account" or "Restore account". A reason is required (up to 500 characters), kept in the audit log, never shown to the person.
@@ -211,4 +220,4 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 ## Not covered here
 - A guaranteed review time for IDs or tickets: the code has none ("less than a day" is only app text).
 - Live values of the server environment limits above (sign-in lifetimes, code lifetimes, upload limits): only the shipped defaults are known here.
-- The app has no account deletion or self-deactivation, and nothing ever sets "phone verified".
+- Nothing ever sets "phone verified".

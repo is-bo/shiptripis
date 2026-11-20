@@ -72,7 +72,7 @@ DEFINITIONS = {
         "Successfully applied canonical funding before refunds.",
         "LedgerEntry: customer_payment/provider_clearing, linked PaymentAttempt",
         "Positive capture leg; succeeded, applied attempt; selected mode.",
-        "Unapplied/failed attempts, deposit credit and Boost binding/allocation transfers.",
+        "Unapplied/failed attempts, deposit credit and Boost allocation transfers.",
         "PaymentAttempt.succeeded_at",
         "Applied capture records = capture ledger legs.",
     ),
@@ -99,7 +99,7 @@ DEFINITIONS = {
         "Net allocated platform share without final earning evidence.",
         "PLATFORM_COMMISSION entries",
         "No clean completion/final settlement evidence.",
-        "Recognized entries; unbound Boost held funds are not allocated platform earnings.",
+        "Recognized entries.",
         "Current consistent snapshot; period filter does not apply.",
         "Recognized + pending = allocated platform share.",
     ),
@@ -196,27 +196,22 @@ for key, status in (
         "Finalized records = refund ledger debits; applied finalized subtracted once from funded.",
     )
 
-for key, purpose in (
-    ("deposits_collected", "posting_deposit"),
-    ("boost_funded", "boost"),
-):
-    DEFINITIONS[key] = Definition(
-        key.replace("_", " ").title(),
-        "Applied capture component of gross funded volume.",
-        "gross_funded filtered by PaymentOrder.purpose",
-        purpose,
-        "Credits, binding and allocation entries; not an additional amount to add to gross.",
-        "PaymentAttempt.succeeded_at",
-        "Subset of gross funded, not separate revenue.",
-    )
+DEFINITIONS["deposits_collected"] = Definition(
+    "Deposits Collected",
+    "Applied capture component of gross funded volume.",
+    "gross_funded filtered by PaymentOrder.purpose",
+    "posting_deposit",
+    "Credit and allocation entries; not an additional amount to add to gross.",
+    "PaymentAttempt.succeeded_at",
+    "Subset of gross funded, not separate revenue.",
+)
 
 DEFINITIONS["boost_commission"] = Definition(
     "Boost Commission",
     "Wassla commission on the Boost portion of funded deliveries.",
     "platform_commission ledger entries keyed deal_boost_allocation:",
     "additive_commission_v2 boosts only",
-    "Retired paid visibility packages, whose platform share is inside "
-    "boost_funded instead. Not an amount to add to gross funded volume.",
+    "Not an amount to add to gross funded volume.",
     "Ledger posting time; recognised with the Deal exactly as base commission is.",
     "Subset of platform commission, reported apart so delivery commission and "
     "Boost commission can be told from one another.",

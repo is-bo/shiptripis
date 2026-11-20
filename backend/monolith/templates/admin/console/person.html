@@ -39,7 +39,7 @@
 
   {% if person.is_banned or not person.is_active %}
   <div class="st-alert st-alert-bad" role="status">
-    <strong>{% if person.is_banned %}This account is banned.{% else %}This account cannot sign in.{% endif %}</strong>
+    <strong>{% if person.deleted_at %}The member deleted this account.{% elif person.is_banned %}This account is banned.{% else %}This account cannot sign in.{% endif %}</strong>
     <span>Existing Deals and money owed are unaffected by the restriction and remain visible below.</span>
   </div>
   {% endif %}

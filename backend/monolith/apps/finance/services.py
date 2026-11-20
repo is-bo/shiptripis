@@ -1057,20 +1057,7 @@ def _fund_deal_if_covered(order: PaymentOrder) -> bool:
             traveler_reward_eur_cents=int(terms["traveler_reward_minor"]),
             platform_fee_eur_cents=int(terms["platform_fee_minor"]),
         )
-        from apps.boosts.models import BoostPurchase
-
-        # Retired paid packages: their cash arrived on their own order and was
-        # attributed to this Deal at binding. Historical rows only.
-        for boost in BoostPurchase.objects.filter(deal_id=order.deal_id).order_by("pk"):
-            ledger.record_boost_allocation(
-                deal_id=order.deal_id,
-                order_id=boost.payment_order_id,
-                purchase_id=boost.pk,
-                traveler_id=result.traveler_id,
-                traveler_boost_eur_cents=int(boost.traveler_boost_eur_cents),
-                platform_boost_eur_cents=int(boost.platform_boost_eur_cents),
-            )
-        # J2: the Boost and its commission arrived inside this very order, so
+        # The Boost and its commission arrived inside this very order, so
         # the held deal funds already contain them. Recognising them as a
         # separate transaction rather than folding them into `deal_funding` is
         # what lets H5 tell base delivery commission and Boost commission apart
@@ -1093,22 +1080,6 @@ def _fund_deal_if_covered(order: PaymentOrder) -> bool:
             query_provider_capability=False,
         )
     return result.changed
-
-
-def _activate_boost_if_paid(order: PaymentOrder) -> bool:
-    """Hand a covered boost order to the boost domain. Idempotent.
-
-    Late import so `apps.finance` keeps no import-time dependency on
-    `apps.boosts`, exactly as `_fund_deal_if_covered` does for `apps.deals`.
-    The boost row was locked with the request graph before this order, so the
-    ordering is the canonical one.
-    """
-
-    if order.status != PaymentOrder.Status.PAID:
-        return False
-    from apps.boosts.services import activate_paid_boost
-
-    return activate_paid_boost(order_id=order.pk)
 
 
 def _funding_provider(order: PaymentOrder) -> str:
@@ -1555,7 +1526,6 @@ def _checkout_description(order: PaymentOrder) -> str:
     labels = {
         PaymentOrder.Purpose.POSTING_DEPOSIT: "Waçla posting deposit",
         PaymentOrder.Purpose.DEAL_BALANCE: "Waçla delivery payment",
-        PaymentOrder.Purpose.BOOST: "Waçla listing boost",
     }
     return labels.get(order.purpose, "Waçla payment")
 
@@ -2159,11 +2129,6 @@ def reconcile_attempt(
             _publish_request_after_deposit(order, at=now)
     elif order.purpose == PaymentOrder.Purpose.DEAL_BALANCE:
         _fund_deal_if_covered(order)
-    elif order.purpose == PaymentOrder.Purpose.BOOST:
-        # The authoritative payment activates the boost. A client returning
-        # from a checkout page never does, which is the same rule the deposit
-        # and the deal balance already follow.
-        _activate_boost_if_paid(order)
 
     _publish(
         channels.PAYMENT_CAPTURED,

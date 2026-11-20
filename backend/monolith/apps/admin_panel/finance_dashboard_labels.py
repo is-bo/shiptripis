@@ -314,7 +314,6 @@ COUNT_NOUNS = {
     "deposits_credited": ("credit entry", "credit entries"),
     "deposits_held": ("deposit entry", "deposit entries"),
     "deposits_refunded": ("refund", "refunds"),
-    "boost_funded": ("Boost entry", "Boost entries"),
     "recognized_revenue": ("ledger entry", "ledger entries"),
     "pending_earnings": ("ledger entry", "ledger entries"),
     "traveler_outstanding": ("payout", "payouts"),

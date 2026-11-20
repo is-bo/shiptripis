@@ -47,7 +47,13 @@ from apps.deals.cancellation import cancel_funded_deal
 from apps.deals.services import cancel_pending_deal, release_pending_deal_reservation
 from apps.deals.tests.phase4_factories import enable_mock_rail
 from apps.finance import ledger
-from apps.finance.models import LedgerAccount, LedgerTransaction, PaymentRefund, Payout
+from apps.finance.models import (
+    LedgerAccount,
+    LedgerTransaction,
+    PaymentOrder,
+    PaymentRefund,
+    Payout,
+)
 from apps.finance.settlement import assert_deal_reconciles, read_deal_money
 from apps.finance.tests.factories import build_scenario, pay_order_with_mock
 from apps.matching.policy import Phase2Policy
@@ -542,11 +548,13 @@ class BoostLifetimeTests(TestCase):
             amount_eur_cents=800,
         )
         # There is no Boost expiry job, so nothing exists that could retire it.
+        from apps.finance.jobs import HANDLERS
         from apps.finance.models import ScheduledJob
 
         assert not ScheduledJob.objects.filter(
-            kind=ScheduledJob.Kind.BOOST_EXPIRY
+            kind="boost_expiry"
         ).exists()
+        assert "boost_expiry" not in HANDLERS
 
         request.refresh_from_db()
         assert request.boost_eur_cents == 800
@@ -599,7 +607,9 @@ class BoostAccountingTests(TestCase):
         assert ledger.deal_balance(deal.pk, LedgerAccount.DEAL_FUNDS) == 0
         assert assert_deal_reconciles(deal.pk)["net"] == 0
         # There is no separate Boost obligation in J2.
-        assert not read_deal_money(deal).boost_order_ids
+        assert not PaymentOrder.objects.filter(
+            deal_id=deal.pk, purpose=PaymentOrder.Purpose.BOOST
+        ).exists()
 
     def test_a_funded_cancellation_refunds_the_boost_with_the_reward(self):
         enable_mock_rail()

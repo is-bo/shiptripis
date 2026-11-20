@@ -2135,6 +2135,41 @@ class ChatRepository {
       cancelToken: cancelToken,
     ),
   );
+
+  /// Reports a message the caller received. A second report of the same
+  /// message answers the first one. With [block] the sender is blocked too.
+  Future<void> report({
+    required int messageId,
+    required ChatReportReason reason,
+    String note = '',
+    bool block = false,
+  }) => _api.postVoid(
+    '/api/chat/messages/$messageId/report',
+    body: {'reason': reason.code, 'note': note.trim(), 'block': block},
+  );
+
+  /// Blocks the other member of [matchId]. Idempotent.
+  Future<void> block(int matchId) =>
+      _api.postVoid('/api/matches/$matchId/block');
+
+  /// Lifts the caller's block of the other member of [matchId]. Idempotent.
+  Future<void> unblock(int matchId) =>
+      _api.deleteVoid('/api/matches/$matchId/block');
+
+  /// The people the caller blocks, newest first.
+  Future<List<BlockedPerson>> blockedPeople({CancelToken? cancelToken}) async {
+    final json = await _api.getObject(
+      '/api/me/blocks',
+      cancelToken: cancelToken,
+    );
+    return readObjectList(
+      json['results'],
+    ).map(BlockedPerson.fromJson).toList(growable: false);
+  }
+
+  /// Lifts the caller's block of [userId]. Idempotent.
+  Future<void> unblockPerson(int userId) =>
+      _api.deleteVoid('/api/me/blocks/$userId');
 }
 
 // ---------------------------------------------------------------------------

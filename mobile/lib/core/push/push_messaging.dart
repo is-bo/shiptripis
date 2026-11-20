@@ -249,7 +249,7 @@ class DeferredPushMessaging implements PushMessaging {
 }
 
 const _notificationPermissionChannel = MethodChannel(
-  'com.shiptrip.shiptrip/notification_permission',
+  'eu.wassla.app/notification_permission',
 );
 
 Future<bool> _androidRuntimePermissionSupported() async {

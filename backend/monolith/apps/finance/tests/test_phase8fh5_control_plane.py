@@ -280,7 +280,7 @@ def test_h501_unknown_and_conflicting_provenance_stays_isolated(case):
     assert list(LedgerEntry.objects.values()) == before
 
 
-def test_deposit_credit_boost_and_duplicate_attempts_do_not_add_funding(world):
+def test_deposit_credit_and_duplicate_attempts_do_not_add_funding(world):
     s, _, _, original = world
     deposit, attempt = record_capture(s.sender, amount=500)
     balance, balance_attempt = record_capture(
@@ -295,10 +295,6 @@ def test_deposit_credit_boost_and_duplicate_attempts_do_not_add_funding(world):
         owner_id=s.sender.pk,
         amount_eur_cents=500,
         deal_id=s.deal.pk,
-    )
-    boost, boost_attempt = record_capture(s.sender, amount=800, purpose="boost")
-    ledger.record_boost_binding(
-        deal_id=s.deal.pk, order_id=boost.pk, purchase_id=999, amount_eur_cents=800
     )
     # Replayed ledger posting and provider success are idempotent. A corrupt
     # duplicate succeeded attempt without a posting must not inflate volume.
@@ -317,11 +313,10 @@ def test_deposit_credit_boost_and_duplicate_attempts_do_not_add_funding(world):
         provider_currency="EUR",
     )
     snapshot = build_snapshot(scope())
-    assert cents(snapshot, "gross_funded") == original.amount_eur_cents + 6000 + 800
+    assert cents(snapshot, "gross_funded") == original.amount_eur_cents + 6000
     assert cents(snapshot, "deposits_collected") == 500
     assert cents(snapshot, "deposits_credited") == 500
     assert cents(snapshot, "deposits_held") == 0
-    assert cents(snapshot, "boost_funded") == 800
     assert snapshot["integrity"]["status"] == "ok"
     PaymentAttempt.objects.create(
         order=balance,
@@ -725,11 +720,9 @@ def test_f1_boost_is_funded_once_and_recognised_only_at_close():
     before = build_snapshot(scope())
     # Counted once, and only from the balance capture.
     assert cents(before, "gross_funded") == balance_amount
-    assert cents(before, "boost_funded") == 0
     assert cents(before, "boost_commission") == 195
     assert cents(before, "pending_earnings") == 500 + 195
     assert cents(before, "recognized_revenue") == 0
-    assert LedgerTransaction.objects.filter(kind="boost_binding").count() == 0
     assert (
         LedgerTransaction.objects.filter(
             key=f"deal_boost_allocation:deal:{s.deal.pk}"

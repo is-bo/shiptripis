@@ -140,14 +140,24 @@ failure; only the last offers an in-app retry. Never log or render the token.
 The mobile build supplies public Firebase client identifiers with Dart
 defines: `FIREBASE_API_KEY`, `FIREBASE_PROJECT_ID`,
 `FIREBASE_MESSAGING_SENDER_ID`, and `FIREBASE_ANDROID_APP_ID`; iOS also needs
-`FIREBASE_IOS_APP_ID` and optionally `FIREBASE_IOS_BUNDLE_ID`. An incomplete
-tuple leaves push unavailable without affecting the app. These are Firebase
-client identifiers, never Firebase Admin credentials.
+`FIREBASE_IOS_APP_ID` and optionally `FIREBASE_IOS_BUNDLE_ID` (default
+`eu.wassla.app`, the app id on both platforms). An incomplete tuple leaves
+push unavailable without affecting the app. These are Firebase client
+identifiers, never Firebase Admin credentials. No `GoogleService-Info.plist`
+or `google-services.json` is used.
 
-The device model and Dart layer support iOS, but production iOS push is gated
-on the Firebase iOS app, APNs key, Xcode push/background capabilities, signing,
-and physical-device verification. Do not claim iOS verification before those
-steps pass.
+On iOS the Runner is signed with `aps-environment` in every build (both
+entitlements files, `ios/Runner/Runner.entitlements` and
+`ios/Runner/RunnerAppleSignIn.entitlements`; "development" in the files, the
+production value comes from the App Store profile) and `Info.plist` declares
+the `remote-notification` background mode; `tools/check_ios_config.py` fails
+CI if either disappears. `firebase_messaging` registers with APNs itself and,
+with Firebase's default method swizzling, hands the APNs token to Firebase, so
+`AppDelegate.swift` needs no push code. What remains outside the repository:
+the App ID's Push Notifications capability, an App Store profile made after
+it, and the APNs authentication key uploaded to the Firebase project
+(`docs/WASSLA_SETUP_FOR_ISMAIL.md`, section 10). Do not claim iOS push
+verification before a physical iPhone has received one.
 
 ## Post-pickup protection state (Phase 8F-F5)
 

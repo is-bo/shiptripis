@@ -2,15 +2,26 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Identity verification captures the user's document + face. iOS hard
-	     crashes on first camera/library access without these strings, and they
-	     are what the permission sheet shows, so they name the actual purpose. -->
+	<!-- iOS stops the app at the first camera or library access without these
+	     strings, and they are what the permission sheet shows, so they name
+	     every use: the identity check (face by camera, ID document from the
+	     library), travel tickets, item photos, the crossed cheque for DZD
+	     payouts, and dispute evidence (library only). The translations are in
+	     <language>.lproj/InfoPlist.strings. -->
 	<key>NSCameraUsageDescription</key>
-	<string>Wassla uses your camera to photograph your ID document and your face so we can verify your identity.</string>
+	<string>Wassla uses your camera only when you choose to take a photo: your face for the identity check, your travel ticket, the item you are sending, or the crossed cheque for payouts in Algeria.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Wassla lets you pick an existing photo of your ID document instead of taking a new one.</string>
+	<string>Wassla opens your photos only when you choose one: your ID document for the identity check, your travel ticket, the item you are sending, the crossed cheque for payouts in Algeria, or photos and videos as evidence in a dispute.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<!-- The app's own languages, so iOS names them in Settings and picks the
+	     matching InfoPlist.strings. -->
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>fr</string>
+		<string>ar</string>
+	</array>
 	<key>CFBundleDisplayName</key>
 	<string>Wassla</string>
 	<key>CFBundleExecutable</key>
@@ -46,8 +57,18 @@
 			</array>
 		</dict>
 	</array>
+	<!-- Only HTTPS through the system, which is exempt from export
+	     documentation: no encryption of the app's own. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<!-- Push notifications are delivered while the app is in the background
+	     (Firebase Cloud Messaging through APNs). -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

@@ -294,15 +294,17 @@ void main() {
       ));
     });
 
-    test('iOS: Google needs both client ids; Apple needs its switch', () {
+    test('iOS: Google needs both client ids and Apple; Apple needs its '
+        'switch', () {
       expect(offers(TargetPlatform.iOS), (google: true, apple: true));
       expect(offers(TargetPlatform.iOS, ios: ''), (google: false, apple: true));
       expect(offers(TargetPlatform.iOS, server: ''), (
         google: false,
         apple: true,
       ));
+      // App Store 4.8: Google is never offered on iOS without Apple.
       expect(offers(TargetPlatform.iOS, apple: false), (
-        google: true,
+        google: false,
         apple: false,
       ));
     });
@@ -1306,6 +1308,10 @@ class _Delegating implements SocialSignIn {
 
   @override
   Future<AppleCredential?> apple() => _platform.apple();
+
+  @override
+  Future<String?> appleAuthorizationCode() =>
+      _platform.appleAuthorizationCode();
 
   @override
   Future<void> signOut() => _fake.signOut();

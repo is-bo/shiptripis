@@ -63,14 +63,6 @@ REQUEST_TERMS_MONEY_FIELDS = (
     "sender_total_with_boost_minor",
 )
 
-#: What a request with no retired paid package binds: nothing.
-NO_PAID_BOOST = {
-    "purchase_ids": [],
-    "amount_eur_cents": 0,
-    "traveler_boost_eur_cents": 0,
-    "platform_boost_eur_cents": 0,
-}
-
 #: Deal states whose terms no longer describe anything the sender owes.
 _DEAD_DEAL_STATUSES = (
     Deal.Status.CANCELLED,
@@ -83,7 +75,6 @@ def project_request_terms(
     *,
     economics: dict,
     boost_intent_eur_cents: int,
-    paid_boost: dict | None = None,
     policy_loader=None,
 ) -> DealTermsSnapshot:
     """The unsaved terms committing `economics` with this Boost would freeze.
@@ -95,7 +86,6 @@ def project_request_terms(
     from apps.boosts.services import resolve_committed_boost  # noqa: WPS433
 
     boost = resolve_committed_boost(
-        paid_boost=paid_boost or NO_PAID_BOOST,
         boost_intent_eur_cents=int(boost_intent_eur_cents or 0),
         policy_loader=policy_loader,
     )
@@ -143,24 +133,19 @@ def saved_request_terms(delivery_request, *, chosen_economics: dict | None) -> d
     """`chosen_terms` for a saved request, from the source that is authoritative.
 
     While the Boost is still the sender's to change, the figures are what
-    acceptance would commit now -- including a retired paid package, exactly
-    as `_accept_offer_locked` resolves it. Once committed, the Deal's frozen
+    acceptance would commit now, exactly as `_accept_offer_locked` resolves
+    it. Once committed, the Deal's frozen
     terms are the only truth; the request's own Boost column is not.
     """
 
-    from apps.boosts.services import (  # noqa: WPS433
-        EDITABLE_STATUSES,
-        unbound_paid_boost_totals_by_request,
-    )
+    from apps.boosts.services import EDITABLE_STATUSES  # noqa: WPS433
 
     if delivery_request.status in EDITABLE_STATUSES:
         if chosen_economics is None:
             return unavailable_request_terms()
-        paid = unbound_paid_boost_totals_by_request([delivery_request.pk])
         terms = project_request_terms(
             economics=chosen_economics,
             boost_intent_eur_cents=int(delivery_request.boost_eur_cents or 0),
-            paid_boost=paid.get(delivery_request.pk),
         )
         return request_terms_payload(terms, status=BOOST_TERMS_PROVISIONAL)
 

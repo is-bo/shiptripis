@@ -1,0 +1,102 @@
+{% extends "admin/base_site.html" %}
+{% load shiptrip_admin %}
+
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin_console:overview' %}">Operations</a> &rsaquo; <a href="{{ queue_url }}">Reported chat messages</a> &rsaquo; Message {{ message.pk }}</div>{% endblock %}
+
+{% block content %}
+<main class="st-console">
+  <header class="st-page-head">
+    <div>
+      <p class="st-eyebrow">Chat &middot; parcel <span class="st-tracking-number">{{ tracking_number }}</span></p>
+      <h1>Message from {{ message.sender.full_name|default:message.sender.email }}</h1>
+      <p>Sent {{ message.created_at|date:"d M Y, H:i" }} in the conversation between {{ message.match.sender.full_name|default:message.match.sender.email }} (sender) and {{ message.match.traveler.full_name|default:message.match.traveler.email }} (traveler).</p>
+    </div>
+    <div class="st-page-aside">
+      {% if message.removed_at %}
+        <span class="st-chip st-bad">Removed</span>
+      {% elif open_reports %}
+        <span class="st-chip st-attn">{{ open_reports }} open report{{ open_reports|pluralize }}</span>
+      {% else %}
+        <span class="st-chip st-mute">Shown as written</span>
+      {% endif %}
+    </div>
+  </header>
+
+  <div class="st-alert st-alert-info">
+    <strong>Staff only</strong>
+    <span>Only reported messages and the few around them are shown here. Members see “Removed by Wassla” in place of a removed message. The sender is never told who reported. To stop someone who keeps sending abuse, suspend them from their person page.</span>
+  </div>
+
+  <div class="st-grid st-grid-2">
+    <section class="st-card">
+      <p class="st-eyebrow">The message</p>
+      <h2>As written</h2>
+      <p class="st-case-reason">{{ message.body }}</p>
+      <dl class="st-facts">
+        <div><dt>Sent by</dt><dd>{% person_link message.sender "chat-reports" %}<small>{{ message.sender.email }}</small></dd></div>
+        <div><dt>Shown to members</dt><dd>{% if message.removed_at %}No, removed {{ message.removed_at|date:"d M Y, H:i" }}<small>{{ message.removed_by.email|default:"—" }}</small>{% else %}Yes{% endif %}</dd></div>
+      </dl>
+      {% if may_view_deal %}<div class="st-split-actions"><a class="button st-button-quiet" href="{% url 'admin_console:deal-detail' deal.pk %}">Open the delivery</a></div>{% endif %}
+    </section>
+
+    <section class="st-card">
+      <p class="st-eyebrow">In its conversation</p>
+      <h2>Messages around it</h2>
+      <ol class="st-timeline">
+        {% for line in conversation %}
+        <li>
+          <strong>{% if line.pk == message.pk %}Reported &middot; {% endif %}{{ line.sender.full_name|default:line.sender.email }}</strong>
+          <span>{{ line.created_at|date:"d M Y, H:i" }}{% if line.removed_at %} &middot; removed{% endif %}</span>
+          <span{% if line.pk != message.pk %} class="st-muted"{% endif %}>{{ line.body }}</span>
+        </li>
+        {% endfor %}
+      </ol>
+    </section>
+  </div>
+
+  <section class="st-card">
+    <p class="st-eyebrow">Reports &middot; staff only</p>
+    <h2>{{ reports|length }} report{{ reports|length|pluralize }}</h2>
+    <ol class="st-timeline">
+      {% for report in reports %}
+      <li>
+        <strong>{{ report.get_reason_display }} &middot; {{ report.get_status_display }}</strong>
+        <span>{{ report.created_at|date:"d M Y, H:i" }} &middot; {% person_link report.reporter "chat-reports" %} ({{ report.reporter.email }}){% if report.decided_at %} &middot; decided {{ report.decided_at|date:"d M Y, H:i" }} by {{ report.decided_by.email|default:"—" }}{% endif %}</span>
+        {% if report.note %}<span class="st-muted">“{{ report.note }}”</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+
+  {% if decisions %}
+  <div class="st-grid st-grid-2">
+    {% for decision in decisions %}
+    <section class="st-card">
+      <p class="st-eyebrow">Audited action</p>
+      <h2>{{ decision.title }}</h2>
+      <p class="st-muted">{{ decision.help }}{% if open_reports %} Its {{ open_reports }} open report{{ open_reports|pluralize }} {{ open_reports|pluralize:"is,are" }} closed with this decision.{% endif %}</p>
+      <form method="post" class="st-form">{% csrf_token %}
+        <input type="hidden" name="action" value="{{ decision.action }}">
+        {{ decision.form.as_p }}
+        <div class="st-split-actions"><span class="st-spacer"></span><button type="submit"{% if decision.danger %} class="st-button-danger"{% endif %}>{{ decision.title }}</button></div>
+      </form>
+    </section>
+    {% endfor %}
+  </div>
+  {% elif not may_moderate %}
+  <p class="st-muted">You can read this message but not decide on it.</p>
+  {% endif %}
+
+  {% if audits %}
+  <section class="st-card">
+    <p class="st-eyebrow">Audit</p>
+    <h2>Staff decisions on this message</h2>
+    <ol class="st-timeline">
+      {% for audit in audits %}
+      <li><strong>{{ audit.action|admin_action }}</strong><span>{{ audit.created_at|date:"d M Y, H:i" }} &middot; {{ audit.actor.email|default:"System" }} &middot; {{ audit.reason }}</span></li>
+      {% endfor %}
+    </ol>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}

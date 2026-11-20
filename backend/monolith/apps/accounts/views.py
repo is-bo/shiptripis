@@ -16,11 +16,13 @@ from apps.notifications.models import OutboundMessage
 from apps.notifications.outbox import cancel_message, enqueue_secret_message
 from apps.notifications.push import unregister_push_device
 
+from . import deletion
 from .apple import AppleAuthError, AppleAuthUnavailable, verify_identity_token
 from .google import GoogleAuthError, GoogleAuthUnavailable, verify_id_token
 from .models import EmailVerificationCode, OAuthIdentity, PasswordResetCode, User
 from .sessions import end_all_sessions
 from .serializers import (
+    AccountDeletionSerializer,
     AppleSignInSerializer,
     GoogleSignInSerializer,
     MeSerializer,
@@ -371,3 +373,40 @@ class MeView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(MeSerializer(request.user).data)
+
+
+class AccountDeletionView(APIView):
+    """GET  /api/me/deletion — what stands before deleting the account.
+    POST /api/me/deletion — delete it (`apps.accounts.deletion`).
+
+    POST answers 204 once the account is deleted: every session has ended, so
+    the app signs out locally. The password is checked, so the endpoint takes
+    the sign-in throttle.
+    """
+
+    permission_classes = (IsAuthenticated,)
+
+    def get_throttles(self):
+        if self.request.method == "POST":
+            self.throttle_scope = "login"
+            return [ScopedRateThrottle()]
+        return super().get_throttles()
+
+    def get(self, request: Request) -> Response:
+        result = deletion.check(request.user)
+        return Response(
+            {
+                "blockers": list(result.blockers),
+                "password_required": result.password_required,
+                "apple_authorization_required": result.apple_authorization_required,
+            }
+        )
+
+    def post(self, request: Request) -> Response:
+        serializer = AccountDeletionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            deletion.delete_account(request.user, **serializer.validated_data)
+        except deletion.AccountDeletionRefused as exc:
+            return Response(exc.payload, status=exc.status)
+        return Response(status=status.HTTP_204_NO_CONTENT)

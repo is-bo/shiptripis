@@ -36,7 +36,7 @@ See pricing.md and money.md for the full formulas.
 - Languages: English (default), French, Arabic (right to left) in the app and the home page. Emails follow the user's email language. The legal pages are English only for now.
 - Currency: EUR is the real currency (stored in cents). Chargily shows a DZD amount converted by the server from EUR (rate typed by an admin, shipped placeholder 150 DZD per EUR, minimum 75 DZD). Stripe pays in EUR.
 - Whether a country is actually "live" for users cannot be read from the code: signup asks for no country. Which payment rails are on is a setting (next section).
-- Not offered: sea legs (off by default), a wallet, phone or SMS sign-in, account deletion in the app. Google sign-in and Sign in with Apple are built in the app and the server, and each stays off until its keys are set (Apple until the iOS bundle id is in `APPLE_SIGN_IN_CLIENT_IDS` and the build defines `APPLE_SIGN_IN_ENABLED=true`). Account deletion in the app, which the App Store requires, is not built yet. Visitors can browse without an account.
+- Not offered: sea legs (off by default), a wallet, phone or SMS sign-in. Google sign-in and Sign in with Apple are built in the app and the server, and each stays off until its keys are set (Apple until the iOS bundle id is in `APPLE_SIGN_IN_CLIENT_IDS` and the build defines `APPLE_SIGN_IN_ENABLED=true`). Members delete their own account in the app (Profile > Delete account), as the App Store and Google Play require, and members can report a chat message and block someone. Visitors can browse without an account.
 <!-- src: apps/core/languages.py, apps/trips/transport_rules.py, apps/finance/policy.py, web/en/index.html -->
 
 ## What is switched on or off in the shipped settings, and where do I change it?
@@ -96,7 +96,7 @@ See admin-console.md for the role table.
 <!-- src: apps/admin_panel/permissions.py, apps/discovery/profiles.py -->
 
 ## How long is data kept? Can a user delete their account?
-- No account deletion or deactivation in the app or API. Privacy requests (access, correction, deletion) go to a support mailbox on the website (see legal pages below). The privacy page says retention periods are not yet decided and will be published before launch.
+- Yes: Profile > "Delete account" in the app, or the /delete-account web page (steps and an email route). It waits until nothing is open, then erases the person's details at once; records others and the law rely on stay without them (see accounts-and-verification). Other privacy requests (access, correction) go to the support mailbox on the website (see legal pages below). The privacy page says retention periods are not yet decided and will be published before launch.
 - Fixed in code: finished background-job rows are pruned after 90 days by default (never below 30; money records are never touched); AI helper calls kept 30 days; phones not seen for 180 days are switched off; unclaimed parcel photos are reclaimable after 48 hours; notifications, audit rows and ledger rows are never deleted.
 - Financial, safety and dispute records are kept (the privacy page says they may need to stay for legal reasons).
 - There is no data-retention policy in the code. The public privacy page states no retention periods. Say so, and say that it is an open business decision.

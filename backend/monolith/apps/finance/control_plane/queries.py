@@ -435,8 +435,8 @@ class Queries:
         if self.has_cohort:
             rows = rows.annotate(linked_deal=source_deal())
             cohort = Q(linked_deal__in=self.payouts.values("deal_id"))
-            # Unbound deposit/Boost can still be looked up by their own UUID,
-            # or by the tracking number of the parcel they are for.
+            # An unbound deposit can still be looked up by its own UUID,
+            # or by the tracking number of the parcel it is for.
             if self.scope.search and not any(
                 (
                     self.scope.rail,
@@ -572,14 +572,12 @@ class Queries:
             "deposits_collected": MetricQuery(
                 funding.filter(order__purpose="posting_deposit")
             ),
-            "boost_funded": MetricQuery(funding.filter(order__purpose="boost")),
-            # J2 boosts carry no payment order of their own -- the amount and
-            # its commission ride inside the Deal balance -- so the funding
-            # split above cannot see them. This reads the recognition entry
-            # instead, which is why it is a commission figure rather than a
-            # funding one, and why it is reported apart from `boost_funded`
-            # rather than added to it. Both are display metrics; neither is a
-            # reconciliation input, and neither is an amount to add to gross.
+            # A Boost carries no payment order of its own -- the amount and its
+            # commission ride inside the Deal balance -- so the funding split
+            # above cannot see it. This reads the recognition entry instead,
+            # which is why it is a commission figure rather than a funding one.
+            # A display metric, not a reconciliation input, and not an amount
+            # to add to gross.
             "boost_commission": MetricQuery(
                 ledger.filter(
                     account="platform_commission",

@@ -103,19 +103,11 @@ def cancel_delivery_request(
         .exclude(status=PaymentOrder.Status.CANCELLED)
         .order_by("pk")
     )
-    locked_orders_by_id = {order.pk: order for order in locked_orders}
 
-    from apps.boosts.services import unwind_boosts  # noqa: WPS433
+    from apps.boosts.services import close_request_boost  # noqa: WPS433
 
-    unwind_boosts(
-        locked_purchases=graph.boost_purchases,
-        reason="sender_cancelled_request",
-        requested_by_id=actor_id,
-        locked_orders=locked_orders_by_id,
-        delivery_request=delivery,
-        # The request itself is ending, so its unpaid J2 Boost ends with it.
-        clear_intent=True,
-    )
+    # The request itself is ending, so its unpaid Boost ends with it.
+    close_request_boost(delivery_request=delivery, actor_id=actor_id)
 
     deposit_orders = tuple(
         order

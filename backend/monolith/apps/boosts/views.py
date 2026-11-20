@@ -3,10 +3,6 @@
     GET  /api/boosts/policy            the bounds and the rate, before choosing
     GET  /api/parcels/<id>/boost       this request's Boost, economics, history
     PUT  /api/parcels/<id>/boost       set, raise, lower or remove it
-    GET  /api/parcels/<id>/boosts      retired paid-package history (audit)
-    POST /api/parcels/<id>/boosts      410 Gone -- packages are not sold
-    GET  /api/boosts/packages          410 Gone
-    POST /api/boosts/preview           410 Gone
 
 A J2 Boost is not a purchase, so nothing in this module creates a payment
 order, opens a checkout or waits for a provider. The amount is a property of
@@ -53,12 +49,6 @@ MAPPED_FAILURES = (
     NoActiveBusinessSettings,
     InvalidPhase4Policy,
 )
-
-RETIRED_DETAIL = (
-    "Paid boost packages are retired. A boost is now extra reward on the "
-    "request: use PUT /api/parcels/<id>/boost."
-)
-
 
 def _error_response(exc: Exception) -> Response:
     """Map a domain failure to its machine code and structured detail.
@@ -140,55 +130,3 @@ class RequestBoostIntentView(APIView):
         except MAPPED_FAILURES as exc:
             return _error_response(exc)
         return Response(state)
-
-
-class RequestBoostHistoryView(APIView):
-    """The retired paid-package history for one request.
-
-    `GET` still answers, because a historical purchase is a settled payment and
-    the person who made it may always read it back. `POST` is gone.
-    """
-
-    permission_classes = (IsAuthenticated,)
-
-    def get(self, request: Request, pk: int) -> Response:
-        delivery_request = get_object_or_404(DeliveryRequest, pk=pk)
-        if delivery_request.sender_id != request.user.id and not request.user.is_staff:
-            return _error_response(
-                NotAuthorized("Only the sender may see this request's boosts.")
-            )
-        try:
-            state = boost_state(
-                delivery_request=delivery_request, viewer_id=request.user.id
-            )
-        except MAPPED_FAILURES as exc:
-            return _error_response(exc)
-        return Response(state)
-
-    def post(self, request: Request, pk: int) -> Response:
-        del request, pk
-        return Response(
-            {"code": "boost_package_retired", "detail": RETIRED_DETAIL},
-            status=http.HTTP_410_GONE,
-        )
-
-
-class RetiredBoostPackageView(APIView):
-    """The package catalogue and its preview. Both retired by J2.
-
-    Answering 410 rather than deleting the route is deliberate: a client built
-    against the old contract gets a named, machine-readable retirement instead
-    of a 404 it would report to the user as a network fault.
-    """
-
-    permission_classes = (IsAuthenticated,)
-
-    def get(self, request: Request) -> Response:
-        del request
-        return Response(
-            {"code": "boost_package_retired", "detail": RETIRED_DETAIL},
-            status=http.HTTP_410_GONE,
-        )
-
-    def post(self, request: Request) -> Response:
-        return self.get(request)

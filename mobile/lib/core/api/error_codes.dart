@@ -56,6 +56,42 @@ class ApiErrorCode {
   static const nameAlreadySet = ApiErrorCode('name_already_set');
 
   // ---------------------------------------------------------------------------
+  // Deleting the account (`/api/me/deletion`)
+  // ---------------------------------------------------------------------------
+  static const passwordIncorrect = ApiErrorCode('password_incorrect');
+
+  /// Something is still open; the body lists `blockers`.
+  static const accountDeletionBlocked = ApiErrorCode(
+    'account_deletion_blocked',
+  );
+
+  /// The account signs in with Apple and the request carried no fresh code.
+  static const appleAuthorizationRequired = ApiErrorCode(
+    'apple_authorization_required',
+  );
+
+  /// Apple refused the code; asking Apple again usually works.
+  static const appleAuthorizationRefused = ApiErrorCode(
+    'apple_authorization_refused',
+  );
+
+  /// Apple could not be reached; nothing was deleted.
+  static const appleRevokeUnavailable = ApiErrorCode(
+    'apple_revoke_unavailable',
+  );
+
+  /// Staff accounts are closed in the console, not from the app.
+  static const staffAccount = ApiErrorCode('staff_account');
+
+  // ---------------------------------------------------------------------------
+  // Blocking
+  // ---------------------------------------------------------------------------
+
+  /// One of the two members blocks the other, so neither can start a
+  /// delivery with the other.
+  static const partyBlocked = ApiErrorCode('party_blocked');
+
+  // ---------------------------------------------------------------------------
   // Retired V1 surfaces. Reaching one of these means the client called
   // something that no longer exists — a bug in the app, not a user problem.
   // ---------------------------------------------------------------------------

@@ -16,6 +16,7 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 
+from apps.accounts.blocks import blocked_between
 from apps.core import channels, redis_bus
 from apps.core.marketplace_policy import marketplace_policy
 from apps.matching.discovery import explain_candidate
@@ -61,6 +62,10 @@ def register_interest(*, traveler, request_id: int, journey_id: int):
         )
     if not Journey.objects.filter(pk=journey_id, traveler=traveler).exists():
         raise DiscoveryError("journey_not_found", "Choose one of your own journeys.", status=404)
+    if blocked_between(traveler.id, delivery_request.sender_id):
+        raise DiscoveryError(
+            "party_blocked", "You cannot contact this sender.", status=403
+        )
 
     evaluation = explain_candidate(
         delivery_request_id=delivery_request.pk, journey_id=journey_id, at=at

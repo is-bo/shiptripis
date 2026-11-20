@@ -2,6 +2,7 @@ from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from .views import (
+    AccountDeletionView,
     AppleSignInView,
     GoogleSignInView,
     MeView,
@@ -38,4 +39,5 @@ urlpatterns = [
         name="auth-verify-email-resend",
     ),
     path("me", MeView.as_view(), name="me"),
+    path("me/deletion", AccountDeletionView.as_view(), name="me-deletion"),
 ]

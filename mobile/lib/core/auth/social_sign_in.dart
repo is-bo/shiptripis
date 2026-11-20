@@ -10,7 +10,9 @@
 /// Neither provider is offered until it is configured for the platform
 /// (decision 15 of the plan): Google needs its server client id, and on iOS
 /// its iOS client id too; Apple needs `APPLE_SIGN_IN_ENABLED` on an iOS
-/// build, and is never offered elsewhere.
+/// build, and is never offered elsewhere. On iOS Google is offered only
+/// together with Apple (App Store 4.8): a build with Google configured and
+/// Apple off offers neither.
 library;
 
 import 'dart:async';
@@ -95,6 +97,11 @@ abstract interface class SocialSignIn {
 
   Future<AppleCredential?> apple();
 
+  /// A fresh Apple authorization code, asked for when the person deletes an
+  /// account that uses Sign in with Apple, so the server can revoke it.
+  /// `null` when the person cancelled.
+  Future<String?> appleAuthorizationCode();
+
   /// Forgets the provider's own signed-in account, so the next person on a
   /// shared phone is offered the account picker. Best effort: never throws.
   Future<void> signOut();
@@ -115,7 +122,10 @@ abstract interface class SocialSignIn {
       apple: false,
     ),
     TargetPlatform.iOS => (
-      google: googleServerClientId.isNotEmpty && googleIosClientId.isNotEmpty,
+      google:
+          appleSignInEnabled &&
+          googleServerClientId.isNotEmpty &&
+          googleIosClientId.isNotEmpty,
       apple: appleSignInEnabled,
     ),
     _ => (google: false, apple: false),
@@ -166,12 +176,22 @@ Future<AuthorizationCredentialAppleID> _authorizeWithApple(
   nonce: hashedNonce,
 );
 
+/// Asks Apple for an authorization with no name or email: only its code.
+typedef AppleReauthorize = Future<AuthorizationCredentialAppleID> Function();
+
+Future<AuthorizationCredentialAppleID> _reauthorizeWithApple() =>
+    SignInWithApple.getAppleIDCredential(scopes: const []);
+
 /// The real providers.
 class PlatformSocialSignIn implements SocialSignIn {
-  PlatformSocialSignIn({AppleAuthorize authorizeApple = _authorizeWithApple})
-    : _authorizeApple = authorizeApple;
+  PlatformSocialSignIn({
+    AppleAuthorize authorizeApple = _authorizeWithApple,
+    AppleReauthorize reauthorizeApple = _reauthorizeWithApple,
+  }) : _authorizeApple = authorizeApple,
+       _reauthorizeApple = reauthorizeApple;
 
   final AppleAuthorize _authorizeApple;
+  final AppleReauthorize _reauthorizeApple;
   Future<void>? _googleReady;
 
   static final _offers = socialSignInOffers(
@@ -262,6 +282,24 @@ class PlatformSocialSignIn implements SocialSignIn {
       fullName: joinAppleName(credential.givenName, credential.familyName),
       userIdentifier: credential.userIdentifier,
     );
+  }
+
+  @override
+  Future<String?> appleAuthorizationCode() async {
+    final AuthorizationCredentialAppleID credential;
+    try {
+      credential = await _reauthorizeApple();
+    } on SignInWithAppleAuthorizationException catch (error) {
+      if (error.code == AuthorizationErrorCode.canceled) return null;
+      throw SocialSignInFailure(SocialProvider.apple, error.code);
+    } on Object catch (error) {
+      throw SocialSignInFailure(SocialProvider.apple, error);
+    }
+    final code = credential.authorizationCode;
+    if (code.isEmpty) {
+      throw const SocialSignInFailure(SocialProvider.apple, 'no code');
+    }
+    return code;
   }
 }
 

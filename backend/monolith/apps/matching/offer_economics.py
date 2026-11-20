@@ -156,13 +156,11 @@ class OfferEconomicsReader:
 
     One reader lives in a serializer context for the whole response. The Phase 4
     policy is read at most once, and only if some pending offer has a Boost to
-    price; the retired paid-package rows are read once per request, or once for
-    a whole list after `prime`.
+    price.
     """
 
     def __init__(self) -> None:
         self._policy = None
-        self._paid: dict[int, dict] = {}
 
     def _load_policy(self):
         if self._policy is None:
@@ -170,31 +168,6 @@ class OfferEconomicsReader:
 
             self._policy = phase4_policy()
         return self._policy
-
-    def prime(self, matches) -> None:
-        """Load paid-package totals for every pending negotiation in one query."""
-
-        from apps.boosts.services import (  # noqa: WPS433
-            unbound_paid_boost_totals_by_request,
-        )
-
-        request_ids = {
-            match.parcel_id
-            for match in matches
-            if match.status == Match.Status.PENDING
-            and match.parcel_id not in self._paid
-        }
-        if request_ids:
-            self._paid.update(unbound_paid_boost_totals_by_request(request_ids))
-
-    def _paid_boost(self, request_id: int) -> dict:
-        if request_id not in self._paid:
-            from apps.boosts.services import (  # noqa: WPS433
-                unbound_paid_boost_totals_by_request,
-            )
-
-            self._paid.update(unbound_paid_boost_totals_by_request([request_id]))
-        return self._paid[request_id]
 
     def project(self, offer: Offer, match: Match) -> dict:
         if (
@@ -223,7 +196,6 @@ class OfferEconomicsReader:
 
         try:
             boost = resolve_committed_boost(
-                paid_boost=self._paid_boost(match.parcel_id),
                 boost_intent_eur_cents=_request_boost_intent(match),
                 policy_loader=self._load_policy,
             )

@@ -47,11 +47,14 @@ Staff cannot unlock chat for an unfunded deal from the chat itself; the rule fol
 - Exact addresses are not part of chat; the chat does not reveal anything the deal has not already unlocked.
 <!-- src: backend/monolith/apps/chat/views.py, serializers.py -->
 
-## Is chat moderated? Can staff read it?
-- There is no automatic moderation, word filter, block or report-message button in the code.
-- Staff have no screen to read chat. Neither the admin console nor the Django admin has a chat page, and the AI helper has no chat tool. Dispute evidence bundles only record that a conversation existed (message count, first and last message time), not the text; the text stays in the chat table.
-- Users report abuse through support (see the support section) or by opening a problem report / dispute.
-<!-- src: backend/monolith/apps/disputes/services.py (_chat_block), apps/admin_panel/console_urls.py (no chat page), apps/chat (no admin.py) -->
+## Is chat moderated? Can staff read it? (report and block)
+- No automatic moderation or word filter. Members report and block (App Store rule 1.2).
+- Report: in a conversation, the member presses and holds a message they received and picks a reason: Spam or advertising, Harassment or threats, A scam or a request to pay outside Wassla, Offensive or inappropriate, Something else; an optional note (up to 500 characters); and "Also block this member". Only the recipient can report a message, once (a second report answers the first). The sender is never told who reported.
+- Block: from the conversation's menu ("Block"), or with the report. Either member blocking stops, both ways: sending chat messages (403, reason `blocked`), new proposals, counter-offers and accepting a pending offer (403 `party_blocked`), and "I can carry this" (403 `party_blocked`). The two also stop finding each other's trips and requests in matching, a request cannot name the other as its traveler, and route alerts leave the other's listings out. The conversation stays readable to both. A delivery already paid goes on as agreed (codes, progress, payout are unchanged). Only the blocker can unblock: from the conversation's notice ("Unblock") or Profile > Blocked people.
+- Staff read chat only through reports: console page "Reported chat messages" (Trust menu, `trust/chat-reports/`, capability `moderate_chat`: Trust and Super Admin). Only reported messages are shown, each with the 5 messages before and after it, every report with its reporter, reason and note. Decisions, each with a required internal reason (audited): Dismiss the reports (message unchanged), Remove the message (both members see "Removed by Wassla" instead, and the text also leaves the recipient's notifications; the text stays for staff), Restore the message. Every decision closes the message's open reports. A member who keeps sending abuse is banned from their person page (Super Admin).
+- The work list shows open chat reports ("Reported chat messages"), urgent after 24 hours. The AI helper sees only that count; chat contents never reach the helper, and it cannot decide a report.
+- Dispute evidence bundles only record that a conversation existed (message count, first and last message time), not the text.
+<!-- src: backend/monolith/apps/chat/moderation.py, apps/accounts/blocks.py, apps/chat/views.py, apps/matching/v1_services.py (PartiesBlocked), apps/discovery/interest.py, apps/admin_panel/console_chat_reports.py, worklist.py -->
 
 ## How does the notification bell work?
 - The bell is in the app header. It shows a count of active unread items. Screen reader label: "Notifications, N unread".

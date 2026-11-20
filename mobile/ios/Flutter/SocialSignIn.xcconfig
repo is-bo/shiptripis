@@ -1,7 +1,8 @@
-// Sign in with Google and Sign in with Apple on iOS. Both stay empty in Git
-// and inert until Ismail sets them; the Runner's "Check sign-in settings"
-// build phase (ios/scripts/check_social_sign_in.sh) fails a build whose
-// build defines disagree with them.
+// Sign in with Google and Sign in with Apple on iOS, and the entitlements the
+// app is signed with. The sign-in settings stay empty or off in Git and inert
+// until Ismail sets them; the Runner's "Check sign-in settings" build phase
+// (ios/scripts/check_social_sign_in.sh) fails a build whose build defines
+// disagree with them.
 //
 // GOOGLE_IOS_CLIENT_PREFIX  the iOS OAuth client id without its
 //                           ".apps.googleusercontent.com" ending, such as
@@ -10,9 +11,17 @@
 //                           from it, and the GOOGLE_IOS_CLIENT_ID define must
 //                           be <prefix>.apps.googleusercontent.com.
 //
-// APPLE_SIGN_IN_ENTITLEMENTS Runner/Runner.entitlements once the App ID has
-//                           the Sign in with Apple capability; empty, the
-//                           app is signed without it. Required when the
-//                           build defines APPLE_SIGN_IN_ENABLED=true.
+// APPLE_SIGN_IN_CAPABILITY  YES once the App ID has the Sign in with Apple
+//                           capability; NO, the app is signed without it.
+//                           Required YES when the build defines
+//                           APPLE_SIGN_IN_ENABLED=true.
 GOOGLE_IOS_CLIENT_PREFIX =
-APPLE_SIGN_IN_ENTITLEMENTS =
+APPLE_SIGN_IN_CAPABILITY = NO
+
+// The Runner's CODE_SIGN_ENTITLEMENTS. Push notifications (aps-environment)
+// are in both files, so every signed build can receive them; only Sign in
+// with Apple is switched. "development" is what Xcode writes: signing for
+// the App Store takes the production value from the distribution profile.
+RUNNER_ENTITLEMENTS_NO = Runner/Runner.entitlements
+RUNNER_ENTITLEMENTS_YES = Runner/RunnerAppleSignIn.entitlements
+RUNNER_ENTITLEMENTS = $(RUNNER_ENTITLEMENTS_$(APPLE_SIGN_IN_CAPABILITY))

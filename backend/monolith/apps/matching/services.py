@@ -29,6 +29,8 @@ REASON_PAYMENT_PENDING = "payment_pending"
 REASON_MATCH_CLOSED = "match_closed"
 REASON_V1_PAYMENT_UNAVAILABLE = "v1_payment_unavailable"
 REASON_PRODUCT_RETIRED = "product_request_retired"
+#: One of the two members blocks the other (`apps.accounts.blocks`).
+REASON_BLOCKED = "blocked"
 
 #: Deal states in which the conversation becomes read-only. History survives —
 #: the client can still open and page the thread — but no new message is
@@ -56,7 +58,8 @@ def chat_eligibility(match: Match, user_id: int) -> tuple[bool, str]:
     Chat is gated on money having actually moved: no funded obligation, no
     chat. That protects both parties from a pre-payment harassment funnel and
     enforces that counterparty contact details flow only once both sides have
-    committed.
+    committed. A conversation that could otherwise go on closes to new
+    messages while either party blocks the other.
     """
     if not is_party(match, user_id):
         return False, REASON_NOT_A_PARTY
@@ -65,9 +68,27 @@ def chat_eligibility(match: Match, user_id: int) -> tuple[bool, str]:
         return False, REASON_PRODUCT_RETIRED
 
     if match.journey_id is not None:
-        return _v1_chat_eligibility(match)
+        eligible, reason = _v1_chat_eligibility(match)
+    else:
+        eligible, reason = _legacy_chat_eligibility(match)
+    if eligible and _parties_blocked(match):
+        return False, REASON_BLOCKED
+    return eligible, reason
 
-    return _legacy_chat_eligibility(match)
+
+def _parties_blocked(match: Match) -> bool:
+    """Whether either party blocks the other.
+
+    The inbox annotates `parties_blocked` on every row it lists, so asking
+    about many threads costs no query per thread.
+    """
+
+    annotated = getattr(match, "parties_blocked", None)
+    if annotated is not None:
+        return annotated
+    from apps.accounts.blocks import blocked_between
+
+    return blocked_between(match.sender_id, match.traveler_id)
 
 
 def _v1_chat_eligibility(match: Match) -> tuple[bool, str]:

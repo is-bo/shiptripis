@@ -35,7 +35,7 @@ Actions → Variables**:
 - `FIREBASE_ANDROID_APP_ID`
 
 They must be supplied together and must describe the Android app whose package
-is `com.shiptrip.shiptrip`. They are not Firebase Admin credentials. If all
+is `eu.wassla.app`. They are not Firebase Admin credentials. If all
 four are absent, the workflow still builds but the app deliberately keeps push
 unavailable; a partial tuple fails validation. Never store the Firebase Admin
 service-account JSON in GitHub build variables or the mobile bundle.
@@ -52,7 +52,7 @@ repository holds no Google value and no `google-services.json` entry for it.
 Google also has to know which signing keys may ask for that id: create an
 **Android** OAuth client in Google Cloud (**APIs & Services → Credentials →
 Create credentials → OAuth client ID → Android**) for the package
-`com.shiptrip.shiptrip`, once per signing key, with that key's SHA-1. A build
+`eu.wassla.app`, once per signing key, with that key's SHA-1. A build
 signed by a key Google does not know fails at the account picker with a
 configuration error, which the app reports as "We couldn't sign you in with
 Google".

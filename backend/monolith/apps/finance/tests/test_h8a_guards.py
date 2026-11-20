@@ -59,15 +59,18 @@ def test_coherent_test_and_explicit_live():
     validate_payment_configuration(config(**LIVE))
 
 
-def test_unbound_order_history_excludes_unrelated_unbound_boosts():
+def test_funding_sources_are_the_order_and_its_credited_deposit_only():
     from apps.finance.payout_snapshots import source_order_ids
 
-    order = SimpleNamespace(
-        pk=11, deal_id=None, credit_source_id=12, credited_eur_cents=100
+    credited = SimpleNamespace(
+        pk=11, deal_id=7, credit_source_id=12, credited_eur_cents=100
     )
-    with patch("apps.boosts.models.BoostPurchase.objects.filter") as boosts:
-        assert source_order_ids(order) == [11, 12]
-        boosts.assert_not_called()
+    assert source_order_ids(credited) == [11, 12]
+    # A linked deposit that credited nothing is not a funding source.
+    uncredited = SimpleNamespace(
+        pk=11, deal_id=7, credit_source_id=12, credited_eur_cents=0
+    )
+    assert source_order_ids(uncredited) == [11]
 
 
 @pytest.mark.parametrize(

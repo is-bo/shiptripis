@@ -399,8 +399,10 @@ class ChatThreadController extends ChangeNotifier {
       if (index >= 0) _pending[index] = _pending[index].failed();
       _finishSend();
       _flushDeferredPages();
-      if (error is ApiException && error.statusCode == 402) {
+      if (error is ApiException && _refusesSending(error)) {
         _sendBlock = ChatBlockReason.parse(error.extras['reason']);
+        // Who blocked whom is on the eligibility, so read it again.
+        if (_sendBlock == ChatBlockReason.blocked) _reconcileQueued = true;
       }
       notifyListeners();
       return error;
@@ -410,6 +412,46 @@ class ChatThreadController extends ChangeNotifier {
         unawaited(reconcile());
       }
     }
+  }
+
+  /// A refusal that says the conversation is not sendable: 402 while the
+  /// deal is not funded, 403 once one member blocks the other.
+  static bool _refusesSending(ApiException error) =>
+      error.statusCode == 402 ||
+      (error.statusCode == 403 && error.extras['reason'] == 'blocked');
+
+  /// Blocks the other member. Sending stops both ways; history stays.
+  Future<void> block() => _changeBlock(() => _repository.block(matchId));
+
+  /// Lifts the viewer's block of the other member.
+  Future<void> unblock() => _changeBlock(() => _repository.unblock(matchId));
+
+  /// Reports [message], which the other member sent. With [alsoBlock] the
+  /// server blocks them in the same request.
+  Future<void> report(
+    ChatMessage message, {
+    required ChatReportReason reason,
+    String note = '',
+    bool alsoBlock = false,
+  }) async {
+    await _repository.report(
+      messageId: message.id,
+      reason: reason,
+      note: note,
+      block: alsoBlock,
+    );
+    if (alsoBlock) await _afterBlockChange();
+  }
+
+  Future<void> _changeBlock(Future<void> Function() change) async {
+    await change();
+    await _afterBlockChange();
+  }
+
+  Future<void> _afterBlockChange() async {
+    if (!_active) return;
+    _invalidateThreads();
+    await reconcile();
   }
 
   void _finishSend() {

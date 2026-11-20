@@ -131,6 +131,23 @@ class AuthRepository {
     ),
   );
 
+  /// What stands before deleting the account.
+  Future<AccountDeletionCheck> deletionCheck() async =>
+      AccountDeletionCheck.fromJson(await _api.getObject('/api/me/deletion'));
+
+  /// Deletes the account. The server ends every session, so the caller
+  /// clears the device afterwards without asking the server to sign out.
+  Future<void> deleteAccount({
+    String? password,
+    String? appleAuthorizationCode,
+  }) => _api.postVoid(
+    '/api/me/deletion',
+    body: {
+      'password': ?password,
+      'apple_authorization_code': ?appleAuthorizationCode,
+    },
+  );
+
   /// Blacklists the refresh token server-side, then clears local storage.
   ///
   /// Local clearing happens regardless of the network result: a user who taps

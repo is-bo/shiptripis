@@ -50,7 +50,7 @@
 
 	# Keep the public marketing bundle static and outside Django's authenticated
 	# routes. The compose deployment mounts ../web read-only at this path.
-	@public path / /index.html /en/* /fr/* /ar/* /assets/* /terms /terms/ /terms.html /privacy /privacy/ /privacy.html /prohibited-items /prohibited-items/ /prohibited-items.html /support /support/ /support.html /robots.txt /sitemap.xml /favicon.ico
+	@public path / /index.html /en/* /fr/* /ar/* /assets/* /terms /terms/ /terms.html /privacy /privacy/ /privacy.html /prohibited-items /prohibited-items/ /prohibited-items.html /support /support/ /support.html /delete-account /delete-account/ /delete-account.html /robots.txt /sitemap.xml /favicon.ico
 	handle @public {
 		header Content-Security-Policy "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; object-src 'none'"
 		header Cache-Control "public, max-age=300"
@@ -63,6 +63,8 @@
 		rewrite /prohibited-items/ /prohibited-items.html
 		rewrite /support /support.html
 		rewrite /support/ /support.html
+		rewrite /delete-account /delete-account.html
+		rewrite /delete-account/ /delete-account.html
 		encode gzip
 		file_server
 	}

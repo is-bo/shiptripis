@@ -26,6 +26,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from apps.accounts.blocks import not_blocked_with
 from apps.core import channels, redis_bus
 from apps.core.marketplace_policy import marketplace_policy
 from apps.trips.models import Journey
@@ -115,6 +116,7 @@ def handle_route_alert_fanout(payload: dict) -> str:
         .filter(user__is_active=True, user__is_banned=False)
         .exclude(user_id=owner_id)
         .exclude(user_id__in=told_trip_fit)
+        .filter(not_blocked_with(owner_id, "user_id"))
         .order_by("pk")
     )
     sent = 0

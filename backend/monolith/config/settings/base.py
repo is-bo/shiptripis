@@ -308,6 +308,15 @@ def _client_ids(name: str) -> list[str]:
 GOOGLE_OAUTH_CLIENT_IDS = _client_ids("GOOGLE_OAUTH_CLIENT_IDS")
 # Apple: the iOS app's bundle id, which is the `aud` of its identity tokens.
 APPLE_SIGN_IN_CLIENT_IDS = _client_ids("APPLE_SIGN_IN_CLIENT_IDS")
+# Apple: what revoking a person's Sign in with Apple needs when they delete
+# their account (`apps.accounts.apple_revoke`). The team id, the id of the
+# Sign in with Apple key, and the key itself: the `.p8` file's PEM text, with
+# its line breaks written as `\n` when it is kept on one line.
+APPLE_TEAM_ID = env.str("APPLE_TEAM_ID", default="").strip()
+APPLE_SIGN_IN_KEY_ID = env.str("APPLE_SIGN_IN_KEY_ID", default="").strip()
+APPLE_SIGN_IN_PRIVATE_KEY = (
+    env.str("APPLE_SIGN_IN_PRIVATE_KEY", default="").replace("\\n", "\n").strip()
+)
 
 # --- Password reset ---
 PASSWORD_RESET_CODE_TTL_SECONDS = env.int(

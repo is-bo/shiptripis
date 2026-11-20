@@ -119,6 +119,17 @@ for _required in (
 ):
     _require_explicit(_required)
 
+# Sign in with Apple may be switched on only together with what revoking it at
+# account deletion needs (App Store 5.1.1(v)); otherwise an Apple member could
+# never delete their account.
+if APPLE_SIGN_IN_CLIENT_IDS and not (  # noqa: F405
+    APPLE_TEAM_ID and APPLE_SIGN_IN_KEY_ID and APPLE_SIGN_IN_PRIVATE_KEY  # noqa: F405
+):
+    raise RuntimeError(
+        "APPLE_SIGN_IN_CLIENT_IDS needs APPLE_TEAM_ID, APPLE_SIGN_IN_KEY_ID and "
+        "APPLE_SIGN_IN_PRIVATE_KEY in production."
+    )
+
 if len(TRANSACTIONAL_EMAIL_SECRET) < 32:  # noqa: F405
     raise RuntimeError("TRANSACTIONAL_EMAIL_SECRET must be at least 32 characters.")
 if TRANSACTIONAL_EMAIL_SECRET in (SECRET_KEY, SIMPLE_JWT["SIGNING_KEY"]):  # noqa: F405

@@ -279,8 +279,9 @@ hours).
 5. The payout keyring must be provisioned before the first production start.
 6. Package EGS (email, guest browsing, Google and Apple sign-in) is built and off. Ismail's own steps,
    in order, are in `docs/WASSLA_SETUP_FOR_ISMAIL.md`: Sender.net account, domain, DNS and token; the
-   mailbox; Google Cloud clients; Apple Developer; the app id decision; account deletion in the app
-   (not built, required by the App Store).
+   mailbox; Google Cloud clients; Apple Developer, including the Sign in with Apple key that account
+   deletion uses. The app id is `eu.wassla.app`, and account deletion, chat reports and blocking are
+   built (STORE).
 
 **Open decisions** (release report section 11, plan 5.1f and 5.1g)
 1. Should staff be able to open a dispute? Today only the sender or the traveler can.

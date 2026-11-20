@@ -4138,10 +4138,6 @@ def _job_related_object(job: ScheduledJob) -> tuple[str, str]:
         pk := integer("delivery_request_id")
     ):
         return f"Delivery request {pk}", reverse("admin_console:requests")
-    if job.kind == ScheduledJob.Kind.BOOST_EXPIRY and (
-        pk := integer("boost_purchase_id")
-    ):
-        return f"Boost purchase {pk}", ""
     return f"Job {job.pk}", ""
 
 
