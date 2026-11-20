@@ -16,6 +16,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -31,7 +32,7 @@ from apps.accounts.models import OAuthIdentity, User
 from apps.core.tests.l10_world import DRIVE, AcceptanceWorld, api
 from apps.discovery.models import PublicProfile
 from apps.discovery.tests.support import STATIC_STORES
-from apps.notifications.models import Notification, PushDevice
+from apps.notifications.models import Notification, OutboundMessage, PushDevice
 
 DELETION = reverse("me-deletion")
 PASSWORD = "Correct-horse-42"
@@ -48,6 +49,16 @@ APPLE_SETTINGS = {
     "APPLE_SIGN_IN_KEY_ID": "KEY1234567",
     "APPLE_SIGN_IN_PRIVATE_KEY": APPLE_KEY_PEM,
 }
+
+
+def apple_id_token(subject="a-1"):
+    """The identity token Apple's token endpoint returns with the refresh token."""
+
+    return jwt.encode(
+        {"iss": "https://appleid.apple.com", "aud": "eu.wassla.app", "sub": subject},
+        "signed-by-apple",
+        algorithm="HS256",
+    )
 
 
 def apple_answers(*responses):
@@ -114,6 +125,14 @@ class AccountDeletionTests(AcceptanceWorld, TestCase):
             active=True,
         )
         Notification.objects.create(recipient=self.member, channel="x", event_id="e1")
+        sent = OutboundMessage.objects.create(
+            key="sent-before",
+            kind=OutboundMessage.Kind.SECURITY_EVENT,
+            to_email="leaving@example.com",
+            recipient_user=self.member,
+            status=OutboundMessage.Status.DISPATCHED,
+            dispatched_at=timezone.now(),
+        )
         PublicProfile.objects.create(user=self.member)
         OAuthIdentity.objects.create(
             user=self.member, provider=OAuthIdentity.Provider.GOOGLE, subject="g-1"
@@ -139,6 +158,8 @@ class AccountDeletionTests(AcceptanceWorld, TestCase):
         self.assertFalse(Notification.objects.filter(recipient=self.member).exists())
         self.assertFalse(PublicProfile.objects.filter(user=self.member).exists())
         self.assertFalse(OAuthIdentity.objects.filter(user=self.member).exists())
+        sent.refresh_from_db()
+        self.assertEqual(sent.to_email, self.member.email)
 
     def test_the_old_session_and_password_no_longer_open_anything(self):
         refresh = str(RefreshToken.for_user(self.member))
@@ -174,6 +195,19 @@ class AccountDeletionTests(AcceptanceWorld, TestCase):
         # The access token of the deleted account is refused by authentication
         # itself; a request that slipped in before it is answered as gone.
         self.assertEqual(self.delete(self.member).status_code, 410)
+
+    def test_staff_cannot_ban_or_restore_a_deleted_account(self):
+        from apps.admin_panel import staff_actions
+
+        self.assertEqual(self.delete(self.member, password=PASSWORD).status_code, 204)
+        self.member.refresh_from_db()
+        staff = User.objects.create_superuser(
+            email="admin@example.com", username="admin-x", password="Admin-pass-42"
+        )
+        for banned in (True, False):
+            refusal = staff_actions.ban_refusal(staff, self.member, banned=banned)
+            self.assertEqual(refusal.code, "account_deleted")
+        self.assertFalse(User.objects.get(pk=self.member.pk).is_active)
 
     def test_an_account_without_a_password_needs_none(self):
         self.member.set_unusable_password()
@@ -222,7 +256,9 @@ class AccountDeletionTests(AcceptanceWorld, TestCase):
         self.assertEqual(check["blockers"], [BLOCKER_DELIVERIES, BLOCKER_REQUESTS])
         response = self.delete(self.sender, password=PASSWORD)
         self.assertEqual(response.status_code, 409)
-        self.assertEqual(response.data["blockers"], [BLOCKER_DELIVERIES, BLOCKER_REQUESTS])
+        self.assertEqual(
+            response.data["blockers"], [BLOCKER_DELIVERIES, BLOCKER_REQUESTS]
+        )
         self.sender.refresh_from_db()
         self.assertTrue(self.sender.is_active)
 
@@ -235,7 +271,9 @@ class AccountDeletionTests(AcceptanceWorld, TestCase):
 
     def test_an_apple_member_must_send_a_fresh_authorization(self):
         self.link_apple()
-        self.assertTrue(api(self.member).get(DELETION).data["apple_authorization_required"])
+        self.assertTrue(
+            api(self.member).get(DELETION).data["apple_authorization_required"]
+        )
         response = self.delete(self.member, password=PASSWORD)
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.data["code"], "apple_authorization_required")
@@ -244,7 +282,14 @@ class AccountDeletionTests(AcceptanceWorld, TestCase):
     def test_apple_is_revoked_before_the_account_is_deleted(self):
         self.link_apple()
         with apple_answers(
-            (200, {"refresh_token": "apple-refresh", "access_token": "apple-access"}),
+            (
+                200,
+                {
+                    "refresh_token": "apple-refresh",
+                    "access_token": "apple-access",
+                    "id_token": apple_id_token(),
+                },
+            ),
             (200, {}),
         ) as post:
             response = self.delete(
@@ -286,6 +331,34 @@ class AccountDeletionTests(AcceptanceWorld, TestCase):
         self.assertEqual(response.data["code"], "apple_authorization_refused")
         self.member.refresh_from_db()
         self.assertTrue(self.member.is_active)
+
+    @override_settings(**APPLE_SETTINGS)
+    def test_a_code_for_another_apple_id_revokes_nothing_and_deletes_nothing(self):
+        self.link_apple()
+        with apple_answers(
+            (
+                200,
+                {"refresh_token": "theirs", "id_token": apple_id_token("someone-else")},
+            ),
+        ) as post:
+            response = self.delete(
+                self.member, password=PASSWORD, apple_authorization_code="their-code"
+            )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["code"], "apple_authorization_refused")
+        self.assertEqual(post.call_count, 1)
+        self.assertTrue(User.objects.get(pk=self.member.pk).is_active)
+
+    @override_settings(**APPLE_SETTINGS)
+    def test_apple_refusing_the_server_credentials_is_unavailable_not_refused(self):
+        self.link_apple()
+        with apple_answers((400, {"error": "invalid_client"})):
+            response = self.delete(
+                self.member, password=PASSWORD, apple_authorization_code="code-1"
+            )
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.data["code"], "apple_revoke_unavailable")
+        self.assertTrue(User.objects.get(pk=self.member.pk).is_active)
 
     @override_settings(**APPLE_SETTINGS)
     def test_apple_unreachable_leaves_the_account_untouched(self):

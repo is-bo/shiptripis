@@ -125,6 +125,27 @@ def _staff_reason(reason: str) -> str:
     return reason[:MAX_REASON_LENGTH]
 
 
+def _forget_text_in_inbox(message_id: int) -> None:
+    """Drop a removed message's text from the inbox rows that carried it.
+
+    The recipient's bell row keeps the event as it was published, and a late
+    redelivery republishes that row: without this the text stays readable
+    there after Wassla removed it. Restoring does not put it back; the
+    conversation shows it again.
+    """
+
+    from apps.core import channels
+    from apps.notifications.models import Notification
+
+    rows = Notification.objects.select_for_update().filter(
+        channel=channels.CHAT_MESSAGE_NEW, payload__message_id=message_id
+    )
+    for row in rows:
+        if "body" in row.payload:
+            row.payload = {key: value for key, value in row.payload.items() if key != "body"}
+            row.save(update_fields=["payload"])
+
+
 def decide(*, message_id: int, actor, action: str, reason: str) -> Decision:
     """Apply one staff decision to one message. Audited; refuses a no-op."""
 
@@ -167,6 +188,8 @@ def decide(*, message_id: int, actor, action: str, reason: str) -> Decision:
             closed_as = ChatMessageReport.Status.DISMISSED
         if action != ACTION_DISMISS:
             message.save(update_fields=["removed_at", "removed_by"])
+        if action == ACTION_REMOVE:
+            _forget_text_in_inbox(message.pk)
 
         closed = ChatMessageReport.objects.filter(
             pk__in=open_ids, status=ChatMessageReport.Status.OPEN

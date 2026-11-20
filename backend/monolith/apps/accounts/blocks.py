@@ -7,7 +7,10 @@ While either of two members blocks the other (`blocked_between`):
   chat_eligibility` answers `blocked`), and their conversation stays readable;
 - neither can propose to the other, counter or accept the other's proposal
   (`apps.matching.v1_services`), or tell the other "I can carry this"
-  (`apps.discovery.interest`).
+  (`apps.discovery.interest`);
+- neither finds the other's trips or requests in matching, a request cannot
+  name the other as its traveler, and neither is alerted about the other's
+  listings (`not_blocked_with`).
 
 A delivery that is already funded goes on unchanged: the pickup and delivery
 codes, progress, problem reports and disputes do not need the chat, and money
@@ -29,6 +32,14 @@ def blocked_between(first_id: int, second_id: int) -> bool:
         Q(blocker_id=first_id, blocked_id=second_id)
         | Q(blocker_id=second_id, blocked_id=first_id)
     ).exists()
+
+
+def not_blocked_with(user_id: int, field: str) -> Q:
+    """A filter keeping rows whose member ``field`` and ``user_id`` block neither way."""
+
+    return ~Q(
+        **{f"{field}__in": UserBlock.objects.filter(blocker_id=user_id).values("blocked_id")}
+    ) & ~Q(**{f"{field}__in": UserBlock.objects.filter(blocked_id=user_id).values("blocker_id")})
 
 
 def blocks(blocker_id: int, blocked_id: int) -> bool:

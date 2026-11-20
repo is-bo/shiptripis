@@ -71,8 +71,27 @@ table, `PaymentOrder.Purpose.BOOST` and `boost_reference` wait for a cleanup Ism
   `APPLE_SIGN_IN_CLIENT_IDS`. On Android an Apple-linked account is told to delete from an iPhone or
   write to support, because Apple gives a fresh code only on Apple devices.
 - **A block is both ways and stops new dealing, not a paid delivery.** Chat sending, proposals,
-  counters, acceptance and "I can carry this" stop; a funded delivery goes on (codes, progress,
-  payout). History stays readable. Only the blocker lifts it.
+  counters, acceptance and "I can carry this" stop; the two no longer find each other's trips and
+  requests in matching (so no "a parcel fits your trip" either), a request cannot name the other as
+  its traveler, and route alerts leave the other's listings out. A funded delivery goes on (codes,
+  progress, payout). History stays readable. Only the blocker lifts it.
+- **A removed message leaves the bell too.** The recipient's notification row kept the published
+  event with its text; removing the message drops the text from those rows, so neither the bell nor
+  a late redelivery shows it. Restoring does not put it back there.
+- **The Apple code must be the account's own.** The identity token in Apple's answer names the Apple
+  ID; a code for another Apple ID is refused before anything is revoked. Apple refusing this server's
+  own credentials (`invalid_client`) is `apple_revoke_unavailable`, not the member's fault. If
+  something new blocks deletion after Apple was revoked, the account stays and Apple simply asks for
+  consent at the next sign-in.
+- **Opening a request or publishing a journey holds the member's row** the way deletion does, so
+  either it commits before deletion reads its blockers again or it sees the account gone
+  (`account_inactive`). Acceptance already locks both members.
+- **A Google-only account deletes with its signed-in session alone.** It has no password to ask and
+  Apple's rule asks only that deletion be possible in the app; the confirmation step stays. The
+  access token of a deleted account stops working within its 5 minutes, which also bounds an open
+  live-update socket (it can receive, never send).
+- **Staff cannot ban or restore a deleted account** (`account_deleted`); the console shows "Deleted".
+  Sent mail keeps its record with the address replaced.
 - **Only the recipient reports, once.** Staff see only reported messages, with the 5 before and after,
   never a whole conversation. Chat text never reaches the AI helper; it sees only the count and cannot
   decide a report.
@@ -86,12 +105,18 @@ table, `PaymentOrder.Purpose.BOOST` and `boost_reference` wait for a cleanup Ism
 
 ## Tests
 
-New: `apps/accounts/tests/test_store_account_deletion.py` (15), `apps/chat/tests/test_store_report_block.py`
-(10), `apps/finance/tests/test_deployment_safety.py` (Apple key at boot),
+New: `apps/accounts/tests/test_store_account_deletion.py` (18), `apps/chat/tests/test_store_report_block.py`
+(11), `apps/finance/tests/test_deployment_safety.py` (Apple key at boot),
 `mobile/test/store_report_block_delete_test.dart` (13), the version footer in
 `profile_passport_test.dart`.
 
 Rewritten to a changed rule (CLAUDE.md, never weakened):
+
+- `apps/matching/tests/test_matching.py` (two chat-eligibility tests) and
+  `apps/core/tests/test_l1a_retired_surfaces.py` (one): the exact eligibility payload gained
+  `blocked_by_me`.
+- `apps/core/tests/l10_world.py`: `post_parcel` builds its body with the new `parcel_payload`, so a
+  test can send a request with one more field.
 
 - `mobile/test/egs_social_sign_in_test.dart`: "iOS offers Google without Apple" became "iOS offers
   Google only with Apple" (App Store 4.8).

@@ -411,6 +411,15 @@ class DeliveryV1CreateView(APIView):
         boost_eur_cents: int,
     ) -> Response:
         with transaction.atomic():
+            from apps.accounts.deletion import hold_active_member
+
+            # Account deletion waits for open requests: holding the member's
+            # row means this one commits before deletion looks, or not at all.
+            if not hold_active_member(request.user.pk):
+                return Response(
+                    {"detail": "This account is no longer active.", "code": "account_inactive"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
             # Re-read the staged photo under a row lock. The serializer
             # already checked that it is this sender's and unattached, but
             # two creates racing on one staged id would otherwise both pass

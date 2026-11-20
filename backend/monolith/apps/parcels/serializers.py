@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import serializers
 
+from apps.accounts.blocks import blocked_between
 from apps.locations.models import Location, Place
 from apps.locations.serializers import (
     PrivateLocationSerializer,
@@ -307,6 +308,11 @@ class DeliveryV1CreateSerializer(serializers.Serializer):
         if target is not None and target.pk == request.user.pk:
             raise serializers.ValidationError(
                 {"target_traveler_id": "A sender cannot target their own account."}
+            )
+        if target is not None and blocked_between(target.pk, request.user.pk):
+            raise serializers.ValidationError(
+                {"target_traveler_id": "You cannot send a request to this traveler."},
+                code="party_blocked",
             )
         return attrs
 

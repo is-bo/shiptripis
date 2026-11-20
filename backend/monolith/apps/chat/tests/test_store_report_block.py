@@ -54,7 +54,9 @@ class ReportAndBlockTests(AcceptanceWorld, TestCase):
 
     def send(self, user, body="Hello"):
         return api(user).post(
-            reverse("chat-messages", args=(self.match.pk,)), {"body": body}, format="json"
+            reverse("chat-messages", args=(self.match.pk,)),
+            {"body": body},
+            format="json",
         )
 
     def report(self, user, message_id, **body):
@@ -65,14 +67,22 @@ class ReportAndBlockTests(AcceptanceWorld, TestCase):
         )
 
     def eligibility(self, user):
-        return api(user).get(reverse("matches-chat-eligibility", args=(self.match.pk,))).data
+        return (
+            api(user)
+            .get(reverse("matches-chat-eligibility", args=(self.match.pk,)))
+            .data
+        )
 
     def thread_row(self, user):
         rows = api(user).get(reverse("chat-threads")).data["results"]
         return next(row for row in rows if row["match_id"] == self.match.pk)
 
     def history(self, user):
-        return api(user).get(reverse("chat-messages", args=(self.match.pk,))).data["results"]
+        return (
+            api(user)
+            .get(reverse("chat-messages", args=(self.match.pk,)))
+            .data["results"]
+        )
 
     # -- reporting -------------------------------------------------------------
 
@@ -108,9 +118,13 @@ class ReportAndBlockTests(AcceptanceWorld, TestCase):
 
     def test_report_and_block_closes_the_chat_both_ways_and_unblock_reopens_it(self):
         message_id = self.send(self.traveler).data["id"]
-        self.assertEqual(self.report(self.sender, message_id, block=True).status_code, 201)
+        self.assertEqual(
+            self.report(self.sender, message_id, block=True).status_code, 201
+        )
         self.assertTrue(
-            UserBlock.objects.filter(blocker=self.sender, blocked=self.traveler).exists()
+            UserBlock.objects.filter(
+                blocker=self.sender, blocked=self.traveler
+            ).exists()
         )
 
         for user in (self.traveler, self.sender):
@@ -121,13 +135,22 @@ class ReportAndBlockTests(AcceptanceWorld, TestCase):
 
         self.assertEqual(
             self.eligibility(self.sender),
-            {"eligible": False, "reason": "blocked", "match_id": self.match.pk, "blocked_by_me": True},
+            {
+                "eligible": False,
+                "reason": "blocked",
+                "match_id": self.match.pk,
+                "blocked_by_me": True,
+            },
         )
         self.assertFalse(self.eligibility(self.traveler)["blocked_by_me"])
         sender_row = self.thread_row(self.sender)
-        self.assertEqual((sender_row["can_send"], sender_row["blocked_by_me"]), (False, True))
+        self.assertEqual(
+            (sender_row["can_send"], sender_row["blocked_by_me"]), (False, True)
+        )
         traveler_row = self.thread_row(self.traveler)
-        self.assertEqual((traveler_row["can_send"], traveler_row["blocked_by_me"]), (False, False))
+        self.assertEqual(
+            (traveler_row["can_send"], traveler_row["blocked_by_me"]), (False, False)
+        )
         # The conversation stays readable to both.
         self.assertEqual(len(self.history(self.traveler)), 1)
 
@@ -137,7 +160,9 @@ class ReportAndBlockTests(AcceptanceWorld, TestCase):
         listed = api(self.sender).get(reverse("my-blocks")).data["results"]
         self.assertEqual([row["user_id"] for row in listed], [self.traveler.pk])
         self.assertEqual(
-            api(self.sender).delete(reverse("my-block", args=(self.traveler.pk,))).status_code,
+            api(self.sender)
+            .delete(reverse("my-block", args=(self.traveler.pk,)))
+            .status_code,
             204,
         )
         self.assertEqual(self.send(self.sender).status_code, 201)
@@ -180,17 +205,23 @@ class ReportAndBlockTests(AcceptanceWorld, TestCase):
             },
             format="json",
         )
-        self.assertEqual((refused.status_code, refused.data["code"]), (403, "party_blocked"))
+        self.assertEqual(
+            (refused.status_code, refused.data["code"]), (403, "party_blocked")
+        )
         countered = api(self.traveler).post(
             reverse("offers-counter-v1", args=(pending["id"],)),
             {"traveler_reward_eur_cents": 3_500},
             format="json",
         )
-        self.assertEqual((countered.status_code, countered.data["code"]), (403, "party_blocked"))
+        self.assertEqual(
+            (countered.status_code, countered.data["code"]), (403, "party_blocked")
+        )
         accepted = api(self.traveler).post(
             reverse("offers-accept", args=(pending["id"],)), {}, format="json"
         )
-        self.assertEqual((accepted.status_code, accepted.data["code"]), (403, "party_blocked"))
+        self.assertEqual(
+            (accepted.status_code, accepted.data["code"]), (403, "party_blocked")
+        )
 
         # Lifting the block lets the pending offer be accepted again, and the
         # funded delivery was never touched.
@@ -198,6 +229,52 @@ class ReportAndBlockTests(AcceptanceWorld, TestCase):
         self.accept(pending)
         self.deal.refresh_from_db()
         self.assertEqual(self.deal.status, "funded")
+
+    def test_blocked_members_do_not_find_or_target_each_other(self):
+        from apps.matching.discovery import (
+            compatible_journeys_for_request,
+            compatible_requests_for_journey,
+            phase2_policy,
+        )
+
+        parcel = self.open_parcel()
+
+        def journeys_for_parcel():
+            return [
+                row.journey.pk
+                for row in compatible_journeys_for_request(
+                    delivery_request=parcel, policy=phase2_policy()
+                )
+            ]
+
+        def parcels_for_journey():
+            return [
+                row.delivery_request.pk
+                for row in compatible_requests_for_journey(
+                    journey=self.journey, policy=phase2_policy()
+                )
+            ]
+
+        self.assertIn(self.journey.pk, journeys_for_parcel())
+        self.assertIn(parcel.pk, parcels_for_journey())
+        api(self.traveler).post(reverse("match-block", args=(self.match.pk,)))
+        self.assertNotIn(self.journey.pk, journeys_for_parcel())
+        self.assertNotIn(parcel.pk, parcels_for_journey())
+
+        body = self.parcel_payload(
+            self.algiers,
+            self.setif,
+            ready_from=self.depart - timedelta(hours=2),
+            ready_until=self.depart + timedelta(minutes=30),
+            deliver_by=self.depart + timedelta(hours=12),
+        )
+        targeted = api(self.sender).post(
+            reverse("parcels-delivery-v1-create"),
+            {**body, "target_traveler_id": self.traveler.pk},
+            format="json",
+        )
+        self.assertEqual(targeted.status_code, 400)
+        self.assertIn("target_traveler_id", targeted.data)
 
     # -- staff ---------------------------------------------------------------
 
@@ -220,7 +297,9 @@ class ReportAndBlockTests(AcceptanceWorld, TestCase):
         client = self.console(self.trust)
         queue = client.get(reverse("admin_console:chat-reports"), {"status": "open"})
         self.assertContains(queue, "Pay me cash or else")
-        page = client.get(reverse("admin_console:chat-report-detail", args=(message_id,)))
+        page = client.get(
+            reverse("admin_console:chat-report-detail", args=(message_id,))
+        )
         self.assertContains(page, "Remove the message")
 
         missing = self.decide(client, message_id, "remove", reason="")
@@ -243,7 +322,13 @@ class ReportAndBlockTests(AcceptanceWorld, TestCase):
             row = self.history(user)[0]
             self.assertEqual((row["body"], row["removed"]), ("", True))
             thread = self.thread_row(user)
-            self.assertEqual((thread["last_message"], thread["last_message_removed"]), ("", True))
+            self.assertEqual(
+                (thread["last_message"], thread["last_message_removed"]), ("", True)
+            )
+        # The recipient's bell kept the event as published: the text leaves it too.
+        inbox = api(self.sender).get(reverse("notification-list"), {"bucket": "all"})
+        self.assertEqual(inbox.status_code, 200)
+        self.assertNotIn("Pay me cash or else", str(inbox.data))
 
         self.assertEqual(self.decide(client, message_id, "restore").status_code, 302)
         self.assertEqual(self.history(self.sender)[0]["body"], "Pay me cash or else")
@@ -257,20 +342,26 @@ class ReportAndBlockTests(AcceptanceWorld, TestCase):
         self.assertEqual(self.history(self.sender)[0]["body"], "Fine")
         again = self.decide(client, message_id, "dismiss")
         self.assertEqual(again.status_code, 200)
-        self.assertEqual(AdminAuditLog.objects.filter(action="chat.reports_dismissed").count(), 1)
+        self.assertEqual(
+            AdminAuditLog.objects.filter(action="chat.reports_dismissed").count(), 1
+        )
 
     def test_only_staff_who_moderate_chat_see_the_queue(self):
         message_id = self.send(self.traveler).data["id"]
         self.report(self.sender, message_id)
         client = self.console(self.ops)
-        self.assertEqual(client.get(reverse("admin_console:chat-reports")).status_code, 403)
+        self.assertEqual(
+            client.get(reverse("admin_console:chat-reports")).status_code, 403
+        )
         self.assertEqual(self.decide(client, message_id, "remove").status_code, 403)
         self.assertIsNone(ChatMessage.objects.get(pk=message_id).removed_at)
 
     def test_a_message_nobody_reported_is_not_on_the_console(self):
         message_id = self.send(self.traveler).data["id"]
         client = self.console(self.trust)
-        page = client.get(reverse("admin_console:chat-report-detail", args=(message_id,)))
+        page = client.get(
+            reverse("admin_console:chat-report-detail", args=(message_id,))
+        )
         self.assertEqual(page.status_code, 404)
 
     def _count(self, code):

@@ -250,6 +250,7 @@ class ChatEligibilityTests(APITestCase):
             "eligible": False,
             "reason": "not_a_party",
             "match_id": self.match.id,
+            "blocked_by_me": False,
         }
 
     def test_party_with_no_accepted_offer_blocked(self):
@@ -291,7 +292,12 @@ class ChatEligibilityTests(APITestCase):
         c = _client(self.sender)
         r = c.get(reverse("matches-chat-eligibility", args=[self.match.id]))
         assert r.status_code == 200
-        assert r.data == {"eligible": True, "reason": "ok", "match_id": self.match.id}
+        assert r.data == {
+            "eligible": True,
+            "reason": "ok",
+            "match_id": self.match.id,
+            "blocked_by_me": False,
+        }
 
     def test_succeeded_payment_unlocks_chat_for_traveler(self):
         self._accept_offer()

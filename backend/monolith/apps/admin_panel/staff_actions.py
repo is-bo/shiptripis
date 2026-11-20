@@ -327,6 +327,9 @@ def ban_refusal(actor, person, *, banned: bool) -> StaffActionError | None:
 
     if person.pk == actor.pk:
         return StaffActionError("account_ban_self", "You cannot ban or restore your own account.")
+    if person.deleted_at is not None:
+        # The member deleted it; a restore would bring back an emptied account.
+        return StaffActionError("account_deleted", "This account was deleted by its owner.")
     if person.is_staff:
         return StaffActionError(
             "account_ban_staff",

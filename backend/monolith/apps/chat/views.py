@@ -324,8 +324,10 @@ class ChatThreadsView(APIView):
     def get(self, request: Request) -> Response:
         uid = request.user.id
 
+        # The id breaks a tie in time, so the text and its removed flag always
+        # come from the same message.
         last_msg = ChatMessage.objects.filter(match_id=OuterRef("pk")).order_by(
-            "-created_at"
+            "-created_at", "-id"
         )
         matches = (
             Match.objects.filter(Q(sender_id=uid) | Q(traveler_id=uid))

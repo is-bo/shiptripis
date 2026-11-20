@@ -22,6 +22,7 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.conf import settings
 
+from apps.accounts.blocks import not_blocked_with
 from apps.core.business_settings import get_active_business_settings
 from apps.deals.models import Deal, DealLegAllocation
 from apps.kyc.models import KycSubmission
@@ -546,6 +547,7 @@ def compatible_journeys_for_request(
             has_current_kyc_value=True,
         )
         .exclude(traveler_id=delivery_request.sender_id)
+        .filter(not_blocked_with(delivery_request.sender_id, "traveler_id"))
         .alias(has_overlapping_leg=Exists(overlapping_leg))
         .filter(has_overlapping_leg=True)
         .annotate(
@@ -658,6 +660,7 @@ def compatible_requests_for_journey(
             Q(target_traveler__isnull=True) | Q(target_traveler_id=journey.traveler_id)
         )
         .exclude(sender_id=journey.traveler_id)
+        .filter(not_blocked_with(journey.traveler_id, "sender_id"))
         .annotate(has_active_deal_value=Exists(active_deal))
         .filter(has_active_deal_value=False)
         .annotate(

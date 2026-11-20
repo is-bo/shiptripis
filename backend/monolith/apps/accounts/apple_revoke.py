@@ -10,10 +10,17 @@ JWT signed with the Sign in with Apple key (`APPLE_SIGN_IN_PRIVATE_KEY`, the
 `.p8` file Apple lets the developer download once) and naming its key id and
 the developer team.
 
+The code must belong to the Apple ID the account signs in with: the identity
+token in Apple's answer names it (`sub`), and a code for another Apple ID is
+refused before anything is revoked. That token comes straight from Apple over
+TLS, in answer to a call this server authenticated, so its issuer, audience
+and subject are read without fetching Apple's keys (OpenID Connect Core 3.1.3.7).
+
 `revoke_with_authorization_code` raises `AppleRevokeUnavailable` when the key
-is not configured here or Apple cannot be reached (503), and
-`AppleRevokeRefused` when Apple refuses the code (it expired, was used, or was
-issued to another app). No message carries a code, a token or the key.
+is not configured here, Apple refuses this server's own credentials, or Apple
+cannot be reached (503), and `AppleRevokeRefused` when Apple refuses the code
+(it expired, was used, or was issued to another app) or the code is another
+Apple ID's. No message carries a code, a token or the key.
 """
 
 from __future__ import annotations
@@ -79,6 +86,15 @@ def client_secret(*, now: int | None = None) -> str:
     )
 
 
+def _error_of(answer: requests.Response) -> str:
+    try:
+        body = answer.json()
+    except ValueError:
+        return ""
+    error = body.get("error") if isinstance(body, dict) else None
+    return error if isinstance(error, str) else ""
+
+
 def _post(url: str, data: dict) -> requests.Response:
     try:
         return requests.post(url, data=data, timeout=TIMEOUT_SECONDS)
@@ -86,8 +102,30 @@ def _post(url: str, data: dict) -> requests.Response:
         raise AppleRevokeUnavailable("Apple could not be reached.") from exc
 
 
-def revoke_with_authorization_code(code: str) -> None:
-    """Exchange ``code`` for a refresh token and revoke it."""
+def _subject_of(id_token: object) -> str:
+    """The Apple ID an identity token from the token endpoint names, or ""."""
+
+    if not isinstance(id_token, str) or not id_token:
+        return ""
+    try:
+        claims = jwt.decode(
+            id_token,
+            options={"verify_signature": False, "require": ["iss", "aud", "sub"]},
+            audience=_client_id(),
+            issuer=APPLE_AUDIENCE,
+        )
+    except jwt.PyJWTError:
+        return ""
+    subject = claims.get("sub")
+    return subject if isinstance(subject, str) else ""
+
+
+def revoke_with_authorization_code(code: str, *, apple_subject: str) -> None:
+    """Exchange ``code`` for a refresh token and revoke it.
+
+    ``apple_subject`` is the Apple ID the account signs in with; a code issued
+    to any other Apple ID is refused.
+    """
 
     if not is_configured():
         raise AppleRevokeUnavailable("Revoking Sign in with Apple is not configured.")
@@ -101,6 +139,9 @@ def revoke_with_authorization_code(code: str) -> None:
         TOKEN_URL, {**base, "code": code, "grant_type": "authorization_code"}
     )
     if exchanged.status_code == 400:
+        if _error_of(exchanged) == "invalid_client":
+            # This server's key, team or client id is wrong: not the member's fault.
+            raise AppleRevokeUnavailable("Apple refused this server's credentials.")
         raise AppleRevokeRefused("Apple refused the authorization code.")
     if exchanged.status_code != 200:
         raise AppleRevokeUnavailable("Apple did not answer the token exchange.")
@@ -108,6 +149,10 @@ def revoke_with_authorization_code(code: str) -> None:
         body = exchanged.json()
     except ValueError as exc:
         raise AppleRevokeUnavailable("Apple's answer could not be read.") from exc
+    if not isinstance(body, dict):
+        raise AppleRevokeUnavailable("Apple's answer could not be read.")
+    if not apple_subject or _subject_of(body.get("id_token")) != apple_subject:
+        raise AppleRevokeRefused("The authorization belongs to another Apple ID.")
     token, hint = body.get("refresh_token"), "refresh_token"
     if not token:
         token, hint = body.get("access_token"), "access_token"

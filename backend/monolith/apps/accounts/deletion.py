@@ -146,6 +146,22 @@ def has_apple_identity(user) -> bool:
     ).exists()
 
 
+def hold_active_member(user_id: int) -> bool:
+    """Lock a member's row the way deletion does; False once it is not active.
+
+    Opening something deletion waits for (a request, a published journey)
+    takes this lock first, so it either commits before deletion reads its
+    blockers again or sees the account already gone.
+    """
+
+    return (
+        get_user_model()
+        .objects.select_for_update(no_key=True)
+        .filter(pk=user_id, is_active=True)
+        .exists()
+    )
+
+
 def check(user) -> DeletionCheck:
     return DeletionCheck(
         blockers=blockers_for(user),
@@ -170,11 +186,18 @@ def delete_account(user, *, password: str = "", apple_authorization_code: str = 
     blockers = blockers_for(user)
     if blockers:
         raise AccountDeletionRefused("account_deletion_blocked", 409, blockers=list(blockers))
-    if has_apple_identity(user):
+    apple_subject = (
+        OAuthIdentity.objects.filter(user=user, provider=OAuthIdentity.Provider.APPLE)
+        .values_list("subject", flat=True)
+        .first()
+    )
+    if apple_subject is not None:
         if not apple_authorization_code:
             raise AccountDeletionRefused("apple_authorization_required", 409)
         try:
-            apple_revoke.revoke_with_authorization_code(apple_authorization_code)
+            apple_revoke.revoke_with_authorization_code(
+                apple_authorization_code, apple_subject=apple_subject
+            )
         except apple_revoke.AppleRevokeRefused as exc:
             raise AccountDeletionRefused("apple_authorization_refused", 400) from exc
         except apple_revoke.AppleRevokeUnavailable as exc:
@@ -199,13 +222,13 @@ def delete_account(user, *, password: str = "", apple_authorization_code: str = 
 
 def _erase(user) -> None:
     from apps.discovery.models import PublicProfile, RouteAlert
-    from apps.notifications.outbox import cancel_message
     from apps.notifications.models import (
         Notification,
         NotificationPreference,
         OutboundMessage,
         PushDevice,
     )
+    from apps.notifications.outbox import cancel_message
 
     sessions.end_all_sessions(user)
     PushDevice.objects.filter(user=user).delete()
@@ -215,6 +238,10 @@ def _erase(user) -> None:
         recipient_user=user, status=OutboundMessage.Status.PENDING
     ).values_list("key", flat=True):
         cancel_message(key=key, reason="account_deleted")
+    # Mail already sent stays as a record of what was sent, without the address.
+    OutboundMessage.objects.filter(recipient_user=user).update(
+        to_email=f"deleted-{user.pk}@{DELETED_EMAIL_DOMAIN}"
+    )
     RouteAlert.objects.filter(user=user).delete()
     # Other members' alerts that follow this member stop: there is nothing
     # left for them to follow.
