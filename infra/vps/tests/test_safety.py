@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -108,10 +109,15 @@ class ReleaseRecoveryTests(unittest.TestCase):
             "previous": {"APP_IMAGE": "wacla:" + "c" * 40, "RELEASE_ID": "c" * 40}}))
         self.calls = []
 
-    def execute(self, arguments, fail_ready=False):
+    def execute(self, arguments, fail_ready=False, health_failures=0):
+        failures = [health_failures]
+
         def record(args, **kwargs):
             self.calls.append((list(args), dict(kwargs.get("env", {}))))
             if fail_ready and "up" in args and "app" in args:
+                raise subprocess.CalledProcessError(1, args)
+            if "exec" in args and args[-1] == "health" and failures[0]:
+                failures[0] -= 1
                 raise subprocess.CalledProcessError(1, args)
             return subprocess.CompletedProcess(args, 0)
 
@@ -156,6 +162,44 @@ class ReleaseRecoveryTests(unittest.TestCase):
         (self.state / "deployment-pending.json").write_text("{}")
         with self.assertRaises(ValueError):
             self.execute(["start"])
+
+    def health_runs(self):
+        return [args for args, env in self.calls if "exec" in args and args[-1] == "health"]
+
+    def run_with_clock(self, health_failures, arguments=("start",)):
+        # Fake clock: sleeping advances it, so the 30 second deadline costs no real time.
+        now = [1000.0]
+        sleeps = []
+        clock = SimpleNamespace(monotonic=lambda: now[0], time=lambda: now[0],
+                                sleep=lambda seconds: (sleeps.append(seconds), now.__setitem__(0, now[0] + seconds)))
+        with patch.object(cli, "time", clock):
+            try:
+                self.execute(list(arguments), health_failures=health_failures)
+            finally:
+                self.sleeps = sleeps
+
+    def test_ready_passes_health_on_the_first_try_without_waiting(self):
+        self.run_with_clock(health_failures=0)
+        self.assertEqual(len(self.health_runs()), 1)
+        self.assertEqual(self.sleeps, [])
+
+    def test_ready_retries_health_until_a_cold_worker_answers(self):
+        self.run_with_clock(health_failures=2)
+        self.assertEqual(len(self.health_runs()), 3)
+        self.assertEqual(len(self.sleeps), 2)
+
+    def test_ready_fails_as_before_when_health_never_passes(self):
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.run_with_clock(health_failures=10 ** 6)
+        self.assertGreater(len(self.health_runs()), 1)
+        self.assertGreaterEqual(sum(self.sleeps), 30)
+        self.assertLess(sum(self.sleeps), 35)
+
+    def test_deploy_whose_health_never_passes_keeps_the_pending_marker(self):
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.run_with_clock(10 ** 6, ["deploy", self.new["APP_IMAGE"], self.new["RELEASE_ID"]])
+        self.assertTrue((self.state / "deployment-pending.json").exists())
+        self.assertEqual(json.loads((self.state / "release.json").read_text())["current"], self.old)
 
     def test_monitor_does_not_wait_for_backup_lock(self):
         with patch.object(cli.fcntl, "flock") as lock:

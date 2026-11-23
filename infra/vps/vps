@@ -222,7 +222,16 @@ def operate(resources: ExitStack) -> None:
 
     def ready():
         dc("up", "-d", "--no-build", "--wait", "--wait-timeout", "180", "app", "caddy")
-        dc("exec", "-T", "app", "python", "/opt/vps/runtime.py", "health")
+        # A cold worker answers its first /readyz in about 2 s, the probe's own limit.
+        deadline = time.monotonic() + 30
+        while True:
+            try:
+                dc("exec", "-T", "app", "python", "/opt/vps/runtime.py", "health")
+                return
+            except subprocess.CalledProcessError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(2)
 
     if command == "validate":
         dc("config", "--quiet")
