@@ -204,7 +204,7 @@ See problems-and-disputes.md and money.md.
 - Monitoring: Health page (database, cache, storage, providers, jobs, email). On the server a check runs every 60 seconds (app, web edge, database, cache healthy; disk under 80%; memory; load; cache saving; error rates in logs). In the shipped setup an alert is only a system log line; no external pager is connected.
 - Backups: a daily encrypted copy of the database at 02:15 UTC to an offsite storage, checked after upload; restore is rehearsed on a separate database, never over the live one. How many daily, weekly and monthly copies are kept is an owner decision (no number in code).
 - Updates cause a short maintenance window (not zero downtime); rollback does not reverse database changes.
-- Single server design: one application unit on one server (8 shared CPUs, 16 GB), deliberately one copy.
+- Single server design: one application unit on one server (4 vCPU, 8 GB RAM), deliberately one copy.
 - Automatic checks on every code change (CI): Go build, vet and tests (including a real-cache run); Django tests, lint and a check for missing database migrations; production-configuration and website checks; Flutter format, analysis and tests; a check that the database schema and generated code have not drifted.
 - The files describe how the server is set up. They do not say whether it is live, so do not say it is.
 <!-- src: infra/vps/README.md, infra/vps/backup/backup.sh, infra/vps/monitor.py, infra/vps/systemd/*, .github/workflows/ci.yml, apps/admin_panel/worklist.py -->

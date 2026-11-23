@@ -1160,8 +1160,8 @@ Jobs are durable rows in the database (status `pending`, `running`, `succeeded`,
 - AI helper: `admin_helper_call_prune` (call log kept 30 days), `admin_helper_action_expiry` (prepared change unconfirmed, 24 h default).
 - Daily host maintenance (03:15 UTC) only cleans login tokens, checks the event outbox for lost deliveries and runs approved retention commands. It never starts the finance or lifecycle workers.
 ## How is Wassla hosted, and what are the environments?
-- Design target: one Ubuntu server (Hetzner VPS, 8 shared vCPU, 16 GB RAM) running Docker Compose. Services: `postgres`, `redis`, `app`, `caddy`, plus one-shot `maintenance` and `backup` jobs.
-- The `app` container is deliberately a single unit: Django web (4 workers with 2 threads each in the shipped server example; the launcher's own default is 2 x 2), Django's ID-upload service, a reservation releaser, a finance worker, and the Go notification, chat, kyc and email programs, plus a small internal web server for the static landing site. If any child stops, the whole unit fails loudly instead of running half-alive. There is exactly one copy so jobs are never run twice.
+- Design target: one Ubuntu server (4 vCPU, 8 GB RAM, 160 GB SSD) running Docker Compose. Services: `postgres`, `redis`, `app`, `caddy`, plus one-shot `maintenance` and `backup` jobs.
+- The `app` container is deliberately a single unit: Django web (3 workers with 2 threads each in the shipped server example; the launcher's own default is 2 x 2), Django's ID-upload service, a reservation releaser, a finance worker, and the Go notification, chat, kyc and email programs, plus a small internal web server for the static landing site. If any child stops, the whole unit fails loudly instead of running half-alive. There is exactly one copy so jobs are never run twice.
 - Network: only ports 80 and 443 are public, through Caddy. The database and Redis sit on a private network with no outside route. `/admin` and `/api/admin` answer 403 unless the visitor comes from the owner's approved addresses. Internal metrics routes answer 404.
 - Settings profiles in code: `prod` (strict, refuses unsafe values), `dev`, `test_local`, `local_preview`. A mock payment provider is for tests only and forbidden in production.
 - Deploys use a full reviewed Git SHA as release id and image tag; the previous image is kept for rollback. Nothing merges to `main` or deploys without the owner's approval.
@@ -3008,7 +3008,7 @@ See problems-and-disputes.md and money.md.
 - Monitoring: Health page (database, cache, storage, providers, jobs, email). On the server a check runs every 60 seconds (app, web edge, database, cache healthy; disk under 80%; memory; load; cache saving; error rates in logs). In the shipped setup an alert is only a system log line; no external pager is connected.
 - Backups: a daily encrypted copy of the database at 02:15 UTC to an offsite storage, checked after upload; restore is rehearsed on a separate database, never over the live one. How many daily, weekly and monthly copies are kept is an owner decision (no number in code).
 - Updates cause a short maintenance window (not zero downtime); rollback does not reverse database changes.
-- Single server design: one application unit on one server (8 shared CPUs, 16 GB), deliberately one copy.
+- Single server design: one application unit on one server (4 vCPU, 8 GB RAM), deliberately one copy.
 - Automatic checks on every code change (CI): Go build, vet and tests (including a real-cache run); Django tests, lint and a check for missing database migrations; production-configuration and website checks; Flutter format, analysis and tests; a check that the database schema and generated code have not drifted.
 - The files describe how the server is set up. They do not say whether it is live, so do not say it is.
 
