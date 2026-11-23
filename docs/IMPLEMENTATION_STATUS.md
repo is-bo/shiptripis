@@ -1,5 +1,13 @@
 # Waçla V1 Implementation Status
 
+## Wassla: the VPS stack sized for a 4 vCPU, 8 GB server (2026-11-23)
+
+- Ismail's request of 2026-11-23, for his netcup VPS (Ubuntu 24.04, 4 vCPU, 8 GB, 160 GB). Nothing
+  deployed.
+- Caps: app 3 GB and 3 CPUs (Docker refused 4.5 on 4 CPUs), postgres 2 GB, redis 1 GB; Postgres
+  `shared_buffers` 512 MB, Redis `maxmemory` 512 MB, `WEB_CONCURRENCY=3`. Connection budgets
+  unchanged. Detail: `docs/PHASE_VPS_SIZING.md`.
+
 ## Wassla: what the App Store and Google Play need from the code (2026-11-20)
 
 - Ismail's request of 2026-11-20, from the store readiness report. Nothing deployed or published, no
