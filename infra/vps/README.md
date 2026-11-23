@@ -235,7 +235,7 @@ never attaches production volumes or networks and removes its own volume after
 verification. A successful import is necessary but also compare migrations, counts,
 ledger sums, provider uniqueness, unresolved jobs and encryption-key decryptability
 on an isolated real-data rehearsal in V3. Record recovery point/time and owner signoff.
-Do not replace these checks with a Hetzner snapshot.
+Do not replace these checks with a provider snapshot.
 
 Backup runs as UID/GID 10001 with read-only root filesystem and no capabilities.
 Its named status volume is initialized with that owner by the image; mounted secret
