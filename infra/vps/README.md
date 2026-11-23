@@ -1,7 +1,7 @@
 # Waçla VPS foundation (V1)
 
-This directory prepares code for one Ubuntu 24.04 x86-64 Hetzner VPS with
-8 shared vCPUs, 16 GB RAM and approximately 160 GB disk. It does not provision,
+This directory prepares code for one Ubuntu 24.04 x86-64 VPS with 4 vCPUs,
+8 GB RAM and 160 GB SSD. It does not provision,
 deploy, change DNS or activate providers. Read the audit and verification record
 in [V1_VPS_READINESS](../../docs/V1_VPS_READINESS.md) before V2/V3.
 

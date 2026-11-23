@@ -37,7 +37,7 @@ before initial startup. Optional features remain disabled unless explicitly supp
 | `CORS_ALLOWED_ORIGINS` | Comma-separated HTTPS browser origins; empty valid for native-only API. |
 | `CSRF_TRUSTED_ORIGINS` | Comma-separated HTTPS origins used by Admin/browser POSTs. Must match actual deployment. |
 | `POSTGRES_DB`, `POSTGRES_USER` | Stable lower-case database/owner identifiers chosen before initialization. Do not change to try resetting data. |
-| `WEB_CONCURRENCY`, `WEB_THREADS` | Gunicorn processes/threads; initial 4 × 2 based on K6 measurements. |
+| `WEB_CONCURRENCY`, `WEB_THREADS` | Gunicorn processes/threads; 3 × 2 on the 4 vCPU, 8 GB server (K6 measured 4 × 2 on a 16 GB box). |
 | `KYC_GRPC_WORKERS` | Django gRPC executor threads; initial 4. |
 | `CHAT_DB_MAX_CONNS`, `NOTIF_DB_MAX_CONNS`, `EMAIL_DB_MAX_CONNS` | Go pool maxima; initial 8, 6, 2. |
 | `RESERVATION_RELEASE_INTERVAL_SECONDS` | Single releaser poll interval; 60 seconds. |
