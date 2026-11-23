@@ -1,5 +1,14 @@
 # Waçla V1 Implementation Status
 
+## Wassla: the VPS final health check waits for cold workers (2026-11-23)
+
+- The live deploy and rollback of 2026-11-23 aborted after the site was healthy: each cold gunicorn
+  worker takes about 2.1 s on its first `/readyz`, and the health probe allows 2 s, so the single
+  check failed and left `deployment-pending.json`, which blocks every later deploy.
+- `ready()` in `infra/vps/vps` now retries the health exec for up to 30 s (every 2 s), then fails as
+  before. Host side only, no image rebuild. Nothing deployed. Detail:
+  `docs/PHASE_VPS_READY_HEALTH_RETRY.md`.
+
 ## Wassla: the staff two-step QR code scans (2026-11-23)
 
 - Ismail's first sign-in on the live server, 2026-11-23: the enrolment QR code could not be scanned.
