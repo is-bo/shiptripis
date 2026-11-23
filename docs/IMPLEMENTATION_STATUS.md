@@ -1,5 +1,11 @@
 # Waçla V1 Implementation Status
 
+## Wassla: the public site names wassla.eu (2026-11-23)
+
+- Ismail's hosting of 2026-11-23. `web/robots.txt` and `web/sitemap.xml` named the placeholder host
+  `shiptrip.example`; they now name `https://wassla.eu`, and the admin helper's notes and HANDOFF say
+  so. Nothing deployed.
+
 ## Wassla: the VPS stack sized for a 4 vCPU, 8 GB server (2026-11-23)
 
 - Ismail's request of 2026-11-23, for his netcup VPS (Ubuntu 24.04, 4 vCPU, 8 GB, 160 GB). Nothing

@@ -217,7 +217,7 @@ Static site in `web/` (no build step). Routes: `/en/`, `/fr/`, `/ar/` (Arabic is
 - Terms (draft): use of Wassla, matching and agreements, payment and 48-hour protection, handoffs and prohibited use, cancellations/disputes/ratings, contact. Privacy (draft): data used, how, sharing, retention (periods not yet stated), user rights via support, cookies (no advertising cookies). Prohibited items (draft): weapons, illegal drugs and counterfeit goods, live animals/human remains/hazardous materials, stolen goods or cash equivalents or customs evasion, anything illegal in departure/transit/arrival country or by carrier; sender responsible for customs declarations; a match is not customs clearance.
 - All legal pages say they are drafts pending French, EU and Algerian legal review. The site claims no payment provider is live.
 - The in-app Profile has "Terms" and "Privacy" rows that open these web pages (web base address set in the build; shows "link could not be opened" if missing).
-- The site's address in the sitemap/robots files is a placeholder (`shiptrip.example`) to be replaced at deploy.
+- The sitemap and robots files name the site's address, `https://wassla.eu`.
 <!-- src: web/*.html, web/en/index.html, web/README.md, mobile/lib/features/profile/profile_screen.dart -->
 
 ## How do users contact support?
