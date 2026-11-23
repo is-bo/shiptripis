@@ -9,15 +9,18 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import uuid
 from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
 from unittest import mock
+from xml.etree import ElementTree
 
+import segno
 from django.contrib.sessions.models import Session
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import Client, TestCase, override_settings
+from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django.urls import URLPattern, URLResolver, get_resolver, reverse
 from django.utils import timezone
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -533,6 +536,59 @@ class TwoStepPagesTests(TestCase):
         )
         assert response.redirect_chain[0][0] == "/admin/users/"
         assert "9 of 10 left" in response.content.decode()
+
+
+class EnrolmentQrCodeTests(SimpleTestCase):
+    """The enrolment QR code reaches the page whole, so an app can scan it.
+
+    The first version drew a 285px code with no ``viewBox`` into a 220px box:
+    the browser cut off its right and bottom, two of the three corner squares
+    with them, and no authenticator app could read it.
+    """
+
+    def test_the_svg_is_the_whole_symbol_of_the_address_with_a_quiet_zone(self):
+        uri = two_step.provisioning_uri(
+            User(email="first.last-operations@example.test"), two_step._new_secret()
+        )
+        svg = ElementTree.fromstring(two_step.qr_svg(uri))
+
+        # Sized in whole pixels, with a viewBox that matches: a narrower page
+        # shrinks the code, whole and square, instead of cropping it.
+        assert svg.get("width") == svg.get("height")
+        side = int(svg.get("width").removesuffix("px"))
+        assert svg.get("viewBox") == f"0 0 {side} {side}"
+        group = svg.find("g")
+        scale = int(re.fullmatch(r"scale\((\d+)\)", group.get("transform")).group(1))
+        assert side % scale == 0
+        modules = side // scale
+
+        # Dark modules on a light square that covers the quiet zone too.
+        background = group.find("path[@fill]")
+        assert background.get("fill") == "#fff"
+        assert background.get("d") == f"M0 0h{modules}v{modules}h-{modules}z"
+        line = group.find("path[@class='qrline']")
+        assert line.get("stroke") == "#14232e"
+
+        # segno draws each run of dark modules as a one-module-high line.
+        dark = set()
+        x = y = 0.0
+        for move, dx, dy, run in re.findall(r"([Mm])(-?[\d.]+) (-?[\d.]+)h(\d+)", line.get("d")):
+            x, y = (float(dx), float(dy)) if move == "M" else (x + float(dx), y + float(dy))
+            dark.update((int(y), column) for column in range(int(x), int(x) + int(run)))
+            x += int(run)
+        top = min(row for row, _ in dark)
+        left = min(column for _, column in dark)
+        symbol = segno.make(uri, error="m", micro=False).matrix
+        assert {(row - top, column - left) for row, column in dark} == {
+            (row, column)
+            for row, cells in enumerate(symbol)
+            for column, cell in enumerate(cells)
+            if cell
+        }
+        # The quiet zone the QR standard asks for: four modules on every side.
+        bottom = modules - top - len(symbol)
+        right = modules - left - len(symbol)
+        assert min(top, left, bottom, right) >= 4, (top, left, bottom, right)
 
 
 @override_settings(**PAGES)

@@ -188,12 +188,18 @@ def provisioning_uri(user, secret_b32: str) -> str:
 
 
 def qr_svg(uri: str) -> str:
-    """The address as an inline SVG QR code (segno: pure Python, no network)."""
+    """The address as an inline SVG QR code (segno: pure Python, no network).
+
+    Whole pixels per module and the 4-module quiet zone the QR standard asks
+    for. The ``px`` unit makes segno add a ``viewBox``: without one, a page
+    narrower than the drawing crops it instead of shrinking it, and a cropped
+    code loses two of its three corner squares and cannot be scanned.
+    """
 
     import segno
 
     return segno.make(uri, error="m", micro=False).svg_inline(
-        scale=5, border=2, dark="#14232e", light="#ffffff"
+        scale=4, border=4, unit="px", dark="#14232e", light="#ffffff"
     )
 
 
