@@ -271,8 +271,8 @@ hours).
 1. The support address is now set in the code and the examples: **contact@wassla.eu** (From,
    Reply-To and support). It still needs a real monitored mailbox with MX records, because Sender.net
    only sends.
-2. `web/support.html` shows contact@wassla.eu. `web/robots.txt` and `web/sitemap.xml` still name the
-   placeholder host `shiptrip.example` until the production domain is final.
+2. `web/support.html` shows contact@wassla.eu. `web/robots.txt` and `web/sitemap.xml` name
+   `https://wassla.eu` (2026-11-23).
 3. A terms page with recorded acceptance and the final prohibited-items list.
 4. If a CDN or another proxy is ever put in front of the web server, set the trusted proxies and the
    per-address limits for it first.
