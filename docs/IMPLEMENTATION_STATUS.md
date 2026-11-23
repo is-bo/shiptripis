@@ -1,5 +1,14 @@
 # Waçla V1 Implementation Status
 
+## Wassla: the staff two-step QR code scans (2026-11-23)
+
+- Ismail's first sign-in on the live server, 2026-11-23: the enrolment QR code could not be scanned.
+  The SVG had no `viewBox`, so its 220px box cut off the right and bottom of a 285px drawing, two of
+  the three corner squares with them; its quiet zone was 2 modules.
+- `qr_svg()` now draws 4 px modules, a 4-module quiet zone and a matching `viewBox`; the stylesheet
+  only shrinks it, whole. Key, address and verification unchanged. Nothing deployed. Detail:
+  `docs/PHASE_STAFF_2FA_QR_FIX.md`.
+
 ## Wassla: the public site names wassla.eu (2026-11-23)
 
 - Ismail's hosting of 2026-11-23. `web/robots.txt` and `web/sitemap.xml` named the placeholder host

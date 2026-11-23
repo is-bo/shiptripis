@@ -3214,12 +3214,16 @@ body.login.st-two-step #container {
   border-radius: var(--st-r-2);
   background: var(--st-surface-2);
 }
+/* The code keeps the size it is drawn at (whole pixels per module) and only
+   shrinks, whole and square, when the card is narrower. Crisp edges keep a
+   shrunk code free of faint lines between its rows. */
 .st-two-step-qr svg {
   display: block;
-  width: min(220px, 100%);
+  max-width: 100%;
   height: auto;
   border-radius: var(--st-r-1);
   background: #fff;
+  shape-rendering: crispEdges;
 }
 .st-two-step-qr figcaption {
   display: grid;
