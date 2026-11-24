@@ -69,6 +69,11 @@ class CanonicalOfferFixture:
     turns `select_related("origin", "destination")` into an outer join.
     """
 
+    #: Put each Algerian commune under a wilaya of the same name, as the
+    #: catalogue does. A world whose payloads name places on cards turns this on:
+    #: a card names an Algerian place by its wilaya only (P2).
+    algerian_wilayas = False
+
     def build_world(self) -> None:
         _ensure_business_settings()
         self.now = timezone.now()
@@ -118,9 +123,30 @@ class CanonicalOfferFixture:
             source_id=f"locality-{country_code}-{name}-{suffix}",
             source_version="phase8dr",
             name=name,
+            parent=(
+                self._wilaya(name)
+                if country_code == "DZ" and self.algerian_wilayas
+                else None
+            ),
             latitude=Decimal(latitude),
             longitude=Decimal(longitude),
         )
+
+    def _wilaya(self, name: str) -> Place:
+        """An Algerian commune's wilaya, named like it, as Jijel's is."""
+
+        wilaya, _ = Place.objects.get_or_create(
+            source="phase8dr-test",
+            source_id=f"wilaya-{name}",
+            defaults={
+                "country": self.countries["DZ"],
+                "place_type": Place.PlaceType.ADMIN_REGION,
+                "source_version": "phase8dr",
+                "name": name,
+                "admin_level": "wilaya",
+            },
+        )
+        return wilaya
 
     def _airport(
         self, country_code: str, name: str, iata: str, locality: Place

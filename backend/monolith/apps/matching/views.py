@@ -40,7 +40,6 @@ from apps.core.event_resources import match_resources
 from apps.core.pagination import paginated_array_response
 from apps.parcels.models import ParcelRequest
 
-from .discovery import _place_matching_prefetches
 from .models import Match, MatchEvent, Offer
 from .offer_deadlines import deadline_passed
 from .offer_economics import OfferEconomicsReader
@@ -109,20 +108,13 @@ def _match_read_queryset():
         "parcel__deliveryrequest",
         "parcel__deliveryrequest__pickup_location",
         "parcel__deliveryrequest__delivery_location",
-        # `__parent` and the served mappings because a proposal's places are
-        # labelled with their public city name (`_proposal_place`), which
-        # reads an airport's served locality and an Algerian parent.
-        "parcel__deliveryrequest__pickup_place__parent",
-        "parcel__deliveryrequest__delivery_place__parent",
+        "parcel__deliveryrequest__pickup_place",
+        "parcel__deliveryrequest__delivery_place",
         "trip",
         "sender",
         "traveler",
         "deal",
     ).prefetch_related(
-        *_place_matching_prefetches(
-            "parcel__deliveryrequest__pickup_place",
-            "parcel__deliveryrequest__delivery_place",
-        ),
         Prefetch(
             "offers",
             # An accepted offer's Boost economics are read from its Deal's

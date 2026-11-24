@@ -96,6 +96,8 @@ def give_catalogue_names(world, *, paris_department: str = "Paris") -> None:
 
 
 class DiscoveryWorld(CanonicalOfferFixture):
+    algerian_wilayas = True
+
     def build_discovery_world(self) -> None:
         self.build_world()
         self.sender.full_name = "Samira Haddadine"

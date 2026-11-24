@@ -10,7 +10,6 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 from rest_framework import serializers
 
-from apps.locations.city_names import city_name
 from apps.parcels.models import ParcelRequest
 from apps.parcels import tracking
 
@@ -192,23 +191,6 @@ class OfferListSerializer(OfferSerializer):
         read_only_fields = fields
 
 
-def _proposal_place(place) -> dict:
-    """A proposal's origin or destination place, as either party reads it.
-
-    `display_label` is the public city name (`apps.locations.city_names`), not
-    the catalogue label, because the traveler reads it before funding.
-    """
-
-    return {
-        "id": place.pk,
-        "name": place.name,
-        "display_label": city_name(place),
-        "place_type": place.place_type,
-        "country_code": place.country_id,
-        "iata_code": place.iata_code or None,
-    }
-
-
 class _MatchParcelMini(serializers.Serializer):
     """Compact parcel snapshot embedded in MatchSerializer so list/detail
     consumers don't need a second fetch to render route + weight + kind."""
@@ -229,7 +211,15 @@ class _MatchParcelMini(serializers.Serializer):
         if delivery is not None and delivery.pickup_location_id:
             return PublicLocationSerializer(delivery.pickup_location).data
         if delivery is not None and delivery.pickup_place_id:
-            return _proposal_place(delivery.pickup_place)
+            place = delivery.pickup_place
+            return {
+                "id": place.pk,
+                "name": place.name,
+                "display_label": place.display_label,
+                "place_type": place.place_type,
+                "country_code": place.country_id,
+                "iata_code": place.iata_code or None,
+            }
         return AirportSerializer(obj.origin).data if obj.origin_id else {}
 
     def get_destination(self, obj) -> dict:
@@ -240,7 +230,15 @@ class _MatchParcelMini(serializers.Serializer):
         if delivery is not None and delivery.delivery_location_id:
             return PublicLocationSerializer(delivery.delivery_location).data
         if delivery is not None and delivery.delivery_place_id:
-            return _proposal_place(delivery.delivery_place)
+            place = delivery.delivery_place
+            return {
+                "id": place.pk,
+                "name": place.name,
+                "display_label": place.display_label,
+                "place_type": place.place_type,
+                "country_code": place.country_id,
+                "iata_code": place.iata_code or None,
+            }
         return AirportSerializer(obj.destination).data if obj.destination_id else {}
 
     def get_actual_weight_kg(self, obj) -> str | None:

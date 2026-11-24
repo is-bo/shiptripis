@@ -9,7 +9,6 @@ from django.db.models import Count, Sum
 from django.utils import timezone
 
 from apps.deals.models import Deal, DealLegAllocation
-from apps.locations.city_names import city_name
 from apps.locations.models import AirportLocalityMapping, Location, Place
 from apps.parcels.models import DeliveryRequest, ParcelRequest
 from apps.routing.geometry import (
@@ -169,19 +168,13 @@ def _matching_locality_id(place: Place | None) -> int | None:
 
 
 def _public_place_summary(place: Place | None) -> dict | None:
-    """A covered leg's place as a pre-funding counterparty reads it.
-
-    `display_label` is the public city name (`apps.locations.city_names`),
-    not the catalogue label.
-    """
-
     if place is None:
         return None
     locality_id = _matching_locality_id(place)
     return {
         "id": place.pk,
         "name": place.name,
-        "display_label": city_name(place),
+        "display_label": place.display_label,
         "place_type": place.place_type,
         "country_code": place.country_id,
         "iata_code": place.iata_code or None,

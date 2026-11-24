@@ -135,6 +135,16 @@ A card is built by an explicit allowlist serializer. Anything not listed is forb
 - **Profile card:** first name; ID-verified flag; member since (month and year); rating and completed-delivery count; up to three "usual
   routes" the user chose, as locality pairs.
 
+**Place naming (owner's rule, fix plan P2, 2026-11-24): cards show cities; detail pages show the catalogue place; the exact
+location only after funding.** Every card and list row (trip, request and profile cards, Find Travelers cards and stops,
+route alerts, "Matches for you", the compatible-request rows on a traveler's journey screen) names each place as a city in
+every name field: the wilaya in Algeria (a commune without a wilaya parent names nothing), the commune elsewhere with the
+German status suffix dropped and the Spanish article put first, and an airport as the city it serves. The one rule lives in
+`apps/locations/city_names.py` (`city_name`, and `card_place` for a place summary on a list row); catalogue ids stay. Detail
+pages (journey and request detail, the negotiation screen, the schedule-change view), the place picker, the owner's own
+screens and the staff console keep the catalogue's `"<name> · <parent>"` label. Exact addresses and preferred map points stay
+hidden until funding, unchanged.
+
 Never on any public surface: last name, email, phone, exact address or coordinates, distance or detour
 figures, recipient data, document data, payout data, another user's internal ids beyond the opaque id
 needed to open the card.

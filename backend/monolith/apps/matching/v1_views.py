@@ -342,14 +342,12 @@ class CompatibleRequestsV1View(APIView):
         # Bulk-harvest surface: one call returns up to `result_limit` unrelated
         # senders. The traveler cannot propose a price, so the detour-bearing
         # recommendation is withheld and only the geometry-free enforced floor
-        # is disclosed.
+        # is disclosed. The rows are list rows (the journey screen, "Matches
+        # for you"), so every place names its city (P2).
         return Response(
             {
                 "count": len(candidates),
-                "results": [
-                    row.as_public_dict(include_recommendation=False)
-                    for row in candidates
-                ],
+                "results": [row.as_card_row() for row in candidates],
             }
         )
 

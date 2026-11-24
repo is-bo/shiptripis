@@ -385,7 +385,10 @@ def _stop(
     )
     label = city_name(locality) if locality else ""
     country_code = locality.country_id if locality else None
-    if not label:
+    if arriving_place is None and departing_place is None:
+        # Only a stop with no catalogue place at all is a legacy stop. A
+        # catalogue stop that names no city (an airport that lost its served
+        # mapping) stays unnamed rather than borrowing a preferred point's label.
         label, country_code = _legacy_label(arriving_location, departing_location)
     return {
         "place_id": locality.pk if locality else None,

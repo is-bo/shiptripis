@@ -11,7 +11,7 @@ from decimal import Decimal
 
 from django.test import TestCase
 
-from apps.locations.city_names import city_name
+from apps.locations.city_names import card_place, city_name
 from apps.locations.models import AirportLocalityMapping, Country, Place
 
 COUNTRIES = (("DZ", "Algeria"), ("FR", "France"), ("ES", "Spain"), ("DE", "Germany"))
@@ -97,6 +97,38 @@ class CityNameTests(TestCase):
             with self.subTest(place.name):
                 self.assertCity(place, expected)
 
+    def test_algeria_without_a_wilaya_names_nothing(self):
+        # Only a parent recorded as a wilaya counts: a commune without one, or
+        # under any other tier, never falls back to its own or a daïra's name.
+        orphan = self.place("DZ", "Bab Ezzouar", tier="commune")
+        daira = self.region("DZ", "Dar El Beida", "daira")
+        under_daira = self.place("DZ", "Bab Ezzouar", parent=daira, tier="commune")
+        self.assertCity(orphan, "")
+        self.assertCity(under_daira, "")
+
+    def test_the_card_projection_names_the_city_in_every_name_field(self):
+        alger = self.region("DZ", "Alger", "wilaya")
+        centre = self.place("DZ", "Alger Centre", parent=alger, tier="commune")
+        alg = self.airport(
+            "DZ", "Houari Boumediene Airport", "ALG", served=centre, parent=alger
+        )
+        self.assertEqual(
+            card_place(alg),
+            {
+                "id": alg.pk,
+                "name": "Alger",
+                "display_label": "Alger",
+                "place_type": Place.PlaceType.AIRPORT,
+                "country_code": "DZ",
+                "iata_code": "ALG",
+                "matching_locality_id": centre.pk,
+            },
+        )
+        orphan = self.airport("DZ", "Unmapped Field", "QZY", parent=alger)
+        self.assertEqual(card_place(orphan)["name"], "")
+        self.assertIsNone(card_place(orphan)["matching_locality_id"])
+        self.assertIsNone(card_place(None))
+
     def test_france_names_the_commune_never_the_department(self):
         paris = self.region("FR", "Paris", "department")
         rhone = self.region("FR", "Rhône", "department")
@@ -109,7 +141,9 @@ class CityNameTests(TestCase):
             ("Coruña, A", "A Coruña"),
             ("Palmas de Gran Canaria, Las", "Las Palmas de Gran Canaria"),
             ("Alfàs del Pi, l'", "l'Alfàs del Pi"),
-            ("Alicante/Alacant", "Alicante/Alacant"),
+            # The municipality's official spelling (the province is
+            # "Alicante/Alacant").
+            ("Alacant/Alicante", "Alacant/Alicante"),
             # Part by part around the slash of a bilingual name.
             ("Vila Joiosa, la/Villajoyosa", "la Vila Joiosa/Villajoyosa"),
             ("Orxa, l'/Lorcha", "l'Orxa/Lorcha"),

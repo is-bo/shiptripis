@@ -1,15 +1,18 @@
-"""Fix plan P2: public and pre-funding route lines name cities only.
+"""Fix plan P2: cards show cities; detail pages show the catalogue place.
 
-The world is the canonical CDG → ALG → Jijel one with catalogue-shaped names
-and parents (`give_catalogue_names`): ALG serves the commune "Alger Centre"
-under the wilaya "Alger", Paris sits under its department "Paris". Before P2
-the cards read "Alger Centre · Alger" and "Paris · Paris"; now every reader who
-is not a party reads "Alger" and "Paris". The owner, the place picker and the
-staff console keep the full catalogue label.
+The owner's rule of 2026-11-24. The world is the canonical CDG → ALG → Jijel
+one with catalogue-shaped names and parents (`give_catalogue_names`): ALG
+serves the commune "Alger Centre" under the wilaya "Alger", Paris sits under
+its department "Paris". Before P2 the cards read "Alger Centre · Alger" and
+"Paris · Paris"; now every card and list row reads "Alger" and "Paris", in
+every name-like field. Detail pages (journey and request detail, the
+negotiation screen's proposal), the place picker, the owner's screens and the
+staff views keep the full catalogue label.
 """
 
 from __future__ import annotations
 
+import json
 from datetime import timedelta
 from decimal import Decimal
 
@@ -18,11 +21,27 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.admin_panel.ops_serializers import AdminRequestSerializer
+from apps.locations.models import Location
+from apps.matching.discovery import explain_candidate
 from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
 
 from .support import DiscoveryWorld, client_for, give_catalogue_names
 
 CITIES = {"Alger", "Paris", "Jijel"}
+
+#: Catalogue and preferred-point naming no card or list row may carry, in any
+#: field: the commune behind the wilaya, the airports' own names, a parent
+#: department, the catalogue label's separator, and the preferred points'
+#: own labels attached in `_attach_preferred_points`.
+CARD_FORBIDDEN = (
+    "Alger Centre",
+    "Houari Boumediene",
+    "Charles de Gaulle",
+    "Val-d'Oise",
+    " · ",
+    "Quinconces Point",
+    "Roissy Point",
+)
 
 
 def _labels(value, found: list[str]) -> list[str]:
@@ -103,6 +122,40 @@ class PublicCityNameTests(DiscoveryWorld, TestCase):
         labels = _labels(payload, [])
         self.assertTrue(expect <= set(labels), labels)
         self.assertLessEqual(set(labels), CITIES, labels)
+        text = json.dumps(payload, default=str, ensure_ascii=False)
+        for forbidden in CARD_FORBIDDEN:
+            self.assertNotIn(forbidden, text)
+
+    def _point(self, owner, label: str, place, latitude: str, longitude: str):
+        return Location.objects.create(
+            owner=owner,
+            created_by=owner,
+            kind=Location.Kind.EXACT_ADDRESS,
+            normalized_label=f"1 Rue {label}",
+            public_label=label,
+            private_label=f"1 Rue {label}",
+            city=label,
+            country_code=place.country_id,
+            canonical_place=place,
+            latitude=latitude,
+            longitude=longitude,
+            coarse_latitude=latitude,
+            coarse_longitude=longitude,
+            source="manual",
+            precision=Location.Precision.ROOFTOP,
+        )
+
+    def _attach_preferred_points(self):
+        """Preferred map points on the request and the journey (Blocker 1)."""
+
+        self.request.pickup_location = self._point(
+            self.sender, "Quinconces Point", self.paris, "48.871234", "2.318765"
+        )
+        self.request.save(update_fields=["pickup_location"])
+        self.journey.start_location = self._point(
+            self.traveler, "Roissy Point", self.paris, "49.009700", "2.547900"
+        )
+        self.journey.save(update_fields=["start_location"])
 
     # -- guest and member surfaces -----------------------------------------
 
@@ -197,26 +250,68 @@ class PublicCityNameTests(DiscoveryWorld, TestCase):
         )
         self.assertCitiesOnly(payload, expect={"Paris", "Alger", "Jijel"})
 
-    def test_compatible_requests_show_the_city(self):
+    def test_compatible_request_rows_name_cities_even_with_preferred_points(self):
+        # The rows of the traveler's journey screen and of "Matches for you".
+        self._attach_preferred_points()
         payload = self._get(
             self.traveler, "matches-compatible-requests-v1", journey_id=self.journey.pk
         )
         [row] = payload["results"]
         request = row["delivery_request"]
-        self.assertEqual(request["pickup_place"]["display_label"], "Paris")
-        self.assertEqual(request["delivery_place"]["display_label"], "Jijel")
+        # The endpoint the app renders first is the catalogue place, not the
+        # preferred point, and every name field reads the city.
+        self.assertEqual(
+            request["pickup"],
+            {
+                "id": self.paris.pk,
+                "name": "Paris",
+                "display_label": "Paris",
+                "place_type": "locality",
+                "country_code": "FR",
+                "iata_code": None,
+                "matching_locality_id": self.paris.pk,
+            },
+        )
+        self.assertEqual(request["delivery_place"]["name"], "Jijel")
+        self.assertEqual(row["journey"]["start_location"]["name"], "Paris")
+        covered = row["compatibility"]["covered_legs"]
+        self.assertEqual(
+            [(leg["origin_place"]["name"], leg["destination_place"]["name"]) for leg in covered],
+            [("Paris", "Alger"), ("Alger", "Jijel")],
+        )
         self.assertCitiesOnly(payload, expect={"Paris", "Alger", "Jijel"})
+        matches = self._get(self.traveler, "discovery-matches", role="traveler")
+        self.assertCitiesOnly(matches, expect={"Paris", "Alger", "Jijel"})
 
-    def test_a_proposal_shows_the_city(self):
+    # -- detail pages keep the catalogue place (owner's rule) -----------------
+
+    def test_the_negotiation_detail_keeps_the_catalogue_place(self):
         offer = self.propose()
         for user in (self.traveler, self.sender):
             with self.subTest(user=user.email):
                 detail = self._get(user, "matches-detail", offer.match_id)
-                self.assertEqual(detail["parcel"]["origin"]["display_label"], "Paris")
-                self.assertEqual(detail["parcel"]["destination"]["display_label"], "Jijel")
-                self.assertCitiesOnly(detail, expect={"Paris", "Alger", "Jijel"})
-                listed = self._get(user, "matches-list")
-                self.assertCitiesOnly(listed, expect={"Paris", "Jijel"})
+                self.assertEqual(
+                    detail["parcel"]["origin"]["display_label"], "Paris · Paris"
+                )
+                self.assertEqual(
+                    detail["parcel"]["destination"]["display_label"], "Jijel · Jijel"
+                )
+                self.assertIn("Alger Centre · Alger", _labels(detail, []))
+
+    def test_a_members_journey_detail_keeps_the_catalogue_place(self):
+        detail = self._get(self.other, "journeys-detail", self.home_bound.pk)
+        self.assertEqual(
+            detail["start_place"]["display_label"], "Houari Boumediene Airport · Alger"
+        )
+
+    def test_the_staff_explain_keeps_the_catalogue_place(self):
+        explained = explain_candidate(
+            delivery_request_id=self.request.pk, journey_id=self.journey.pk
+        ).as_dict()
+        self.assertEqual(
+            explained["delivery_request"]["pickup_place"]["display_label"], "Paris · Paris"
+        )
+        self.assertIn("Alger Centre · Alger", _labels(explained, []))
 
     # -- precision stays where it is the point --------------------------------
 
