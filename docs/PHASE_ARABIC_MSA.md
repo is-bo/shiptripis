@@ -57,6 +57,14 @@ codes and tracking numbers.
   comments to describe Algerian date conventions under the new Arabic copy
   standard. The date and digit assertions are identical.
 
+## Verification
+
+Local checks passed for Flutter localization generation, Dart formatting,
+Flutter analysis, Ruff 0.8.4, Django migration drift, Arabic gettext compilation
+and the static site. The first complete CI run verified all 3,588 Django test
+cases across four shards, the full Flutter suite and Schema drift.
+[CI results before rebasing](https://github.com/is-bo/shiptripis/actions/runs/45426511571)
+
 ## Screenshots
 
 Arabic Flutter screens at 360 × 800 px with bundled fonts and fixture data.

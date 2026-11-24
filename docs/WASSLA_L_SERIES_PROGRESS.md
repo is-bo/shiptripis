@@ -1068,11 +1068,10 @@ Phase doc: `docs/PHASE_L19_ACCEPTANCE_FINDINGS.md`.
 
 ### Arabic MSA. Modern Standard Arabic copy (2026-11-24)
 
-- Phase record and screenshots: [Arabic copy in Modern Standard Arabic](PHASE_ARABIC_MSA.md).
-- Contract: Arabic wording follows Modern Standard Arabic across the app, backend and public site.
-  Western digits, Algerian date formatting and code and tracking-number isolation still apply.
-- Test changes: updated Arabic expectations for payout labels, verification resubmission notices
-  and the transactional email footer. The phase record lists individual tests and comment updates.
+- The [phase record](PHASE_ARABIC_MSA.md) contains the vocabulary, screenshots and updated tests.
+- The app, backend and public site use Modern Standard Arabic. Western digits, Algerian date
+  formatting and left-to-right isolation of codes and tracking numbers still apply.
+- Updated Arabic test expectations for payout labels, verification notices and the email footer.
 
 ## Questions for Ismail
 

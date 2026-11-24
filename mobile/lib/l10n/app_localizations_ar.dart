@@ -3777,11 +3777,10 @@ class LAr extends L {
   String get payoutStatusNeedsAttention => 'يلزم اتخاذ إجراء';
 
   @override
-  String get payoutProfileReady => 'وسيلة تحويل الأرباح جاهزة';
+  String get payoutProfileReady => 'جاهزة للتحويل';
 
   @override
-  String get payoutProfileNeedsAttention =>
-      'يلزم التحقق من وسيلة تحويل الأرباح';
+  String get payoutProfileNeedsAttention => 'تتطلب التحقق';
 
   @override
   String get earlyArrivalAction => 'وصلتُ مبكراً';
