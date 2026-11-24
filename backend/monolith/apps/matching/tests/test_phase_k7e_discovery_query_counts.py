@@ -16,7 +16,12 @@ candidate its own airport (so a per-airport read cannot hide behind a shared
 prefetch cache). It then pins the property that matters: the query count does
 not move when the number of candidates doubles. The payloads are asserted to
 still carry the parent-derived labels and the served locality, so the fix
-cannot "pass" by dropping them.
+cannot "pass" by dropping them. Since fix plan P2 a card or list row (Find
+Travelers stops, compatible-request rows) names the city
+(`apps.locations.city_names`), which reads the parent for Algeria: the region
+here stands in for the wilaya, so the Algerian stops read "Region DZ" and the
+parent join is still exercised on every stop. The compatible-journeys payload
+is not a list surface and keeps the catalogue label.
 """
 
 from __future__ import annotations
@@ -54,6 +59,9 @@ class RegionalCanonicalFixture(CanonicalOfferFixture):
                 source_id=f"region-{country_code}",
                 source_version="phase-k7e",
                 name=f"Region {country_code}",
+                # The Algerian region stands in for a wilaya, the tier a card
+                # reads for an Algerian place (P2).
+                admin_level="wilaya" if country_code == "DZ" else "department",
             )
         return self._regions[country_code]
 
@@ -98,6 +106,19 @@ class RegionalCanonicalFixture(CanonicalOfferFixture):
             self._journey(traveler, origin=self._paris_airport())
         self.journeys = max(self.journeys, total)
 
+    def grow_split_header_journeys_to(self, total: int) -> None:
+        """Journeys whose header names one Paris airport and whose first leg
+        leaves from another (ORY in the header, CDG on the leg), so no leg can
+        lend the header its served mapping."""
+
+        for index in range(self.journeys, total):
+            traveler = _user(f"k7e-split-{index}@example.com")
+            _approve_kyc(traveler, f"k7esplit{index}x")
+            journey, _, _ = self._journey(traveler, origin=self._paris_airport())
+            journey.start_place = self._paris_airport()
+            journey.save(update_fields=["start_place"])
+        self.journeys = max(self.journeys, total)
+
     def grow_requests_to(self, total: int) -> None:
         for index in range(self.requests, total):
             # Alternate a locality and an airport pickup so both the parent
@@ -126,8 +147,9 @@ class RegionalCanonicalFixture(CanonicalOfferFixture):
         ]
 
     def compatible_requests_payload(self) -> list[dict]:
+        # The rows `GET /api/matches/compatible-requests` serves (P2: card rows).
         return [
-            row.as_public_dict(include_recommendation=False)
+            row.as_card_row()
             for row in compatible_requests_for_journey(
                 journey=self.journey, policy=self.policy
             )
@@ -163,12 +185,12 @@ class DiscoveryQueryCountTests(RegionalCanonicalFixture, TestCase):
         self.assertEqual(two_n_payload["page"]["total"], 8)
 
         self.assertEqual(n_queries, two_n_queries)
-        # Every stop still carries its parent-derived locality label, including
-        # the city each distinct airport resolves to.
+        # Every stop still carries its public city name, including the city
+        # each distinct airport resolves to; the Algerian ones are the parent.
         for row in two_n_payload["results"]:
             self.assertEqual(
                 [stop["label"] for stop in row["route"]["stops"]],
-                ["Paris · Region FR", "Algiers · Region DZ", "Jijel · Region DZ"],
+                ["Paris", "Region DZ", "Region DZ"],
             )
 
     def test_compatible_journeys_cost_is_flat_from_n_to_2n_journeys(self):
@@ -188,6 +210,27 @@ class DiscoveryQueryCountTests(RegionalCanonicalFixture, TestCase):
             self.assertEqual(start["display_label"], f"{start['name']} · Region FR")
             self.assertEqual(start["matching_locality_id"], self.paris.pk)
 
+    def test_compatible_journeys_cost_is_flat_with_a_header_airport_no_leg_uses(self):
+        # P2 second pass: a header airport that is not a leg place used to
+        # cost one mapping query per candidate; it is now loaded in one batch.
+        self.grow_split_header_journeys_to(4)
+        n_queries, n_payload = self.measure(self.compatible_journeys_payload)
+        self.assertEqual(len(n_payload), 4)
+
+        self.grow_split_header_journeys_to(8)
+        two_n_queries, two_n_payload = self.measure(self.compatible_journeys_payload)
+        self.assertEqual(len(two_n_payload), 8)
+
+        self.assertEqual(n_queries, two_n_queries)
+        split = [row for row in two_n_payload if row["journey"]["id"] != self.journey.pk]
+        self.assertEqual(len(split), 7)
+        for row in split:
+            start = row["journey"]["start_place"]
+            self.assertEqual(start["matching_locality_id"], self.paris.pk)
+            self.assertNotEqual(
+                start["id"], row["journey"]["covered_legs"][0]["origin_place"]["id"]
+            )
+
     def test_compatible_requests_cost_is_flat_from_n_to_2n_requests(self):
         self.grow_requests_to(4)
         n_queries, n_payload = self.measure(self.compatible_requests_payload)
@@ -202,9 +245,9 @@ class DiscoveryQueryCountTests(RegionalCanonicalFixture, TestCase):
         for row in two_n_payload:
             pickup = row["delivery_request"]["pickup_place"]
             delivery = row["delivery_request"]["delivery_place"]
-            self.assertEqual(pickup["display_label"], f"{pickup['name']} · Region FR")
+            self.assertEqual(pickup["display_label"], "Paris")
             # An airport pickup still resolves to its served locality.
             self.assertEqual(pickup["matching_locality_id"], self.paris.pk)
             airport_pickups += pickup["place_type"] == Place.PlaceType.AIRPORT
-            self.assertEqual(delivery["display_label"], "Jijel · Region DZ")
+            self.assertEqual(delivery["display_label"], "Region DZ")
         self.assertEqual(airport_pickups, 3)

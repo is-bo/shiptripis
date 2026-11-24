@@ -26,6 +26,7 @@ from apps.accounts.blocks import not_blocked_with
 from apps.core.business_settings import get_active_business_settings
 from apps.deals.models import Deal, DealLegAllocation
 from apps.kyc.models import KycSubmission
+from apps.locations.city_names import card_place
 from apps.locations.models import AirportLocalityMapping, Place
 from apps.locations.serializers import PublicLocationSerializer
 from apps.parcels.models import DeliveryRequest, ParcelRequest
@@ -57,36 +58,20 @@ class CandidateEvaluation:
     #: The traveler's listed price for this parcel (L4A), or `None`.
     listed: ListedPrice | None = None
 
-    def _request_block(self) -> dict:
-        def place_summary(place):
-            if place is None:
-                return None
-            locality_id = _matching_locality_id(place)
-            return {
-                "id": place.pk,
-                "name": place.name,
-                "display_label": place.display_label,
-                "place_type": place.place_type,
-                "country_code": place.country_id,
-                "iata_code": place.iata_code or None,
-                "matching_locality_id": locality_id,
-            }
-
+    def _request_block(self, *, cards: bool = False) -> dict:
+        request = self.delivery_request
+        place_summary = card_place if cards else _place_summary
         return {
-            "id": self.delivery_request.pk,
-            "sender_id": self.delivery_request.sender_id,
-            "pickup": (
-                PublicLocationSerializer(self.delivery_request.pickup_location).data
-                if self.delivery_request.pickup_location
-                else place_summary(self.delivery_request.pickup_place)
+            "id": request.pk,
+            "sender_id": request.sender_id,
+            "pickup": _endpoint(
+                request.pickup_location, request.pickup_place, cards=cards
             ),
-            "delivery": (
-                PublicLocationSerializer(self.delivery_request.delivery_location).data
-                if self.delivery_request.delivery_location
-                else place_summary(self.delivery_request.delivery_place)
+            "delivery": _endpoint(
+                request.delivery_location, request.delivery_place, cards=cards
             ),
-            "pickup_place": place_summary(self.delivery_request.pickup_place),
-            "delivery_place": place_summary(self.delivery_request.delivery_place),
+            "pickup_place": place_summary(request.pickup_place),
+            "delivery_place": place_summary(request.delivery_place),
             "actual_weight_kg": str(self.delivery_request.actual_weight_kg),
             "ready_window_start": self.delivery_request.ready_window_start,
             "ready_window_end": self.delivery_request.ready_window_end,
@@ -105,7 +90,7 @@ class CandidateEvaluation:
             ),
         }
 
-    def _journey_block(self, compatibility: dict) -> dict:
+    def _journey_block(self, compatibility: dict, *, cards: bool = False) -> dict:
         legs = list(getattr(self.journey, "_matching_legs", ()))
         covered_leg_ids = compatibility.get("covered_leg_ids") or []
         start_leg_id = compatibility.get("start_leg_id")
@@ -115,32 +100,16 @@ class CandidateEvaluation:
         if end_leg_id is None and covered_leg_ids:
             end_leg_id = covered_leg_ids[-1]
 
-        def place_summary(place):
-            if place is None:
-                return None
-            locality_id = _matching_locality_id(place)
-            return {
-                "id": place.pk,
-                "name": place.name,
-                "display_label": place.display_label,
-                "place_type": place.place_type,
-                "country_code": place.country_id,
-                "iata_code": place.iata_code or None,
-                "matching_locality_id": locality_id,
-            }
-
+        journey = self.journey
+        place_summary = card_place if cards else _place_summary
         return {
-            "id": self.journey.pk,
-            "traveler_id": self.journey.traveler_id,
-            "start_location": (
-                PublicLocationSerializer(self.journey.start_location).data
-                if self.journey.start_location
-                else place_summary(self.journey.start_place)
+            "id": journey.pk,
+            "traveler_id": journey.traveler_id,
+            "start_location": _endpoint(
+                journey.start_location, journey.start_place, cards=cards
             ),
-            "destination_location": (
-                PublicLocationSerializer(self.journey.destination_location).data
-                if self.journey.destination_location
-                else place_summary(self.journey.destination_place)
+            "destination_location": _endpoint(
+                journey.destination_location, journey.destination_place, cards=cards
             ),
             "start_place": place_summary(self.journey.start_place),
             "destination_place": place_summary(self.journey.destination_place),
@@ -184,6 +153,70 @@ class CandidateEvaluation:
                 include_recommendation=include_recommendation,
             ),
         }
+
+    def as_card_row(self) -> dict:
+        """`as_public_dict` for a list row, where every place names a city.
+
+        The owner's rule (P2): cards and list rows show cities, detail pages
+        the catalogue place. The compatible-requests list (the traveler's
+        journey screen and "Matches for you") renders this, so every place in
+        it, covered legs included, is the card projection
+        (`apps.locations.city_names.card_place`), and a preferred map point
+        never stands in for a catalogue place. The recommendation is withheld,
+        as on every traveler-facing list.
+        """
+
+        compatibility = public_compatibility_payload(self.compatibility.as_dict())
+        assert compatibility is not None
+        legs = {leg.pk: leg for leg in getattr(self.journey, "_matching_legs", ())}
+        for covered in compatibility.get("covered_legs") or ():
+            leg = legs.get(covered.get("journey_leg_id"))
+            if leg is None:
+                continue
+            for side in ("origin", "destination"):
+                place = getattr(leg, f"{side}_place")
+                if place is not None:
+                    covered[side] = card_place(place)
+                    covered[f"{side}_place"] = card_place(place)
+        return {
+            "delivery_request": self._request_block(cards=True),
+            "journey": self._journey_block(compatibility, cards=True),
+            "compatibility": compatibility,
+            "pricing": public_pricing_payload(
+                self.pricing.as_dict() if self.pricing else None,
+                include_recommendation=False,
+            ),
+        }
+
+
+def _place_summary(place: Place | None) -> dict | None:
+    """A catalogue place as a detail page and the staff explain carry it."""
+
+    if place is None:
+        return None
+    return {
+        "id": place.pk,
+        "name": place.name,
+        "display_label": place.display_label,
+        "place_type": place.place_type,
+        "country_code": place.country_id,
+        "iata_code": place.iata_code or None,
+        "matching_locality_id": _matching_locality_id(place),
+    }
+
+
+def _endpoint(location, place: Place | None, *, cards: bool) -> dict | None:
+    """A route endpoint: the preferred point's public summary, else the place.
+
+    On a card the catalogue place wins whenever there is one, so the row names
+    its city and never the point's own label.
+    """
+
+    if cards and place is not None:
+        return card_place(place)
+    if location is not None:
+        return PublicLocationSerializer(location).data
+    return _place_summary(place)
 
 
 def phase2_policy() -> Phase2Policy:
@@ -362,6 +395,41 @@ def _adopt_leg_place_mappings(journey: Journey) -> None:
             and not hasattr(place, "_active_matching_mappings")
         ):
             place._active_matching_mappings = loaded[place.pk]
+
+
+def _load_endpoint_mappings(journeys: list[Journey]) -> None:
+    """Load, in one query, the served mappings no leg could lend an endpoint.
+
+    A Journey may name one airport in its header and another serving the same
+    city on its first leg (ORY and CDG both serve Paris), so
+    `_adopt_leg_place_mappings` has nothing to lend and each such endpoint
+    would cost its own mapping query per candidate. The filter is the one
+    `_place_matching_prefetches` applies, so the resolved locality is the same.
+    """
+
+    pending: dict[int, list[Place]] = {}
+    for journey in journeys:
+        for place in (journey.start_place, journey.destination_place):
+            if (
+                place is not None
+                and place.place_type == Place.PlaceType.AIRPORT
+                and not hasattr(place, "_active_matching_mappings")
+            ):
+                pending.setdefault(place.pk, []).append(place)
+    if not pending:
+        return
+    found: dict[int, list[AirportLocalityMapping]] = {pk: [] for pk in pending}
+    for mapping in AirportLocalityMapping.objects.filter(
+        airport_id__in=pending,
+        active=True,
+        is_primary=True,
+        relationship_type=AirportLocalityMapping.RelationshipType.SERVED,
+        locality__active=True,
+    ).select_related("locality__parent"):
+        found[mapping.airport_id].append(mapping)
+    for pk, places in pending.items():
+        for place in places:
+            place._active_matching_mappings = found[pk]
 
 
 def _canonical_node_mapping_q(*, relation: str, locality_id: int) -> Q:
@@ -566,6 +634,7 @@ def compatible_journeys_for_request(
     journeys = list(queryset)
     for journey in journeys:
         _adopt_leg_place_mappings(journey)
+    _load_endpoint_mappings(journeys)
     _attach_sea_switch(journeys)
     evaluations = [
         evaluate_candidate(

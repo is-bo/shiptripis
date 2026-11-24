@@ -121,12 +121,9 @@ def traveler_matches(*, user, policy: Phase2Policy, at: datetime) -> dict:
                     "destination": locality_block(journey.destination_place),
                     "next_departure_at": journey.next_departure.isoformat(),
                 },
-                # The compatible-requests endpoint's own public shape. The
-                # detour-bearing recommendation stays withheld, as it is there.
-                "results": [
-                    row.as_public_dict(include_recommendation=False)
-                    for row in rows[:MAX_RESULTS_PER_ITEM]
-                ],
+                # The compatible-requests endpoint's own card rows: cities
+                # only, and the detour-bearing recommendation withheld.
+                "results": [row.as_card_row() for row in rows[:MAX_RESULTS_PER_ITEM]],
                 "more_available": len(rows) > MAX_RESULTS_PER_ITEM,
             }
         )

@@ -1,5 +1,16 @@
 # Waçla V1 Implementation Status
 
+## Wassla: cards show cities, detail pages the catalogue place (P2, 2026-11-24)
+
+- Ismail's phone test of 2026-11-24 ("Alger Paris", not "Alger Centre Alger Paris Paris"); fix plan
+  P2, owner decisions Q1 = the wilaya and "cards show cities; detail pages show the catalogue place;
+  exact location after funding". Server only, no migration, no app change. Nothing deployed.
+- One rule, `apps/locations/city_names.py` (`city_name`, `card_place`): Algeria the wilaya, Germany
+  the name before the comma, Spain the article first, France the commune, an airport its served city.
+  It names every place on cards and list rows (trip, request and profile cards, Find Travelers,
+  alerts, Matches, compatible-request rows). Detail pages, staff, picker and owner views keep
+  `display_label`. No matching result changes. Detail: `docs/PHASE_P2_PUBLIC_CITY_NAMES.md`.
+
 ## Arabic copy in Modern Standard Arabic (2026-11-24)
 
 Updated the mobile app, iOS permission prompts, transactional email, push

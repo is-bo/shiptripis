@@ -46,6 +46,7 @@ from django.db.models import Count
 from django.utils import timezone
 
 from apps.deals.models import Deal
+from apps.locations.city_names import city_name
 from apps.locations.models import AirportLocalityMapping, Place
 from apps.parcels.models import DeliveryRequest, ParcelRequest
 from apps.ratings.public import RATING_NEW, rating_summaries
@@ -299,8 +300,9 @@ def _locality_of(place: Place | None) -> Place | None:
     """The canonical locality a route node resolves to, without a new query.
 
     `_matching_journey_queryset` already prefetches each leg place's active
-    primary served mapping with `select_related("locality")`, so an airport's
-    city is in memory by the time a candidate is projected. The fallback read
+    primary served mapping with `select_related("locality__parent")`, so an
+    airport's city and its public name are in memory by the time a candidate
+    is projected. The fallback read
     exists only so a caller that assembled legs some other way still gets a
     correct answer instead of a blank stop.
     """
@@ -319,7 +321,7 @@ def _locality_of(place: Place | None) -> Place | None:
             relationship_type=AirportLocalityMapping.RelationshipType.SERVED,
             locality__active=True,
         )
-        .select_related("locality")
+        .select_related("locality__parent")
         .first()
     )
     return mapping.locality if mapping else None
@@ -357,9 +359,10 @@ def _stop(
     """One public stop on the carrying route.
 
     The spec's locked route UX is "airports are a facet of a stop": a node
-    reads `Algiers · ALG`, never `Houari Boumediene`, because an airport and
-    the city it serves are the same stop. So the label is the **locality** and
-    the airport rides alongside it as an IATA code.
+    reads `Alger · ALG`, never `Houari Boumediene`, because an airport and
+    the city it serves are the same stop. So the label is the locality's
+    public city name (`apps.locations.city_names`) and the airport rides
+    alongside it as an IATA code.
 
     Which airport: the one the parcel *arrives* on, if any, otherwise the one
     it leaves on. Both sides of a node resolve to the same matching locality by
@@ -380,9 +383,12 @@ def _stop(
         ),
         None,
     )
-    label = locality.display_label if locality else ""
+    label = city_name(locality) if locality else ""
     country_code = locality.country_id if locality else None
-    if not label:
+    if arriving_place is None and departing_place is None:
+        # Only a stop with no catalogue place at all is a legacy stop. A
+        # catalogue stop that names no city (an airport that lost its served
+        # mapping) stays unnamed rather than borrowing a preferred point's label.
         label, country_code = _legacy_label(arriving_location, departing_location)
     return {
         "place_id": locality.pk if locality else None,

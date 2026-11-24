@@ -12,6 +12,7 @@ filter can never disagree with the match the same city would produce.
 
 from __future__ import annotations
 
+from apps.locations.city_names import city_name
 from apps.locations.models import AirportLocalityMapping, Place
 
 
@@ -54,9 +55,10 @@ def place_ids_for_locality(locality_id: int) -> frozenset[int]:
 def locality_block(place: Place | None) -> dict | None:
     """A city as discovery publishes it: catalogue id, label and country.
 
-    Never coordinates, never a street, never the airport's own name. The
-    caller passes a place whose served mapping and parent are already loaded,
-    so this reads no row.
+    The label is the public city name (`apps.locations.city_names`), never
+    the catalogue's `"<name> · <parent>"` label, coordinates, a street or the
+    airport's own name. The caller passes a place whose served mapping and
+    parent are already loaded, so this reads no row.
     """
 
     locality = place.resolve_matching_locality() if place is not None else None
@@ -64,6 +66,6 @@ def locality_block(place: Place | None) -> dict | None:
         return None
     return {
         "place_id": locality.pk,
-        "label": locality.display_label,
+        "label": city_name(locality),
         "country_code": locality.country_id,
     }

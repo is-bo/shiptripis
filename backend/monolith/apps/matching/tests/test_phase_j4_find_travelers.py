@@ -62,6 +62,8 @@ def client_for(user) -> APIClient:
 class FindTravelersFixture(CanonicalOfferFixture):
     """The canonical world, plus whatever J4 needs to look at it."""
 
+    algerian_wilayas = True
+
     def setUp(self):
         self.build_world()
         self.policy = Phase2Policy.from_settings(

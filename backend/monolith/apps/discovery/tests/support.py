@@ -19,6 +19,7 @@ from apps.core.business_settings import activate_business_settings
 from apps.core.models import BusinessSettingsVersion
 from apps.discovery.models import PublicProfile, PublicProfileRoute
 from apps.discovery.profiles import PROFILE_CONSENT_VERSION
+from apps.locations.models import Place
 from apps.matching.tests.test_phase8dr_offer_locks import CanonicalOfferFixture
 from apps.matching.tests.test_v1_matching import _approve_kyc, _user
 from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
@@ -57,7 +58,46 @@ def activate_marketplace(section: dict) -> BusinessSettingsVersion:
     return activate_business_settings(revision)
 
 
+def give_catalogue_names(world, *, paris_department: str = "Paris") -> None:
+    """Name and parent the world's places the way the real catalogue does.
+
+    The canonical world's places have no parent, so a label rule that reads
+    one cannot be seen there. This gives each the 2026 manifest's shape: the
+    commune ALG serves is "Alger Centre" under the wilaya "Alger", Jijel sits
+    under its wilaya, Paris under its department, and each airport under its
+    physical administrative area (fix plan P2).
+    """
+
+    def region(country_code: str, name: str, tier: str) -> Place:
+        return Place.objects.create(
+            country=world.countries[country_code],
+            place_type=Place.PlaceType.ADMIN_REGION,
+            source="catalogue-names-test",
+            source_id=f"region-{country_code}-{name}",
+            source_version="p2",
+            name=name,
+            admin_level=tier,
+        )
+
+    alger = region("DZ", "Alger", "wilaya")
+    jijel = region("DZ", "Jijel", "wilaya")
+    paris = region("FR", paris_department, "department")
+    val_d_oise = region("FR", "Val-d'Oise", "department")
+    for place, parent, name in (
+        (world.algiers, alger, "Alger Centre"),
+        (world.jijel, jijel, "Jijel"),
+        (world.paris, paris, "Paris"),
+        (world.alg, alger, "Houari Boumediene Airport"),
+        (world.cdg, val_d_oise, "Paris Charles de Gaulle Airport"),
+    ):
+        place.parent = parent
+        place.name = name
+        place.save(update_fields=["parent", "name", "normalized_name"])
+
+
 class DiscoveryWorld(CanonicalOfferFixture):
+    algerian_wilayas = True
+
     def build_discovery_world(self) -> None:
         self.build_world()
         self.sender.full_name = "Samira Haddadine"

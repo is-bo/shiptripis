@@ -544,7 +544,7 @@ class Place(models.Model):
                 relationship_type=AirportLocalityMapping.RelationshipType.SERVED,
                 locality__active=True,
             )
-            .select_related("locality")
+            .select_related("locality__parent")
             .first()
         )
         locality = mapping.locality if mapping else None
