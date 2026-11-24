@@ -381,8 +381,10 @@ class MePhotoView(APIView):
     DELETE /api/me/photo — remove it, or dismiss a "removed by Wassla" notice.
 
     The rule is `apps.accounts.photos`. PUT answers the member's own photo
-    block (`GET /api/me` `photo`) and takes the media-upload throttle; DELETE
-    answers 204, also when there was nothing to remove.
+    block (`GET /api/me` `photo`), takes the media-upload throttle and reads
+    the body in memory only (`photos.PhotoUploadHandler`); DELETE answers 204,
+    also when there was nothing to remove, and is never throttled: a member can
+    always take their photo down.
     """
 
     permission_classes = (IsAuthenticated,)
@@ -392,9 +394,12 @@ class MePhotoView(APIView):
         if self.request.method == "PUT":
             self.throttle_scope = "media_upload"
             return [ScopedRateThrottle()]
+        if self.request.method == "DELETE":
+            return []
         return super().get_throttles()
 
     def put(self, request: Request) -> Response:
+        request.upload_handlers = [photos.PhotoUploadHandler(request)]
         try:
             photo = photos.replace_photo(request.user, request.FILES.get("photo"))
         except photos.PhotoRefused as exc:

@@ -18,29 +18,43 @@ The URL is signed when the payload is built (nothing caches it) and lives for
 active photo of an active, unbanned account is published. The owner reads
 `own_photo(user)`, which also says when Wassla removed the photo, and why.
 
-**Races, decided by `version`.** Every write takes the member's row lock, so
-the member's own uploads and removals and a staff removal run one after the
-other. Each upload gets a new random version. A staff removal names the
+**Races, decided by `version`.** Every write takes the member's row lock,
+whatever the account's state, so the member's own uploads and removals, a
+staff removal and account deletion run one after the other. Each upload gets a new random version. A staff removal names the
 version the operator was looking at and applies only while that version is
 still the active one: a replacement that lands first makes the removal refuse
 with `profile_photo_changed`, so a fresh photo is never marked removed unseen,
 and a removal that lands first leaves nothing visible, because the removed
 object is deleted and a later upload is a new photo.
 
-**Objects are deleted after commit.** Replacing, removing (by the member or by
-staff) and deleting the account each delete the object the row no longer
-names, once the transaction has committed. A rolled-back write deletes the
-object it had just stored instead, so neither path leaves an orphan behind.
+**Stored objects: one cleanup rule.** "Delete object K once no photo row
+names it", run by a durable `ScheduledJob` (``profile_photo_object_delete``),
+so no lost response, failed delete or dead worker can leave an image behind:
+
+- an upload records its job (an hour later) before the object is written, which
+  covers a failed write, a lost commit acknowledgement and a crash;
+- replacing and staff removal record the job for the old object in the same
+  transaction as the decision; deleting a row (the member's removal, account
+  deletion, a cascade or a bulk delete) records it from `post_delete`;
+- after commit, one immediate attempt is the fast path; the job retries until
+  storage confirms, an object already gone counts as deleted, and an object a
+  row names is never deleted.
 """
 
 from __future__ import annotations
 
 import logging
 import secrets
+from datetime import timedelta
+from io import BytesIO
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import InMemoryUploadedFile
+from django.core.files.uploadhandler import FileUploadHandler
 from django.db import transaction
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
 from django.utils import timezone
 
 from apps.core.storage import (
@@ -65,6 +79,16 @@ KEY_PREFIX = "profile-photos"
 PHOTO_SIZE = 512
 #: The upload limit, the same as a parcel photo's.
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
+#: What a multipart body may add around the photo (boundaries, part headers).
+MULTIPART_ALLOWANCE = 64 * 1024
+#: An upload's own cleanup job runs this long after it starts: by then the
+#: upload has long committed (the object is named, so it stays) or failed.
+UPLOAD_CHECK_DELAY = timedelta(hours=1)
+#: The cleanup job's retry budget. With the job loop's backoff (capped at six
+#: hours) that is about ten days, then a failed job staff see and can retry.
+CLEANUP_MAX_ATTEMPTS = 48
+OBJECT_JOB_PREFIX = "profile_photo_object"
 
 #: The audit action of a staff removal.
 AUDIT_REMOVED = "profile_photo.removed"
@@ -95,6 +119,53 @@ class PhotoRefused(Exception):
     @property
     def payload(self) -> dict:
         return {"code": self.code, "detail": self.detail, **self.extra}
+
+
+class PhotoUploadHandler(FileUploadHandler):
+    """The upload handler of `PUT /api/me/photo`: memory only, never a temp file.
+
+    Django's default handlers spill a file part to a temporary file once the
+    body passes `FILE_UPLOAD_MAX_MEMORY_SIZE`, which a valid photo near the limit
+    does, so the original, metadata and all, would touch the disk. This one
+    keeps every byte in memory and refuses with `profile_photo_too_large` as
+    soon as the body or the files in it pass the limit, before reading on.
+    """
+
+    def __init__(self, request=None):
+        super().__init__(request)
+        self.received = 0
+
+    def handle_raw_input(self, input_data, META, content_length, boundary, encoding=None):
+        if content_length > MAX_UPLOAD_BYTES + MULTIPART_ALLOWANCE:
+            raise _too_large()
+
+    def new_file(self, *args, **kwargs):
+        super().new_file(*args, **kwargs)
+        self.file = BytesIO()
+
+    def receive_data_chunk(self, raw_data, start):
+        self.received += len(raw_data)
+        if self.received > MAX_UPLOAD_BYTES:
+            raise _too_large()
+        self.file.write(raw_data)
+
+    def file_complete(self, file_size):
+        self.file.seek(0)
+        return InMemoryUploadedFile(
+            file=self.file,
+            field_name=self.field_name,
+            name=self.file_name,
+            content_type=self.content_type,
+            size=file_size,
+            charset=self.charset,
+            content_type_extra=self.content_type_extra,
+        )
+
+
+def _too_large() -> PhotoRefused:
+    return PhotoRefused(
+        PHOTO_TOO_LARGE, "File exceeds 10 MiB.", status=413, max_bytes=MAX_UPLOAD_BYTES
+    )
 
 
 def _new_version() -> str:
@@ -194,30 +265,23 @@ def own_view(photo: ProfilePhoto) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def _delete_object_after_commit(bucket: str, key: str) -> None:
-    if not key:
-        return
+def _hold_member(user_id: int):
+    """Take the member's row lock, whatever the account's state, and return the
+    row (None once it is gone).
 
-    def delete() -> None:
-        try:
-            store_for_bucket(bucket, default=PHOTO_STORE).delete(key)
-        except Exception:  # noqa: BLE001 - an orphan is logged, never a failed write
-            logger.exception("profile photo object delete failed")
-
-    transaction.on_commit(delete)
-
-
-def _hold_member(user_id: int) -> bool:
-    """Take the member's row lock; False once the account is not active.
-
-    Every photo write takes it, so writes on one member's photo queue."""
+    Every photo write takes it, so writes on one member's photo queue. Whether
+    the member may still upload is decided after it is held (`_may_upload`)."""
 
     return (
         get_user_model()
         .objects.select_for_update(no_key=True)
-        .filter(pk=user_id, is_active=True)
-        .exists()
+        .filter(pk=user_id)
+        .first()
     )
+
+
+def _may_upload(member) -> bool:
+    return member is not None and member.is_active and not member.is_banned
 
 
 def prepare_upload(upload) -> bytes:
@@ -231,12 +295,7 @@ def prepare_upload(upload) -> bytes:
     if upload is None:
         raise PhotoRefused(PHOTO_MISSING, "Send the image under the 'photo' field.")
     if upload.size > MAX_UPLOAD_BYTES:
-        raise PhotoRefused(
-            PHOTO_TOO_LARGE,
-            "File exceeds 10 MiB.",
-            status=413,
-            max_bytes=MAX_UPLOAD_BYTES,
-        )
+        raise _too_large()
     ext = ext_for_content_type(upload.content_type or "")
     if ext is None:
         raise PhotoRefused(
@@ -260,33 +319,41 @@ def prepare_upload(upload) -> bytes:
 def replace_photo(user, upload) -> ProfilePhoto:
     """Store a new photo for ``user``, replacing any photo or removal.
 
-    The object is written first, outside any lock, under a fresh key; the row
-    then points at it under the member's lock. The previous object, if any, is
-    deleted after commit. If the row write fails, the new object is deleted.
+    The new object's cleanup job is recorded first, then the object is written
+    outside any lock under a fresh key, then the row points at it under the
+    member's lock. Whatever happens after the job is recorded, the object is
+    deleted unless a row names it. The previous object is released in the same
+    transaction as the replacement.
     """
 
     body = prepare_upload(upload)
     store = storage_for(PHOTO_STORE)
     try:
         bucket = store.require_bucket()
-        key = make_key(KEY_PREFIX, "jpg")
+    except Exception:
+        logger.exception("profile photo storage is not configured")
+        raise _storage_unavailable() from None
+    key = make_key(KEY_PREFIX, "jpg")
+    _schedule_object_check(
+        bucket, key, purpose="upload", run_at=timezone.now() + UPLOAD_CHECK_DELAY
+    )
+    try:
         store.put(key, body, "image/jpeg")
     except Exception:
         # The provider's message names buckets and keys: log it, never send it.
+        # The write may still have landed; the upload's job deletes it.
         logger.exception("profile photo upload failed")
-        raise PhotoRefused(
-            PHOTO_STORAGE_UNAVAILABLE, "Photo storage is temporarily unavailable.", status=503
-        ) from None
+        raise _storage_unavailable() from None
 
     try:
         with transaction.atomic():
-            if not _hold_member(user.pk):
+            if not _may_upload(_hold_member(user.pk)):
                 raise PhotoRefused(ACCOUNT_INACTIVE, "This account is not active.", status=403)
             photo = ProfilePhoto.objects.filter(user_id=user.pk).first()
             if photo is None:
                 photo = ProfilePhoto(user_id=user.pk)
             else:
-                _delete_object_after_commit(photo.bucket, photo.object_key)
+                release_object(photo.bucket, photo.object_key)
             photo.state = ProfilePhoto.State.ACTIVE
             photo.bucket = bucket
             photo.object_key = key
@@ -297,11 +364,11 @@ def replace_photo(user, upload) -> ProfilePhoto:
             photo.removed_by = None
             photo.removed_reason = ""
             photo.save()
-    except BaseException:
-        try:
-            store.delete(key)
-        except Exception:  # noqa: BLE001 - an orphan is logged, the refusal stands
-            logger.exception("profile photo orphan delete failed")
+    except PhotoRefused:
+        # Refused before anything committed, so no row names the object: try
+        # now. Any other failure may follow a commit whose acknowledgement was
+        # lost, so it is left to the job, which keeps an object a row names.
+        _delete_now(bucket, key)
         raise
     return photo
 
@@ -309,17 +376,15 @@ def replace_photo(user, upload) -> ProfilePhoto:
 def remove_own_photo(user) -> None:
     """The member removes their photo, or dismisses a removal notice.
 
-    The row goes and its object, if any, is deleted after commit. Removing
-    when there is no photo changes nothing.
+    The row goes, and `post_delete` releases its object. Removing when there
+    is no photo changes nothing. Never refused for the account's state.
     """
 
     with transaction.atomic():
         _hold_member(user.pk)
         photo = ProfilePhoto.objects.filter(user_id=user.pk).first()
-        if photo is None:
-            return
-        _delete_object_after_commit(photo.bucket, photo.object_key)
-        photo.delete()
+        if photo is not None:
+            photo.delete()
 
 
 # ---------------------------------------------------------------------------
@@ -355,7 +420,7 @@ def remove_by_staff(*, user, actor, version: str, reason: str) -> ProfilePhoto:
                 status=409,
             )
         before = {"state": photo.state, "version": photo.version}
-        _delete_object_after_commit(photo.bucket, photo.object_key)
+        release_object(photo.bucket, photo.object_key)
         photo.state = ProfilePhoto.State.REMOVED
         photo.bucket = ""
         photo.object_key = ""
@@ -380,14 +445,102 @@ def remove_by_staff(*, user, actor, version: str, reason: str) -> ProfilePhoto:
 
 
 def erase(user) -> None:
-    """Delete the photo row; the object goes after commit.
+    """Delete the photo row; `post_delete` releases its object.
 
     Called by `apps.accounts.deletion._erase`, inside its transaction and
     under its lock on the member's row.
     """
 
-    photo = ProfilePhoto.objects.filter(user_id=user.pk).first()
-    if photo is None:
+    ProfilePhoto.objects.filter(user_id=user.pk).delete()
+
+
+# ---------------------------------------------------------------------------
+# Stored objects: "delete object K once no row names it"
+# ---------------------------------------------------------------------------
+
+
+def _storage_unavailable() -> PhotoRefused:
+    return PhotoRefused(
+        PHOTO_STORAGE_UNAVAILABLE, "Photo storage is temporarily unavailable.", status=503
+    )
+
+
+def _already_gone(exc: Exception) -> bool:
+    response = getattr(exc, "response", None) or {}
+    return str(response.get("Error", {}).get("Code", "")) in {"NoSuchKey", "404"}
+
+
+def delete_if_unreferenced(bucket: str, key: str) -> str:
+    """Delete object ``key`` unless a photo row names it. Raises if storage fails.
+
+    Keys are random and never reused, so a key no row names now will never be
+    named again (an upload's own key is checked an hour after it starts).
+    """
+
+    if ProfilePhoto.objects.filter(object_key=key).exists():
+        return "referenced"
+    try:
+        store_for_bucket(bucket, default=PHOTO_STORE).delete(key)
+    except Exception as exc:
+        if not _already_gone(exc):
+            raise
+    return "deleted"
+
+
+def _delete_now(bucket: str, key: str) -> None:
+    try:
+        delete_if_unreferenced(bucket, key)
+    except Exception:  # noqa: BLE001 - the durable job retries it
+        logger.warning("profile photo object delete failed; its job retries", exc_info=True)
+
+
+def _schedule_object_check(bucket: str, key: str, *, purpose: str, run_at) -> None:
+    from apps.finance.models import ScheduledJob
+    from apps.finance.services import schedule_job
+
+    schedule_job(
+        kind=ScheduledJob.Kind.PROFILE_PHOTO_OBJECT_DELETE,
+        key=f"{OBJECT_JOB_PREFIX}:{purpose}:{key}",
+        run_at=run_at,
+        payload={"bucket": bucket, "key": key},
+        max_attempts=CLEANUP_MAX_ATTEMPTS,
+    )
+
+
+def release_object(bucket: str, key: str) -> None:
+    """A row stopped naming ``key``: delete the object once nothing does.
+
+    The job is recorded in the caller's transaction, so it exists exactly when
+    the decision does; after commit, one immediate attempt is the fast path.
+    """
+
+    if not key:
         return
-    _delete_object_after_commit(photo.bucket, photo.object_key)
-    photo.delete()
+    _schedule_object_check(bucket, key, purpose="release", run_at=timezone.now())
+    transaction.on_commit(lambda: _delete_now(bucket, key))
+
+
+@receiver(post_delete, sender=ProfilePhoto, dispatch_uid="accounts.photos.release_deleted")
+def _release_deleted_photo(sender, instance: ProfilePhoto, **kwargs) -> None:
+    """Every deleted row releases its object: the member's removal, account
+    deletion, a cascade from the user, or a bulk delete."""
+
+    release_object(instance.bucket, instance.object_key)
+
+
+def handle_object_delete_job(payload: dict) -> str:
+    """The ``profile_photo_object_delete`` job. Retried until storage confirms."""
+
+    from apps.finance.jobs import PermanentJobError, RetryableJobError
+
+    key = payload.get("key")
+    if not isinstance(key, str) or not key.startswith(f"{KEY_PREFIX}/"):
+        raise PermanentJobError("Not a profile photo key.", code="profile_photo_key_invalid")
+    try:
+        return delete_if_unreferenced(str(payload.get("bucket") or ""), key)
+    except Exception:
+        logger.warning("profile photo object delete failed", exc_info=True)
+        raise RetryableJobError(
+            "Photo storage did not confirm the delete.",
+            code="profile_photo_storage_unavailable",
+        ) from None

@@ -440,6 +440,55 @@ MAX_IMAGE_PIXELS = 40_000_000
 _EXT_BY_FORMAT = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp"}
 
 
+def _webp_canvas(head: bytes) -> tuple[int, int] | None:
+    """The canvas a WebP file declares in its RIFF header, or None if unreadable.
+
+    ``head`` is the first 30 bytes: the RIFF header, the first chunk's header
+    and the few bytes of it that carry the size. VP8X (extended, animation)
+    stores the canvas as 24-bit values minus one, VP8L (lossless) as 14-bit
+    values minus one after its signature, VP8 (lossy) as 14-bit values after
+    the frame tag and start code.
+    """
+
+    if len(head) < 30:
+        return None
+    chunk = head[12:16]
+    if chunk == b"VP8X":
+        return (
+            1 + int.from_bytes(head[24:27], "little"),
+            1 + int.from_bytes(head[27:30], "little"),
+        )
+    if chunk == b"VP8L":
+        if head[20] != 0x2F:
+            return None
+        bits = int.from_bytes(head[21:25], "little")
+        return 1 + (bits & 0x3FFF), 1 + ((bits >> 14) & 0x3FFF)
+    if chunk == b"VP8 ":
+        if head[23:26] != b"\x9d\x01\x2a":
+            return None
+        return (
+            int.from_bytes(head[26:28], "little") & 0x3FFF,
+            int.from_bytes(head[28:30], "little") & 0x3FFF,
+        )
+    return None
+
+
+def _declared_canvas_allowed(body: bytes) -> bool:
+    """False for a WebP whose header declares more than `MAX_IMAGE_PIXELS`, or
+    whose size cannot be read; True for anything that is not WebP.
+
+    Pillow's WebP decoder (the animation decoder in particular) allocates
+    canvas-sized buffers inside `Image.open`, before any check on the opened
+    image can run, so a WebP is measured from its first 30 bytes beforehand.
+    JPEG and PNG are opened lazily, and the check after opening covers them.
+    """
+
+    if body[:4] != b"RIFF" or body[8:12] != b"WEBP":
+        return True
+    canvas = _webp_canvas(body[:30])
+    return canvas is not None and canvas[0] * canvas[1] <= MAX_IMAGE_PIXELS
+
+
 def image_bytes_match_extension(body: bytes, expected_ext: str) -> bool:
     """Verify decoded image bytes match the declared upload type.
 
@@ -458,6 +507,8 @@ def image_bytes_match_extension(body: bytes, expected_ext: str) -> bool:
     the question this function answers is a yes/no about untrusted bytes. So
     anything at all from the decoder means no.
     """
+    if not _declared_canvas_allowed(body):
+        return False
     try:
         with Image.open(BytesIO(body)) as image:
             if image.width * image.height > MAX_IMAGE_PIXELS:
@@ -482,13 +533,16 @@ def square_jpeg_without_metadata(body: bytes, *, size: int, quality: int = 85) -
     (with the same pixel ceiling as `image_bytes_match_extension`), turned
     upright from its EXIF orientation, cropped to its centred square, resized
     and written afresh as a JPEG from pixels alone: no EXIF, XMP, ICC profile
-    or comment survives. Transparency is flattened onto white.
+    or comment survives. Transparency, an alpha channel or a PNG colour key
+    (``tRNS``), is flattened onto white before resizing.
 
     Accepts JPEG, PNG and WebP; an animated file keeps its first frame. Any
     decoder failure raises `ImageRejected`, never anything else, for the
     reason `image_bytes_match_extension` gives.
     """
 
+    if not _declared_canvas_allowed(body):
+        raise ImageRejected("image too large to decode")
     try:
         with Image.open(BytesIO(body)) as image:
             if image.format not in _EXT_BY_FORMAT:
@@ -496,9 +550,7 @@ def square_jpeg_without_metadata(body: bytes, *, size: int, quality: int = 85) -
             if image.width * image.height > MAX_IMAGE_PIXELS:
                 raise ImageRejected("image too large to decode")
             upright = ImageOps.exif_transpose(image)
-            if upright.mode in ("RGBA", "LA", "PA") or (
-                upright.mode == "P" and "transparency" in upright.info
-            ):
+            if upright.has_transparency_data:
                 rgba = upright.convert("RGBA")
                 flat = Image.new("RGB", rgba.size, (255, 255, 255))
                 flat.paste(rgba, mask=rgba.getchannel("A"))

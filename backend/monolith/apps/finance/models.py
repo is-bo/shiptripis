@@ -1399,6 +1399,8 @@ class ScheduledJob(models.Model):
         ADMIN_HELPER_CALL_PRUNE = "admin_helper_call_prune", "AI helper call log pruning"
         # --- L16 AI helper changes ---
         ADMIN_HELPER_ACTION_EXPIRY = "admin_helper_action_expiry", "AI helper prepared change expiry"
+        # --- P3A profile photos ---
+        PROFILE_PHOTO_OBJECT_DELETE = "profile_photo_object_delete", "Profile photo object delete"
 
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"

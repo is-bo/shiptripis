@@ -633,22 +633,25 @@ reversing plan decision 5.1b. Fix plan P3A (server) and P3B (app). The rule live
 - **Accepted:** JPEG, PNG or WebP, at most 10 MiB, its type read from the bytes. Anything else is
   refused with a stable code: `profile_photo_media_type_unsupported` (also a file that cannot be decoded
   or claims more than 40 million pixels), `profile_photo_too_large`, `profile_photo_missing`, and
-  `profile_photo_storage_unavailable` when storage cannot take it.
+  `profile_photo_storage_unavailable` when storage cannot take it. A banned or deactivated account
+  cannot add one (`account_inactive`), and can always remove its photo.
 - **The server never keeps the uploaded file.** It turns the picture upright from its orientation tag,
   crops the centred square, resizes it to 512 by 512 pixels and writes a new JPEG with no metadata: no
-  location, camera, time, profile or comment. The image is stored privately, under a random name that
-  never contains the member's id.
+  location, camera, time, profile or comment. The upload is read in memory only, never written to disk.
+  The image is stored privately, under a random name that never contains the member's id.
 - **No staff check before it shows** (Ismail, 2026-11-24). A valid photo is visible at once.
-- Replacing or removing a photo, or deleting the account, deletes the stored image.
+- Replacing or removing a photo, or deleting the account, deletes the stored image. The delete is a
+  durable background job that retries until storage confirms it, and never deletes an image a photo
+  still uses.
 
 ### 21.2 Who sees it
 
 - **Everyone who sees the person's first name**, people without an account included (Ismail,
   2026-11-24): trip, request and profile cards, the person page, the member's own profile preview, route
-  alerts that follow a person, Find Travelers, "Matches for you", and both parties of a proposal (the
-  delivery screen reads its counterparty from the proposal).
+  alerts that follow a person, Find Travelers, "Matches for you", both parties of a proposal (the
+  delivery screen reads its counterparty from the proposal), and the journey detail and list.
 - Each of those carries `photo`: `{"url", "version"}` or null (`sender_photo` and `traveler_photo` on a
-  proposal). The address is signed when the page is read and expires after 30 minutes
+  proposal, `traveler_photo` on a journey). The address is signed when the page is read and expires after 30 minutes
   (`PROFILE_PHOTO_URL_TTL_SECONDS`); nothing caches it. The app caches the image by `version`, which
   changes with every upload.
 - A photo of a banned or deactivated account is never shown. Chat is out of scope for now.

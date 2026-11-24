@@ -2,7 +2,8 @@
 
 Everyone who sees a person's first name sees their active photo, guests
 included: trip and request cards, people and the person page, the own profile
-preview, route alerts, Find Travelers, "Matches for you" and proposals. The
+preview, route alerts, Find Travelers, "Matches for you", proposals and the
+journey detail and list. The
 block is ``{"url", "version"}``: a fresh signed URL on a random key that never
 names the person. A photo Wassla removed is absent everywhere, except in the
 owner's own `GET /api/me`, which says so and gives the reason. The photo adds
@@ -110,6 +111,8 @@ class PhotoPrivacyWalkTests(DiscoveryWorld, TestCase):
         for party in (self.sender, self.traveler):
             yield f"proposal for {party.pk}", self.get(party, "matches-detail", match_id)
             yield f"proposals for {party.pk}", self.get(party, "matches-list")
+        yield "journey detail", self.get(self.other, "journeys-detail", self.journey.pk)
+        yield "own journeys", self.get(self.traveler, "journeys-list-create")
 
     def own_previews(self):
         for user in (self.sender, self.traveler):
@@ -161,6 +164,10 @@ class PhotoPrivacyWalkTests(DiscoveryWorld, TestCase):
             self.assertPhotoOf(proposal["traveler_photo"], self.traveler)
         own = self.get(self.traveler, "discovery-profile-me")
         self.assertPhotoOf(own["card"]["photo"], self.traveler)
+        journey = self.get(self.other, "journeys-detail", self.journey.pk)
+        self.assertPhotoOf(journey["traveler_photo"], self.traveler)
+        own_journeys = self.get(self.traveler, "journeys-list-create")
+        self.assertPhotoOf(own_journeys[0]["traveler_photo"], self.traveler)
 
     def test_a_photo_adds_nothing_private_to_a_public_payload(self):
         for viewer, label in ((self.other, "member"), (None, "guest")):

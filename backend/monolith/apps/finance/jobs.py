@@ -744,6 +744,14 @@ def handle_admin_helper_action_expiry(payload: dict) -> str:
         raise JobDeferred(str(early), code="prepared_action_not_due", delay=early.delay) from None
 
 
+def handle_profile_photo_object_delete(payload: dict) -> str:
+    """P3A: delete a stored profile photo once no photo row names it."""
+
+    from apps.accounts.photos import handle_object_delete_job as run
+
+    return run(payload)
+
+
 HANDLERS = {
     ScheduledJob.Kind.NOTIFICATION_DISPATCH: handle_notification_dispatch,
     ScheduledJob.Kind.DEPOSIT_EXPIRY_REFUND: handle_deposit_expiry_refund,
@@ -768,6 +776,7 @@ HANDLERS = {
     ScheduledJob.Kind.OFFER_EXPIRY: handle_offer_expiry,
     ScheduledJob.Kind.ADMIN_HELPER_CALL_PRUNE: handle_admin_helper_call_prune,
     ScheduledJob.Kind.ADMIN_HELPER_ACTION_EXPIRY: handle_admin_helper_action_expiry,
+    ScheduledJob.Kind.PROFILE_PHOTO_OBJECT_DELETE: handle_profile_photo_object_delete,
 }
 
 
