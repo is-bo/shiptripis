@@ -40,9 +40,9 @@ final _discoveryKeys = RegExp(
   r'|requestCard|requestOffered)',
 );
 
-/// A name that reads the same in French. Anything else equal to English is a
-/// string somebody forgot to translate.
-const _sameInFrench = {'countryFrance'};
+/// A name or a bare quantity that reads the same in French. Anything else equal
+/// to English is a string somebody forgot to translate.
+const _sameInFrench = {'countryFrance', 'tripSpaceKg'};
 
 void main() {
   final en = _arb('en');

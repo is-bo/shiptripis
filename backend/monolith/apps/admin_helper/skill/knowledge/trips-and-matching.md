@@ -193,7 +193,7 @@ Check in order:
 ## What does a traveler see for matching requests?
 - Home "Matches" tier shows, for the sender, up to 3 of their open requests each with up to 3 best trips; for the traveler, up to 3 of their next journeys each with up to 3 best requests. States: `results`, `none`, `no_active_items`.
 - Traveler matching scans open, untargeted-or-targeted-at-them requests whose ready window overlaps the journey and whose deadline is not before the first departure, with weight set, no active deal, sender active and not banned.
-- Exact capacity left is never published. Cards show a band: `under_5kg`, `5_to_10kg`, `10_to_20kg`, `20kg_plus` (smallest free weight on legs still ahead).
+- A trip card shows the space left as `free_weight_kg`: the smallest free weight on the legs still ahead, in whole kilos rounded down (0 means under 1 kg). The app reads "14 kg left"; 0 reads "Less than 1 kg left".
 <!-- src: discovery/matches.py, discovery/listings.py -->
 
 ## What is Home discovery and what switches control it?

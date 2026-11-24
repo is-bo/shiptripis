@@ -29,6 +29,10 @@ class TripsListingTests(DiscoveryWorld, TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         return response.data
 
+    def card_for(self, journey):
+        cards = {row["journey_id"]: row for row in self.trips()["results"]}
+        return cards[journey.pk]
+
     def ids(self, viewer=None, **query):
         return [row["journey_id"] for row in self.trips(viewer, **query)["results"]]
 
@@ -45,7 +49,7 @@ class TripsListingTests(DiscoveryWorld, TestCase):
             [stop["label"] for stop in card["stops"]], ["Paris", "Algiers", "Jijel"]
         )
         self.assertEqual([leg["mode"] for leg in card["legs"]], ["FLIGHT", "DRIVE"])
-        self.assertEqual(card["capacity_band"], "5_to_10kg")
+        self.assertEqual(card["free_weight_kg"], 8)
         self.assertEqual(card["departs_at"], self.flight_leg.depart_at.isoformat())
 
     def test_the_caller_never_sees_their_own_journey(self):
@@ -80,18 +84,32 @@ class TripsListingTests(DiscoveryWorld, TestCase):
 
     def test_a_journey_with_a_full_leg_ahead_is_not_listed(self):
         accept_offer(pending_offer=self.propose(), actor=self.traveler)
-        self.assertEqual(self.trips()["results"][0]["capacity_band"], "5_to_10kg")
+        self.assertEqual(self.trips()["results"][0]["free_weight_kg"], 6)
 
         # The accepted deal reserves 2 kg on the drive leg; shrink it to that.
         JourneyLeg.objects.filter(pk=self.drive_leg.pk).update(capacity_kg=Decimal("2.00"))
         self.assertEqual(self.ids(), [])
 
-    def test_the_capacity_band_is_the_smallest_free_weight_ahead(self):
-        own = self.new_traveler("l2a-band@example.com")
+    def test_the_free_weight_is_the_smallest_whole_kilo_ahead(self):
+        own = self.new_traveler("l2a-kilos@example.com")
         self.drive_journey(own, capacity="30.00")
         cards = {row["journey_id"]: row for row in self.trips()["results"]}
-        bands = sorted(card["capacity_band"] for card in cards.values())
-        self.assertEqual(bands, ["20kg_plus", "5_to_10kg"])
+        self.assertEqual(sorted(card["free_weight_kg"] for card in cards.values()), [8, 30])
+
+        # The smaller of the two legs ahead decides, and a fraction rounds down.
+        JourneyLeg.objects.filter(pk=self.flight_leg.pk).update(capacity_kg=Decimal("12.00"))
+        JourneyLeg.objects.filter(pk=self.drive_leg.pk).update(capacity_kg=Decimal("7.99"))
+        self.assertEqual(self.card_for(self.journey)["free_weight_kg"], 7)
+
+        # A leg that has already left no longer counts.
+        JourneyLeg.objects.filter(pk=self.flight_leg.pk).update(
+            capacity_kg=Decimal("3.00"), depart_at=self.now - timedelta(hours=1)
+        )
+        self.assertEqual(self.card_for(self.journey)["free_weight_kg"], 7)
+
+    def test_under_one_kilo_free_is_published_as_zero(self):
+        JourneyLeg.objects.filter(pk=self.drive_leg.pk).update(capacity_kg=Decimal("0.60"))
+        self.assertEqual(self.card_for(self.journey)["free_weight_kg"], 0)
 
     def test_soonest_departure_first_and_server_paging(self):
         later = self.drive_journey(self.new_traveler("l2a-later@example.com"), days=6)

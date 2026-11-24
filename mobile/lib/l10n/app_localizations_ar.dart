@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -4615,16 +4616,20 @@ class LAr extends L {
   String get tripSpace => 'المساحة المتاحة';
 
   @override
-  String get tripCapacityUnder5 => 'أقل من 5 كغ متاحة';
+  String tripSpaceLeft(String kg) {
+    return 'المساحة المتبقية: $kg كغ';
+  }
 
   @override
-  String get tripCapacity5to10 => 'من 5 إلى 10 كغ متاحة';
+  String get tripSpaceLeftUnderOne => 'المساحة المتبقية: أقل من 1 كغ';
 
   @override
-  String get tripCapacity10to20 => 'من 10 إلى 20 كغ متاحة';
+  String tripSpaceKg(String kg) {
+    return '$kg كغ';
+  }
 
   @override
-  String get tripCapacity20Plus => '20 كغ أو أكثر متاحة';
+  String get tripSpaceKgUnderOne => 'أقل من 1 كغ';
 
   @override
   String get tripPreviewSubtitle => 'أنت من يقترح أولًا. لا يُحجز شيء من هنا.';

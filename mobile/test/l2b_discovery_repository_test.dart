@@ -300,20 +300,26 @@ void main() {
   });
 
   group('decoding', () {
-    test('a closed vocabulary degrades to unknown instead of throwing', () {
-      final card = TripCard.fromJson({
-        ...tripCardFixture(1),
-        'capacity_band': 'a_new_band',
-        'legs': [
-          {'mode': 'teleport'},
-        ],
-      });
+    test(
+      'a closed vocabulary degrades to unknown and a bad weight to none',
+      () {
+        final card = TripCard.fromJson({
+          ...tripCardFixture(1),
+          'free_weight_kg': 'lots',
+          'legs': [
+            {'mode': 'teleport'},
+          ],
+        });
 
-      expect(card.capacityBand, CapacityBand.unknown);
-      expect(card.modes, isEmpty, reason: 'an unknown leg mode is dropped');
-      expect(DiscoveryTierState.parse('brand_new'), DiscoveryTierState.unknown);
-      expect(OwnProfileState.parse('weird'), OwnProfileState.unknown);
-    });
+        expect(card.freeWeightKg, isNull);
+        expect(card.modes, isEmpty, reason: 'an unknown leg mode is dropped');
+        expect(
+          DiscoveryTierState.parse('brand_new'),
+          DiscoveryTierState.unknown,
+        );
+        expect(OwnProfileState.parse('weird'), OwnProfileState.unknown);
+      },
+    );
 
     test('a person with no rating has none, never zero', () {
       final person = PublicPerson.fromJson(discoveryPersonFields(rating: null));

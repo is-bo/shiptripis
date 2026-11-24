@@ -198,9 +198,8 @@ factual. Use exactly these headings.
   each end is a foreign key to a catalogue locality. The profile's public id is a uuid
   (`PublicProfile.public_id`). `role` on People is the viewer's role (a sender sees travelers). Place
   filters accept any place id, including an airport, and resolve it to its matching locality. The trip
-  card's `capacity_band` (`under_5kg`, `5_to_10kg`, `10_to_20kg`, `20kg_plus`) is the smallest free
-  weight across the legs still ahead; the spec's "existing public band" did not exist, and a journey
-  with a full leg ahead is not listed. The fan-out uses a `ScheduledJob` kind
+  card's `free_weight_kg` (whole kilos, rounded down; it was a band until package P4) is the smallest
+  free weight across the legs still ahead, and a journey with a full leg ahead is not listed. The fan-out uses a `ScheduledJob` kind
   `discovery_route_alerts` (choices-only migration `finance/0027`). `trust_signals(user_ids, side=)`
   replaces `traveler_trust_signals` in `apps/matching/find_travelers.py` (same J4 result for travelers).
 - Left for a later package: L2B removes the mobile `searchPage`/`openFeedPage` callers of the two

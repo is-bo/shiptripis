@@ -408,7 +408,7 @@ Map<String, dynamic> tripCardFixture(
   String from = 'Paris',
   String to = 'Algiers',
   String departs = '2026-12-02T10:00:00Z',
-  String capacity = '5_to_10kg',
+  int freeWeightKg = 8,
   Map<String, dynamic>? price,
 }) => {
   'journey_id': id,
@@ -428,7 +428,7 @@ Map<String, dynamic> tripCardFixture(
   'departs_at': departs,
   'next_departure_at': departs,
   'arrives_at': '2026-12-02T13:00:00Z',
-  'capacity_band': capacity,
+  'free_weight_kg': freeWeightKg,
   'price': price,
 };
 

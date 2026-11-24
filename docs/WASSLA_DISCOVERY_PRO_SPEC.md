@@ -125,7 +125,7 @@ A tier with nothing to show renders its designed empty state. It is never filled
 A card is built by an explicit allowlist serializer. Anything not listed is forbidden.
 
 - **Trip card:** traveler first name; ID-verified flag; rating and completed-delivery count; ordered stops at **locality level** with transport
-  mode per leg; departure and arrival dates; remaining weight capacity as the existing public band;
+  mode per leg; departure and arrival dates; remaining weight capacity as whole kilos (the smallest free weight on the legs still ahead, rounded down; owner decision of 2026-11-24, replacing the earlier band);
   listed price (per kg and minimum) when set.
 - **Request card:** locality of pickup and delivery; item title, category and fragile flag; weight;
   ready window and deadline; offered reward; sender first name. Nothing the existing

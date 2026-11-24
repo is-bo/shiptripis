@@ -52,12 +52,18 @@ String countryName(L l, String code) => switch (code) {
   _ => code,
 };
 
-String capacityBandLabel(L l, CapacityBand band) => switch (band) {
-  CapacityBand.under5kg => l.tripCapacityUnder5,
-  CapacityBand.fiveToTenKg => l.tripCapacity5to10,
-  CapacityBand.tenToTwentyKg => l.tripCapacity10to20,
-  CapacityBand.twentyKgPlus => l.tripCapacity20Plus,
-  CapacityBand.unknown => '',
+/// "14 kg left" on a card; empty when the server sent no figure.
+String spaceLeftLabel(L l, int? kg) => switch (kg) {
+  null => '',
+  < 1 => l.tripSpaceLeftUnderOne,
+  _ => l.tripSpaceLeft('$kg'),
+};
+
+/// The value beside the "Space left" label of the preview sheet.
+String spaceLeftValue(L l, int? kg) => switch (kg) {
+  null => '',
+  < 1 => l.tripSpaceKgUnderOne,
+  _ => l.tripSpaceKg('$kg'),
 };
 
 /// "Samira, Paris to Algiers" — what a screen reader says for a card.
@@ -191,7 +197,7 @@ class TripListingCard extends StatelessWidget {
 
     final stops = placeStops(card.stops);
     final when = card.nextDepartureAt ?? card.departsAt;
-    final capacity = capacityBandLabel(l, card.capacityBand);
+    final capacity = spaceLeftLabel(l, card.freeWeightKg);
     final modes = card.modes;
     final price = card.price;
     final priceLine = price == null
