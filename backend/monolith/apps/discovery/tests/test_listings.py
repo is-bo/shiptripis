@@ -190,7 +190,7 @@ class RequestsListingTests(DiscoveryWorld, TestCase):
         card = self.requests()["results"][0]
 
         self.assertEqual(card["request_id"], self.request.pk)
-        self.assertEqual(card["sender"], {"display_name": "Samira"})
+        self.assertEqual(card["sender"], {"display_name": "Samira", "photo": None})
         self.assertEqual(card["pickup"]["label"], "Paris")
         self.assertEqual(card["delivery"]["label"], "Jijel")
         self.assertEqual(card["weight_kg"], "2.00")

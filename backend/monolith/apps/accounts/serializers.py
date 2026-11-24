@@ -8,6 +8,7 @@ from apps.core.languages import (
 )
 from apps.kyc.models import KycSubmission
 
+from . import photos
 from .models import User
 from .wilayas import WILAYA_CODES
 
@@ -154,11 +155,16 @@ class MeSerializer(serializers.ModelSerializer):
     something true: without it a user who submitted an hour ago is
     indistinguishable from one who never started, so the app would keep
     prompting them to verify and they'd re-upload to no effect.
+
+    `photo` is the member's own view of their profile photo
+    (`apps.accounts.photos.own_photo`): including "removed by Wassla" and the
+    reason, which nobody else is ever shown.
     """
 
     kyc_status = serializers.SerializerMethodField()
     kyc_rejection_reason = serializers.SerializerMethodField()
     preferred_language = serializers.SerializerMethodField()
+    photo = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -175,6 +181,7 @@ class MeSerializer(serializers.ModelSerializer):
             "is_kyc_verified",
             "kyc_status",
             "kyc_rejection_reason",
+            "photo",
             "date_joined",
         )
         read_only_fields = fields
@@ -207,6 +214,9 @@ class MeSerializer(serializers.ModelSerializer):
 
     def get_preferred_language(self, obj: User) -> str:
         return normalize_communication_language(obj.preferred_language)
+
+    def get_photo(self, obj: User) -> dict | None:
+        return photos.own_photo(obj)
 
 
 #: The answer to a name change once a name is set (`PATCH /api/me`, 400).

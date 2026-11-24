@@ -99,7 +99,8 @@ class AlertApiTests(DiscoveryWorld, TestCase):
         alert = self.create(subject_profile_id=str(profile.public_id))
 
         self.assertEqual(
-            alert["subject"], {"id": str(profile.public_id), "display_name": "Yacine"}
+            alert["subject"],
+            {"id": str(profile.public_id), "display_name": "Yacine", "photo": None},
         )
         PublicProfile.objects.filter(pk=profile.pk).update(is_discoverable=False)
         refused = self.create(

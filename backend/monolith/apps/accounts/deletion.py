@@ -15,7 +15,8 @@ that identifies the member is wiped from it: email (replaced by an address
 that cannot receive mail, so the real one is free to sign up again), name,
 phone, region, language, password, linked Google and Apple identities, sign-in
 and email codes, every session and push device, the inbox, notification
-settings, route alerts and the public profile. Pending emails to the member
+settings, route alerts, the public profile and the profile photo (its stored
+object is deleted once the deletion commits). Pending emails to the member
 are cancelled.
 
 **What stays.** The records other people and the law rely on: deliveries,
@@ -39,7 +40,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from . import apple_revoke, sessions
+from . import apple_revoke, photos, sessions
 from .models import EmailVerificationCode, OAuthIdentity, PasswordResetCode
 
 #: An open request: posted (or waiting for its deposit) and not yet closed.
@@ -249,6 +250,7 @@ def _erase(user) -> None:
         is_active=False, deactivated_at=timezone.now()
     )
     PublicProfile.objects.filter(user=user).delete()
+    photos.erase(user)
     OAuthIdentity.objects.filter(user=user).delete()
     PasswordResetCode.objects.filter(user=user).delete()
     EmailVerificationCode.objects.filter(user=user).delete()

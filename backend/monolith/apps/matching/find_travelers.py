@@ -45,6 +45,7 @@ from datetime import datetime, timedelta
 from django.db.models import Count
 from django.utils import timezone
 
+from apps.accounts.photos import public_photo
 from apps.deals.models import Deal
 from apps.locations.city_names import city_name
 from apps.locations.models import AirportLocalityMapping, Place
@@ -609,10 +610,8 @@ def candidate_payload(
         "traveler": {
             "id": traveler.pk,
             "display_name": first_name(traveler.full_name),
-            # No profile photo exists anywhere in the V1 data model. The field
-            # is present and null so a J5 card can design for both shapes and
-            # so landing photos later is not a contract change.
-            "avatar_url": None,
+            # Spec 21. Loaded with the journey (`_matching_journey_queryset`).
+            "photo": public_photo(traveler),
             # True of every returned candidate: `traveler_kyc_current` is a hard
             # gate. Published because it is the authoritative answer, not
             # because it distinguishes one row from another — see

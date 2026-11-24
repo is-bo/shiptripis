@@ -264,14 +264,17 @@ def own_alerts(user):
             "origin_locality__parent",
             "destination_locality__parent",
             "subject_user__public_profile",
+            "subject_user__profile_photo",
         )
         .order_by("-created_at", "-pk")
     )
 
 
 def alert_payload(alert: RouteAlert) -> dict:
-    """A member's own alert. The followed person appears by public card id only."""
+    """A member's own alert. The followed person appears by public card id,
+    first name and photo only."""
 
+    from apps.accounts.photos import public_photo
     from apps.matching.find_travelers import first_name
 
     from .places import locality_block
@@ -282,6 +285,7 @@ def alert_payload(alert: RouteAlert) -> dict:
         subject = {
             "id": str(profile.public_id) if profile is not None else None,
             "display_name": first_name(alert.subject_user.full_name),
+            "photo": public_photo(alert.subject_user),
         }
     return {
         "id": alert.pk,

@@ -40,6 +40,7 @@ from django.db.models import (
 )
 from django.db.models.functions import Coalesce
 
+from apps.accounts.photos import public_photo
 from apps.deals.models import Deal, DealLegAllocation
 from apps.matching.compatibility import ACTIVE_DEAL_STATUSES
 from apps.matching.discovery import _matching_journey_queryset, _place_matching_prefetches
@@ -229,8 +230,9 @@ def trip_card(
     """Spec 4.2 trip card. Every key is written here, and nothing else ships.
 
     Stops are cities (`locality_block`), never an airport name, a street or a
-    coordinate. The traveler appears by first name with the same trust summary
-    Find Travelers shows for them, so the two screens can never disagree.
+    coordinate. The traveler appears by first name and photo (spec 21) with the
+    same trust summary Find Travelers shows for them, so the two screens can
+    never disagree.
 
     `price` is the traveler's own price per kg and minimum (L4A), never a
     listed reward: a card is not about one parcel. It is null when the journey
@@ -259,6 +261,7 @@ def trip_card(
         "journey_id": journey.pk,
         "traveler": {
             "display_name": first_name(journey.traveler.full_name),
+            "photo": public_photo(journey.traveler),
             # A listed trip has passed the current-ID gate; see the queryset.
             "identity_verified": True,
             "rating": trust["rating"],
@@ -303,7 +306,10 @@ def listable_requests(*, at: datetime) -> QuerySet:
     )
     return (
         DeliveryRequest.objects.select_related(
-            "sender", "pickup_place__parent", "delivery_place__parent"
+            "sender",
+            "sender__profile_photo",
+            "pickup_place__parent",
+            "delivery_place__parent",
         )
         .prefetch_related(*_place_matching_prefetches("pickup_place", "delivery_place"))
         .filter(
@@ -329,7 +335,10 @@ def request_card(delivery_request: DeliveryRequest) -> dict:
     boost = int(delivery_request.boost_eur_cents or 0)
     return {
         "request_id": delivery_request.pk,
-        "sender": {"display_name": first_name(delivery_request.sender.full_name)},
+        "sender": {
+            "display_name": first_name(delivery_request.sender.full_name),
+            "photo": public_photo(delivery_request.sender),
+        },
         "pickup": locality_block(delivery_request.pickup_place),
         "delivery": locality_block(delivery_request.delivery_place),
         "title": delivery_request.title,

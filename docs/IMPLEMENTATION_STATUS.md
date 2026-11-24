@@ -1,5 +1,19 @@
 # Waçla V1 Implementation Status
 
+## Wassla: profile photos, server side (P3A, 2026-11-24)
+
+- Ismail's phone test of 2026-11-24 ("Is there no option for profile pictures? Add it."), fix plan
+  P3A, built to his answers of the same day: everyone sees a photo, guests included; no staff check
+  before it shows; staff remove one afterwards with a reason the member is shown; optional. Reverses
+  plan decision 5.1b (recorded there); spec section 21. Server only, the app is P3B. Nothing deployed.
+- One rule, `apps/accounts/photos.py`. `PUT` / `DELETE /api/me/photo`; the server keeps a 512 px
+  square JPEG with no metadata under a random key (`square_jpeg_without_metadata` in
+  `apps/core/storage.py`), and publishes `photo: {url, version} | null` with a 30-minute signed URL on
+  every card, the person page, alerts, Find Travelers and proposals (`avatar_url` removed). Console
+  "Remove photo" behind the new `moderate_profile_photos` capability, audited; races decided by the
+  photo's version. Additive migrations `accounts/0007`, `admin_panel/0010`. No switch and no "report
+  this photo". Detail: `docs/PHASE_P3A_PROFILE_PHOTOS.md`.
+
 ## Wassla: cards show cities, detail pages the catalogue place (P2, 2026-11-24)
 
 - Ismail's phone test of 2026-11-24 ("Alger Paris", not "Alger Centre Alger Paris Paris"); fix plan

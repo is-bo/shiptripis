@@ -95,6 +95,21 @@ TASKS: tuple[Task, ...] = (
         route="admin_console:users",
         covers=("user-ban",),
     ),
+    Task(
+        code="remove_profile_photo",
+        title="Remove a member's profile photo",
+        asks=("How do I remove an offensive profile photo?", "Can a member add a new photo after I removed one?"),
+        steps=(
+            "Open the person's page from People, then Users. Their photo is at the top, in place of their initials.",
+            "Press Remove photo, look at the photo shown, and write the reason. The member sees this reason.",
+            "Press Remove photo again. Nobody sees the photo any more and the stored image is deleted.",
+            "If the member changed their photo while the page was open, nothing is removed: look at the new one.",
+            "The member may add a different photo later. If they keep adding unsuitable ones, a Super Admin can ban the account.",
+        ),
+        permission=("moderate_profile_photos",),
+        route="admin_console:users",
+        covers=("user-photo-remove",),
+    ),
     # --- verification -------------------------------------------------------------
     Task(
         code="review_id_check",

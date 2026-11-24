@@ -40,7 +40,7 @@ import boto3
 from botocore.client import Config
 from botocore.exceptions import BotoCoreError, ClientError
 from django.conf import settings
-from PIL import Image
+from PIL import Image, ImageOps
 
 #: Credential profiles, by the environment prefix that supplies them. The name
 #: is reported to operators so a storage failure says *which key* was refused,
@@ -432,6 +432,14 @@ def ext_for_content_type(ct: str) -> str | None:
     return _EXT_BY_CT.get((ct or "").lower())
 
 
+#: The largest image, in pixels, the server will decode. Checked on the header
+#: before any pixel is read, so a small file that claims a huge canvas (a
+#: decompression bomb) is refused without being expanded.
+MAX_IMAGE_PIXELS = 40_000_000
+
+_EXT_BY_FORMAT = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp"}
+
+
 def image_bytes_match_extension(body: bytes, expected_ext: str) -> bool:
     """Verify decoded image bytes match the declared upload type.
 
@@ -450,13 +458,61 @@ def image_bytes_match_extension(body: bytes, expected_ext: str) -> bool:
     the question this function answers is a yes/no about untrusted bytes. So
     anything at all from the decoder means no.
     """
-    format_to_ext = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp"}
     try:
         with Image.open(BytesIO(body)) as image:
-            if image.width * image.height > 40_000_000:
+            if image.width * image.height > MAX_IMAGE_PIXELS:
                 return False
-            actual_ext = format_to_ext.get(image.format or "")
+            actual_ext = _EXT_BY_FORMAT.get(image.format or "")
             image.verify()
     except Exception:  # noqa: BLE001 - see the docstring; any failure is "no"
         return False
     return actual_ext == expected_ext
+
+
+class ImageRejected(ValueError):
+    """Bytes the server will not decode as an image."""
+
+
+def square_jpeg_without_metadata(body: bytes, *, size: int, quality: int = 85) -> bytes:
+    """Re-encode an uploaded image as a centred ``size`` square JPEG with no metadata.
+
+    Upload bytes may carry what a phone wrote into them: GPS coordinates, the
+    camera, the time, a thumbnail of the uncropped picture. None of it may
+    reach anyone else, so the original is never stored. The image is decoded
+    (with the same pixel ceiling as `image_bytes_match_extension`), turned
+    upright from its EXIF orientation, cropped to its centred square, resized
+    and written afresh as a JPEG from pixels alone: no EXIF, XMP, ICC profile
+    or comment survives. Transparency is flattened onto white.
+
+    Accepts JPEG, PNG and WebP; an animated file keeps its first frame. Any
+    decoder failure raises `ImageRejected`, never anything else, for the
+    reason `image_bytes_match_extension` gives.
+    """
+
+    try:
+        with Image.open(BytesIO(body)) as image:
+            if image.format not in _EXT_BY_FORMAT:
+                raise ImageRejected("unsupported image format")
+            if image.width * image.height > MAX_IMAGE_PIXELS:
+                raise ImageRejected("image too large to decode")
+            upright = ImageOps.exif_transpose(image)
+            if upright.mode in ("RGBA", "LA", "PA") or (
+                upright.mode == "P" and "transparency" in upright.info
+            ):
+                rgba = upright.convert("RGBA")
+                flat = Image.new("RGB", rgba.size, (255, 255, 255))
+                flat.paste(rgba, mask=rgba.getchannel("A"))
+            else:
+                flat = upright.convert("RGB")
+            square = ImageOps.fit(
+                flat, (size, size), method=Image.Resampling.LANCZOS, centering=(0.5, 0.5)
+            )
+            # A new image from the pixels only: nothing in `info` can follow.
+            clean = Image.frombytes("RGB", square.size, square.tobytes())
+            out = BytesIO()
+            clean.save(out, format="JPEG", quality=quality, optimize=True)
+    except ImageRejected:
+        raise
+    except Exception as exc:  # noqa: BLE001 - any decoder failure is a refusal
+        raise ImageRejected("not a decodable image") from exc
+    return out.getvalue()

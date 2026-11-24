@@ -75,7 +75,7 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 - In the app: Profile > "Delete account" (under Sign out). On the web: the page /delete-account (English, French, Arabic) gives the steps and the email route (contact@wassla.eu, subject "Delete my account").
 - It is refused while anything is open, each listed in the app: a delivery not closed, an open dispute, a payout or refund not yet reached them, an open parcel request, a published or under-way trip. The member finishes or cancels those first; deletion never cancels anything or moves money.
 - The password is asked when the account has one (`password_incorrect` if wrong). An account with Sign in with Apple confirms with Apple on an iPhone; the server revokes Apple's token first, and if Apple refuses or cannot be reached nothing is deleted. On Android such an account is told to delete from an iPhone or write to support.
-- Deleting is immediate and permanent: every session ends; name, email (replaced by an address that cannot receive mail, so the real email can sign up again), phone, region, language, password, Google and Apple links, sign-in and email codes, push devices, inbox, notification settings, route alerts and public profile are erased; pending emails are cancelled.
+- Deleting is immediate and permanent: every session ends; name, email (replaced by an address that cannot receive mail, so the real email can sign up again), phone, region, language, password, Google and Apple links, sign-in and email codes, push devices, inbox, notification settings, route alerts, public profile and profile photo (the stored image too) are erased; pending emails are cancelled.
 - Kept, pointing at the emptied account: deliveries, payments, refunds, payouts and payout details, ID check decisions, reviews, problem reports, disputes and chat history. Other members see "Deleted account" in chat.
 - Staff accounts cannot be deleted from the app (`staff_account`).
 <!-- src: backend/monolith/apps/accounts/deletion.py, apple_revoke.py, views.py (AccountDeletionView), mobile/lib/features/profile/delete_account_screen.dart, web/delete-account.html -->
@@ -182,6 +182,15 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 - States the owner sees: visible, not visible, hidden ("Your profile is not currently visible to others." with no reason), disabled.
 - Staff: person page, Discovery tab. State chips: Never set up, Turned off by the member, Visible, Hidden by staff. Button "Hide profile" or "Show profile again" (needs `manage_users`, reason up to 500 characters, audited, member not told the reason). Hiding someone with no profile makes any future profile start hidden. Showing again restores the member's own choice. The AI helper can prepare `profile.hide` / `profile.show`.
 <!-- src: backend/monolith/apps/discovery/profiles.py, models.py, core/marketplace_policy.py, admin_panel/console_discovery.py, mobile l10n publicProfile* -->
+
+## What are profile photos, and who sees them?
+- Optional, one per member (owner decision of 2026-11-24). The server side is built; the app screens to add, change and remove a photo come in a later app update (package P3B), so until then nobody can add one from the app.
+- Everyone who sees the person's first name sees the photo, people without an account included: trip and parcel cards, people cards and the person page, Find Travelers, route alerts and proposals. A photo of a banned or deleted account is never shown.
+- Nobody checks a photo first: it is visible as soon as it is saved. Staff remove an unsuitable one afterwards (see admin-console, "How do I remove a member's profile photo?").
+- The server never keeps the uploaded file. It turns the picture upright, crops the centred square, makes it 512 x 512 and saves a new JPEG with no hidden data (no location, camera or date). Accepted: JPEG, PNG or WebP up to 10 MB; anything else is refused.
+- Photos are shown through links that stop working after 30 minutes; the app fetches fresh ones. A removed or replaced photo's image is deleted.
+- There is no "report this photo" button. A member can block someone from the chat or write to support; staff can remove the photo.
+<!-- src: backend/monolith/apps/accounts/photos.py, apps/core/storage.py (square_jpeg_without_metadata) -->
 
 ## What trust signals do people see?
 - ID verified badge, rating, completed deliveries, member since (month and year) on the public card.

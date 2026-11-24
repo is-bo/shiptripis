@@ -211,7 +211,7 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 - In the app: Profile > "Delete account" (under Sign out). On the web: the page /delete-account (English, French, Arabic) gives the steps and the email route (contact@wassla.eu, subject "Delete my account").
 - It is refused while anything is open, each listed in the app: a delivery not closed, an open dispute, a payout or refund not yet reached them, an open parcel request, a published or under-way trip. The member finishes or cancels those first; deletion never cancels anything or moves money.
 - The password is asked when the account has one (`password_incorrect` if wrong). An account with Sign in with Apple confirms with Apple on an iPhone; the server revokes Apple's token first, and if Apple refuses or cannot be reached nothing is deleted. On Android such an account is told to delete from an iPhone or write to support.
-- Deleting is immediate and permanent: every session ends; name, email (replaced by an address that cannot receive mail, so the real email can sign up again), phone, region, language, password, Google and Apple links, sign-in and email codes, push devices, inbox, notification settings, route alerts and public profile are erased; pending emails are cancelled.
+- Deleting is immediate and permanent: every session ends; name, email (replaced by an address that cannot receive mail, so the real email can sign up again), phone, region, language, password, Google and Apple links, sign-in and email codes, push devices, inbox, notification settings, route alerts, public profile and profile photo (the stored image too) are erased; pending emails are cancelled.
 - Kept, pointing at the emptied account: deliveries, payments, refunds, payouts and payout details, ID check decisions, reviews, problem reports, disputes and chat history. Other members see "Deleted account" in chat.
 - Staff accounts cannot be deleted from the app (`staff_account`).
 
@@ -308,6 +308,14 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 - States the owner sees: visible, not visible, hidden ("Your profile is not currently visible to others." with no reason), disabled.
 - Staff: person page, Discovery tab. State chips: Never set up, Turned off by the member, Visible, Hidden by staff. Button "Hide profile" or "Show profile again" (needs `manage_users`, reason up to 500 characters, audited, member not told the reason). Hiding someone with no profile makes any future profile start hidden. Showing again restores the member's own choice. The AI helper can prepare `profile.hide` / `profile.show`.
 
+## What are profile photos, and who sees them?
+- Optional, one per member (owner decision of 2026-11-24). The server side is built; the app screens to add, change and remove a photo come in a later app update (package P3B), so until then nobody can add one from the app.
+- Everyone who sees the person's first name sees the photo, people without an account included: trip and parcel cards, people cards and the person page, Find Travelers, route alerts and proposals. A photo of a banned or deleted account is never shown.
+- Nobody checks a photo first: it is visible as soon as it is saved. Staff remove an unsuitable one afterwards (see admin-console, "How do I remove a member's profile photo?").
+- The server never keeps the uploaded file. It turns the picture upright, crops the centred square, makes it 512 x 512 and saves a new JPEG with no hidden data (no location, camera or date). Accepted: JPEG, PNG or WebP up to 10 MB; anything else is refused.
+- Photos are shown through links that stop working after 30 minutes; the app fetches fresh ones. A removed or replaced photo's image is deleted.
+- There is no "report this photo" button. A member can block someone from the chat or write to support; staff can remove the photo.
+
 ## What trust signals do people see?
 - ID verified badge, rating, completed deliveries, member since (month and year) on the public card.
 - Ratings details (blind reveal, moderation) are in another file.
@@ -366,7 +374,7 @@ Five roles: Super Admin, Ops, Support, Finance, Trust / Verification. (No others
 | Ops | Marketplace operations | view_dashboard, view_requests, manage_requests, view_journeys, manage_journeys, view_matches, manage_matches, view_deals, manage_deals, manage_lifecycle, view_operational_incidents, view_support_context, view_ratings, view_boosts, view_audit_log, record_no_show, view_disputes, manage_disputes, view_provider_health |
 | Support | Helping members | view_dashboard, view_users, view_requests, view_journeys, view_deals, view_support_context, manage_cancellations, view_ratings, view_audit_log, view_disputes |
 | Finance | Money | export_finance, view_finance_summary, view_payout_sensitive, view_payout_evidence, review_payout_profiles, manage_payout_holds, retry_payouts, view_dashboard, view_deals, view_payment_orders, view_payment_attempts, view_provider_events, issue_refunds, settle_manual_refunds, view_payouts, settle_payouts, reconcile_finance, view_scheduled_jobs, view_provider_health, view_audit_log, view_disputes, resolve_disputes |
-| Trust / Verification | Identity, tickets, evidence, reviews | attest_payout_identity, manage_payout_holds, view_dashboard, view_users, view_user_sensitive, view_kyc, review_kyc, view_flight_proofs, review_flight_proofs, view_evidence, review_safety, record_no_show, view_deals, view_audit_log, view_disputes, manage_disputes, moderate_ratings, moderate_chat |
+| Trust / Verification | Identity, tickets, evidence, reviews | attest_payout_identity, manage_payout_holds, view_dashboard, view_users, view_user_sensitive, view_kyc, review_kyc, view_flight_proofs, review_flight_proofs, view_evidence, review_safety, record_no_show, view_deals, view_audit_log, view_disputes, manage_disputes, moderate_ratings, moderate_chat, moderate_profile_photos |
 | Super Admin | Owner | Every capability, including the ones only Super Admin holds |
 
 Capabilities only Super Admin holds: manage_users (account ban, hide profile), view_settings, manage_settings (settings, sea crossings), manage_admins and manage_permissions (staff management), plus technical records.
@@ -473,8 +481,8 @@ The Overview also shows provider status (for those with view_provider_health), t
 
 ## What does the Person profile show?
 Tabs appear only if the role may read that data: Overview; Identity (view_users, view_kyc, review_payout_profiles or attest_payout_identity); Activity (requests, journeys, offers); Deliveries (view_deals); Payments (view_payment_orders or attempts); Payouts (view_payouts, view_finance_summary or review_payout_profiles); Trust & support (disputes, ratings, notifications); Discovery (view_users); Audit (view_audit_log). 20 rows per page.
-- Header shows account state (Active, Banned, Sign-in disabled), ID state (ID approved, ID waiting for review, ID rejected, ID expired, No ID submitted) and staff role if any.
-- Header actions: "Review payout method", "Review ID", "Ban account" or "Restore account" (Super only).
+- Header shows the member's profile photo in place of their initials when they have one, account state (Active, Banned, Sign-in disabled), ID state (ID approved, ID waiting for review, ID rejected, ID expired, No ID submitted) and staff role if any. The Overview's Account card has a "Profile photo" line: Shown to everyone, Not shown while the account is restricted, Removed by Wassla (when, by whom, the reason), or None.
+- Header actions: "Review payout method", "Review ID", "Remove photo" (moderate_profile_photos: Trust, Super), "Ban account" or "Restore account" (Super only).
 - No payout account number, ID image or chat content is on this page. Ratings appear only once the product's blind rule has revealed them.
 - Discovery tab: public profile state (Visible, Hidden by staff, Turned off by the member, Never set up). "Hide profile" / "Show profile again" needs manage_users (Super) and a reason (max 500); the member is not shown the reason. Hiding overrides their choice until lifted.
 
@@ -483,6 +491,12 @@ Tabs appear only if the role may read that data: Overview; Identity (view_users,
 - A ban sets banned and disables sign-in: the person is signed out at once and cannot sign in, even mid-delivery. It does not cancel deliveries, move money or release payouts.
 - Refusals: "You cannot ban or restore your own account."; "This is a staff account. Staff access is changed on Staff & access, not here."; "This account is already banned." / "This account is not banned."
 - Audit actions `account.banned`, `account.restored`.
+
+## How do I remove a member's profile photo?
+- Person profile header, "Remove photo" (`users/<id>/photo/remove/`), only while the member has a photo. Needs moderate_profile_photos (Trust, Super). The page shows the photo; a reason is required (max 500) and **the member is shown it**.
+- The photo disappears from every screen at once and the stored image is deleted. The member sees "removed by Wassla" with the reason and may add a different photo.
+- If the member changed their photo after the page was opened, nothing is removed ("The member changed their photo after this page was opened. Nothing was removed: look at the new photo.").
+- Audit action `profile_photo.removed`, on the person, with the photo's version before and after. The AI helper never removes a photo and never sees one.
 
 ## What are internal notes?
 - A card on the Deal, Dispute and Person pages. Staff only, never shown to members and never read by the AI helper.

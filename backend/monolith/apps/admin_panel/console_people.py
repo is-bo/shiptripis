@@ -324,7 +324,11 @@ def _header(request, person, caps, *, source):
             }
         )
     from .console_account import header_action
+    from .console_photos import photo_summary
 
+    photo = photo_summary(request, person)
+    if photo.get("remove_url"):
+        actions.append({"label": "Remove photo", "url": photo["remove_url"], "primary": False})
     if (access := header_action(request, person)) is not None:
         actions.append(access)
 
@@ -332,6 +336,7 @@ def _header(request, person, caps, *, source):
         "name": display_name(person),
         "has_name": bool((person.full_name or "").strip()),
         "initials": initials(person),
+        "photo": photo,
         "email": person.email,
         "phone": person.phone if caps("view_user_sensitive") else None,
         "id": person.pk,
