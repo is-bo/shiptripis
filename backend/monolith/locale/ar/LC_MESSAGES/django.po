@@ -11,7 +11,7 @@ msgid "Amount"
 msgstr "المبلغ"
 
 msgid "Your sender"
-msgstr "المرسِل"
+msgstr "المُرسِل"
 
 msgid "Hello,"
 msgstr "مرحبًا،"
@@ -101,7 +101,7 @@ msgid "Wassla flight ticket update"
 msgstr "تحديث تذكرة الطيران في Wassla"
 
 msgid "Payment needed for your Wassla delivery"
-msgstr "يلزم دفع مبلغ لمتابعة تسليم Wassla"
+msgstr "يلزم الدفع لمتابعة توصيلك عبر Wassla"
 
 msgid "Open Wassla to review the payment needed."
 msgstr "افتح Wassla لمراجعة الدفعة المطلوبة."
@@ -116,13 +116,13 @@ msgid "Your Wassla payment is processing"
 msgstr "دفعة Wassla قيد المعالجة"
 
 msgid "The provider is still confirming your payment."
-msgstr "لا يزال مزود الدفع يؤكد دفعتك."
+msgstr "لا يزال مزوّد الدفع يتحقّق من دفعتك."
 
 msgid "Your payment is being confirmed"
 msgstr "يجري تأكيد دفعتك"
 
 msgid "Your Wassla payment needs attention"
-msgstr "دفعة Wassla تتطلب انتباهك"
+msgstr "تتطلب دفعتك عبر Wassla اتخاذ إجراء"
 
 msgid "The payment failed; open Wassla to try again."
 msgstr "فشلت الدفعة؛ افتح Wassla للمحاولة مرة أخرى."
@@ -140,10 +140,10 @@ msgid "Your payment is confirmed"
 msgstr "تم تأكيد دفعتك"
 
 msgid "This payment does not create a Wassla account or give access to the delivery. Keep the reference private and contact Wassla support if you need help."
-msgstr "لا تنشئ هذه الدفعة حسابًا في Wassla ولا تمنح حق الوصول إلى التسليم. احتفظ بالمرجع سريًا واتصل بدعم Wassla إذا احتجت إلى المساعدة."
+msgstr "لا تنشئ هذه الدفعة حسابًا في Wassla ولا تمنح حق الاطلاع على تفاصيل التوصيل. احتفظ بالمرجع سريًا واتصل بدعم Wassla إذا احتجت إلى المساعدة."
 
 msgid "Wassla refund update"
-msgstr "تحديث استرداد Wassla"
+msgstr "تحديث استرداد المبلغ عبر Wassla"
 
 msgid "More information is needed for your Wassla case"
 msgstr "نحتاج إلى معلومات إضافية بشأن حالتك في Wassla"
@@ -218,7 +218,7 @@ msgid "A dispute has been opened"
 msgstr "تم فتح نزاع"
 
 msgid "The traveler's payout is frozen while the dispute is reviewed."
-msgstr "تم تعليق مستحقات المسافر أثناء مراجعة النزاع."
+msgstr "يُعلَّق تحويل أرباح المسافر أثناء مراجعة النزاع."
 
 msgid "Your dispute has been resolved"
 msgstr "تم حل نزاعك"
@@ -227,25 +227,25 @@ msgid "Open Wassla to review the dispute outcome."
 msgstr "افتح Wassla لمراجعة نتيجة النزاع."
 
 msgid "Payout update"
-msgstr "تحديث المستحقات"
+msgstr "تحديث تحويل الأرباح"
 
 msgid "Your Wassla payout status was updated."
-msgstr "تم تحديث حالة مستحقاتك في Wassla."
+msgstr "حُدّثت حالة تحويل أرباحك عبر Wassla."
 
 msgid "Payout"
-msgstr "المستحقات"
+msgstr "تحويل الأرباح"
 
 msgid "Your payout was updated"
-msgstr "تم تحديث مستحقاتك"
+msgstr "حُدّثت حالة تحويل أرباحك"
 
 msgid "Delivery cancelled"
-msgstr "تم إلغاء التسليم"
+msgstr "أُلغي التوصيل"
 
 msgid "This Wassla delivery has been cancelled."
-msgstr "تم إلغاء عملية التسليم هذه في Wassla."
+msgstr "أُلغي هذا التوصيل عبر Wassla."
 
 msgid "This delivery has been cancelled"
-msgstr "تم إلغاء عملية التسليم"
+msgstr "أُلغي هذا التوصيل"
 
 msgid "Leave a review"
 msgstr "أضف تقييمًا"
@@ -290,37 +290,37 @@ msgid "Open the Wassla app to see the next step."
 msgstr "افتح تطبيق Wassla لمعرفة الخطوة التالية."
 
 msgid "Your flight ticket is approved."
-msgstr "تمت الموافقة على تذكرة الطيران الخاصة بك."
+msgstr "اعتُمدت تذكرة طيرانك."
 
 msgid "Your flight ticket needs attention."
 msgstr "تتطلب تذكرة الطيران الخاصة بك اتخاذ إجراء."
 
 msgid "Your flight ticket is approved"
-msgstr "تمت الموافقة على تذكرة الطيران الخاصة بك"
+msgstr "اعتُمدت تذكرة طيرانك"
 
 msgid "Your flight ticket needs attention"
 msgstr "تتطلب تذكرة الطيران الخاصة بك اتخاذ إجراء"
 
 msgid "A payment is required before this delivery can continue."
-msgstr "يلزم الدفع قبل متابعة عملية التسليم هذه."
+msgstr "يلزم الدفع لمتابعة هذا التوصيل."
 
 msgid "Open Wassla to review the amount and available provider."
-msgstr "افتح Wassla لمراجعة المبلغ ومزودي الدفع المتاحين."
+msgstr "افتح Wassla لمراجعة المبلغ ومزوّدي الدفع المتاحين."
 
 msgid "Your payment has been received by the provider and is being confirmed."
-msgstr "استلم مزود الدفع دفعتك ويجري تأكيدها."
+msgstr "استلم مزوّد الدفع دفعتك ويجري تأكيدها."
 
 msgid "The payment provider could not complete this attempt."
-msgstr "تعذر على مزود الدفع إكمال هذه المحاولة."
+msgstr "تعذر على مزوّد الدفع إكمال هذه المحاولة."
 
 msgid "Open Wassla to retry or choose another available provider."
-msgstr "افتح Wassla لإعادة المحاولة أو اختيار مزود آخر متاح."
+msgstr "افتح Wassla لإعادة المحاولة أو اختيار مزوّد آخر متاح."
 
 msgid "Your payment is confirmed and the delivery can continue."
-msgstr "تم تأكيد دفعتك ويمكن متابعة التسليم."
+msgstr "تأكّد دفعك ويمكن الآن متابعة التوصيل."
 
 msgid "Your Wassla payment receipt"
-msgstr "إيصال دفعة Wassla"
+msgstr "إيصال الدفع عبر Wassla"
 
 msgid "Your guest payment was confirmed."
 msgstr "تم تأكيد دفعة الضيف."
@@ -341,7 +341,7 @@ msgid "Your refund is being processed"
 msgstr "يجري استرداد المبلغ"
 
 msgid "The time it takes to appear depends on the payment provider."
-msgstr "تعتمد مدة ظهور المبلغ على مزود الدفع."
+msgstr "تعتمد مدة ظهور المبلغ على مزوّد الدفع."
 
 msgid "The Wassla trust team requested additional evidence."
 msgstr "طلب فريق الثقة في Wassla أدلة إضافية."
@@ -359,22 +359,22 @@ msgid "The delivery code was entered successfully and the delivery is confirmed.
 msgstr "تم إدخال رمز التسليم بنجاح وتأكيد التسليم."
 
 msgid "The protection window for this delivery has closed with no open dispute. The traveler's payout is now eligible."
-msgstr "انتهت فترة الحماية لهذا التسليم دون نزاع مفتوح. أصبحت مستحقات المسافر مؤهلة الآن."
+msgstr "انتهت فترة الحماية لهذا التوصيل دون نزاع مفتوح. يمكن الآن تحويل أرباح المسافر."
 
 msgid "If something is wrong with this delivery, open a dispute before the protection window closes."
-msgstr "إذا كانت هناك مشكلة في هذا التسليم، فافتح نزاعًا قبل انتهاء فترة الحماية."
+msgstr "إذا واجهت مشكلة في هذا التوصيل، فافتح نزاعًا قبل انتهاء فترة الحماية."
 
 msgid "A dispute has been opened on this delivery. The traveler's payout is frozen while it is reviewed."
-msgstr "تم فتح نزاع بشأن هذا التسليم. تم تعليق مستحقات المسافر أثناء مراجعته."
+msgstr "فُتح نزاع بشأن هذا التوصيل. يُعلَّق تحويل أرباح المسافر أثناء مراجعته."
 
 msgid "This delivery has been cancelled."
-msgstr "تم إلغاء عملية التسليم هذه."
+msgstr "أُلغي هذا التوصيل."
 
 msgid "Any refund due is processed automatically and appears in your payment history."
 msgstr "تُعالج أي مبالغ مستحقة للاسترداد تلقائيًا وتظهر في سجل المدفوعات."
 
 msgid "You can now review the other party for this delivery."
-msgstr "يمكنك الآن تقييم الطرف الآخر في عملية التسليم هذه."
+msgstr "يمكنك الآن تقييم الطرف الآخر في هذا التوصيل."
 
 msgid "Reviews stay hidden until both sides have submitted or the review window closes."
 msgstr "تبقى التقييمات مخفية حتى يرسلها الطرفان أو تنتهي فترة التقييم."
@@ -386,7 +386,7 @@ msgid "Please review the reason and submit updated documents."
 msgstr "راجع السبب وأرسل مستندات محدّثة."
 
 msgid "The verified flight leg can be used for matching."
-msgstr "يمكن استخدام مقطع الرحلة الجوية المتحقق منه في المطابقة."
+msgstr "يمكن استخدام المرحلة الجوية المعتمدة في المطابقة."
 
 msgid "Wassla ferry ticket update"
 msgstr "تحديث تذكرة العبّارة في Wassla"
@@ -404,7 +404,7 @@ msgid "Your ferry ticket needs attention"
 msgstr "تتطلب تذكرة العبّارة الخاصة بك اتخاذ إجراء"
 
 msgid "The verified sea leg can be used for matching."
-msgstr "يمكن استخدام المقطع البحري المتحقق منه في المطابقة."
+msgstr "يمكن استخدام المرحلة البحرية المعتمدة في المطابقة."
 
 msgid "Please review the reason and submit updated proof."
 msgstr "راجع السبب وأرسل إثباتًا محدّثًا."
@@ -416,7 +416,7 @@ msgid "Payment reference"
 msgstr "مرجع الدفع"
 
 msgid "Your Wassla guest payment needs attention"
-msgstr "دفعة الضيف في Wassla تتطلب انتباهك"
+msgstr "يتطلب دفعك بصفتك ضيفًا في Wassla اتخاذ إجراء"
 
 msgid "Your Wassla guest payment"
 msgstr "دفعة الضيف في Wassla"
@@ -458,7 +458,7 @@ msgid "A Wassla administrator has resolved this dispute. Open Wassla to see the 
 msgstr "حلّ أحد مسؤولي Wassla هذا النزاع. افتح Wassla للاطلاع على النتيجة."
 
 msgid "Your Wassla payout was updated. Open Wassla to see its current status."
-msgstr "تم تحديث مستحقاتك في Wassla. افتح Wassla للاطلاع على حالتها الحالية."
+msgstr "حُدّثت حالة تحويل أرباحك. افتح Wassla للاطلاع عليها."
 
 msgid "Reason"
 msgstr "السبب"
@@ -467,7 +467,7 @@ msgid "Reason: %(reason)s"
 msgstr "السبب: %(reason)s"
 
 msgid "The provider could not complete this guest payment."
-msgstr "تعذر على مزود الدفع إكمال دفعة الضيف هذه."
+msgstr "تعذر على مزوّد الدفع إكمال دفعة الضيف هذه."
 
 msgid "the end of the window"
 msgstr "نهاية الفترة"
@@ -482,7 +482,7 @@ msgid "There was a security or account change."
 msgstr "حدث تغيير أمني أو تعديل في الحساب."
 
 msgid "Your Wassla payout status is now %(status)s."
-msgstr "حالة مستحقاتك في Wassla الآن: %(status)s."
+msgstr "حالة تحويل أرباحك عبر Wassla الآن: %(status)s."
 
 msgid "cancelled"
 msgstr "ملغاة"
@@ -491,13 +491,13 @@ msgid "Wassla will never ask you for a pickup or delivery code, and will never a
 msgstr "لن تطلب منك Wassla أبدًا رمز الاستلام أو التسليم، ولن تطلب منك مشاركته قبل أن يصبح الطرد بين يديك."
 
 msgid "You are receiving this because of a delivery or account action on Wassla. This is a transactional message, not marketing."
-msgstr "تلقيت هذه الرسالة بسبب إجراء متعلق بتسليم أو بحسابك على Wassla. هذه رسالة معاملات وليست رسالة تسويقية."
+msgstr "تلقيت هذه الرسالة بسبب إجراء متعلق بتوصيل أو بحسابك على Wassla. هذه رسالة بشأن إجراء على المنصّة وليست رسالة تسويقية."
 
 msgid "Questions? Reply to this email."
 msgstr "لديك سؤال؟ رد على هذه الرسالة."
 
 msgid "You are receiving this because of a delivery or account action on %(shiptrip)s. This is a transactional message, not marketing."
-msgstr "تلقيت هذه الرسالة بسبب إجراء متعلق بتسليم أو بحسابك على %(shiptrip)s. هذه رسالة معاملات وليست رسالة تسويقية."
+msgstr "تلقيت هذه الرسالة بسبب إجراء متعلق بتوصيل أو بحسابك على %(shiptrip)s. هذه رسالة بشأن إجراء على المنصّة وليست رسالة تسويقية."
 
 msgid "Questions? Reply to this email or write to %(support_link)s."
 msgstr "لديك سؤال؟ رد على هذه الرسالة أو راسل %(support_link)s."
@@ -509,25 +509,25 @@ msgid "EU ↔ Algeria"
 msgstr "الاتحاد الأوروبي ↔ الجزائر"
 
 msgid "Full sender refund"
-msgstr "رد كامل للمرسل"
+msgstr "ردّ المبلغ كاملًا إلى المُرسِل"
 
 msgid "Full traveler payout"
-msgstr "دفع كامل للمسافر"
+msgstr "تحويل أرباح المسافر كاملةً"
 
 msgid "Partial split"
 msgstr "تقسيم جزئي"
 
 msgid "cancelled by the sender"
-msgstr "ألغيت من قبل المرسل"
+msgstr "ألغى المُرسِل التوصيل"
 
 msgid "cancelled by the traveler"
-msgstr "ألغيت من قبل المسافر"
+msgstr "ألغى المسافر التوصيل"
 
 msgid "cancelled after the traveler changed the times"
 msgstr "أُلغيت بعد أن غيّر المسافر المواعيد"
 
 msgid "cancelled by an administrator"
-msgstr "ألغيت من قبل مسؤول"
+msgstr "ألغى أحد المسؤولين التوصيل"
 
 msgid "You have been invited to Wassla Operations"
 msgstr "تمت دعوتك للانضمام إلى عمليات Wassla"
@@ -566,7 +566,7 @@ msgid "Expires at"
 msgstr "تنتهي الصلاحية في"
 
 msgid "Use this code before it expires. Wassla will never ask you to share this code outside the verification screen."
-msgstr "استخدم هذا الرمز قبل انتهاء صلاحيته. لن تطلب منك Wassla أبداً مشاركة هذا الرمز خارج شاشة التحقق."
+msgstr "استخدم هذا الرمز قبل انتهاء صلاحيته. لن تطلب منك Wassla أبدًا مشاركة هذا الرمز خارج شاشة التحقق."
 
 msgid "Use this code before it expires. If you did not request this, ignore this email and keep your code private."
 msgstr "استخدم هذا الرمز قبل انتهاء صلاحيته. إذا لم تطلب ذلك، فتجاهل هذا البريد وحافظ على سرية الرمز."
@@ -581,7 +581,7 @@ msgid "The invitation could not be accepted. Check the link and password, or con
 msgstr "تعذر قبول الدعوة. تحقق من الرابط وكلمة المرور، أو تواصل مع المسؤول."
 
 msgid "Please try again later."
-msgstr "يرجى المحاولة مرة أخرى لاحقاً."
+msgstr "يُرجى إعادة المحاولة لاحقًا."
 
 msgid "Language"
 msgstr "اللغة"
@@ -590,7 +590,7 @@ msgid "Your invitation has been accepted."
 msgstr "تم قبول دعوتك."
 
 msgid "Open Wassla Operations"
-msgstr "فتح عمليات Wassla"
+msgstr "فتح لوحة عمليات Wassla"
 
 msgid "For an existing account, enter your current password. For a new account, choose a strong password."
 msgstr "لحساب موجود، أدخل كلمة مرورك الحالية. لحساب جديد، اختر كلمة مرور قوية."
@@ -602,10 +602,10 @@ msgid "Enable JavaScript to load your private invitation link."
 msgstr "فعّل JavaScript لفتح رابط دعوتك الخاص."
 
 msgid "We need a new upload of your identity document."
-msgstr "نحتاج إلى رفع جديد لوثيقة هويتك."
+msgstr "نحتاج إلى إعادة رفع وثيقة هويتك."
 
 msgid "We need a new upload of your identity document"
-msgstr "نحتاج إلى رفع جديد لوثيقة هويتك"
+msgstr "نحتاج إلى إعادة رفع وثيقة هويتك"
 
 msgid "Please read the reason below and upload your document again."
 msgstr "يرجى قراءة السبب أدناه وإعادة رفع وثيقتك."
@@ -614,10 +614,10 @@ msgid "Open the Wassla app to upload it again."
 msgstr "افتح تطبيق Wassla لإعادة رفعها."
 
 msgid "We need a new upload of your ferry ticket"
-msgstr "نحتاج إلى رفع جديد لتذكرة العبّارة الخاصة بك"
+msgstr "نحتاج إلى إعادة رفع تذكرة العبّارة"
 
 msgid "We need a new upload of your flight ticket"
-msgstr "نحتاج إلى رفع جديد لتذكرة الطيران الخاصة بك"
+msgstr "نحتاج إلى إعادة رفع تذكرة الطيران"
 
 msgid "Please read the reason below and upload the ticket again."
 msgstr "يرجى قراءة السبب أدناه وإعادة رفع التذكرة."

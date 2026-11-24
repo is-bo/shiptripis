@@ -1066,6 +1066,14 @@ Phase doc: `docs/PHASE_L19_ACCEPTANCE_FINDINGS.md`.
   `test_l19_payout_mode.py` 2). No existing expectation changed.
 - Known limits: none.
 
+### Arabic MSA. Modern Standard Arabic copy (2026-11-24)
+
+- Phase record and screenshots: [Arabic copy in Modern Standard Arabic](PHASE_ARABIC_MSA.md).
+- Contract: Arabic wording follows Modern Standard Arabic across the app, backend and public site.
+  Western digits, Algerian date formatting and code and tracking-number isolation still apply.
+- Test change: updated the Arabic payout methods screen labels. The phase record lists the test
+  and the two date-test files whose policy comments were updated.
+
 ## Questions for Ismail
 
 | Asked | Question | Answer |

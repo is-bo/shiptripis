@@ -160,8 +160,8 @@ merges each part into the package branch, runs every check, and opens one pull r
 - Never skip, delete or weaken a test. A test that encoded a rule this plan changes is rewritten to the
   new rule, and your report names it and why.
 - Remove what you replace. No commented-out code, no parameter for later.
-- Every user-facing string in English, French and Arabic. Arabic is Algerian Arabic: Western digits
-  (0-9), Maghrebi month names. Never the word "partner".
+- Every user-facing string in English, French and Arabic. Arabic uses Modern Standard Arabic with Western
+  digits (0-9) and Algerian month names. Never the word "partner".
 - Local services: PostgreSQL 16 on `localhost:5432` (user `shiptrip`, password `shiptrip-ci-pw`,
   superuser, so test databases are created for you) and Redis on `localhost:6379`. Load the
   environment with `source /tmp/claude-0/django-env.sh <your_db_name> <your_redis_db_number>`; it also
@@ -454,7 +454,7 @@ entitlements with Python's `plistlib` in a test or script).
 ## 7. Part E: copy, web, docs and Ismail's setup list (Sonnet, medium)
 
 1. Read every new or changed string of parts A to D in EN, FR and AR; fix translation quality,
-   tone (the app's existing voice), Algerian Arabic usage, and length at 320 px.
+   tone (the app's existing voice), Modern Standard Arabic usage, and length at 320 px.
 2. `web/support.html` (and any other web page with a placeholder mailbox): one address,
    contact@wassla.eu. `tools/check_static_web.py` passes.
 3. Helper notes: update `backend/monolith/apps/admin_helper/skill/knowledge/` where email transport,

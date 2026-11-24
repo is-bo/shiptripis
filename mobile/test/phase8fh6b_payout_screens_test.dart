@@ -645,14 +645,14 @@ void main() {
         );
 
         // Arabic strings present in top part
-        expect(find.text('وسائل التحويل'), findsOneWidget);
-        expect(find.text('التحويلات باليورو (Stripe)'), findsOneWidget);
+        expect(find.text('وسائل تحويل الأرباح'), findsOneWidget);
+        expect(find.text('تحويل الأرباح باليورو (Stripe)'), findsOneWidget);
 
         // Scroll to reveal DZD card
         await tester.drag(find.byType(Scrollable).first, const Offset(0, -400));
         await tester.pumpAndSettle();
 
-        expect(find.textContaining('التحويلات بالدينار'), findsOneWidget);
+        expect(find.textContaining('تحويل الأرباح بالدينار'), findsOneWidget);
         expect(find.textContaining('بريدي موب'), findsWidgets);
         expect(find.text('•••• 1234'), findsOneWidget);
         expect(find.text('•••• 5678'), findsOneWidget);

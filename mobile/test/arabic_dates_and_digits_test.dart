@@ -1,4 +1,4 @@
-// Wassla's Arabic is Algerian Arabic: the Maghrebi month names (جانفي, فيفري
+// Wassla's Arabic dates use Algerian month names (جانفي, فيفري
 // ... أوت) and Western digits, on every surface that prints a date or a number,
 // Flutter's own pickers included.
 

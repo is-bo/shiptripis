@@ -1,5 +1,14 @@
 # Waçla V1 Implementation Status
 
+## Arabic copy in Modern Standard Arabic (2026-11-24)
+
+Updated the mobile app, iOS permission prompts, transactional email, push
+notifications, payment pages and public site to use Modern Standard Arabic.
+Guest and account prompts now use الفصحى, with shared terminology for offers,
+handover codes, posting deposits and payout. The existing Arabic date, digit and
+code display conventions apply. See [the Arabic copy phase record](PHASE_ARABIC_MSA.md)
+for the vocabulary, test changes and 360 px screenshots.
+
 ## Wassla: the Android build log says whether Google sign-in is offered (2026-11-24)
 
 - Ismail's phone test of 2026-11-24: no Google button. A `profile` build is never given the Google
