@@ -129,7 +129,7 @@ that already has a home.
 - A new switch is read from the marketplace policy on the server at the moment of the action
   (`apps/core/marketplace_policy.py`); switched off, the capability answers a stable code.
 - Every public payload is built from an explicit allowlist and has a privacy test.
-- Every user-facing string exists in English, French and Arabic.
+- Every user-facing string exists in English, French and Arabic (Modern Standard Arabic).
 - Critical delayed jobs survive Redis and process restarts.
 - Guardrails the code cites as `CLAUDE.md G1` to `G6b` (from an earlier version of this file):
   **G1** WebSocket fan-out by pub/sub with delivery receipts and presence keys before the push

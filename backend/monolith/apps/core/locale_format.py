@@ -1,6 +1,6 @@
 """Dates for text the server writes itself, such as an email fact row.
 
-Wassla's Arabic is Algerian Arabic: Western digits (0-9) and the Maghrebi
+Wassla's Modern Standard Arabic uses Western digits (0-9) and the Algerian
 month names (جانفي, فيفري ... أوت ...), never the Mashriq ones (يناير, أغسطس)
 or Arabic-Indic digits (٠-٩). The mobile app follows the same rule through
 `ar_DZ` in `mobile/lib/core/format/locale_formats.dart`.

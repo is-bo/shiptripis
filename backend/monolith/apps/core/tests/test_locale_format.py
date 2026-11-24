@@ -1,4 +1,4 @@
-"""Server-written dates follow Wassla's Algerian Arabic: Maghrebi months, Western digits."""
+"""Server-written Arabic dates use Algerian month names and Western digits."""
 
 from __future__ import annotations
 

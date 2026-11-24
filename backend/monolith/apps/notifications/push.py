@@ -78,7 +78,7 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
         {
             "en": ("Request cancelled", "Your delivery request was cancelled."),
             "fr": ("Demande annulée", "Votre demande de livraison a été annulée."),
-            "ar": ("تم إلغاء الطلب", "تم إلغاء طلب التوصيل الخاص بك."),
+            "ar": ("تم إلغاء الطلب", "أُلغي طلب التوصيل."),
         },
     ),
     "offer.created": (
@@ -88,7 +88,7 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
         {
             "en": ("New offer", "An offer needs your attention."),
             "fr": ("Nouvelle offre", "Une offre nécessite votre attention."),
-            "ar": ("عرض جديد", "هناك عرض يتطلب انتباهك."),
+            "ar": ("عرض جديد", "لديك عرض جديد يحتاج إلى ردّك."),
         },
     ),
     "offer.updated": (
@@ -116,7 +116,7 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
                 "Une proposition attend votre réponse",
                 "Répondez vite : elle expire bientôt.",
             ),
-            "ar": ("عرض بانتظار ردك", "أجب قريبًا: ستنتهي صلاحيته بعد قليل."),
+            "ar": ("عرض بانتظار ردك", "أجب قريبًا قبل انتهاء صلاحية العرض."),
         },
     ),
     "offer.accepted": (
@@ -126,7 +126,7 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
         {
             "en": ("Offer accepted", "Open Wassla to review the delivery."),
             "fr": ("Offre acceptée", "Ouvrez Wassla pour consulter la livraison."),
-            "ar": ("تم قبول العرض", "افتح Wassla لمراجعة عملية التسليم."),
+            "ar": ("تم قبول العرض", "افتح Wassla لمراجعة التوصيل."),
         },
     ),
     "payment.captured": (
@@ -136,7 +136,7 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
         {
             "en": ("Payment received", "Your delivery payment was confirmed."),
             "fr": ("Paiement reçu", "Le paiement de votre livraison a été confirmé."),
-            "ar": ("تم استلام الدفعة", "تم تأكيد دفع عملية التسليم."),
+            "ar": ("تم استلام الدفعة", "تم تأكيد الدفع لهذا التوصيل."),
         },
     ),
     "payment.refunded": (
@@ -320,7 +320,7 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
                 "Un expéditeur a répondu",
                 "Ouvrez Wassla pour voir vos nouveaux horaires.",
             ),
-            "ar": ("ردّ أحد المرسلين", "افتح Wassla لرؤية مواعيدك الجديدة."),
+            "ar": ("ردّ أحد المُرسِلين", "افتح Wassla لرؤية مواعيدك الجديدة."),
         },
     ),
     "journey.schedule_change_applied": (
@@ -394,7 +394,7 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
             ),
             "ar": (
                 "تم تأكيد الوصول المبكر",
-                "أكد المُرسل وصولك. لم يتم التسليم بعد.",
+                "أكّد المُرسِل وصولك. لم يتم التسليم بعد.",
             ),
         },
     ),
@@ -411,7 +411,7 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
                 "Arrivée anticipée non confirmée",
                 "Ouvrez Wassla pour consulter la livraison.",
             ),
-            "ar": ("لم يتم تأكيد الوصول المبكر", "افتح Wassla لمراجعة عملية التسليم."),
+            "ar": ("لم يتم تأكيد الوصول المبكر", "افتح Wassla لمراجعة التوصيل."),
         },
     ),
     "dispute.opened": (
@@ -424,7 +424,7 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
                 "Litige ouvert",
                 "Le versement est suspendu pendant l'examen du litige.",
             ),
-            "ar": ("تم فتح نزاع", "تم إيقاف التحويل مؤقتًا أثناء مراجعة النزاع."),
+            "ar": ("تم فتح نزاع", "يُعلَّق تحويل الأرباح أثناء مراجعة النزاع."),
         },
     ),
     "dispute.resolved": (
@@ -447,7 +447,7 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
                 "Mise à jour du versement",
                 "Le statut de votre versement a été mis à jour.",
             ),
-            "ar": ("تحديث التحويل", "تم تحديث حالة التحويل الخاص بك."),
+            "ar": ("تحديث تحويل الأرباح", "حُدّثت حالة تحويل أرباحك."),
         },
     ),
     # L2A. Non-essential marketplace signals: a member who turned marketplace
@@ -462,7 +462,7 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
                 "Nouveau sur votre trajet",
                 "Quelqu'un vient de publier sur un trajet que vous suivez.",
             ),
-            "ar": ("جديد على مسارك", "نشر أحدهم للتو على مسار تتابعه."),
+            "ar": ("جديد على مسارك", "نُشر محتوى جديد على مسار تتابعه."),
         },
     ),
     "discovery.traveler_interested": (
@@ -493,7 +493,7 @@ _PUSH_SPECS: dict[str, tuple[str, str, str, dict[str, tuple[str, str]]]] = {
                 "Un colis correspond à votre trajet",
                 "Ouvrez Wassla pour le voir. L'expéditeur propose en premier.",
             ),
-            "ar": ("طرد يناسب رحلتك", "افتح Wassla لرؤيته. المرسل هو من يقترح أولًا."),
+            "ar": ("طرد يناسب رحلتك", "افتح Wassla لرؤيته. يقدّم المُرسِل العرض أولًا."),
         },
     ),
     "chat.message.new": (
@@ -524,19 +524,19 @@ _STATUS_PUSH_COPY: dict[
     ("kyc.status_changed", "approved"): {
         "en": ("Your KYC was approved", "You can now publish journeys."),
         "fr": ("Votre KYC a été approuvé", "Vous pouvez maintenant publier des trajets."),
-        "ar": ("تمت الموافقة على التحقق", "يمكنك الآن نشر الرحلات."),
+        "ar": ("تم التحقق من هويتك", "يمكنك الآن نشر الرحلات."),
     },
     ("kyc.status_changed", "rejected"): {
         "en": ("KYC needs attention", "Open Wassla to review the decision and next step."),
         "fr": ("Votre KYC nécessite votre attention", "Ouvrez Wassla pour consulter la décision et la prochaine étape."),
-        "ar": ("يتطلب التحقق انتباهك", "افتح Wassla لمراجعة القرار والخطوة التالية."),
+        "ar": ("يلزم إجراء للتحقق من هويتك", "افتح Wassla لمراجعة القرار والخطوة التالية."),
     },
     # L6A: staff asked for a new upload rather than rejecting (spec 13). The
     # stored status is still rejected; the payload's `outcome` says which.
     ("kyc.status_changed", "resubmission_requested"): {
         "en": ("We need a new upload", "Open Wassla to see why and upload your ID again."),
         "fr": ("Nous avons besoin d'un nouvel envoi", "Ouvrez Wassla pour voir pourquoi et renvoyer votre pièce d'identité."),
-        "ar": ("نحتاج إلى رفع جديد", "افتح Wassla لمعرفة السبب وإعادة رفع وثيقة هويتك."),
+        "ar": ("أعد رفع وثيقة هويتك", "افتح Wassla لمعرفة السبب وإعادة رفع وثيقة هويتك."),
     },
 }
 
@@ -555,7 +555,7 @@ _TICKET_PUSH_COPY: dict[tuple[str, str], dict[str, tuple[str, str]]] = {
     ("FLIGHT", "rejected"): {
         "en": ("Flight ticket needs attention", "Open Wassla to review the decision."),
         "fr": ("Votre billet d'avion nécessite votre attention", "Ouvrez Wassla pour consulter la décision."),
-        "ar": ("تذكرة الطيران تتطلب انتباهك", "افتح Wassla لمراجعة القرار."),
+        "ar": ("تذكرة الطيران تتطلب إجراءً", "افتح Wassla لمراجعة القرار."),
     },
     ("SEA", "approved"): {
         "en": ("Ferry ticket approved", "Your journey verification was updated."),
@@ -565,7 +565,7 @@ _TICKET_PUSH_COPY: dict[tuple[str, str], dict[str, tuple[str, str]]] = {
     ("SEA", "rejected"): {
         "en": ("Ferry ticket needs attention", "Open Wassla to review the decision."),
         "fr": ("Votre billet de ferry nécessite votre attention", "Ouvrez Wassla pour consulter la décision."),
-        "ar": ("تذكرة العبّارة تتطلب انتباهك", "افتح Wassla لمراجعة القرار."),
+        "ar": ("تذكرة العبّارة تتطلب إجراءً", "افتح Wassla لمراجعة القرار."),
     },
     ("FLIGHT", "resubmission_requested"): {
         "en": ("We need a new flight ticket", "Open Wassla to see why and upload it again."),
