@@ -101,9 +101,12 @@ To turn email off in an emergency: `EMAIL_ENABLED=false`. Rows stay safe in the 
      - GitHub: repository variable `GOOGLE_SERVER_CLIENT_ID` (Settings, Secrets and variables, Actions,
        Variables). The Android release workflow reads it.
    - **Android**: package name `eu.wassla.app` and a SHA-1. One client per signing key: the
-     **debug** key, the **release** key, and the **Play App Signing** key (Play Console, Test and
-     release, App integrity). Commands to read each SHA-1: `docs/ANDROID_BUILD_RUNBOOK.md`. Nothing from
-     this client goes into the app or the server; Google just needs to know the keys.
+     **release** key, then the **Play App Signing** key (Play Console, Test and release, App
+     integrity). Create it in the same Google Cloud project as Firebase: `waa-eefab`, project number
+     `513341711450`. Commands to read each SHA-1: `docs/ANDROID_BUILD_RUNBOOK.md`. Nothing from this
+     client goes into the app or the server; Google just needs to know the keys. Phone builds from
+     GitHub that are `profile` or `debug` are signed with a key that changes on every run, so they
+     never offer Google: to test it, build `release` (steps below).
    - **iOS**: bundle id `eu.wassla.app`. Its client id (`<prefix>.apps.googleusercontent.com`)
      goes in two places that must match:
      - app build: `--dart-define=GOOGLE_IOS_CLIENT_ID=<prefix>.apps.googleusercontent.com` (the iOS
@@ -116,7 +119,23 @@ To turn email off in an emergency: `EMAIL_ENABLED=false`. Rows stay safe in the 
    On Android the token names the Web id. On iPhone, depending on the version of Google's library, the
    token can name the iOS id instead, so list both, separated by a comma. The Android client id is not
    needed there.
-5. Until `GOOGLE_OAUTH_CLIENT_IDS` is set the server answers `google_sign_in_unavailable`, and until the
+5. Steps to test Google sign-in on your Android phone, in order:
+   1. Make the permanent release key on your own computer (so no password passes through a chat):
+      `keytool -genkeypair -v -keystore wassla-release.jks -alias wassla -keyalg RSA -keysize 4096 -validity 10000`.
+      Keep the `.jks` file and its password in a password manager plus one offline copy, never in the
+      repository, a chat or an email.
+   2. GitHub, Settings, Secrets and variables, Actions, **Secrets**: add `ANDROID_KEYSTORE_BASE64`
+      (PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("wassla-release.jks")) | Set-Clipboard`,
+      then paste), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`wassla`) and `ANDROID_KEY_PASSWORD`
+      (the same password as the keystore's).
+   3. Read the SHA-1: `keytool -list -v -keystore wassla-release.jks -alias wassla`.
+   4. Create the **Android** OAuth client described above, with that SHA-1.
+   5. OAuth consent screen: add your own Google account as a test user, or publish to Production.
+   6. GitHub, Actions, Build Android, Run workflow: `build_type` **release**, `apk_architecture` arm64,
+      `api_base_url` `https://wassla.eu`. Uninstall the old profile build first (different key).
+      Later release builds install over it. A new client can take a few minutes; a configuration error
+      at the account picker means the SHA-1 or the project is wrong.
+6. Until `GOOGLE_OAUTH_CLIENT_IDS` is set the server answers `google_sign_in_unavailable`, and until the
    app is built with `GOOGLE_SERVER_CLIENT_ID` the button is hidden.
 
 ## 5. Apple Developer: Sign in with Apple (iPhone only)
