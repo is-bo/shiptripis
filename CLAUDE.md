@@ -53,6 +53,25 @@ record what was built. They never replace a specification.
 - Wording with Ismail: the requirements document of 11 November 2026 is "the cahier des charges".
   Do not use the word "partner".
 
+## Models: who plans, who builds, who reviews
+
+Ismail's rule since 2026-11-24, for every code change, however small:
+
+- **Plan first.** A Claude Opus 5.5 agent at extra-high effort investigates and writes the
+  implementation plan. The plan splits the work into packages and gives each package a builder model
+  (Claude Sonnet or Claude Opus) and an effort (medium, high or extra high, never low), chosen by
+  difficulty and by the "strongest model" rule above. It aims for the best result in the most
+  efficient way.
+- **The lead session coordinates and does not code.** It hands each package to its builder agent,
+  reviews the result, runs the gate and merges. Product, money, code-rule and matching questions the
+  plan raises go to Ismail before building (plan 1.7).
+- **Astra 6.2 (OpenAI) thinks, it does not write product code.** It is the strongest reasoner after
+  Claude Fable, but its code is poor. Use it to save usage on read-only thinking work: the second
+  independent gate pass (races, authorization, idempotency, money, privacy), root-cause
+  investigations and plan critiques. Ismail runs it himself: the lead writes a self-contained prompt
+  for him to paste. Astra's report is a claim, not proof. The lead verifies every finding against the
+  code, and a real finding goes back to the package's builder to fix.
+
 ## How work is done
 
 1. Read the board. Take the next package or the task Ismail gave. One at a time.
@@ -64,7 +83,7 @@ record what was built. They never replace a specification.
    evidence.
 6. Gate review (plan 1.6), recorded on the pull request: every "Done when" line, nothing outside the
    package's scope, a second independent pass on races, authorization, idempotency and money for
-   packages on the strongest model, and screenshots in English and Arabic at 360 px for every new
+   packages on the strongest model (by Astra 6.2 when available, see "Models" above), and screenshots in English and Arabic at 360 px for every new
    screen.
 7. Merge when all checks are green. Then update the board in a docs-only commit.
 
