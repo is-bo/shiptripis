@@ -84,6 +84,41 @@ When the app is distributed through Google Play with Play App Signing, Google
 re-signs it with the **app signing key**: register that key's SHA-1 too,
 copied from **Play Console → Test and release → App integrity → App signing**.
 
+## Test Google sign-in on a phone
+
+Google sign-in works only on a `release` build, signed with the one permanent
+release key, whose SHA-1 is registered in Google Cloud. Later release builds are
+signed by the same key, so they install over each other without uninstalling.
+
+1. Make the release keystore yourself, on your own computer, so the passwords
+   never pass through a chat or an agent:
+   `keytool -genkeypair -v -keystore wassla-release.jks -alias wassla -keyalg RSA -keysize 4096 -validity 10000`.
+   Keep the `.jks` file and its password in a password manager and in one
+   offline copy. Never in the repository, a chat, an email or a ticket. With
+   Google Play App Signing this is the upload key, which Google can reset if it
+   is lost; without Play, losing it means the app can never be updated.
+2. Add the four release-signing secrets (see the first section). In PowerShell,
+   `ANDROID_KEYSTORE_BASE64` is
+   `[Convert]::ToBase64String([IO.File]::ReadAllBytes("wassla-release.jks")) | Set-Clipboard`.
+   `ANDROID_KEY_ALIAS` is `wassla`; with the modern keystore format
+   `ANDROID_KEY_PASSWORD` equals the keystore password.
+3. Read the key's SHA-1, a public fingerprint that is safe to share:
+   `keytool -list -v -keystore wassla-release.jks -alias wassla`.
+4. In the Google Cloud project behind Firebase `waa-eefab` (project number
+   `513341711450`), create an **Android** OAuth client for `eu.wassla.app` with
+   that SHA-1. Once the app is on Google Play, add a second Android client with
+   the Play App Signing key's SHA-1.
+5. Add your own Google account as a test user on the OAuth consent screen, or
+   publish it to Production.
+6. Make sure the repository variable `GOOGLE_SERVER_CLIENT_ID` is set, then run
+   **Actions → Build Android → Run workflow** with **build_type** `release`,
+   **apk_architecture** `arm64` and **api_base_url** `https://wassla.eu`. Leave
+   **release_id** empty, or use one without a `+`. Uninstall any older `profile`
+   or `debug` build first, because it is signed with a different key.
+7. Check the run log: the `Google sign-in:` line must say `on`. A new Android
+   client can take a few minutes to take effect. If the account picker reports a
+   configuration error, the SHA-1 or the Google Cloud project is wrong.
+
 ## Build a signed pre-launch release
 
 1. Open the repository on GitHub.
@@ -115,11 +150,20 @@ They are not interchangeable.
 | `profile` | Private device-performance QA | The runner's local Android debug key | No |
 | `debug` | Install-only fallback when nothing else builds | The runner's local Android debug key | No |
 
+Only `release` can offer Google sign-in. `profile` and `debug` are never given
+`GOOGLE_SERVER_CLIENT_ID`: the runner's debug key is new on every run, so no
+Android OAuth client can list it, and the button would only ever fail. The run
+log of each build says so on a `Google sign-in:` line.
+
 `release` is the only signed path, and it stays that way: the Gradle build
 refuses any `*Release` task unless all four signing values are present, so a
 debug key can never be substituted into a release artifact.
 
 ## Build a private profile APK for device performance
+
+Profile builds measure speed; they are not the way to test the app's features on
+a phone, and they never offer Google sign-in (see the build-type table). To test
+Google sign-in, build `release`.
 
 Debug builds are the wrong instrument for judging whether the app feels fast on
 a real phone. A debug APK runs Dart under the JIT engine, ships the Vulkan

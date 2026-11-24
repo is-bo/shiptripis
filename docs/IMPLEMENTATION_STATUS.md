@@ -1,5 +1,15 @@
 # Waçla V1 Implementation Status
 
+## Wassla: the Android build log says whether Google sign-in is offered (2026-11-24)
+
+- Ismail's phone test of 2026-11-24: no Google button. A `profile` build is never given the Google
+  client id and is signed with a debug key that changes every run, so Google could not accept it
+  anyway; the `release` build that carries the id needs signing secrets that do not exist yet.
+- `tools/mobile_release_config.py` now prints a `Google sign-in:` line for every Android build type
+  and for iOS, both workflows pass it the Google ids, the profile-step comment is corrected, and the
+  runbook and setup guide give Ismail the steps to test Google on a release build. No app or server
+  code changed. Nothing deployed. Detail: `docs/PHASE_P1_GOOGLE_SIGNIN_BUILD_STATE.md`.
+
 ## Wassla: the VPS final health check waits for cold workers (2026-11-23)
 
 - The live deploy and rollback of 2026-11-23 aborted after the site was healthy: each cold gunicorn

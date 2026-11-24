@@ -78,6 +78,8 @@ jobs:
           INPUT_FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
           INPUT_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.FIREBASE_MESSAGING_SENDER_ID }}
           INPUT_FIREBASE_IOS_APP_ID: ${{ vars.FIREBASE_IOS_APP_ID }}
+          INPUT_GOOGLE_SERVER_CLIENT_ID: ${{ vars.GOOGLE_SERVER_CLIENT_ID }}
+          INPUT_GOOGLE_IOS_CLIENT_ID: ${{ vars.GOOGLE_IOS_CLIENT_ID }}
         run: python3 ../tools/mobile_release_config.py ios
 
       # Checked before the long build, so a missing secret fails in seconds.

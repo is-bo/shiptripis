@@ -8,8 +8,8 @@ from the `mobile/` folder:
 
 It reads the workflow's inputs from the environment (INPUT_*), refuses an API
 origin that is not a credential-free HTTPS origin and a Firebase client tuple
-that is only partly set, says in the run log whether the build can do push,
-and writes `api_base_url`, `artifact_name` and `file_stem` to $GITHUB_OUTPUT.
+that is only partly set, says in the run log whether the build can do push
+and whether it can offer Google sign-in, and writes `api_base_url`, `artifact_name` and `file_stem` to $GITHUB_OUTPUT.
 
 Everything here is public build configuration: the Firebase values are client
 identifiers that ship inside every app. No secret is read or printed.
@@ -95,6 +95,52 @@ def report_firebase(platform: str) -> None:
         print("Firebase client configuration: absent - this build keeps push unavailable")
 
 
+def report_google_sign_in(platform: str) -> None:
+    # Say, in the run log, whether this artifact can offer Google sign-in, for
+    # the same reason as the push line above. Android profile and debug builds
+    # are signed with the runner's auto-generated debug key, which changes on
+    # every run, so no Android OAuth client can ever list it: the app would
+    # show a button that always fails. The workflow does not pass the Google
+    # id to those builds, and this line says why.
+    server_id = os.environ.get("INPUT_GOOGLE_SERVER_CLIENT_ID", "").strip()
+    if platform == "android":
+        build_type = os.environ["INPUT_BUILD_TYPE"]
+        if build_type != "release":
+            print(
+                "Google sign-in: off - this build is signed with a key that changes"
+                " on every run, which Google cannot accept; build release to test"
+                " Google sign-in"
+            )
+        elif server_id:
+            print(
+                "Google sign-in: on - the release key's SHA-1 must be registered as"
+                " an Android OAuth client for eu.wassla.app"
+            )
+        else:
+            print(
+                "Google sign-in: off - GOOGLE_SERVER_CLIENT_ID is not set, so the"
+                " button stays hidden"
+            )
+        return
+    ios_id = os.environ.get("INPUT_GOOGLE_IOS_CLIENT_ID", "").strip()
+    if server_id and ios_id:
+        print("Google sign-in: on")
+    else:
+        missing = [
+            name
+            for name, value in (
+                ("GOOGLE_SERVER_CLIENT_ID", server_id),
+                ("GOOGLE_IOS_CLIENT_ID", ios_id),
+            )
+            if not value
+        ]
+        print(
+            "Google sign-in: off - "
+            + " and ".join(missing)
+            + " not set, so the button stays hidden"
+        )
+
+
 def file_stem(platform: str) -> str:
     pubspec = Path("pubspec.yaml").read_text(encoding="utf-8")
     match = re.search(r"(?m)^version:\s*([^+\s]+)(?:\+([^\s]+))?\s*$", pubspec)
@@ -132,6 +178,7 @@ def main() -> int:
             raise SystemExit("build_number must be a positive whole number")
     origin = api_base_url()
     report_firebase(platform)
+    report_google_sign_in(platform)
     stem = file_stem(platform)
     with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as handle:
         handle.write(f"api_base_url={origin}\n")
