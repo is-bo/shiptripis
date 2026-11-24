@@ -491,13 +491,13 @@ msgid "Wassla will never ask you for a pickup or delivery code, and will never a
 msgstr "لن تطلب منك Wassla أبدًا رمز الاستلام أو التسليم، ولن تطلب منك مشاركته قبل أن يصبح الطرد بين يديك."
 
 msgid "You are receiving this because of a delivery or account action on Wassla. This is a transactional message, not marketing."
-msgstr "تلقيت هذه الرسالة بسبب إجراء متعلق بتوصيل أو بحسابك على Wassla. هذه رسالة بشأن إجراء على المنصّة وليست رسالة تسويقية."
+msgstr "تلقيت هذه الرسالة بسبب إجراء متعلق بتوصيل أو بحسابك على Wassla. هذه رسالة خدمية وليست رسالة تسويقية."
 
 msgid "Questions? Reply to this email."
 msgstr "لديك سؤال؟ رد على هذه الرسالة."
 
 msgid "You are receiving this because of a delivery or account action on %(shiptrip)s. This is a transactional message, not marketing."
-msgstr "تلقيت هذه الرسالة بسبب إجراء متعلق بتوصيل أو بحسابك على %(shiptrip)s. هذه رسالة بشأن إجراء على المنصّة وليست رسالة تسويقية."
+msgstr "تلقيت هذه الرسالة بسبب إجراء متعلق بتوصيل أو بحسابك على %(shiptrip)s. هذه رسالة خدمية وليست رسالة تسويقية."
 
 msgid "Questions? Reply to this email or write to %(support_link)s."
 msgstr "لديك سؤال؟ رد على هذه الرسالة أو راسل %(support_link)s."

@@ -44,6 +44,14 @@ codes and tracking numbers.
 - `mobile/test/phase8fh6b_payout_screens_test.dart`, “PayoutMethodsScreen
   renders cleanly in Arabic RTL without overflow.” Updated the three payout
   label expectations because Arabic copy moved to Modern Standard Arabic.
+- `backend/monolith/apps/admin_panel/tests/test_l6a_verification_inbox.py`.
+  Updated the Arabic headings in `test_the_id_email_asks_for_a_new_upload_in_every_language`,
+  `test_the_ticket_email_names_the_ticket_and_asks_for_a_new_upload`, and
+  `test_an_id_ask_for_more_push_says_we_need_a_new_upload` because Arabic copy
+  moved to Modern Standard Arabic.
+- `backend/monolith/apps/notifications/tests/test_phase6c_localization.py`,
+  `test_launch_templates_render_localized_subject_body_and_footer`. Updated the
+  Arabic email footer marker because Arabic copy moved to Modern Standard Arabic.
 - `mobile/test/arabic_dates_and_digits_test.dart` and
   `backend/monolith/apps/core/tests/test_locale_format.py`. Updated the file
   comments to describe Algerian date conventions under the new Arabic copy

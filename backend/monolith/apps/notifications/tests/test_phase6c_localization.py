@@ -116,7 +116,7 @@ class LanguageSnapshotTests(TestCase):
         )
         footer_markers = {
             "fr": "message transactionnel",
-            "ar": "رسالة معاملات",
+            "ar": "رسالة خدمية",
         }
         for kind, context in cases:
             english_subject, _, _ = render_parts(

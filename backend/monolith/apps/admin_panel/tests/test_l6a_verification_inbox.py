@@ -547,7 +547,7 @@ class ResubmissionCopyTests(TestCase):
         expected = {
             "en": "We need a new upload of your identity document",
             "fr": "Nous avons besoin d’un nouvel envoi de votre pièce d’identité",
-            "ar": "نحتاج إلى رفع جديد لوثيقة هويتك",
+            "ar": "نحتاج إلى إعادة رفع وثيقة هويتك",
         }
         for language, heading in expected.items():
             with self.subTest(language):
@@ -571,8 +571,8 @@ class ResubmissionCopyTests(TestCase):
             ("SEA", "en"): "We need a new upload of your ferry ticket",
             ("FLIGHT", "fr"): "Nous avons besoin d’un nouvel envoi de votre billet d’avion",
             ("SEA", "fr"): "Nous avons besoin d’un nouvel envoi de votre billet de ferry",
-            ("FLIGHT", "ar"): "نحتاج إلى رفع جديد لتذكرة الطيران الخاصة بك",
-            ("SEA", "ar"): "نحتاج إلى رفع جديد لتذكرة العبّارة الخاصة بك",
+            ("FLIGHT", "ar"): "نحتاج إلى إعادة رفع تذكرة الطيران",
+            ("SEA", "ar"): "نحتاج إلى إعادة رفع تذكرة العبّارة",
         }
         for (mode, language), heading in expected.items():
             with self.subTest(f"{mode}-{language}"):
@@ -619,7 +619,7 @@ class ResubmissionPushTests(TestCase):
     def test_an_id_ask_for_more_push_says_we_need_a_new_upload(self):
         self.assertEqual(
             self.titles(KYC_STATUS_CHANGED, {"status": "rejected", "outcome": ASK}),
-            {"We need a new upload", "Nous avons besoin d'un nouvel envoi", "نحتاج إلى رفع جديد"},
+            {"We need a new upload", "Nous avons besoin d'un nouvel envoi", "أعد رفع وثيقة هويتك"},
         )
         self.assertIn(
             "KYC needs attention",
