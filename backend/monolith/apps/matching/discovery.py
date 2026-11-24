@@ -26,6 +26,7 @@ from apps.accounts.blocks import not_blocked_with
 from apps.core.business_settings import get_active_business_settings
 from apps.deals.models import Deal, DealLegAllocation
 from apps.kyc.models import KycSubmission
+from apps.locations.city_names import city_name
 from apps.locations.models import AirportLocalityMapping, Place
 from apps.locations.serializers import PublicLocationSerializer
 from apps.parcels.models import DeliveryRequest, ParcelRequest
@@ -59,13 +60,19 @@ class CandidateEvaluation:
 
     def _request_block(self) -> dict:
         def place_summary(place):
+            """The place as a pre-funding counterparty reads it.
+
+            `display_label` is the public city name
+            (`apps.locations.city_names`), not the catalogue label.
+            """
+
             if place is None:
                 return None
             locality_id = _matching_locality_id(place)
             return {
                 "id": place.pk,
                 "name": place.name,
-                "display_label": place.display_label,
+                "display_label": city_name(place),
                 "place_type": place.place_type,
                 "country_code": place.country_id,
                 "iata_code": place.iata_code or None,
@@ -116,13 +123,19 @@ class CandidateEvaluation:
             end_leg_id = covered_leg_ids[-1]
 
         def place_summary(place):
+            """The place as a pre-funding counterparty reads it.
+
+            `display_label` is the public city name
+            (`apps.locations.city_names`), not the catalogue label.
+            """
+
             if place is None:
                 return None
             locality_id = _matching_locality_id(place)
             return {
                 "id": place.pk,
                 "name": place.name,
-                "display_label": place.display_label,
+                "display_label": city_name(place),
                 "place_type": place.place_type,
                 "country_code": place.country_id,
                 "iata_code": place.iata_code or None,
@@ -196,8 +209,8 @@ def _place_matching_prefetches(*relations: str) -> list[Prefetch]:
     Without it every airport place in a payload costs one mapping query. The
     filter is the same one `_matching_locality_id` falls back to, and at most
     one active primary mapping can exist per airport. `locality__parent` is
-    there because a Find Travelers stop is labelled with the served locality's
-    `display_label` (K7-E).
+    there because a public stop is labelled with the served locality's city
+    name, which reads the parent in Algeria (`apps.locations.city_names`).
     """
 
     active_mapping = AirportLocalityMapping.objects.filter(
@@ -256,8 +269,9 @@ def _matching_leg_queryset(*, at):
     )[:1]
     decimal_field = DecimalField(max_digits=10, decimal_places=3)
     return (
-        # K7-E: `__parent` because `Place.display_label` reads the parent for
-        # every leg stop a payload renders (one query per stop otherwise).
+        # K7-E: `__parent` because the public city name reads the parent in
+        # Algeria for every leg stop a payload renders (one query per stop
+        # otherwise).
         JourneyLeg.objects.select_related(
             "origin",
             "destination",

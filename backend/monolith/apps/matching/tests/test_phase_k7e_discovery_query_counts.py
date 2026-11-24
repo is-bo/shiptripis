@@ -15,8 +15,11 @@ see either. This world gives every place a region parent, and every grown
 candidate its own airport (so a per-airport read cannot hide behind a shared
 prefetch cache). It then pins the property that matters: the query count does
 not move when the number of candidates doubles. The payloads are asserted to
-still carry the parent-derived labels and the served locality, so the fix
-cannot "pass" by dropping them.
+still carry the public city names and the served locality, so the fix cannot
+"pass" by dropping them. Since fix plan P2 the label is the public city name
+(`apps.locations.city_names`), which reads the parent for Algeria: the
+region here stands in for the wilaya, so the Algerian stops read
+"Region DZ" and the parent join is still exercised on every stop.
 """
 
 from __future__ import annotations
@@ -163,12 +166,12 @@ class DiscoveryQueryCountTests(RegionalCanonicalFixture, TestCase):
         self.assertEqual(two_n_payload["page"]["total"], 8)
 
         self.assertEqual(n_queries, two_n_queries)
-        # Every stop still carries its parent-derived locality label, including
-        # the city each distinct airport resolves to.
+        # Every stop still carries its public city name, including the city
+        # each distinct airport resolves to; the Algerian ones are the parent.
         for row in two_n_payload["results"]:
             self.assertEqual(
                 [stop["label"] for stop in row["route"]["stops"]],
-                ["Paris · Region FR", "Algiers · Region DZ", "Jijel · Region DZ"],
+                ["Paris", "Region DZ", "Region DZ"],
             )
 
     def test_compatible_journeys_cost_is_flat_from_n_to_2n_journeys(self):
@@ -185,7 +188,9 @@ class DiscoveryQueryCountTests(RegionalCanonicalFixture, TestCase):
             start = row["journey"]["start_place"]
             origin = row["journey"]["covered_legs"][0]["origin_place"]
             self.assertEqual(start, origin)
-            self.assertEqual(start["display_label"], f"{start['name']} · Region FR")
+            # An airport start reads as the city it serves.
+            self.assertEqual(start["place_type"], Place.PlaceType.AIRPORT)
+            self.assertEqual(start["display_label"], "Paris")
             self.assertEqual(start["matching_locality_id"], self.paris.pk)
 
     def test_compatible_requests_cost_is_flat_from_n_to_2n_requests(self):
@@ -202,9 +207,9 @@ class DiscoveryQueryCountTests(RegionalCanonicalFixture, TestCase):
         for row in two_n_payload:
             pickup = row["delivery_request"]["pickup_place"]
             delivery = row["delivery_request"]["delivery_place"]
-            self.assertEqual(pickup["display_label"], f"{pickup['name']} · Region FR")
+            self.assertEqual(pickup["display_label"], "Paris")
             # An airport pickup still resolves to its served locality.
             self.assertEqual(pickup["matching_locality_id"], self.paris.pk)
             airport_pickups += pickup["place_type"] == Place.PlaceType.AIRPORT
-            self.assertEqual(delivery["display_label"], "Jijel · Region DZ")
+            self.assertEqual(delivery["display_label"], "Region DZ")
         self.assertEqual(airport_pickups, 3)

@@ -171,6 +171,39 @@ changes an identity, or makes two nearby localities compatible.
   Exact labels, provider metadata and coordinates remain backend-protected and
   unlock only through existing Deal-state authorization.
 
+## Public city names
+
+`Place.display_label` is `"<name> · <parent name>"`, and the parent is an
+administrative area, not a city: `Alger Centre · Alger`, `Paris · Paris`,
+`Berlin, Stadt · Berlin, Stadt`. Since fix plan P2 (2026-11-24) every route
+line read by someone other than the owner names cities only, through one
+function, `apps/locations/city_names.py` `city_name(place)`:
+
+| Country | Rule | Catalogue row → public name |
+| --- | --- | --- |
+| Algeria | the wilaya (the commune's parent), owner decision Q1 | `Alger Centre`, `Bab Ezzouar` → `Alger`; `Tamanghasset` → `Tamanrasset` |
+| Germany | the name before the first comma; Destatis appends a status or epithet after it | `Berlin, Stadt` → `Berlin`; `Halle (Saale), Stadt` → `Halle (Saale)`; `Erkrath, Fundort des Neanderthalers, Stadt` → `Erkrath` |
+| Spain | a postposed article moves to the front, part by part around the slash of a bilingual name; a comma before anything else is part of the name | `Coruña, A` → `A Coruña`; `Alfàs del Pi, l'` → `l'Alfàs del Pi`; `Vila Joiosa, la/Villajoyosa` → `la Vila Joiosa/Villajoyosa`; `Alicante/Alacant` and `Saus, Camallera i Llampaies` unchanged |
+| France and any other | the commune's own name | `Paris`, `Lyon` |
+
+An airport reads as the city it serves; an airport with no active primary
+served mapping names nothing, failing closed as `resolve_matching_locality`
+does. A department, province or district is never used outside Algeria
+(`Rhône` is not Lyon).
+
+Where it applies: the discovery `locality_block` (trip and request cards,
+Matches, usual routes on profile cards and the person page, route alerts),
+Find Travelers stops (`find_travelers._stop`), and the `display_label` of the
+pre-funding counterparty place summaries (compatible requests and journeys,
+covered legs, proposal origin and destination). The catalogue id stays beside
+the name, because filters, the "post for this route" pre-fill and matching
+identity need it: this is a display rule, not a new secret.
+
+Where `display_label` stays: the staff console, the place picker
+(`geography_serializers.py`), the owner's own journey and request payloads,
+and the funded deal's route (`apps/deals/route.py`). Names keep the
+catalogue's spelling in English, French and Arabic.
+
 ## Limitations and review points
 
 - OurAirports municipality and ISO-region fields are retained as hints; they

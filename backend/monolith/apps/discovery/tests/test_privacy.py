@@ -5,6 +5,11 @@ address, exact coordinates, a deal recipient and a KYC row, then walks the
 whole JSON answer: none of those strings and none of the forbidden keys may
 appear anywhere in it, at any depth. The four public reads are walked twice:
 as a member and as a guest without an account (plan EGS, decision 10).
+
+The places carry catalogue-shaped names and parents (fix plan P2), so the
+walk also proves a public stop names a city only: never the catalogue's
+`"<name> · <parent>"` label, a department, the Algerian commune behind its
+wilaya, or an airport's own name.
 """
 
 from __future__ import annotations
@@ -21,7 +26,7 @@ from apps.locations.models import Location
 from apps.matching.v1_services import accept_offer
 from apps.parcels.models import DeliveryRequest
 
-from .support import DiscoveryWorld, client_for
+from .support import DiscoveryWorld, client_for, give_catalogue_names
 
 SECRETS = (
     "Zekkouriqa",  # sender surname
@@ -38,6 +43,16 @@ SECRETS = (
     "+213777000111",
     "kyc/privacy-secret",  # KYC object key
     "WSL-",  # any tracking number (L11A)
+)
+
+#: Catalogue naming a public stop never carries (P2): the departments, the
+#: commune behind the wilaya "Alger", and the airports' own names.
+CATALOGUE_ONLY = (
+    "Seine-Quinconces",
+    "Val-d'Oise",
+    "Alger Centre",
+    "Houari Boumediene",
+    "Charles de Gaulle",
 )
 
 FORBIDDEN_KEYS = {
@@ -76,6 +91,20 @@ FORBIDDEN_KEYS = {
 }
 
 
+def _place_labels(value, found: list[str]) -> list[str]:
+    """Every public stop label (`label` beside a `place_id`), at any depth."""
+
+    if isinstance(value, dict):
+        if "place_id" in value and isinstance(value.get("label"), str):
+            found.append(value["label"])
+        for inner in value.values():
+            _place_labels(inner, found)
+    elif isinstance(value, list):
+        for inner in value:
+            _place_labels(inner, found)
+    return found
+
+
 def _keys(value, found: set[str]) -> set[str]:
     if isinstance(value, dict):
         for key, inner in value.items():
@@ -90,6 +119,7 @@ def _keys(value, found: set[str]) -> set[str]:
 class PublicPayloadPrivacyTests(DiscoveryWorld, TestCase):
     def setUp(self):
         self.build_discovery_world()
+        give_catalogue_names(self, paris_department="Seine-Quinconces")
         self._make_people_distinctive()
         self.opt_in(self.sender, (self.paris, self.jijel))
         self.opt_in(self.traveler, (self.algiers, self.jijel))
@@ -144,6 +174,13 @@ class PublicPayloadPrivacyTests(DiscoveryWorld, TestCase):
         for secret in SECRETS:
             self.assertNotIn(secret, text)
         self.assertEqual(_keys(payload, set()) & FORBIDDEN_KEYS, set())
+        for name in CATALOGUE_ONLY:
+            self.assertNotIn(name, text)
+        labels = _place_labels(payload, [])
+        self.assertTrue(labels, "the payload under test names no place")
+        self.assertLessEqual(set(labels), {"Paris", "Alger", "Jijel"}, labels)
+        for label in labels:
+            self.assertNotIn(" · ", label)
 
     def _get(self, viewer, name, *args, **query):
         """`viewer` `None` reads as a guest, without an account."""

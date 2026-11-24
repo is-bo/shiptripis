@@ -217,7 +217,8 @@ Settings (console Business settings, "Marketplace features" card; stored under `
 - Request listed only if: delivery request, open, not aimed at one traveler, not expired (deadline and ready window end both in the future), weight set, no active deal, sender active and not banned.
 - Trips sorted by next departure; requests newest first. Own items are hidden from the owner. Filters: origin/destination city or country, "departing after". Pages of 20 (max 50), paging limited to offset 1000.
 - A trip card shows first name, ID verified, rating, completed deliveries, stops (city labels only), leg modes and times, capacity band, optional price. Request cards show sender first name, cities, title, category, fragile, weight, windows, deadline, reward, boost and total. Never addresses, recipient, dimensions or coordinates.
-<!-- src: discovery/listings.py, discovery/serializers.py -->
+- Every route line someone other than the owner reads (cards, profile routes, alerts, Matches, Find Travelers, and a proposal or compatible request before funding) names the city only: in Algeria the wilaya (Alger Centre and Bab Ezzouar both read "Alger"), in Germany the name before the comma ("Berlin, Stadt" reads "Berlin"), in Spain the article first ("Coruña, A" reads "A Coruña"), in France the commune, and an airport reads as the city it serves; the staff console, the place picker and the owner's own screens keep the full "name · area" label.
+<!-- src: discovery/listings.py, discovery/serializers.py, locations/city_names.py -->
 
 ## What is "I can carry this" and what limits it?
 - A traveler taps it on an open listed request with one of their own journeys. The server first checks full compatibility; if not compatible: 409 `incompatible_candidate` "This journey cannot carry this request." with the rejection codes.
