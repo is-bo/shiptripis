@@ -234,7 +234,7 @@ class _TripPreviewSheet extends ConsumerWidget {
     final locale = Localizations.localeOf(context);
 
     final stops = placeStops(card.stops);
-    final capacity = capacityBandLabel(l, card.capacityBand);
+    final capacity = spaceLeftValue(l, card.freeWeightKg);
     final requests = ref.watch(myRequestsProvider);
     final open = (requests.value ?? const <DeliveryRequest>[])
         .where((r) => r.status == RequestStatus.open)

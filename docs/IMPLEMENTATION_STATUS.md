@@ -19,6 +19,15 @@ for the vocabulary, test changes and 360 px screenshots.
   runbook and setup guide give Ismail the steps to test Google on a release build. No app or server
   code changed. Nothing deployed. Detail: `docs/PHASE_P1_GOOGLE_SIGNIN_BUILD_STATE.md`.
 
+## Wassla: space left shows real kilos (2026-11-24)
+
+- Ismail's phone test, owner decision Q2. A trip card's remaining capacity was a band ("10-20 kg
+  left"); it is now `free_weight_kg`, the smallest free weight on the legs still ahead in whole
+  kilos rounded down. The card reads "14 kg left", the preview sheet "Space left: 14 kg", and under
+  one kilo "Less than 1 kg left", in English, French and Modern Standard Arabic.
+- The band constants, `capacity_band`, the app's `CapacityBand` and the four `tripCapacity*` keys are
+  removed. Nothing deployed. Detail: `docs/PHASE_P4_SPACE_LEFT_KILOS.md`.
+
 ## Wassla: the VPS final health check waits for cold workers (2026-11-23)
 
 - The live deploy and rollback of 2026-11-23 aborted after the site was healthy: each cold gunicorn

@@ -334,7 +334,8 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('Identity verified'), findsOneWidget);
-        expect(find.text('5–10 kg left'), findsWidgets);
+        expect(find.text('8 kg left'), findsOneWidget, reason: 'the card');
+        expect(find.text('8 kg'), findsOneWidget, reason: 'the sheet value');
         expect(find.textContaining('Paris'), findsWidgets);
         expect(find.textContaining('detour'), findsNothing);
         expect(find.textContaining('km'), findsNothing);

@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -4620,16 +4621,20 @@ class LEn extends L {
   String get tripSpace => 'Space left';
 
   @override
-  String get tripCapacityUnder5 => 'Under 5 kg left';
+  String tripSpaceLeft(String kg) {
+    return '$kg kg left';
+  }
 
   @override
-  String get tripCapacity5to10 => '5–10 kg left';
+  String get tripSpaceLeftUnderOne => 'Less than 1 kg left';
 
   @override
-  String get tripCapacity10to20 => '10–20 kg left';
+  String tripSpaceKg(String kg) {
+    return '$kg kg';
+  }
 
   @override
-  String get tripCapacity20Plus => '20 kg or more left';
+  String get tripSpaceKgUnderOne => 'Less than 1 kg';
 
   @override
   String get tripPreviewSubtitle =>

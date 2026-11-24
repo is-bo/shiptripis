@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -4660,16 +4661,20 @@ class LFr extends L {
   String get tripSpace => 'Place disponible';
 
   @override
-  String get tripCapacityUnder5 => 'Moins de 5 kg disponibles';
+  String tripSpaceLeft(String kg) {
+    return 'Il reste $kg kg';
+  }
 
   @override
-  String get tripCapacity5to10 => '5 à 10 kg disponibles';
+  String get tripSpaceLeftUnderOne => 'Il reste moins de 1 kg';
 
   @override
-  String get tripCapacity10to20 => '10 à 20 kg disponibles';
+  String tripSpaceKg(String kg) {
+    return '$kg kg';
+  }
 
   @override
-  String get tripCapacity20Plus => '20 kg ou plus disponibles';
+  String get tripSpaceKgUnderOne => 'Moins de 1 kg';
 
   @override
   String get tripPreviewSubtitle =>

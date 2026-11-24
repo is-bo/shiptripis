@@ -8061,29 +8061,29 @@ abstract class L {
   /// **'Space left'**
   String get tripSpace;
 
-  /// No description provided for @tripCapacityUnder5.
+  /// No description provided for @tripSpaceLeft.
   ///
   /// In en, this message translates to:
-  /// **'Under 5 kg left'**
-  String get tripCapacityUnder5;
+  /// **'{kg} kg left'**
+  String tripSpaceLeft(String kg);
 
-  /// No description provided for @tripCapacity5to10.
+  /// No description provided for @tripSpaceLeftUnderOne.
   ///
   /// In en, this message translates to:
-  /// **'5–10 kg left'**
-  String get tripCapacity5to10;
+  /// **'Less than 1 kg left'**
+  String get tripSpaceLeftUnderOne;
 
-  /// No description provided for @tripCapacity10to20.
+  /// No description provided for @tripSpaceKg.
   ///
   /// In en, this message translates to:
-  /// **'10–20 kg left'**
-  String get tripCapacity10to20;
+  /// **'{kg} kg'**
+  String tripSpaceKg(String kg);
 
-  /// No description provided for @tripCapacity20Plus.
+  /// No description provided for @tripSpaceKgUnderOne.
   ///
   /// In en, this message translates to:
-  /// **'20 kg or more left'**
-  String get tripCapacity20Plus;
+  /// **'Less than 1 kg'**
+  String get tripSpaceKgUnderOne;
 
   /// No description provided for @tripPreviewSubtitle.
   ///

@@ -224,23 +224,6 @@ DateTime? _yearMonth(String? raw) {
 // Listings
 // ---------------------------------------------------------------------------
 
-/// The remaining weight capacity, as the server's public band.
-enum CapacityBand {
-  under5kg,
-  fiveToTenKg,
-  tenToTwentyKg,
-  twentyKgPlus,
-  unknown;
-
-  static CapacityBand parse(Object? raw) => switch (readString(raw)) {
-    'under_5kg' => under5kg,
-    '5_to_10kg' => fiveToTenKg,
-    '10_to_20kg' => tenToTwentyKg,
-    '20kg_plus' => twentyKgPlus,
-    _ => unknown,
-  };
-}
-
 class TripLeg {
   const TripLeg({required this.mode, this.departAt, this.arriveAt});
 
@@ -262,7 +245,7 @@ class TripCard {
     required this.traveler,
     required this.stops,
     required this.legs,
-    required this.capacityBand,
+    required this.freeWeightKg,
     this.departsAt,
     this.nextDepartureAt,
     this.arrivesAt,
@@ -281,7 +264,7 @@ class TripCard {
     departsAt: readDate(json['departs_at']),
     nextDepartureAt: readDate(json['next_departure_at']),
     arrivesAt: readDate(json['arrives_at']),
-    capacityBand: CapacityBand.parse(json['capacity_band']),
+    freeWeightKg: readInt(json['free_weight_kg']),
     price: JourneyPrice.maybe(json['price']),
   );
 
@@ -296,7 +279,10 @@ class TripCard {
   /// The next leg that has not left yet. What a sender should read as "when".
   final DateTime? nextDepartureAt;
   final DateTime? arrivesAt;
-  final CapacityBand capacityBand;
+
+  /// The smallest free weight on the legs still ahead, in whole kilos rounded
+  /// down: 0 means under one kilo. Null when the server sent none.
+  final int? freeWeightKg;
 
   /// What the traveller charges, or null. A card is about no parcel in
   /// particular, so this is the price itself and never a total for a parcel.

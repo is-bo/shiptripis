@@ -2502,10 +2502,24 @@
   },
   "tripArrives": "Arrives",
   "tripSpace": "Space left",
-  "tripCapacityUnder5": "Under 5 kg left",
-  "tripCapacity5to10": "5–10 kg left",
-  "tripCapacity10to20": "10–20 kg left",
-  "tripCapacity20Plus": "20 kg or more left",
+  "tripSpaceLeft": "{kg} kg left",
+  "@tripSpaceLeft": {
+    "placeholders": {
+      "kg": {
+        "type": "String"
+      }
+    }
+  },
+  "tripSpaceLeftUnderOne": "Less than 1 kg left",
+  "tripSpaceKg": "{kg} kg",
+  "@tripSpaceKg": {
+    "placeholders": {
+      "kg": {
+        "type": "String"
+      }
+    }
+  },
+  "tripSpaceKgUnderOne": "Less than 1 kg",
   "tripPreviewSubtitle": "You propose first. Nothing is booked from here.",
   "tripChooseParcel": "Choose one of your parcels",
   "tripPostForRoute": "Post a parcel for this route",

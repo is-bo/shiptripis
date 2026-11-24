@@ -58,20 +58,6 @@ from .places import locality_block
 DEFAULT_PAGE_SIZE = 20
 MAX_PAGE_SIZE = 50
 
-#: Remaining-capacity bands on a trip card. The exact free weight discloses
-#: the traveler's other bookings (`apps.matching.public_contract`), so a card
-#: publishes which band the smallest free weight still ahead falls in.
-CAPACITY_UNDER_5KG = "under_5kg"
-CAPACITY_5_TO_10KG = "5_to_10kg"
-CAPACITY_10_TO_20KG = "10_to_20kg"
-CAPACITY_20KG_PLUS = "20kg_plus"
-CAPACITY_BANDS: tuple[str, ...] = (
-    CAPACITY_UNDER_5KG,
-    CAPACITY_5_TO_10KG,
-    CAPACITY_10_TO_20KG,
-    CAPACITY_20KG_PLUS,
-)
-
 _DECIMAL = DecimalField(max_digits=10, decimal_places=3)
 
 
@@ -233,16 +219,6 @@ def listable_journeys(*, at: datetime, sea_legs_enabled: bool) -> QuerySet:
     )
 
 
-def capacity_band(free_kg: Decimal) -> str:
-    if free_kg < 5:
-        return CAPACITY_UNDER_5KG
-    if free_kg < 10:
-        return CAPACITY_5_TO_10KG
-    if free_kg < 20:
-        return CAPACITY_10_TO_20KG
-    return CAPACITY_20KG_PLUS
-
-
 def _isoformat(value) -> str | None:
     return value.isoformat() if value is not None else None
 
@@ -260,6 +236,11 @@ def trip_card(
     listed reward: a card is not about one parcel. It is null when the journey
     has none or traveler pricing is off (``pricing_enabled``, read by the
     caller from the same revision as its other switches).
+
+    `free_weight_kg` is the smallest free weight on the legs still ahead, in
+    whole kilos rounded down, so the card never promises room that is not
+    there. The declared capacity per leg is already readable by any signed-in
+    member, so the figure discloses nothing new.
     """
 
     legs = list(journey._matching_legs)
@@ -302,7 +283,7 @@ def trip_card(
         "departs_at": _isoformat(legs[0].depart_at) if legs else None,
         "next_departure_at": _isoformat(ahead[0].depart_at) if ahead else None,
         "arrives_at": _isoformat(legs[-1].arrive_at) if legs else None,
-        "capacity_band": capacity_band(smallest_free),
+        "free_weight_kg": max(int(smallest_free), 0),
         "price": (
             JourneyPrice.of(journey).as_public_dict() if pricing_enabled else None
         ),
