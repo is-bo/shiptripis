@@ -4,6 +4,7 @@ from uuid import UUID
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
+from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -16,7 +17,7 @@ from apps.notifications.models import OutboundMessage
 from apps.notifications.outbox import cancel_message, enqueue_secret_message
 from apps.notifications.push import unregister_push_device
 
-from . import deletion
+from . import deletion, photos
 from .apple import AppleAuthError, AppleAuthUnavailable, verify_identity_token
 from .google import GoogleAuthError, GoogleAuthUnavailable, verify_id_token
 from .models import EmailVerificationCode, OAuthIdentity, PasswordResetCode, User
@@ -373,6 +374,41 @@ class MeView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(MeSerializer(request.user).data)
+
+
+class MePhotoView(APIView):
+    """PUT    /api/me/photo — add or replace the member's photo (multipart, `photo`).
+    DELETE /api/me/photo — remove it, or dismiss a "removed by Wassla" notice.
+
+    The rule is `apps.accounts.photos`. PUT answers the member's own photo
+    block (`GET /api/me` `photo`), takes the media-upload throttle and reads
+    the body in memory only (`photos.PhotoUploadHandler`); DELETE answers 204,
+    also when there was nothing to remove, and is never throttled: a member can
+    always take their photo down.
+    """
+
+    permission_classes = (IsAuthenticated,)
+    parser_classes = (MultiPartParser,)
+
+    def get_throttles(self):
+        if self.request.method == "PUT":
+            self.throttle_scope = "media_upload"
+            return [ScopedRateThrottle()]
+        if self.request.method == "DELETE":
+            return []
+        return super().get_throttles()
+
+    def put(self, request: Request) -> Response:
+        request.upload_handlers = [photos.PhotoUploadHandler(request)]
+        try:
+            photo = photos.replace_photo(request.user, request.FILES.get("photo"))
+        except photos.PhotoRefused as exc:
+            return Response(exc.payload, status=exc.status)
+        return Response(photos.own_view(photo))
+
+    def delete(self, request: Request) -> Response:
+        photos.remove_own_photo(request.user)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class AccountDeletionView(APIView):

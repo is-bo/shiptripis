@@ -1813,6 +1813,11 @@ summary on the page a relative pays from, volume and a payout-account check on t
 page with recorded acceptance, a computer version of the user app, and the four design choices (full
 payment before matching, a fixed grid, automatic assignment, weekly payouts).
 
+**Reversed for the profile photo (Ismail, 2026-11-24).** After his phone test he asked for profile
+photos. Decided the same day: everyone sees a photo, guests included; no staff check before it shows,
+staff remove one afterwards with a reason the member is shown; optional. Built by fix-plan packages
+P3A (server) and P3B (app); spec section 21. Extra profile fields stay not chosen.
+
 ### 5.1d Before the unattended run (Ismail, 2026-11-12, evening)
 
 Ismail said he will not check on the build until it is done, asked what should change first, and

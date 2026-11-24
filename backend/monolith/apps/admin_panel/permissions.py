@@ -113,6 +113,9 @@ ADMIN_PERMISSION_CODES: tuple[str, ...] = (
     # Store readiness, App Store 1.2: decide reported chat messages (dismiss,
     # remove the message, restore it).
     "moderate_chat",
+    # P3A, spec 21: remove a member's profile photo, with a reason the member
+    # is shown. Granted where ID review is.
+    "moderate_profile_photos",
 )
 
 # Explicit least-privilege matrix.  ``super_admin`` receives every code in the
@@ -202,6 +205,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "manage_disputes",
             "moderate_ratings",
             "moderate_chat",
+            "moderate_profile_photos",
         }
     ),
     AdminRole.SUPER_ADMIN: frozenset(ADMIN_PERMISSION_CODES),

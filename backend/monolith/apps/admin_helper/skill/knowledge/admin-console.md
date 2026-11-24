@@ -20,7 +20,7 @@ Five roles: Super Admin, Ops, Support, Finance, Trust / Verification. (No others
 | Ops | Marketplace operations | view_dashboard, view_requests, manage_requests, view_journeys, manage_journeys, view_matches, manage_matches, view_deals, manage_deals, manage_lifecycle, view_operational_incidents, view_support_context, view_ratings, view_boosts, view_audit_log, record_no_show, view_disputes, manage_disputes, view_provider_health |
 | Support | Helping members | view_dashboard, view_users, view_requests, view_journeys, view_deals, view_support_context, manage_cancellations, view_ratings, view_audit_log, view_disputes |
 | Finance | Money | export_finance, view_finance_summary, view_payout_sensitive, view_payout_evidence, review_payout_profiles, manage_payout_holds, retry_payouts, view_dashboard, view_deals, view_payment_orders, view_payment_attempts, view_provider_events, issue_refunds, settle_manual_refunds, view_payouts, settle_payouts, reconcile_finance, view_scheduled_jobs, view_provider_health, view_audit_log, view_disputes, resolve_disputes |
-| Trust / Verification | Identity, tickets, evidence, reviews | attest_payout_identity, manage_payout_holds, view_dashboard, view_users, view_user_sensitive, view_kyc, review_kyc, view_flight_proofs, review_flight_proofs, view_evidence, review_safety, record_no_show, view_deals, view_audit_log, view_disputes, manage_disputes, moderate_ratings, moderate_chat |
+| Trust / Verification | Identity, tickets, evidence, reviews | attest_payout_identity, manage_payout_holds, view_dashboard, view_users, view_user_sensitive, view_kyc, review_kyc, view_flight_proofs, review_flight_proofs, view_evidence, review_safety, record_no_show, view_deals, view_audit_log, view_disputes, manage_disputes, moderate_ratings, moderate_chat, moderate_profile_photos |
 | Super Admin | Owner | Every capability, including the ones only Super Admin holds |
 
 Capabilities only Super Admin holds: manage_users (account ban, hide profile), view_settings, manage_settings (settings, sea crossings), manage_admins and manage_permissions (staff management), plus technical records.
@@ -136,8 +136,8 @@ The Overview also shows provider status (for those with view_provider_health), t
 
 ## What does the Person profile show?
 Tabs appear only if the role may read that data: Overview; Identity (view_users, view_kyc, review_payout_profiles or attest_payout_identity); Activity (requests, journeys, offers); Deliveries (view_deals); Payments (view_payment_orders or attempts); Payouts (view_payouts, view_finance_summary or review_payout_profiles); Trust & support (disputes, ratings, notifications); Discovery (view_users); Audit (view_audit_log). 20 rows per page.
-- Header shows account state (Active, Banned, Sign-in disabled), ID state (ID approved, ID waiting for review, ID rejected, ID expired, No ID submitted) and staff role if any.
-- Header actions: "Review payout method", "Review ID", "Ban account" or "Restore account" (Super only).
+- Header shows the member's profile photo in place of their initials when they have one, account state (Active, Banned, Sign-in disabled), ID state (ID approved, ID waiting for review, ID rejected, ID expired, No ID submitted) and staff role if any. The Overview's Account card has a "Profile photo" line: Shown to everyone, Not shown while the account is restricted, Removed by Wassla (when, by whom, the reason), or None.
+- Header actions: "Review payout method", "Review ID", "Remove photo" (moderate_profile_photos: Trust, Super), "Ban account" or "Restore account" (Super only).
 - No payout account number, ID image or chat content is on this page. Ratings appear only once the product's blind rule has revealed them.
 - Discovery tab: public profile state (Visible, Hidden by staff, Turned off by the member, Never set up). "Hide profile" / "Show profile again" needs manage_users (Super) and a reason (max 500); the member is not shown the reason. Hiding overrides their choice until lifted.
 <!-- src: backend/monolith/apps/admin_panel/console_people.py, console_discovery.py, people_links.py -->
@@ -148,6 +148,13 @@ Tabs appear only if the role may read that data: Overview; Identity (view_users,
 - Refusals: "You cannot ban or restore your own account."; "This is a staff account. Staff access is changed on Staff & access, not here."; "This account is already banned." / "This account is not banned."
 - Audit actions `account.banned`, `account.restored`.
 <!-- src: backend/monolith/apps/admin_panel/console_account.py, staff_actions.py -->
+
+## How do I remove a member's profile photo?
+- Person profile header, "Remove photo" (`users/<id>/photo/remove/`), only while the member has a photo. Needs moderate_profile_photos (Trust, Super). The page shows the photo; a reason is required (max 500) and **the member is shown it**.
+- The photo disappears from every screen at once and the stored image is deleted. The member sees "removed by Wassla" with the reason and may add a different photo.
+- If the member changed their photo after the page was opened, nothing is removed ("The member changed their photo after this page was opened. Nothing was removed: look at the new photo.").
+- Audit action `profile_photo.removed`, on the person, with the photo's version before and after. The AI helper never removes a photo and never sees one.
+<!-- src: backend/monolith/apps/admin_panel/console_photos.py, apps/accounts/photos.py -->
 
 ## What are internal notes?
 - A card on the Deal, Dispute and Person pages. Staff only, never shown to members and never read by the AI helper.

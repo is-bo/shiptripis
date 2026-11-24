@@ -337,6 +337,9 @@ def _matching_journey_queryset(*, at):
     return (
         Journey.objects.select_related(
             "traveler",
+            # The traveler's photo rides on the same row (spec 21), so a card
+            # or a Find Travelers row publishes it without a query of its own.
+            "traveler__profile_photo",
             "start_location",
             "destination_location",
             "start_place__parent",

@@ -404,6 +404,7 @@ Jobs are durable rows in the database (status `pending`, `running`, `succeeded`,
 - Messages: `outbound_message`, `notification_dispatch` (send queued email and notices).
 - Marketplace: `discovery_route_alerts`, `leg_reminder` (nudge traveler to report progress), `schedule_change_settle`, `offer_response_reminder` and `offer_expiry` (unanswered offer, 6 h default).
 - AI helper: `admin_helper_call_prune` (call log kept 30 days), `admin_helper_action_expiry` (prepared change unconfirmed, 24 h default).
+- Profile photos: `profile_photo_object_delete` (deletes a stored photo once no member's photo names it; retried until storage confirms).
 - Daily host maintenance (03:15 UTC) only cleans login tokens, checks the event outbox for lost deliveries and runs approved retention commands. It never starts the finance or lifecycle workers.
 <!-- src: apps/finance/models.py (job kinds), infra/vps/ENVIRONMENT.md, infra/vps/systemd/wacla-scheduled.*, finance/jobs.py, money.md -->
 ## How is Wassla hosted, and what are the environments?

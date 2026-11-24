@@ -4,6 +4,7 @@ from apps.locations.sea_crossings import MANAGE_CROSSINGS_PERMISSION
 from apps.problems.services import VIEW_PROBLEMS_PERMISSION
 from apps.chat.moderation import MODERATE_PERMISSION as CHAT_MODERATE_PERMISSION
 from apps.ratings.moderation import MODERATE_PERMISSION
+from apps.accounts.photos import MODERATE_PERMISSION as PHOTO_MODERATE_PERMISSION
 
 from apps.admin_helper import console as helper_console
 
@@ -16,6 +17,7 @@ from .console_identity_checks import identity_check_detail, identity_checks
 from .console_journey_pause import journey_pause_action
 from .console_notes import NOTE_ROUTE_CAPABILITIES, note_add
 from .console_people import person_profile
+from .console_photos import photo_remove
 from .console_problems import deal_no_show, problem_detail, problems
 from .console_chat_reports import chat_report_detail, chat_reports
 from .console_reviews import review_detail, reviews
@@ -118,6 +120,12 @@ urlpatterns = [
         "notes/<slug:target_type>/<int:pk>/",
         capability_required(*NOTE_ROUTE_CAPABILITIES)(note_add),
         name="note-add",
+    ),
+    # P3A, spec 21. Remove a member's profile photo, with a reason they see.
+    path(
+        "users/<int:pk>/photo/remove/",
+        capability_required(PHOTO_MODERATE_PERMISSION)(photo_remove),
+        name="user-photo-remove",
     ),
     path(
         "users/<int:pk>/public-profile/",

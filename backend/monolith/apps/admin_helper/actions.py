@@ -1252,6 +1252,7 @@ NEVER: dict[str, str] = {
     "sea-crossing-new": "Adding a sea crossing to the geography.",
     "finance-exports": "Finance exports: files for the admin, never for an assistant.",
     "chat-report-detail": "Reported chat messages: chat contents never reach an assistant.",
+    "user-photo-remove": "Removing a profile photo: the admin looks at the picture, which never reaches an assistant.",
 }
 
 #: Operations of a page in `CONSOLE_POSTS` that the helper still never does.

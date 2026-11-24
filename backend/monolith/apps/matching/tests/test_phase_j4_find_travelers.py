@@ -630,14 +630,15 @@ class TravelerIdentityTests(FindTravelersFixture, TestCase):
             {
                 "id",
                 "display_name",
-                "avatar_url",
+                "photo",
                 "identity_verified",
                 "rating",
                 "completed_deliveries",
             },
         )
         self.assertTrue(traveler["identity_verified"])
-        self.assertIsNone(traveler["avatar_url"])
+        # P3A: the placeholder became the photo block; no photo is null.
+        self.assertIsNone(traveler["photo"])
 
     def _rate(self, score: int, *, revealed: bool) -> Rating:
         deal = self._completed_deal()

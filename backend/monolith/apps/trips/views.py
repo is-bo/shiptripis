@@ -144,6 +144,7 @@ def _journey_queryset(*, include_proofs: bool = True):
     )
     return Journey.objects.select_related(
         "traveler",
+        "traveler__profile_photo",
         "start_location",
         "destination_location",
         "start_place",

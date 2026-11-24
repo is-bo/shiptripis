@@ -18,6 +18,7 @@ from django.db.models import Exists, F, OuterRef, Prefetch, Q, QuerySet, Subquer
 from django.db.models.functions import Greatest
 from django.utils import timezone
 
+from apps.accounts.photos import public_photo
 from apps.kyc.models import KycSubmission
 from apps.matching.find_travelers import first_name
 from apps.parcels.models import DeliveryRequest, ParcelRequest
@@ -67,7 +68,7 @@ def visible_profiles() -> QuerySet:
     """Profiles anyone may see, with everything their card renders loaded."""
 
     return (
-        PublicProfile.objects.select_related("user")
+        PublicProfile.objects.select_related("user", "user__profile_photo")
         .prefetch_related(_routes_prefetch())
         .filter(
             is_discoverable=True,
@@ -162,6 +163,7 @@ def profile_card(profile: PublicProfile, *, trust: dict) -> dict:
     return {
         "id": str(profile.public_id) if profile.pk else None,
         "display_name": first_name(user.full_name),
+        "photo": public_photo(user),
         "identity_verified": bool(getattr(profile, "identity_verified", False)),
         "member_since": f"{joined.year:04d}-{joined.month:02d}" if joined else None,
         "rating": trust["rating"],
@@ -189,7 +191,7 @@ def own_profile(user) -> PublicProfile:
     """
 
     profile = (
-        PublicProfile.objects.select_related("user")
+        PublicProfile.objects.select_related("user", "user__profile_photo")
         .prefetch_related(_routes_prefetch())
         .annotate(identity_verified=Exists(_current_kyc()))
         .filter(user=user)

@@ -124,15 +124,15 @@ A tier with nothing to show renders its designed empty state. It is never filled
 
 A card is built by an explicit allowlist serializer. Anything not listed is forbidden.
 
-- **Trip card:** traveler first name; ID-verified flag; rating and completed-delivery count; ordered stops at **locality level** with transport
+- **Trip card:** traveler first name and photo (section 21); ID-verified flag; rating and completed-delivery count; ordered stops at **locality level** with transport
   mode per leg, each stop named as a city (see the place-naming rule below); departure and arrival dates; remaining weight
   capacity as whole kilos (the smallest free weight on the legs still ahead, rounded down; owner decision of 2026-11-24,
   replacing the earlier band);
   listed price (per kg and minimum) when set.
 - **Request card:** locality of pickup and delivery; item title, category and fragile flag; weight;
-  ready window and deadline; offered reward; sender first name. Nothing the existing
+  ready window and deadline; offered reward; sender first name and photo (section 21). Nothing the existing
   compatible-requests contract does not already show a matched traveler, and never the recipient.
-- **Profile card:** first name; ID-verified flag; member since (month and year); rating and completed-delivery count; up to three "usual
+- **Profile card:** first name and photo (section 21); ID-verified flag; member since (month and year); rating and completed-delivery count; up to three "usual
   routes" the user chose, as locality pairs.
 
 **Place naming (owner's rule, fix plan P2, 2026-11-24): cards show cities; detail pages show the catalogue place; the exact
@@ -619,3 +619,53 @@ do the work. It never contains a key or a server address.
 
 AI helper on or off, with the key durations, the validity of prepared actions and the rate limit. It
 ships on. Turning it off stops every key at once.
+
+## 21. Profile photos
+
+Added by Ismail on 2026-11-24 after his phone test ("Is there no option for profile pictures? Add it."),
+reversing plan decision 5.1b. Fix plan P3A (server) and P3B (app). The rule lives in
+`apps/accounts/photos.py`.
+
+### 21.1 The member's photo
+
+- **Optional.** A member may add one photo, replace it and remove it, from Profile. Nobody is asked
+  for one, and the ID-check selfie is never used as one.
+- **Accepted:** JPEG, PNG or WebP, at most 10 MiB, its type read from the bytes. Anything else is
+  refused with a stable code: `profile_photo_media_type_unsupported` (also a file that cannot be decoded
+  or claims more than 40 million pixels), `profile_photo_too_large`, `profile_photo_missing`, and
+  `profile_photo_storage_unavailable` when storage cannot take it. A banned or deactivated account
+  cannot add one (`account_inactive`), and can always remove its photo.
+- **The server never keeps the uploaded file.** It turns the picture upright from its orientation tag,
+  crops the centred square, resizes it to 512 by 512 pixels and writes a new JPEG with no metadata: no
+  location, camera, time, profile or comment. The upload is read in memory only, never written to disk.
+  The image is stored privately, under a random name that never contains the member's id.
+- **No staff check before it shows** (Ismail, 2026-11-24). A valid photo is visible at once.
+- Replacing or removing a photo, or deleting the account, deletes the stored image. The delete is a
+  durable background job that retries until storage confirms it, and never deletes an image a photo
+  still uses.
+
+### 21.2 Who sees it
+
+- **Everyone who sees the person's first name**, people without an account included (Ismail,
+  2026-11-24): trip, request and profile cards, the person page, the member's own profile preview, route
+  alerts that follow a person, Find Travelers, "Matches for you", both parties of a proposal (the
+  delivery screen reads its counterparty from the proposal), and the journey detail and list.
+- Each of those carries `photo`: `{"url", "version"}` or null (`sender_photo` and `traveler_photo` on a
+  proposal, `traveler_photo` on a journey). The address is signed when the page is read and expires after 30 minutes
+  (`PROFILE_PHOTO_URL_TTL_SECONDS`); nothing caches it. The app caches the image by `version`, which
+  changes with every upload.
+- A photo of a banned or deactivated account is never shown. Chat is out of scope for now.
+
+### 21.3 Removal by Wassla
+
+- Staff with the capability "moderate profile photos" (granted where ID review is: Trust /
+  Verification and Super Admin) remove a photo from the console person page, with a reason. The member
+  is shown that Wassla removed it and the reason (`GET /api/me`, `photo.state = "removed"`). Everyone
+  else sees no photo. The removal writes the audit log with actor, person, before, after and reason.
+- The member may add a different photo afterwards.
+- **Races are decided by the version.** The removal names the photo the operator was shown. If the
+  member replaced it in the meantime, nothing is removed and the operator looks again; a removal that
+  lands first deletes the image, and a later upload is a new photo.
+- The AI helper never carries a photo, and removing one is on its "never" list.
+- There is no "report this photo" for now: the existing reports carry a chat message or a review only.
+  A member can block a counterparty from the chat or write to support.

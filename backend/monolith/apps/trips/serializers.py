@@ -6,6 +6,7 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 
+from apps.accounts.photos import public_photo
 from apps.locations.models import Location, Place, SeaCrossing
 from apps.locations.serializers import PublicLocationSerializer
 from apps.matching.public_contract import distance_band
@@ -877,6 +878,7 @@ class JourneySerializer(serializers.ModelSerializer):
 
     traveler_id = serializers.IntegerField(read_only=True)
     traveler_name = serializers.CharField(source="traveler.full_name", read_only=True)
+    traveler_photo = serializers.SerializerMethodField()
     start_location = PublicLocationSerializer(read_only=True)
     destination_location = PublicLocationSerializer(read_only=True)
     start_place = serializers.SerializerMethodField()
@@ -895,6 +897,7 @@ class JourneySerializer(serializers.ModelSerializer):
             "id",
             "traveler_id",
             "traveler_name",
+            "traveler_photo",
             "start_location",
             "destination_location",
             "start_place",
@@ -915,6 +918,11 @@ class JourneySerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = fields
+
+    def get_traveler_photo(self, obj: Journey) -> dict | None:
+        """The traveler's public photo (spec 21), the same block every card carries."""
+
+        return public_photo(obj.traveler)
 
     def _is_owner(self, obj: Journey) -> bool:
         request = self.context.get("request")

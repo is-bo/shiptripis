@@ -496,6 +496,12 @@ PARCEL_MEDIA_URL_TTL_SECONDS = env.int("PARCEL_MEDIA_URL_TTL_SECONDS", default=3
 #: `manage.py purge_staged_parcel_media` may reclaim it. Long enough that a
 #: sender can leave the form, come back and still post.
 PARCEL_STAGED_MEDIA_TTL_HOURS = env.int("PARCEL_STAGED_MEDIA_TTL_HOURS", default=48)
+#: Lifetime of a signed profile-photo URL, in seconds (spec 21). Every payload
+#: that shows a person signs a fresh one when it is read, nothing caches it,
+#: and the app caches the image by its `version`, so the URL only has to
+#: outlive one page being scrolled. A removed photo's object is deleted, so
+#: its old URLs stop working at once whatever this says.
+PROFILE_PHOTO_URL_TTL_SECONDS = env.int("PROFILE_PHOTO_URL_TTL_SECONDS", default=1800)
 
 # --- gRPC ---
 GRPC_AUTH_MODE = env.str("GRPC_AUTH_MODE", default="bearer")

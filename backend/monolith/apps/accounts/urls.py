@@ -5,6 +5,7 @@ from .views import (
     AccountDeletionView,
     AppleSignInView,
     GoogleSignInView,
+    MePhotoView,
     MeView,
     PasswordResetConfirmView,
     PasswordResetRequestView,
@@ -39,5 +40,6 @@ urlpatterns = [
         name="auth-verify-email-resend",
     ),
     path("me", MeView.as_view(), name="me"),
+    path("me/photo", MePhotoView.as_view(), name="me-photo"),
     path("me/deletion", AccountDeletionView.as_view(), name="me-deletion"),
 ]

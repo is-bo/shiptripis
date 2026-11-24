@@ -12,6 +12,12 @@
     </div>
   </header>
   <section class="st-card {% if danger %}st-decision-card{% endif %}">
+    {% if preview %}
+    <figure class="st-photo-preview">
+      {% if preview.url %}<img src="{{ preview.url }}" alt="{{ preview.alt }}" width="160" height="160" referrerpolicy="no-referrer">{% endif %}
+      <figcaption>{% if preview.url %}The photo as members see it now.{% else %}The photo cannot be shown right now.{% endif %}</figcaption>
+    </figure>
+    {% endif %}
     {% if form %}
     <form method="post" class="st-form">{% csrf_token %}
       {{ form.as_p }}

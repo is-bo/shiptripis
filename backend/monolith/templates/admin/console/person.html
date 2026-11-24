@@ -14,7 +14,11 @@
 {% block content %}
 <main class="st-console st-person">
   <header class="st-person-head">
+    {% if header.photo.state == "active" and header.photo.url %}
+    <img class="st-person-avatar st-person-photo" src="{{ header.photo.url }}" alt="Profile photo of {{ header.name }}" width="64" height="64" referrerpolicy="no-referrer">
+    {% else %}
     <span class="st-person-avatar" aria-hidden="true">{{ header.initials }}</span>
+    {% endif %}
     <div class="st-person-id">
       <p class="st-eyebrow">Person &middot; account #{{ header.id }}</p>
       <h1>{{ header.name }}</h1>
@@ -88,6 +92,7 @@
           <div><dt>Marketplace role</dt><dd>{{ header.role }}</dd></div>
           <div><dt>Uses Wassla as</dt><dd>{% if body.uses %}{{ body.uses|join:" and " }}{% else %}No marketplace activity yet{% endif %}</dd></div>
           <div><dt>Joined</dt><dd>{{ header.joined|date:"d M Y, H:i" }}</dd></div>
+          <div><dt>Profile photo</dt><dd>{% if header.photo.state == "active" %}{% if header.photo.public %}Shown to everyone{% else %}Not shown while the account is restricted{% endif %}<small>Added {{ header.photo.uploaded_at|date:"d M Y, H:i" }}</small>{% elif header.photo.state == "removed" %}<span class="st-chip st-bad">Removed by Wassla</span><small>{{ header.photo.removed_at|date:"d M Y, H:i" }} by {{ header.photo.removed_by }}. Reason shown to the member: {{ header.photo.reason }}</small>{% else %}None{% endif %}</dd></div>
           {% if body.deals %}<div><dt>Deliveries</dt><dd>{{ body.deals.sender }} as Sender &middot; {{ body.deals.traveler }} as Traveler</dd></div>{% endif %}
           {% if header.staff_roles %}<div><dt>Staff access</dt><dd>{{ header.staff_roles|join:", " }}</dd></div>{% endif %}
         </dl>

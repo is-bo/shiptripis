@@ -200,6 +200,70 @@ class EmailVerificationCode(models.Model):
             return ok
 
 
+class ProfilePhoto(models.Model):
+    """A member's one optional profile photo (spec 21; `apps.accounts.photos`).
+
+    The stored object is the server's own re-encoding (a 512 px square JPEG
+    with no metadata) under a random key that never contains the user id.
+    `version` is random and changes with every upload: the app caches the
+    image by it, and a staff removal names the version it was looking at, so a
+    replacement that arrives meanwhile is never removed unseen.
+
+    A photo is visible from the moment it is stored. Staff removal keeps the
+    row (`removed`, with the reason the member is shown) and deletes the
+    object; the member may upload a new photo, which replaces the row's
+    contents.
+    """
+
+    class State(models.TextChoices):
+        ACTIVE = "active", "Active"
+        REMOVED = "removed", "Removed by Wassla"
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="profile_photo",
+    )
+    state = models.CharField(max_length=16, choices=State.choices, default=State.ACTIVE)
+    #: The bucket the object was written to, so it resolves to the credential
+    #: that can read it (`apps.core.storage.store_for_bucket`). Blank once the
+    #: object is gone.
+    bucket = models.CharField(max_length=128, blank=True)
+    object_key = models.CharField(max_length=256, blank=True)
+    bytes = models.PositiveIntegerField(default=0)
+    version = models.CharField(max_length=32)
+    uploaded_at = models.DateTimeField()
+    removed_at = models.DateTimeField(null=True, blank=True)
+    removed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    #: Written by staff; the member is shown it.
+    removed_reason = models.CharField(max_length=500, blank=True)
+
+    class Meta:
+        db_table = "accounts_profile_photo"
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(state="active", removed_at__isnull=True)
+                    & ~models.Q(object_key="")
+                )
+                | (
+                    models.Q(state="removed", removed_at__isnull=False, object_key="")
+                    & ~models.Q(removed_reason="")
+                ),
+                name="accounts_profile_photo_state_shape",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"ProfilePhoto({self.user_id}, {self.state})"
+
+
 class UserBlock(models.Model):
     """One member has blocked another (App Store 1.2; `apps.accounts.blocks`).
 

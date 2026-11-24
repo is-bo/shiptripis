@@ -112,7 +112,9 @@ def _match_read_queryset():
         "parcel__deliveryrequest__delivery_place",
         "trip",
         "sender",
+        "sender__profile_photo",
         "traveler",
+        "traveler__profile_photo",
         "deal",
     ).prefetch_related(
         Prefetch(

@@ -3954,6 +3954,27 @@ a.st-person-link:hover { color: var(--st-accent); text-decoration-color: current
   font-size: 1.45rem;
   font-weight: 600;
 }
+/* P3A: a member's profile photo, in place of the initials. */
+.st-person-photo {
+  display: block;
+  object-fit: cover;
+  padding: 0;
+}
+.st-photo-preview {
+  display: flex;
+  align-items: center;
+  gap: var(--st-4);
+  margin: 0 0 var(--st-4);
+}
+.st-photo-preview img {
+  width: 160px;
+  height: 160px;
+  border: 1px solid var(--st-line-2);
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--st-surface-2);
+}
+.st-photo-preview figcaption { color: var(--st-ink-2); }
 .st-person-id { min-width: 0; }
 .st-person-id h1 {
   margin: 0 0 var(--st-1);

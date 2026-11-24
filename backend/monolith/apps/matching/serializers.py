@@ -10,6 +10,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 from rest_framework import serializers
 
+from apps.accounts.photos import public_photo
 from apps.parcels.models import ParcelRequest
 from apps.parcels import tracking
 
@@ -249,10 +250,18 @@ class _MatchParcelMini(serializers.Serializer):
 
 
 class MatchSerializer(serializers.ModelSerializer):
+    """A proposal as its two parties see it.
+
+    Each party appears by name and photo (spec 21). The Deal a match leads to
+    names nobody; the app reads the counterparty from here.
+    """
+
     sender_id = serializers.IntegerField(read_only=True)
     traveler_id = serializers.IntegerField(read_only=True)
     sender_name = serializers.SerializerMethodField()
     traveler_name = serializers.SerializerMethodField()
+    sender_photo = serializers.SerializerMethodField()
+    traveler_photo = serializers.SerializerMethodField()
     parcel_id = serializers.IntegerField(read_only=True)
     trip_id = serializers.IntegerField(read_only=True)
     journey_id = serializers.IntegerField(read_only=True)
@@ -285,6 +294,8 @@ class MatchSerializer(serializers.ModelSerializer):
             "traveler_id",
             "sender_name",
             "traveler_name",
+            "sender_photo",
+            "traveler_photo",
             "status",
             "matching_version",
             "matched_distance_band",
@@ -314,6 +325,12 @@ class MatchSerializer(serializers.ModelSerializer):
 
     def get_traveler_name(self, obj: Match) -> str:
         return obj.traveler.full_name
+
+    def get_sender_photo(self, obj: Match) -> dict | None:
+        return public_photo(obj.sender)
+
+    def get_traveler_photo(self, obj: Match) -> dict | None:
+        return public_photo(obj.traveler)
 
     def get_tracking_number(self, obj: Match) -> str:
         # A match exists only once the sender has proposed: both people of
