@@ -48,7 +48,7 @@ thread as for five. The K4 performance tests are unedited.
 
 ## Tests
 
-New, `apps/chat/tests/test_p3c_chat_photos.py` (12):
+New, `apps/chat/tests/test_p3c_chat_photos.py` (13):
 
 - both directions: the sender sees the traveler's photo and the traveler the sender's; a person with a
   photo does not see it on their own row;
@@ -56,12 +56,28 @@ New, `apps/chat/tests/test_p3c_chat_photos.py` (12):
   `{url, version}`; the URL's path ends in the stored key and holds no user id or email;
 - null: no photo, removed by staff, banned, deactivated, deleted (thread still listed with
   `counterparty_deleted`);
-- a thread blocked from either side still shows the photo to both; the blocked-people list has no photo
-  key;
-- query count: one thread equals five, five different travelers each with an active photo (checked to
-  fail, 6 queries against 2, when the two `select_related` entries are removed);
+- a thread blocked from either side still shows the photo to both; the blocked-people row keys are
+  exactly `{user_id, name, deleted, blocked_at}`;
+- query count, both directions: one thread equals five. The sender's inbox has five different travelers,
+  the traveler's inbox five different senders, every one with an active photo. Each test fails (6 queries
+  against 2) when its own join is removed: `traveler__profile_photo` for the sender's inbox,
+  `sender__profile_photo` for the traveler's;
 - publish unchanged: message payloads (sent and listed) and the `chat.message.new` payload keep their
   keys, and the publish keeps its arguments.
+
+## Second-pass review
+
+Astra's second independent pass (races, authorization, idempotency, privacy) approved the package with
+two test nits, both added:
+
+- **Reciprocal query count.** The first query test measured only the sender's inbox, so dropping
+  `sender__profile_photo` alone still passed. A second test measures the traveler's inbox with one
+  traveler and five distinct senders; it fails when `sender__profile_photo` is removed (6 against 2) and
+  the sender's test still passes then, and the other way round.
+- **Blocked-people exact keys.** The list's row keys are asserted equal to
+  `{user_id, name, deleted, blocked_at}`, not only free of a "photo" key.
+
+No production code changed in the second pass.
 
 ## Handoff to P3B
 

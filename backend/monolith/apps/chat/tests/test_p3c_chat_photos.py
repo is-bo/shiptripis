@@ -182,7 +182,7 @@ class ChatPhotoTests(TestCase):
         UserBlock.objects.create(blocker=self.sender, blocked=self.traveler)
         rows = _client(self.sender).get(reverse("my-blocks")).data["results"]
         self.assertEqual(len(rows), 1)
-        self.assertEqual([key for key in rows[0] if "photo" in key], [])
+        self.assertEqual(set(rows[0]), {"user_id", "name", "deleted", "blocked_at"})
 
     # -- messages and the published event stay as they were ------------------
 
@@ -210,22 +210,26 @@ class ChatPhotoTests(TestCase):
 
 class ChatPhotoQueryCountTests(CanonicalOfferFixture, TestCase):
     """The inbox costs the same queries for one thread as for five, every
-    counterparty (a different traveler each time) having an active photo: the
-    photo row is joined, not read per thread."""
+    counterparty having an active photo: the photo row is joined, not read per
+    thread. Both directions: the sender's inbox joins the travelers' photos,
+    the traveler's inbox the senders'."""
 
     def setUp(self):
         enable_mock_rail()
         self.build_world()
 
-    def add_funded_thread(self, index: int) -> None:
-        traveler = _v1_user(f"p3c-flat-traveler-{index}@example.com")
-        _approve_kyc(traveler, f"p3c-flat-{index}")
-        give_photo(traveler)
+    def add_funded_thread(self, *, sender, traveler, index: int) -> None:
         journey, flight, drive = self._journey(traveler, origin=self.cdg)
-        delivery_request = self._request(
-            self.paris, self.jijel, title=f"P3C thread {index}"
-        )
+        # `_request` names `self.sender` as the request's sender.
+        fixture_sender, self.sender = self.sender, sender
+        try:
+            delivery_request = self._request(
+                self.paris, self.jijel, title=f"P3C thread {index}"
+            )
+        finally:
+            self.sender = fixture_sender
         offer = self.propose(
+            sender=sender,
             delivery_request=delivery_request,
             journey=journey,
             start_leg_id=flight.pk,
@@ -239,8 +243,14 @@ class ChatPhotoQueryCountTests(CanonicalOfferFixture, TestCase):
             match=deal.match, sender=traveler, body=f"hello {index}"
         )
 
-    def inbox(self) -> tuple[int, int]:
-        client = _client(self.sender)
+    def new_member(self, role: str, index: int):
+        member = _v1_user(f"p3c-flat-{role}-{index}@example.com")
+        _approve_kyc(member, f"p3c-flat-{role}-{index}")
+        give_photo(member)
+        return member
+
+    def inbox(self, viewer) -> tuple[int, int]:
+        client = _client(viewer)
         self.assertEqual(client.get(reverse("chat-threads")).status_code, 200)
         with CaptureQueriesContext(connection) as captured:
             response = client.get(reverse("chat-threads"))
@@ -248,12 +258,28 @@ class ChatPhotoQueryCountTests(CanonicalOfferFixture, TestCase):
         with_photo = sum(1 for r in response.data["results"] if r["counterparty_photo"])
         return len(captured.captured_queries), with_photo
 
-    def test_the_inbox_query_count_is_flat_from_one_thread_to_five(self):
-        self.add_funded_thread(0)
-        one, one_with_photo = self.inbox()
-        for index in range(1, 5):
-            self.add_funded_thread(index)
-        five, five_with_photo = self.inbox()
+    def test_the_senders_inbox_query_count_is_flat_from_one_thread_to_five(self):
+        """One sender, five different travelers."""
+
+        for index in range(5):
+            traveler = self.new_member("traveler", index)
+            self.add_funded_thread(sender=self.sender, traveler=traveler, index=index)
+            if index == 0:
+                one, one_with_photo = self.inbox(self.sender)
+        five, five_with_photo = self.inbox(self.sender)
+
+        self.assertEqual((one_with_photo, five_with_photo), (1, 5))
+        self.assertEqual(five, one)
+
+    def test_the_travelers_inbox_query_count_is_flat_from_one_thread_to_five(self):
+        """One traveler, five different senders."""
+
+        for index in range(5):
+            sender = self.new_member("sender", index)
+            self.add_funded_thread(sender=sender, traveler=self.traveler, index=index)
+            if index == 0:
+                one, one_with_photo = self.inbox(self.traveler)
+        five, five_with_photo = self.inbox(self.traveler)
 
         self.assertEqual((one_with_photo, five_with_photo), (1, 5))
         self.assertEqual(five, one)
