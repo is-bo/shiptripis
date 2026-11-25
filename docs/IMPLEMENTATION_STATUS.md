@@ -15,6 +15,22 @@
   before/after recording of every evaluation in nine test apps. Helper knowledge updated. Detail and
   the M2 handoff: `docs/PHASE_M1_ROUTE_STOP_REASONS.md`.
 
+## Wassla: profile photos in the app, chat included (P3B, 2026-11-25)
+
+- Ismail's phone test of 2026-11-24, fix plan P3B, on the server of P3A and P3C. The app only; no
+  migration, no Go change. Nothing deployed, and a phone needs a new build to see it.
+- Profile has a "Profile photo" section after the verification card: camera or library (resized to
+  1024 px by the phone), a centred-square preview, a confirmation before removing, and every state (empty,
+  uploading, active, removed by Wassla with the staff's reason, too large, unsupported type, inactive
+  account, storage unavailable, offline, general error, camera refused). An upload is sent once and never
+  retried by the app; any HTTP 413 reads as "too large".
+- `AppAvatar` draws a photo through `CachedNetworkImage`, cached by the photo's version, with initials
+  while loading and on error. Photos show wherever a person is named, guests included: person rows, trip,
+  request and profile cards, Find Travelers, the person page, alerts, proposals, the chat list and a new
+  avatar slot in the chat header (a deleted counterparty shows initials). `avatar_url` is gone from the
+  app. Helper knowledge `accounts-and-verification.md` now describes the screens. Detail and the
+  screenshots (`docs/screenshots/p3b/`): `docs/PHASE_P3B_PROFILE_PHOTOS_APP.md`.
+
 ## Wassla: chat photos, server side (P3C, 2026-11-24)
 
 - Ismail's answer after P3A: photos should appear in chat, in the conversation list and the chat

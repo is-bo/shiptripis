@@ -184,13 +184,13 @@ Related files: admin-console.md, money.md, trips-and-matching.md, deliveries.md,
 <!-- src: backend/monolith/apps/discovery/profiles.py, models.py, core/marketplace_policy.py, admin_panel/console_discovery.py, mobile l10n publicProfile* -->
 
 ## What are profile photos, and who sees them?
-- Optional, one per member (owner decision of 2026-11-24). The server side is built; the app screens to add, change and remove a photo come in a later app update (package P3B), so until then nobody can add one from the app.
+- Optional, one per member (owner decision of 2026-11-24). In the app, Profile has a "Profile photo" section, below the verification card: take a photo with the camera or choose one from the library, change it, or remove it (after a confirmation). The phone shrinks the picture first, and the screen shows the centred square that others will see. Each upload is sent once; if it fails (too large, wrong type, offline, storage down) the member presses "Try again" themselves. If Wassla removed the photo, that section says so with the reason staff gave, until the member dismisses the notice or adds a new photo.
 - Everyone who sees the person's first name sees the photo, people without an account included: trip and parcel cards, people cards and the person page, trip details, Find Travelers, route alerts and proposals. The chat list and the chat header show the other person's photo too, also on a blocked or closed thread (it shows their name), but the "Blocked people" list shows none and messages carry none. A photo of a banned or deleted account is never shown, and a banned or deactivated account cannot add one (it can still remove it).
 - Nobody checks a photo first: it is visible as soon as it is saved. Staff remove an unsuitable one afterwards (see admin-console, "How do I remove a member's profile photo?").
 - The server never keeps the uploaded file. It turns the picture upright, crops the centred square, makes it 512 x 512 and saves a new JPEG with no hidden data (no location, camera or date). Accepted: JPEG, PNG or WebP up to 10 MB; anything else is refused.
 - Photos are shown through links that stop working after 30 minutes; the app fetches fresh ones. A removed or replaced photo's image is deleted by a background job (`profile_photo_object_delete`) that keeps retrying until storage confirms; a failed one shows in System > Background jobs and can be retried there.
 - There is no "report this photo" button. A member can block someone from the chat or write to support; staff can remove the photo.
-<!-- src: backend/monolith/apps/accounts/photos.py, apps/core/storage.py (square_jpeg_without_metadata) -->
+<!-- src: backend/monolith/apps/accounts/photos.py, apps/core/storage.py (square_jpeg_without_metadata), mobile profile_photo_section.dart, l10n profilePhoto* -->
 
 ## What trust signals do people see?
 - ID verified badge, rating, completed deliveries, member since (month and year) on the public card.
