@@ -267,6 +267,6 @@ This investigation used pinned source, the lead's live observations and an isola
 Ismail, 25 November 2026:
 
 - **Q1 = yes.** The lead may enable payout-method setup on the test server: first the DZD postal-account rehearsal (O4), then a France-only Stripe Connect onboarding rehearsal (O5). Payout execution stays off. Each switch change on the running server still gets its own OK.
-- **Q2 = yes.** A regular Algerian bank account with a RIB is wanted in addition to the CCP postal account. This is new money scope. It gets its own package (F3), planned by the Opus extra-high planner before building. The planner's owner questions (accepted evidence document, what Finance verifies, how it pays) go to Ismail first.
+- **Q2 = no (corrected by Ismail the same day).** CCP postal account with the full crossed cheque only, as recommended. No bank RIB rail and no F3 package for now.
 - **Q3 = yes.** M3 as recommended: an optional "Other departures to Paris" browse result with "You would need to bring the parcel to Algiers". The sender arranges the first mile, and the original request is unchanged.
 - **Q4 = both.** A1 offers the route alert after an empty two-city search **and** after posting (a request or a journey), each created only on confirmation.
