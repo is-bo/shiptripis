@@ -2158,7 +2158,7 @@ class LAr extends L {
       'سيرى الآخرون الحروف الأولى من اسمك بدلاً منها. يمكنك إضافة صورة جديدة في أي وقت.';
 
   @override
-  String get profilePhotoWassla => 'أزالت وصلة صورتك';
+  String get profilePhotoWassla => 'أزالت Wassla صورتك';
 
   @override
   String get profilePhotoWasslaBody =>
@@ -2198,7 +2198,7 @@ class LAr extends L {
 
   @override
   String get profilePhotoPickFailed =>
-      'تعذّر فتح الكاميرا أو الصور. تأكد من أن وصلة مسموح لها باستخدامهما في إعدادات جهازك.';
+      'تعذّر فتح الكاميرا أو الصور. تأكد من السماح لتطبيق Wassla باستخدامهما في إعدادات جهازك.';
 
   @override
   String get profilePassportStamp => 'Wassla · عضو';

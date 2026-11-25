@@ -404,7 +404,10 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
     final reason = photo.reason?.trim() ?? '';
     return reason.isEmpty
         ? l.profilePhotoWasslaBody
-        : '${l.profilePhotoWasslaBody}\n${l.profilePhotoWasslaReason(reason)}';
+        // The reason is staff's own words, in any language: isolated, so it
+        // cannot reorder the label around it in a right-to-left sentence.
+        : '${l.profilePhotoWasslaBody}\n'
+              '${l.profilePhotoWasslaReason('\u2068$reason\u2069')}';
   }
 }
 

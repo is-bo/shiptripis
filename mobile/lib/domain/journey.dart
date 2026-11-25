@@ -16,7 +16,6 @@ library;
 import 'json.dart';
 import 'canonical_place.dart';
 import 'location.dart';
-import 'person_photo.dart';
 import 'transport_mode.dart';
 
 enum JourneyStatus {
@@ -334,7 +333,6 @@ class Journey {
     required this.travelerId,
     required this.travelerName,
     required this.status,
-    this.travelerPhoto,
     required this.notes,
     required this.legs,
     this.startLocation,
@@ -357,7 +355,6 @@ class Journey {
     id: readInt(json['id']) ?? 0,
     travelerId: readInt(json['traveler_id']) ?? 0,
     travelerName: readText(json['traveler_name']),
-    travelerPhoto: PersonPhoto.maybe(json['traveler_photo']),
     startLocation: AppLocation.maybe(json['start_location']),
     destinationLocation: AppLocation.maybe(json['destination_location']),
     startPlace: _place(json['start_place']),
@@ -393,7 +390,6 @@ class Journey {
   final int id;
   final int travelerId;
   final String travelerName;
-  final PersonPhoto? travelerPhoto;
   final AppLocation? startLocation;
   final AppLocation? destinationLocation;
   final CanonicalPlace? startPlace;

@@ -866,20 +866,6 @@ void main() {
       expect(bare.counterpartyPhoto(99), isNull);
     });
 
-    test('a journey carries the traveler photo beside the name', () {
-      final journey = Journey.fromJson({
-        'id': 9,
-        'traveler_id': 3,
-        'traveler_name': 'Samira Ait',
-        'traveler_photo': block,
-      });
-      expectPhoto(journey.travelerPhoto);
-      expect(
-        Journey.fromJson(const {'id': 9, 'traveler_photo': null}).travelerPhoto,
-        isNull,
-      );
-    });
-
     test('a chat thread row carries counterparty_photo, or null', () {
       const thread = {
         'match_id': 55,
