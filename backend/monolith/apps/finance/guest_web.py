@@ -23,6 +23,9 @@ complete says so instead (J7D; see `_completed_link`).
 browser language when it is one of ours, falls back to the language the owner's
 link was issued in, and always offers a one-tap switch. The switch is a query
 parameter on the same path; the token never moves into a query string.
+
+**The token is the only authority (G1).** The page takes no CSRF token and
+never reads the session; see `guest_payment_page`.
 """
 
 from __future__ import annotations
@@ -30,12 +33,15 @@ from __future__ import annotations
 import logging
 import math
 from datetime import datetime
+from functools import wraps
 
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import render
 from django.utils import timezone
+from django.utils.cache import patch_cache_control
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from apps.core.business_settings import NoActiveBusinessSettings
@@ -370,6 +376,28 @@ def _completed_link(token: str):
     return link
 
 
+def _private(view):
+    """No referrer and no cache on every response, redirects and errors too.
+
+    The path is the capability. `Referrer-Policy` keeps it out of whatever the
+    browser requests next, the provider's page after the redirect included,
+    and `private, no-store` keeps every cache from holding a page or a
+    redirect to a checkout under it. The shell's meta tag covers the rendered
+    document; a redirect has no document, so the header says it for both.
+    """
+
+    @wraps(view)
+    def wrapped(request: HttpRequest, *args, **kwargs) -> HttpResponse:
+        response = view(request, *args, **kwargs)
+        response.headers["Referrer-Policy"] = "no-referrer"
+        patch_cache_control(response, private=True, no_store=True)
+        return response
+
+    return wrapped
+
+
+@csrf_exempt
+@_private
 @require_http_methods(["GET", "POST"])
 def guest_payment_page(request: HttpRequest, token: str) -> HttpResponse:
     """Show what is owed, or start a hosted checkout for it.
@@ -377,6 +405,16 @@ def guest_payment_page(request: HttpRequest, token: str) -> HttpResponse:
     The POST branch redirects the browser to the provider rather than returning
     JSON, and returning from that provider proves nothing: only the
     signature-verified webhook moves money, exactly as for a signed-in payer.
+
+    **Exempt from Django's CSRF check (G1).** That check binds a form to the
+    browser's cookie and to its Origin or Referer, and neither is the authority
+    here: the token in the path is. The shell's no-referrer policy makes
+    Chromium submit with `Origin: null` and no Referer, which the check refuses,
+    so under it no one could pay. A forged submission would need the token, and
+    whoever holds the token can already do all the form does: start a checkout
+    the provider still asks them to complete. Nothing here reads the session,
+    so a signed-in member who opens someone else's link pays as a guest, as a
+    stranger would. The exemption is this view's alone.
     """
 
     if _throttled(request):
@@ -444,6 +482,8 @@ def guest_payment_page(request: HttpRequest, token: str) -> HttpResponse:
                 )
                 return _no_rail(request, lang)
             except FinanceError:
+                # Includes a link revoked, replaced or expired since it was read
+                # above: checkout reads it again under the order lock.
                 # The token is never echoed into a log line; the order is named
                 # by its own id, which is not derivable from anything the payer
                 # holds.

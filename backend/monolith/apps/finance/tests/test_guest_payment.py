@@ -13,6 +13,7 @@ import json
 import secrets
 from copy import deepcopy
 from datetime import timedelta
+from unittest import mock
 
 from django.test import TestCase
 from django.urls import reverse
@@ -27,15 +28,24 @@ from apps.finance.models import (
     PaymentAttempt,
     PaymentOrder,
 )
+from apps.finance import views as finance_views
 from apps.finance.services import (
     GuestLinkInvalid,
     NotAuthorized,
+    cancel_order,
     create_guest_link,
     hash_guest_token,
     resolve_guest_link,
+    revoke_guest_link,
+    start_checkout,
 )
 
-from .factories import build_scenario, deliver_mock_webhook, succeed_attempt
+from .factories import (
+    build_scenario,
+    deliver_mock_webhook,
+    open_mock_checkout,
+    succeed_attempt,
+)
 
 
 def _enable_mock():
@@ -362,3 +372,98 @@ class GuestAuthorityDenialTests(GuestPaymentTestCase):
         assert deal.traveler_id == self.scenario.traveler.pk
         # There is no user row for the guest at all.
         assert attempt.payer_id is None
+
+
+class CheckoutRecheckTests(GuestPaymentTestCase):
+    """G1: checkout reads the link again, under the order lock.
+
+    The link a caller passes in is a snapshot from an unlocked read. Whatever
+    has happened to it since -- revoked, replaced, expired, used, its order
+    closed -- and whichever order the caller pairs it with, the locked re-read
+    decides, and every refusal is the same `guest_link_invalid`.
+    """
+
+    def start(self, link, order=None):
+        return start_checkout(
+            order_id=(order or self.order).pk,
+            provider="mock",
+            actor_id=None,
+            guest_link=link,
+            guest_email="",
+        )
+
+    def assert_refused(self, link, order=None):
+        with self.assertRaises(GuestLinkInvalid):
+            self.start(link, order)
+        assert not PaymentAttempt.objects.filter(order=self.order).exists()
+
+    def test_a_live_link_opens_the_checkout(self):
+        attempt = self.start(resolve_guest_link(self.token)).attempt
+        assert attempt.guest_link_id == self.issued.link.pk
+        assert attempt.payer_id is None
+
+    def test_a_link_revoked_since_it_was_read_is_refused(self):
+        snapshot = resolve_guest_link(self.token)
+        revoke_guest_link(order_id=self.order.pk, actor_id=self.scenario.sender.pk)
+        self.assert_refused(snapshot)
+
+    def test_a_link_replaced_since_it_was_read_is_refused(self):
+        snapshot = resolve_guest_link(self.token)
+        create_guest_link(order_id=self.order.pk, actor_id=self.scenario.sender.pk)
+        self.assert_refused(snapshot)
+
+    def test_a_link_expired_since_it_was_read_is_refused(self):
+        snapshot = resolve_guest_link(self.token)
+        GuestPaymentLink.objects.filter(pk=snapshot.pk).update(
+            expires_at=timezone.now() - timedelta(seconds=1)
+        )
+        self.assert_refused(snapshot)
+
+    def test_a_link_used_since_it_was_read_is_refused(self):
+        snapshot = resolve_guest_link(self.token)
+        GuestPaymentLink.objects.filter(pk=snapshot.pk).update(
+            consumed_at=timezone.now()
+        )
+        self.assert_refused(snapshot)
+
+    def test_a_link_whose_order_closed_is_refused_in_the_same_words(self):
+        snapshot = resolve_guest_link(self.token)
+        cancel_order(order_id=self.order.pk, reason="g1 test")
+        self.assert_refused(snapshot)
+
+    def test_a_link_pays_only_its_own_order(self):
+        other = build_scenario(prefix="guest-recheck")
+        other.accept()
+        other_order = other.balance_order()
+
+        self.assert_refused(resolve_guest_link(self.token), order=other_order)
+        assert not PaymentAttempt.objects.filter(order=other_order).exists()
+
+    def test_the_owners_own_checkout_needs_no_link(self):
+        revoke_guest_link(order_id=self.order.pk, actor_id=self.scenario.sender.pk)
+        attempt = open_mock_checkout(self.order, actor_id=self.scenario.sender.pk)
+        assert attempt.guest_link_id is None
+        assert attempt.payer_id == self.scenario.sender.pk
+
+    def test_the_apps_guest_checkout_gets_the_same_recheck(self):
+        real_resolve = finance_views.resolve_guest_link
+
+        def resolve_then_revoke(token):
+            link = real_resolve(token)
+            revoke_guest_link(
+                order_id=self.order.pk, actor_id=self.scenario.sender.pk
+            )
+            return link
+
+        with mock.patch.object(
+            finance_views, "resolve_guest_link", side_effect=resolve_then_revoke
+        ):
+            response = self.guest.post(
+                reverse("finance-guest-checkout", args=[self.token]),
+                {"provider": "mock"},
+                format="json",
+            )
+
+        assert response.status_code == 404
+        assert response.data["code"] == "guest_link_invalid"
+        assert not PaymentAttempt.objects.filter(order=self.order).exists()

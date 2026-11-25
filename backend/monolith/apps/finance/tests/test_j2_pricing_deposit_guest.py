@@ -23,7 +23,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import timedelta
 
-from django.test import TestCase
+from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -607,9 +607,14 @@ class GuestPayerTests(TestCase):
         )
         issued = create_guest_link(order_id=deposit.pk, actor_id=scenario.sender.pk)
 
-        posted = APIClient().post(
+        # G1: submitted as Chromium submits it under the page's no-referrer
+        # policy, with Django's CSRF check on: `Origin: null`, no Referer.
+        browser = Client(enforce_csrf_checks=True)
+        posted = browser.post(
             f"/pay/guest/{issued.token}",
             {"provider": "mock", "email": "neighbour@example.com"},
+            secure=True,
+            HTTP_ORIGIN="null",
         )
 
         assert posted.status_code == 302, posted
@@ -622,9 +627,11 @@ class GuestPayerTests(TestCase):
         assert attempt.amount_eur_cents == 500
 
         # A rail the page did not offer is refused rather than passed through.
-        refused = APIClient().post(
+        refused = browser.post(
             f"/pay/guest/{issued.token}",
             {"provider": "stripe", "email": "neighbour@example.com"},
+            secure=True,
+            HTTP_ORIGIN="null",
         )
         assert refused.status_code == 404
 
