@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from unittest.mock import patch
 
 from django.test import TestCase
@@ -11,7 +12,16 @@ from apps.core import channels
 from apps.deals.models import DealLegAllocation
 from apps.discovery.models import TravelerInterest
 from apps.matching.models import Match, Offer
+from apps.matching.tests.test_phase8c_canonical import (
+    INCIDENT_ARRIVE,
+    INCIDENT_AT,
+    INCIDENT_DEADLINE,
+    INCIDENT_DEPART,
+    INCIDENT_READY_END,
+    INCIDENT_READY_START,
+)
 from apps.parcels.models import DeliveryRequest
+from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
 
 from .support import DiscoveryWorld, activate_marketplace, client_for
 
@@ -62,7 +72,7 @@ class InterestTests(DiscoveryWorld, TestCase):
         elsewhere = self.drive_journey(self.traveler)  # Algiers → Jijel, no Paris pickup
         body, publish = self.signal(journey_id=elsewhere.pk, status=409)
         self.assertEqual(body["code"], "incompatible_candidate")
-        self.assertTrue(body["rejection_codes"])
+        self.assertEqual(body["rejection_codes"], ["pickup_stop_on_route"])
         publish.assert_not_called()
         self.assertFalse(TravelerInterest.objects.exists())
 
@@ -93,3 +103,88 @@ class InterestTests(DiscoveryWorld, TestCase):
     def test_listings_switched_off_refuses_the_signal(self):
         activate_marketplace({"discovery": {"listings_enabled": False}})
         self.assertEqual(self.signal(status=409)[0]["code"], "discovery_listings_disabled")
+
+
+class IncidentInterestTests(DiscoveryWorld, TestCase):
+    """Phone test 2 (M1): "I can carry this" from journey 11 (ALG → CDG) to
+    request 1 (Jijel → Paris), on the clock of the test.
+
+    The signal stays refused, Boost or not, and the refusal now names the
+    missing pickup stop instead of a code the app read as a date problem.
+    """
+
+    signal = InterestTests.signal
+
+    def setUp(self):
+        clock = patch("django.utils.timezone.now", return_value=INCIDENT_AT)
+        clock.start()
+        self.addCleanup(clock.stop)
+        self.build_discovery_world()
+        self.journey_11 = Journey.objects.create(
+            traveler=self.traveler,
+            schema_version=2,
+            start_place=self.algiers,
+            destination_place=self.paris,
+            status=Journey.Status.ACTIVE,
+            published_at=INCIDENT_AT,
+        )
+        flight = JourneyLeg.objects.create(
+            journey=self.journey_11,
+            position=0,
+            mode=JourneyLeg.Mode.FLIGHT,
+            origin_place=self.alg,
+            destination_place=self.cdg,
+            depart_at=INCIDENT_DEPART,
+            arrive_at=INCIDENT_ARRIVE,
+            capacity_kg=Decimal("8.00"),
+            flight_number="AH1000",
+        )
+        JourneyLegProof.objects.create(
+            leg=flight,
+            bucket="private",
+            object_key=f"discovery/m1-{self.journey_11.pk}.jpg",
+            status=JourneyLegProof.Status.APPROVED,
+            reviewer=self.sender,
+            reviewed_at=INCIDENT_AT,
+        )
+        self.request_1 = self.request_from(self.jijel)
+
+    def request_from(self, origin) -> DeliveryRequest:
+        request = self._request(origin, self.paris, title="Phone test 2")
+        request.ready_window_start = INCIDENT_READY_START
+        request.ready_window_end = INCIDENT_READY_END
+        request.deadline_at = INCIDENT_DEADLINE
+        request.save(
+            update_fields=["ready_window_start", "ready_window_end", "deadline_at"]
+        )
+        return request
+
+    def test_the_signal_is_refused_with_the_missing_pickup_stop_even_with_a_boost(self):
+        for boosted in (False, True):
+            if boosted:
+                self.request_1.boost_eur_cents = 100_000
+                self.request_1.ranking_boost_weight = 20
+                self.request_1.ranking_boost_expires_at = self.request_1.deadline_at
+                self.request_1.save(
+                    update_fields=[
+                        "boost_eur_cents",
+                        "ranking_boost_weight",
+                        "ranking_boost_expires_at",
+                    ]
+                )
+            with self.subTest(boosted=boosted):
+                body, publish = self.signal(
+                    self.request_1.pk, self.journey_11.pk, status=409
+                )
+                self.assertEqual(set(body), {"code", "detail", "rejection_codes"})
+                self.assertEqual(body["code"], "incompatible_candidate")
+                self.assertEqual(body["rejection_codes"], ["pickup_stop_on_route"])
+                publish.assert_not_called()
+        self.assertFalse(TravelerInterest.objects.exists())
+        self.assertEqual(Offer.objects.count(), 0)
+
+    def test_the_same_dates_from_algiers_are_a_real_signal(self):
+        algiers = self.request_from(self.algiers)
+        body, publish = self.signal(algiers.pk, self.journey_11.pk)
+        self.assertTrue(body["created"])
+        publish.assert_called_once()

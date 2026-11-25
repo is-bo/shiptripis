@@ -811,6 +811,13 @@ def evaluate_compatibility(
     if not sequence_valid:
         return empty
 
+    def refused() -> CompatibilityResult:
+        return replace(
+            empty,
+            checks=tuple(checks),
+            rejection_codes=tuple(dict.fromkeys(rejection_codes)),
+        )
+
     # Reuse the same leg objects while evaluating alternate anchors so that
     # annotations and covered-leg identity remain stable without extra queries.
     journey._matching_legs = legs
@@ -826,6 +833,15 @@ def evaluate_compatibility(
 
     if _anchor_pair is None:
         if canonical_flow:
+            if (
+                _matching_locality_id(delivery_request.pickup_place) is None
+                or _matching_locality_id(delivery_request.delivery_place) is None
+            ):
+                # The catalogue cannot place a request city, so there is no
+                # locality to look for on the route. The failed
+                # `canonical_geography_complete` is the whole answer: no stop
+                # is reported missing and no order is claimed.
+                return refused()
             pickup_anchors = _canonical_candidate_anchors(
                 delivery_request.pickup_place, legs
             )
@@ -838,11 +854,7 @@ def evaluate_compatibility(
                 or delivery_request.delivery_location is None
             ):
                 check("canonical_geography_complete", False)
-                return replace(
-                    empty,
-                    checks=tuple(checks),
-                    rejection_codes=tuple(dict.fromkeys(rejection_codes)),
-                )
+                return refused()
             pickup_anchors = _candidate_anchors(
                 delivery_request.pickup_location,
                 legs,
@@ -860,12 +872,20 @@ def evaluate_compatibility(
             if _pickup_precedes_delivery(pickup, delivery)
         ]
         if not ordered_pairs:
-            check("pickup_before_delivery", False)
-            return replace(
-                empty,
-                checks=tuple(checks),
-                rejection_codes=tuple(dict.fromkeys(rejection_codes)),
-            )
+            # A route that never visits a request city and a route that visits
+            # both in the wrong order are different failures, and neither is a
+            # date problem, so each end has its own gate and
+            # `pickup_before_delivery` fails only when both stops are there.
+            check("pickup_stop_on_route", bool(pickup_anchors))
+            check("delivery_stop_on_route", bool(delivery_anchors))
+            if pickup_anchors and delivery_anchors:
+                check(
+                    "pickup_before_delivery",
+                    False,
+                    pickup_positions=sorted(a.position for a in pickup_anchors),
+                    delivery_positions=sorted(a.position for a in delivery_anchors),
+                )
+            return refused()
         if len(ordered_pairs) > 1:
             rejected: list[CompatibilityResult] = []
             if _sea_legs_enabled is None and any(
@@ -911,6 +931,8 @@ def evaluate_compatibility(
     ):
         if anchor.method == "spatial_fallback":
             limitations.append(f"{kind}_anchor_uses_straight_line_spatial_fallback")
+    check("pickup_stop_on_route", True)
+    check("delivery_stop_on_route", True)
     check(
         "pickup_before_delivery",
         True,

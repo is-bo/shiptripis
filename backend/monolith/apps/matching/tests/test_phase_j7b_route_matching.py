@@ -47,7 +47,18 @@ from apps.matching.find_travelers import (
     STATE_REQUEST_INELIGIBLE,
     STATE_RESULTS,
 )
+from apps.matching.models import Offer
+from apps.matching.public_contract import public_compatibility_payload
 from apps.matching.tests.test_phase_j4_find_travelers import FindTravelersFixture
+from apps.matching.tests.test_phase8c_canonical import (
+    DATE_GATES,
+    INCIDENT_ARRIVE,
+    INCIDENT_AT,
+    INCIDENT_DEADLINE,
+    INCIDENT_DEPART,
+    INCIDENT_READY_END,
+    INCIDENT_READY_START,
+)
 from apps.matching.tests.test_phase8dr_offer_locks import REWARD_EUR_CENTS
 from apps.matching.v1_services import accept_offer
 from apps.parcels.models import DeliveryRequest, ParcelMedia, ParcelRequest
@@ -523,7 +534,9 @@ class RouteShapeTests(RouteMatchingFixture, TestCase):
     def test_a_different_route_does_not_match(self):
         oran = self._locality("DZ", "Oran", "35.6976", "-0.6337")
         request = self.request_between(self.paris, oran, **self._window(self.d))
-        self.assertFalse(self.verdict(request, self.journey).compatible)
+        verdict = self.verdict(request, self.journey)
+        self.assertFalse(verdict.compatible)
+        self.assertEqual(verdict.rejection_codes, ("delivery_stop_on_route",))
         self.assertEqual(self.page(request)["state"], STATE_NO_CANDIDATES)
 
     def test_the_reverse_direction_does_not_match(self):
@@ -532,13 +545,124 @@ class RouteShapeTests(RouteMatchingFixture, TestCase):
         )
         verdict = self.verdict(request, self.journey)
         self.assertFalse(verdict.compatible)
-        self.assertIn("pickup_before_delivery", verdict.rejection_codes)
+        self.assertEqual(verdict.rejection_codes, ("pickup_before_delivery",))
 
     def test_a_same_named_twin_locality_does_not_match(self):
         request = self.request_between(
             self.paris_twin, self.jijel, **self._window(self.d)
         )
-        self.assertFalse(self.verdict(request, self.journey).compatible)
+        verdict = self.verdict(request, self.journey)
+        self.assertFalse(verdict.compatible)
+        self.assertEqual(verdict.rejection_codes, ("pickup_stop_on_route",))
+
+
+# ---------------------------------------------------------------------------
+# Phone test 2: a missing stop is its own refusal, never a date problem (M1)
+# ---------------------------------------------------------------------------
+
+
+class IncidentPairTests(RouteMatchingFixture, TestCase):
+    """Request 1 (Jijel → Paris) against journey 11 (ALG → CDG), on the clock
+    of the phone test, through every surface that evaluates the pair.
+
+    The refusal is right; what M1 changes is its reason. The dates fit, so the
+    same request from Algiers is the control that must still match.
+    """
+
+    def setUp(self):
+        clock = patch("django.utils.timezone.now", return_value=INCIDENT_AT)
+        clock.start()
+        self.addCleanup(clock.stop)
+        super().setUp()
+        self.journey_11, (self.flight_11,) = self.journey_over(
+            self.other,
+            [
+                (self.alg, JourneyLeg.Mode.FLIGHT, INCIDENT_DEPART, INCIDENT_ARRIVE),
+                self.cdg,
+            ],
+        )
+        self.request_1 = self.request_from(self.jijel)
+
+    def request_from(self, origin) -> DeliveryRequest:
+        return self.request_between(
+            origin,
+            self.paris,
+            ready_start=INCIDENT_READY_START,
+            ready_end=INCIDENT_READY_END,
+            deadline=INCIDENT_DEADLINE,
+        )
+
+    def quote(self, request):
+        return client_for(self.sender).post(
+            reverse("matches-quote-v1"),
+            {"parcel_id": request.pk, "journey_id": self.journey_11.pk},
+            format="json",
+        )
+
+    def test_the_evaluator_names_the_missing_pickup_stop_and_no_date(self):
+        verdict = self.verdict(self.request_1, self.journey_11)
+
+        self.assertFalse(verdict.compatible)
+        self.assertEqual(verdict.rejection_codes, ("pickup_stop_on_route",))
+        ran = {row["code"] for row in verdict.checks}
+        self.assertFalse(ran & {"pickup_before_delivery", *DATE_GATES})
+
+        control = self.verdict(self.request_from(self.algiers), self.journey_11)
+        self.assertTrue(control.compatible, control.rejection_codes)
+        self.assertEqual(
+            [leg.pk for leg in control.covered_legs], [self.flight_11.pk]
+        )
+
+    def test_find_travelers_omits_journey_11_and_finds_it_from_algiers(self):
+        self.assertEqual(self.page(self.request_1)["state"], STATE_NO_CANDIDATES)
+        self.assertIn(self.journey_11.pk, self.found(self.request_from(self.algiers)))
+
+    def test_the_quote_refusal_carries_the_stop_reason_in_the_public_shape(self):
+        response = self.quote(self.request_1)
+
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertEqual(response.data["code"], "incompatible_candidate")
+        self.assertEqual(response.data["rejection_codes"], ["pickup_stop_on_route"])
+        compatibility = response.data["compatibility"]
+        # Exactly the allowlisted projection: no gate details, positions or
+        # covered legs for a pair that never reached the route.
+        self.assertEqual(set(compatibility), set(public_compatibility_payload({})))
+        self.assertEqual(compatibility["rejection_codes"], ["pickup_stop_on_route"])
+        self.assertEqual(compatibility["covered_legs"], [])
+        self.assertIsNone(compatibility["estimated_pickup_window"])
+
+        self.assertEqual(self.quote(self.request_from(self.algiers)).status_code, 200)
+
+    def test_an_offer_on_the_original_pair_is_refused_even_with_a_boost(self):
+        body = {
+            "parcel_id": self.request_1.pk,
+            "journey_id": self.journey_11.pk,
+            "start_leg_id": self.flight_11.pk,
+            "end_leg_id": self.flight_11.pk,
+            "traveler_reward_eur_cents": REWARD_EUR_CENTS,
+        }
+        for boosted in (False, True):
+            if boosted:
+                self.request_1.boost_eur_cents = 100_000
+                self.request_1.ranking_boost_weight = 20
+                self.request_1.ranking_boost_expires_at = self.request_1.deadline_at
+                self.request_1.save(
+                    update_fields=[
+                        "boost_eur_cents",
+                        "ranking_boost_weight",
+                        "ranking_boost_expires_at",
+                    ]
+                )
+            with self.subTest(boosted=boosted):
+                response = client_for(self.sender).post(
+                    reverse("matches-propose-v1"), body, format="json"
+                )
+                self.assertEqual(response.status_code, 409, response.data)
+                self.assertEqual(response.data["code"], "incompatible_candidate")
+                self.assertEqual(
+                    response.data["rejection_codes"], ["pickup_stop_on_route"]
+                )
+        self.assertFalse(Offer.objects.filter(match__journey=self.journey_11).exists())
 
 
 class TimingTests(RouteMatchingFixture, TestCase):
