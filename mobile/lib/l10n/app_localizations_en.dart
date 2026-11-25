@@ -2201,6 +2201,20 @@ class LEn extends L {
       'We couldn\'t open your camera or photos. Check that Wassla is allowed to use them in your device settings.';
 
   @override
+  String get profilePhotoUnreadable =>
+      'We couldn\'t read that photo. Choose it again.';
+
+  @override
+  String get profilePhotoRecovered =>
+      'Your phone closed Wassla while you were choosing a photo. Use the photo you picked?';
+
+  @override
+  String get profilePhotoUse => 'Use this photo';
+
+  @override
+  String get profilePhotoDiscard => 'Discard this photo';
+
+  @override
   String get profilePassportStamp => 'Wassla · MEMBER';
 
   @override

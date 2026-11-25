@@ -591,11 +591,36 @@ class _RequestPreviewSheetState extends ConsumerState<_RequestPreviewSheet> {
 
     return AppSheet(
       title: card.title,
-      subtitle: card.sender.isEmpty ? null : l.requestCardFrom(card.sender),
       footer: footer,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // The sender, with their photo: a guest sees it on the card, so the
+          // sheet keeps it.
+          if (card.sender.isNotEmpty) ...[
+            Row(
+              children: [
+                AppAvatar(
+                  initials: travelerInitial(card.sender),
+                  name: card.sender,
+                  photo: card.senderPhoto,
+                  size: 32,
+                ),
+                const SizedBox(width: AppSpace.sm),
+                Expanded(
+                  child: Text(
+                    l.requestCardFrom(card.sender),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: context.colors.textSecondary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpace.md),
+          ],
           if (suggested != null) ...[
             InfoNotice(
               message: l.requestFitsTripHint(journeyOptionLabel(suggested)),

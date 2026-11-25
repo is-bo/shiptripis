@@ -54,14 +54,24 @@ class RecordedRequest {
 /// What the fake should answer with.
 class FakeResponse {
   const FakeResponse(this.statusCode, [this.body = const <String, dynamic>{}])
-    : headers = const <String, List<String>>{};
+    : headers = const <String, List<String>>{},
+      raw = null;
+
+  /// An answer whose body is sent exactly as written, not as JSON: what an
+  /// edge proxy writes (HTML, an empty body, a JSON that is cut short). It is
+  /// still labelled `application/json`, the worst case for a decoder.
+  const FakeResponse.raw(this.statusCode, String this.raw)
+    : body = const <String, dynamic>{},
+      headers = const <String, List<String>>{};
 
   /// For a contract carried in headers — the K4 bare-array lists say whether
   /// another page follows in `X-Next-Page`, not in the body.
-  const FakeResponse.withHeaders(this.statusCode, this.body, this.headers);
+  const FakeResponse.withHeaders(this.statusCode, this.body, this.headers)
+    : raw = null;
 
   final int statusCode;
   final Object body;
+  final String? raw;
   final Map<String, List<String>> headers;
 }
 
@@ -154,10 +164,14 @@ class _FakeAdapter implements HttpClientAdapter {
       headers: Map<String, dynamic>.from(options.headers),
     );
     unawaited(cancelFuture?.then((_) => request.cancelled = true));
+    // A real adapter reads the whole body, and so closes a file the body came
+    // from. Leaving it unread would keep that file open, which a test that then
+    // deletes it cannot do on Windows.
+    if (requestStream != null) await requestStream.drain<void>();
 
     final response = await backend._dispatch(request);
     return ResponseBody.fromString(
-      jsonEncode(response.body),
+      response.raw ?? jsonEncode(response.body),
       response.statusCode,
       headers: {
         Headers.contentTypeHeader: [Headers.jsonContentType],
@@ -245,6 +259,16 @@ class FakeTokenStore extends TokenStore {
 
   @override
   Future<String?> readRoleContext() async => _roleContext;
+
+  /// The account that had the photo picker open, as secure storage holds it.
+  String? pendingPhotoPick;
+
+  @override
+  Future<String?> readPendingPhotoPick() async => pendingPhotoPick;
+
+  @override
+  Future<void> writePendingPhotoPick(String? accountId) async =>
+      pendingPhotoPick = accountId;
 
   @override
   Future<void> writeRoleContext(String value) async => _roleContext = value;

@@ -10,147 +10,24 @@
 library;
 
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show PlatformException;
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:shiptrip/core/session/session.dart';
 import 'package:shiptrip/design/components/primitives.dart';
-import 'package:shiptrip/domain/account.dart';
 import 'package:shiptrip/features/profile/profile_photo_section.dart';
-import 'package:shiptrip/l10n/app_localizations.dart';
 
 import 'support/fake_api.dart';
 import 'support/harness.dart';
 import 'support/photo_cache.dart';
+import 'support/photo_rig.dart';
 
-const _put = '/api/me/photo';
+const _put = photoPut;
 
 const _small = DeviceProfile(name: '360x740', size: Size(360, 740));
-
-Map<String, dynamic> _active([String version = 'v1']) => {
-  'state': 'active',
-  'url': 'https://media.test/profile-photos/abc.jpg?sig=1',
-  'version': version,
-  'removed_at': null,
-  'reason': null,
-};
-
-Map<String, dynamic> _removed({String? reason = 'Not a photo of you.'}) => {
-  'state': 'removed',
-  'url': null,
-  'version': 'v0',
-  'removed_at': '2026-11-24T10:00:00Z',
-  'reason': reason,
-};
-
-/// A real file the multipart body reads from.
-String _file({String name = 'me.jpg', int? size}) {
-  final dir = Directory.systemTemp.createTempSync('shiptrip-profile-photo');
-  addTearDown(() {
-    try {
-      dir.deleteSync(recursive: true);
-    } on FileSystemException {
-      // The OS reclaims it; the assertions have already run.
-    }
-  });
-  final file = File('${dir.path}${Platform.pathSeparator}$name');
-  file.writeAsBytesSync(size == null ? tinyPng : Uint8List(size));
-  return file.path;
-}
-
-ProfilePhotoPicker _pickerReturning(
-  String path, {
-  String mime = 'image/jpeg',
-  List<ImageSource>? calls,
-}) => (source) async {
-  calls?.add(source);
-  return XFile(
-    path,
-    mimeType: mime,
-    name: path.split(Platform.pathSeparator).last,
-  );
-};
-
-/// Lets real I/O (the file read behind a multipart body) and fake time both
-/// move, until [until] holds.
-Future<void> _until(
-  WidgetTester tester,
-  bool Function() until, {
-  int maxFrames = 200,
-}) async {
-  for (var frame = 0; frame < maxFrames; frame++) {
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 10)),
-    );
-    await tester.pump(const Duration(milliseconds: 16));
-    if (until()) return;
-  }
-  fail('the screen never reached the state the test was waiting for');
-}
-
-class _Rig {
-  _Rig(this.backend, {this.picker, Map<String, dynamic>? photo})
-    : _photo = photo;
-
-  final FakeBackend backend;
-  final ProfilePhotoPicker? picker;
-  final Map<String, dynamic>? _photo;
-
-  late final ProviderContainer container;
-
-  L l(WidgetTester tester) =>
-      L.of(tester.element(find.byType(ProfilePhotoSection)));
-
-  Future<void> pump(
-    WidgetTester tester, {
-    Locale locale = const Locale('en'),
-    DeviceProfile device = DeviceProfile.android,
-  }) async {
-    backend.on('GET', '/api/me', FakeResponse(200, meFixture(photo: _photo)));
-    final tokens = FakeTokenStore();
-    container = ProviderContainer(
-      overrides: [
-        tokenStoreProvider.overrideWithValue(tokens),
-        apiClientProvider.overrideWithValue(apiClientFor(backend, tokens)),
-        if (picker != null)
-          profilePhotoPickerProvider.overrideWithValue(picker!),
-      ],
-    );
-    addTearDown(container.dispose);
-    await tester.runAsync(
-      () => container.read(sessionProvider.notifier).restore(),
-    );
-    await pumpApp(
-      tester,
-      Scaffold(
-        body: Consumer(
-          builder: (context, ref, _) => ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              ProfilePhotoSection(account: ref.watch(accountProvider)!),
-            ],
-          ),
-        ),
-      ),
-      container: container,
-      locale: locale,
-      device: device,
-    );
-  }
-
-  Account get account => container.read(accountProvider)!;
-}
-
-Finder _button(String label) => find.widgetWithText(AppButton, label);
-
-bool _enabled(WidgetTester tester, String label) =>
-    tester.widget<AppButton>(_button(label)).onPressed != null;
 
 void main() {
   setUp(() => imageCache.clear());
@@ -159,17 +36,17 @@ void main() {
     testWidgets(
       'invites a photo, says who sees it, and offers camera and library',
       (tester) async {
-        final rig = _Rig(FakeBackend());
+        final rig = PhotoRig(FakeBackend());
         await rig.pump(tester);
         final l = rig.l(tester);
 
         expect(find.text(l.profilePhotoTitle), findsOneWidget);
         expect(find.text(l.profilePhotoHelpEmpty), findsOneWidget);
         expect(find.text(l.profilePhotoFormatRule), findsOneWidget);
-        expect(_button(l.profilePhotoTake), findsOneWidget);
-        expect(_button(l.profilePhotoChoose), findsOneWidget);
-        expect(_button(l.profilePhotoRemove), findsNothing);
-        expect(_button(l.profilePhotoChange), findsNothing);
+        expect(photoButton(l.profilePhotoTake), findsOneWidget);
+        expect(photoButton(l.profilePhotoChoose), findsOneWidget);
+        expect(photoButton(l.profilePhotoRemove), findsNothing);
+        expect(photoButton(l.profilePhotoChange), findsNothing);
         // The initials stand in for the picture.
         expect(find.text('AB'), findsOneWidget);
         expect(tester.takeException(), isNull);
@@ -178,11 +55,11 @@ void main() {
 
     testWidgets('closing the picker changes nothing', (tester) async {
       final backend = FakeBackend();
-      final rig = _Rig(backend, picker: (_) async => null);
+      final rig = PhotoRig(backend, picker: (_) async => null);
       await rig.pump(tester);
       final l = rig.l(tester);
 
-      await tester.tap(_button(l.profilePhotoChoose));
+      await tester.tap(photoButton(l.profilePhotoChoose));
       await tester.pump();
 
       expect(backend.to('PUT', _put), isEmpty);
@@ -198,31 +75,36 @@ void main() {
         final gate = Completer<FakeResponse>();
         final backend = FakeBackend()..handle('PUT', _put, (_) => gate.future);
         final calls = <ImageSource>[];
-        final rig = _Rig(
+        final rig = PhotoRig(
           backend,
-          picker: _pickerReturning(_file(), calls: calls),
+          picker: pickerReturning(sourceFile(), calls: calls),
         );
         await rig.pump(tester);
         final l = rig.l(tester);
 
-        await tester.tap(_button(l.profilePhotoChoose));
-        await _until(tester, () => backend.to('PUT', _put).isNotEmpty);
+        await tester.tap(photoButton(l.profilePhotoChoose));
+        await untilReached(tester, () => backend.to('PUT', _put).isNotEmpty);
 
         expect(calls, [ImageSource.gallery]);
         // Mid-flight: the preview and the words, and nothing can be pressed.
         expect(find.text(l.profilePhotoUploading), findsOneWidget);
         expect(find.byType(Image), findsOneWidget);
-        expect(_enabled(tester, l.profilePhotoTake), isFalse);
-        expect(_enabled(tester, l.profilePhotoChoose), isFalse);
+        expect(photoButtonEnabled(tester, l.profilePhotoTake), isFalse);
+        expect(photoButtonEnabled(tester, l.profilePhotoChoose), isFalse);
 
         final request = backend.lastTo('PUT', _put)!;
-        expect(request.body['photo__filename'], 'me.jpg');
+        expect(request.body['photo__filename'], 'photo.jpg');
         expect(request.body['photo__content_type'], 'image/jpeg');
 
-        gate.complete(FakeResponse(200, _active()));
-        await _until(
+        gate.complete(FakeResponse(200, photoActive()));
+        await untilReached(
           tester,
           () => find.text(l.profilePhotoChange).evaluate().isNotEmpty,
+        );
+
+        await untilReached(
+          tester,
+          () => find.text(l.profilePhotoUpdated).evaluate().isNotEmpty,
         );
 
         expect(backend.to('PUT', _put), hasLength(1));
@@ -236,35 +118,56 @@ void main() {
     testWidgets('the camera button opens the camera', (tester) async {
       final calls = <ImageSource>[];
       final backend = FakeBackend()
-        ..on('PUT', _put, FakeResponse(200, _active()));
-      final rig = _Rig(
+        ..on('PUT', _put, FakeResponse(200, photoActive()));
+      final rig = PhotoRig(
         backend,
-        picker: _pickerReturning(_file(), calls: calls),
+        picker: pickerReturning(sourceFile(), calls: calls),
       );
       await rig.pump(tester);
 
-      await tester.tap(_button(rig.l(tester).profilePhotoTake));
-      await _until(tester, () => backend.to('PUT', _put).isNotEmpty);
+      await tester.tap(photoButton(rig.l(tester).profilePhotoTake));
+      await untilReached(tester, () => backend.to('PUT', _put).isNotEmpty);
 
       expect(calls, [ImageSource.camera]);
     });
 
-    testWidgets('a PNG is declared as a PNG', (tester) async {
+    testWidgets('the type is read from the bytes, and the name follows it', (
+      tester,
+    ) async {
       final backend = FakeBackend()
-        ..on('PUT', _put, FakeResponse(200, _active()));
-      final rig = _Rig(
+        ..on('PUT', _put, FakeResponse(200, photoActive()));
+      final rig = PhotoRig(
         backend,
-        picker: _pickerReturning(_file(name: 'me.png'), mime: 'image/png'),
+        picker: pickerReturning(sourceFile(name: 'me.heic')),
+        preparer: preparerWriting(pngBytes, name: 'prepared.png'),
       );
       await rig.pump(tester);
 
-      await tester.tap(_button(rig.l(tester).profilePhotoChoose));
-      await _until(tester, () => backend.to('PUT', _put).isNotEmpty);
+      await tester.tap(photoButton(rig.l(tester).profilePhotoChoose));
+      await untilReached(tester, () => backend.to('PUT', _put).isNotEmpty);
 
-      expect(
-        backend.lastTo('PUT', _put)!.body['photo__content_type'],
-        'image/png',
+      final body = backend.lastTo('PUT', _put)!.body;
+      expect(body['photo__content_type'], 'image/png');
+      expect(body['photo__filename'], 'photo.png');
+    });
+
+    testWidgets('a .webp name on JPEG bytes is sent as a JPEG', (tester) async {
+      // The native resizer keeps the source's suffix but writes JPEG.
+      final backend = FakeBackend()
+        ..on('PUT', _put, FakeResponse(200, photoActive()));
+      final rig = PhotoRig(
+        backend,
+        picker: pickerReturning(sourceFile(name: 'camera.webp')),
+        preparer: preparerWriting(jpegBytes, name: 'scaled_camera.webp'),
       );
+      await rig.pump(tester);
+
+      await tester.tap(photoButton(rig.l(tester).profilePhotoChoose));
+      await untilReached(tester, () => backend.to('PUT', _put).isNotEmpty);
+
+      final body = backend.lastTo('PUT', _put)!.body;
+      expect(body['photo__content_type'], 'image/jpeg');
+      expect(body['photo__filename'], 'photo.jpg');
     });
   });
 
@@ -273,15 +176,15 @@ void main() {
       tester,
     ) async {
       installPhotoCache(PhotoCacheBehavior.serve);
-      final rig = _Rig(FakeBackend(), photo: _active());
+      final rig = PhotoRig(FakeBackend(), photo: photoActive());
       await rig.pump(tester);
       await settlePhotos(tester);
       final l = rig.l(tester);
 
       expect(find.text(l.profilePhotoHelpActive), findsOneWidget);
-      expect(_button(l.profilePhotoChange), findsOneWidget);
-      expect(_button(l.profilePhotoRemove), findsOneWidget);
-      expect(_button(l.profilePhotoTake), findsNothing);
+      expect(photoButton(l.profilePhotoChange), findsOneWidget);
+      expect(photoButton(l.profilePhotoRemove), findsOneWidget);
+      expect(photoButton(l.profilePhotoTake), findsNothing);
       // The photo is drawn in the section and on the passport-sized avatar.
       expect(
         find.descendant(
@@ -297,34 +200,37 @@ void main() {
     ) async {
       final calls = <ImageSource>[];
       final backend = FakeBackend()
-        ..on('PUT', _put, FakeResponse(200, _active('v2')));
-      final rig = _Rig(
+        ..on('PUT', _put, FakeResponse(200, photoActive('v2')));
+      final rig = PhotoRig(
         backend,
-        picker: _pickerReturning(_file(), calls: calls),
-        photo: _active(),
+        picker: pickerReturning(sourceFile(), calls: calls),
+        photo: photoActive(),
       );
       await rig.pump(tester);
       final l = rig.l(tester);
 
-      await tester.tap(_button(l.profilePhotoChange));
+      await tester.tap(photoButton(l.profilePhotoChange));
       await tester.pumpAndSettle();
       expect(find.text(l.profilePhotoTake), findsOneWidget);
       await tester.tap(find.text(l.profilePhotoTake));
-      await _until(tester, () => backend.to('PUT', _put).isNotEmpty);
+      await untilReached(tester, () => backend.to('PUT', _put).isNotEmpty);
 
       expect(calls, [ImageSource.camera]);
-      await _until(tester, () => rig.account.photo?.photo?.version == 'v2');
+      await untilReached(
+        tester,
+        () => rig.account.photo?.photo?.version == 'v2',
+      );
     });
 
     testWidgets('removing asks first, and Cancel leaves the photo', (
       tester,
     ) async {
       final backend = FakeBackend();
-      final rig = _Rig(backend, photo: _active());
+      final rig = PhotoRig(backend, photo: photoActive());
       await rig.pump(tester);
       final l = rig.l(tester);
 
-      await tester.tap(_button(l.profilePhotoRemove));
+      await tester.tap(photoButton(l.profilePhotoRemove));
       await tester.pumpAndSettle();
       expect(find.text(l.profilePhotoRemoveTitle), findsOneWidget);
       expect(find.text(l.profilePhotoRemoveBody), findsOneWidget);
@@ -341,11 +247,11 @@ void main() {
     ) async {
       final backend = FakeBackend()
         ..on('DELETE', _put, const FakeResponse(204));
-      final rig = _Rig(backend, photo: _active());
+      final rig = PhotoRig(backend, photo: photoActive());
       await rig.pump(tester);
       final l = rig.l(tester);
 
-      await tester.tap(_button(l.profilePhotoRemove));
+      await tester.tap(photoButton(l.profilePhotoRemove));
       await tester.pumpAndSettle();
       await tester.tap(
         find.descendant(
@@ -358,8 +264,8 @@ void main() {
       expect(backend.to('DELETE', _put), hasLength(1));
       expect(rig.account.photo, isNull);
       expect(find.text(l.profilePhotoRemoved), findsOneWidget);
-      expect(_button(l.profilePhotoTake), findsOneWidget);
-      expect(_button(l.profilePhotoRemove), findsNothing);
+      expect(photoButton(l.profilePhotoTake), findsOneWidget);
+      expect(photoButton(l.profilePhotoRemove), findsNothing);
     });
 
     testWidgets('a removal the server refuses keeps the photo and says so', (
@@ -367,11 +273,11 @@ void main() {
     ) async {
       final backend = FakeBackend()
         ..on('DELETE', _put, const FakeResponse(500, {'detail': 'boom'}));
-      final rig = _Rig(backend, photo: _active());
+      final rig = PhotoRig(backend, photo: photoActive());
       await rig.pump(tester);
       final l = rig.l(tester);
 
-      await tester.tap(_button(l.profilePhotoRemove));
+      await tester.tap(photoButton(l.profilePhotoRemove));
       await tester.pumpAndSettle();
       await tester.tap(
         find.descendant(
@@ -382,8 +288,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(rig.account.photo?.photo?.version, 'v1');
-      expect(_button(l.profilePhotoRemove), findsOneWidget);
-      expect(_enabled(tester, l.profilePhotoRemove), isTrue);
+      expect(photoButton(l.profilePhotoRemove), findsOneWidget);
+      expect(photoButtonEnabled(tester, l.profilePhotoRemove), isTrue);
       expect(find.byType(SnackBar), findsOneWidget);
     });
   });
@@ -392,15 +298,15 @@ void main() {
     testWidgets(
       'shows the server\'s reason and offers a new photo or dismissal',
       (tester) async {
-        final rig = _Rig(FakeBackend(), photo: _removed());
+        final rig = PhotoRig(FakeBackend(), photo: photoRemoved());
         await rig.pump(tester);
         final l = rig.l(tester);
 
         expect(find.text(l.profilePhotoWassla), findsOneWidget);
         expect(find.textContaining('Not a photo of you.'), findsOneWidget);
         expect(find.text(l.profilePhotoDismiss), findsOneWidget);
-        expect(_button(l.profilePhotoTake), findsOneWidget);
-        expect(_button(l.profilePhotoChoose), findsOneWidget);
+        expect(photoButton(l.profilePhotoTake), findsOneWidget);
+        expect(photoButton(l.profilePhotoChoose), findsOneWidget);
         // Nothing of the removed photo is drawn.
         expect(find.text('AB'), findsOneWidget);
       },
@@ -409,7 +315,7 @@ void main() {
     testWidgets('no reason given reads as the generic sentence, not a blank', (
       tester,
     ) async {
-      final rig = _Rig(FakeBackend(), photo: _removed(reason: null));
+      final rig = PhotoRig(FakeBackend(), photo: photoRemoved(reason: null));
       await rig.pump(tester);
       final l = rig.l(tester);
 
@@ -422,7 +328,7 @@ void main() {
     ) async {
       final backend = FakeBackend()
         ..on('DELETE', _put, const FakeResponse(204));
-      final rig = _Rig(backend, photo: _removed());
+      final rig = PhotoRig(backend, photo: photoRemoved());
       await rig.pump(tester);
       final l = rig.l(tester);
 
@@ -436,39 +342,36 @@ void main() {
 
     testWidgets('a new photo replaces the notice', (tester) async {
       final backend = FakeBackend()
-        ..on('PUT', _put, FakeResponse(200, _active('v9')));
-      final rig = _Rig(
+        ..on('PUT', _put, FakeResponse(200, photoActive('v9')));
+      final rig = PhotoRig(
         backend,
-        picker: _pickerReturning(_file()),
-        photo: _removed(),
+        picker: pickerReturning(sourceFile()),
+        photo: photoRemoved(),
       );
       await rig.pump(tester);
       final l = rig.l(tester);
 
-      await tester.tap(_button(l.profilePhotoChoose));
-      await _until(tester, () => rig.account.photo?.photo != null);
+      await tester.tap(photoButton(l.profilePhotoChoose));
+      await untilReached(tester, () => rig.account.photo?.photo != null);
 
       expect(find.text(l.profilePhotoWassla), findsNothing);
-      expect(_button(l.profilePhotoChange), findsOneWidget);
+      expect(photoButton(l.profilePhotoChange), findsOneWidget);
     });
   });
 
   group('refusals', () {
-    Future<(_Rig, FakeBackend)> failing(
+    Future<(PhotoRig, FakeBackend)> failing(
       WidgetTester tester,
-      FakeResponse response, {
-      String? mime,
-      String? path,
-    }) async {
+      FakeResponse response,
+    ) async {
       final backend = FakeBackend()..on('PUT', _put, response);
-      final rig = _Rig(
-        backend,
-        picker: _pickerReturning(path ?? _file(), mime: mime ?? 'image/jpeg'),
-      );
+      final rig = PhotoRig(backend, picker: pickerReturning(sourceFile()));
       await rig.pump(tester);
-      await tester.tap(_button(rig.l(tester).profilePhotoChoose));
-      await _until(tester, () => backend.to('PUT', _put).isNotEmpty);
-      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(photoButton(rig.l(tester).profilePhotoChoose));
+      await untilReached(
+        tester,
+        () => find.byType(InfoNotice).evaluate().isNotEmpty,
+      );
       return (rig, backend);
     }
 
@@ -537,39 +440,44 @@ void main() {
       expect(find.text(rig.l(tester).actionRetry), findsNothing);
     });
 
-    testWidgets('a file over 10 MB is refused on the phone, never sent', (
-      tester,
-    ) async {
-      final backend = FakeBackend();
-      final rig = _Rig(
-        backend,
-        picker: _pickerReturning(_file(size: 10 * 1024 * 1024 + 1)),
-      );
-      await rig.pump(tester);
-      final l = rig.l(tester);
-
-      await tester.tap(_button(l.profilePhotoChoose));
-      await _until(
-        tester,
-        () => find.text(l.profilePhotoTooLarge).evaluate().isNotEmpty,
-      );
-
-      expect(backend.to('PUT', _put), isEmpty);
-    });
-
     testWidgets(
-      'a file that is not JPEG, PNG or WebP is refused on the phone',
+      'a prepared file over 10 MB is refused on the phone, never sent',
       (tester) async {
         final backend = FakeBackend();
-        final rig = _Rig(
+        final rig = PhotoRig(
           backend,
-          picker: _pickerReturning(_file(name: 'me.gif'), mime: 'image/gif'),
+          picker: pickerReturning(sourceFile()),
+          preparer: preparerWriting(
+            Uint8List.fromList([...jpegBytes, ...Uint8List(10 * 1024 * 1024)]),
+          ),
         );
         await rig.pump(tester);
         final l = rig.l(tester);
 
-        await tester.tap(_button(l.profilePhotoChoose));
-        await _until(
+        await tester.tap(photoButton(l.profilePhotoChoose));
+        await untilReached(
+          tester,
+          () => find.text(l.profilePhotoTooLarge).evaluate().isNotEmpty,
+        );
+
+        expect(backend.to('PUT', _put), isEmpty);
+      },
+    );
+
+    testWidgets(
+      'a result that is not JPEG, PNG or WebP is refused on the phone',
+      (tester) async {
+        final backend = FakeBackend();
+        final rig = PhotoRig(
+          backend,
+          picker: pickerReturning(sourceFile(name: 'me.gif')),
+          preparer: preparerWriting(gifBytes, name: 'prepared.jpg'),
+        );
+        await rig.pump(tester);
+        final l = rig.l(tester);
+
+        await tester.tap(photoButton(l.profilePhotoChoose));
+        await untilReached(
           tester,
           () => find.text(l.profilePhotoTypeNotAllowed).evaluate().isNotEmpty,
         );
@@ -582,7 +490,7 @@ void main() {
       tester,
     ) async {
       final backend = FakeBackend();
-      final rig = _Rig(
+      final rig = PhotoRig(
         backend,
         picker: (_) async =>
             throw PlatformException(code: 'camera_access_denied'),
@@ -590,7 +498,7 @@ void main() {
       await rig.pump(tester);
       final l = rig.l(tester);
 
-      await tester.tap(_button(l.profilePhotoTake));
+      await tester.tap(photoButton(l.profilePhotoTake));
       await tester.pump();
       await tester.pump();
 
@@ -613,15 +521,18 @@ void main() {
                   'code': 'profile_photo_storage_unavailable',
                   'detail': 'Down.',
                 })
-              : FakeResponse(200, _active()),
+              : FakeResponse(200, photoActive()),
         );
-      final rig = _Rig(backend, picker: _pickerReturning(_file()));
+      final rig = PhotoRig(backend, picker: pickerReturning(sourceFile()));
       await rig.pump(tester);
       final l = rig.l(tester);
 
-      await tester.tap(_button(l.profilePhotoChoose));
-      await _until(tester, () => backend.to('PUT', _put).isNotEmpty);
-      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(photoButton(l.profilePhotoChoose));
+      await untilReached(tester, () => backend.to('PUT', _put).isNotEmpty);
+      await untilReached(
+        tester,
+        () => find.byType(InfoNotice).evaluate().isNotEmpty,
+      );
 
       expect(find.text(l.profilePhotoStorageUnavailable), findsOneWidget);
       expect(
@@ -639,7 +550,7 @@ void main() {
 
       failing = false;
       await tester.tap(find.text(l.actionRetry));
-      await _until(tester, () => rig.account.photo?.photo != null);
+      await untilReached(tester, () => rig.account.photo?.photo != null);
 
       expect(backend.to('PUT', _put), hasLength(2));
       expect(find.text(l.profilePhotoStorageUnavailable), findsNothing);
@@ -650,20 +561,26 @@ void main() {
     ) async {
       final backend = FakeBackend()
         ..on('PUT', _put, const FakeResponse(500, {'detail': 'boom'}));
-      final rig = _Rig(backend, picker: _pickerReturning(_file()));
+      final rig = PhotoRig(backend, picker: pickerReturning(sourceFile()));
       await rig.pump(tester);
       final l = rig.l(tester);
 
-      await tester.tap(_button(l.profilePhotoChoose));
-      await _until(tester, () => backend.to('PUT', _put).isNotEmpty);
-      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(photoButton(l.profilePhotoChoose));
+      await untilReached(tester, () => backend.to('PUT', _put).isNotEmpty);
+      await untilReached(
+        tester,
+        () => find.byType(InfoNotice).evaluate().isNotEmpty,
+      );
 
       expect(find.text(l.profilePhotoFailed), findsOneWidget);
       expect(backend.to('PUT', _put), hasLength(1));
 
       await tester.tap(find.text(l.actionRetry));
-      await _until(tester, () => backend.to('PUT', _put).length == 2);
-      await tester.pump(const Duration(milliseconds: 100));
+      await untilReached(tester, () => backend.to('PUT', _put).length == 2);
+      await untilReached(
+        tester,
+        () => find.byType(InfoNotice).evaluate().isNotEmpty,
+      );
 
       expect(backend.to('PUT', _put), hasLength(2));
     });
@@ -680,13 +597,16 @@ void main() {
             reason: 'offline',
           ),
         );
-      final rig = _Rig(backend, picker: _pickerReturning(_file()));
+      final rig = PhotoRig(backend, picker: pickerReturning(sourceFile()));
       await rig.pump(tester);
       final l = rig.l(tester);
 
-      await tester.tap(_button(l.profilePhotoChoose));
-      await _until(tester, () => backend.to('PUT', _put).isNotEmpty);
-      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(photoButton(l.profilePhotoChoose));
+      await untilReached(tester, () => backend.to('PUT', _put).isNotEmpty);
+      await untilReached(
+        tester,
+        () => find.byType(InfoNotice).evaluate().isNotEmpty,
+      );
 
       expect(find.text(l.profilePhotoOffline), findsOneWidget);
       expect(find.text(l.actionRetry), findsOneWidget);
@@ -694,11 +614,13 @@ void main() {
     });
   });
 
+  // Every state on every phone shape and language, and inside the real Profile
+  // screen under the bottom navigation, is `p3b_photo_layout_test.dart`.
   group('layout', () {
     testWidgets('Arabic: right to left, Modern Standard Arabic, no overflow', (
       tester,
     ) async {
-      final rig = _Rig(FakeBackend(), photo: _removed());
+      final rig = PhotoRig(FakeBackend(), photo: photoRemoved());
       await rig.pump(tester, locale: const Locale('ar'), device: _small);
       final l = rig.l(tester);
 
@@ -711,35 +633,5 @@ void main() {
       );
       expect(tester.takeException(), isNull);
     });
-
-    for (final device in [
-      _small,
-      DeviceProfile.smallAndroid,
-      DeviceProfile.landscape,
-      DeviceProfile.largeText,
-    ]) {
-      for (final locale in const [Locale('en'), Locale('fr'), Locale('ar')]) {
-        testWidgets(
-          '${device.name} / ${locale.languageCode}: every state fits',
-          (tester) async {
-            final rig = _Rig(
-              FakeBackend()..on('PUT', _put, const FakeResponse(500)),
-              picker: _pickerReturning(_file()),
-              photo: _removed(),
-            );
-            await rig.pump(tester, locale: locale, device: device);
-            final l = rig.l(tester);
-            expect(tester.takeException(), isNull, reason: 'removed notice');
-
-            await tester.ensureVisible(_button(l.profilePhotoChoose));
-            await tester.pump();
-            await tester.tap(_button(l.profilePhotoChoose));
-            await _until(tester, () => rig.backend.to('PUT', _put).isNotEmpty);
-            await tester.pump(const Duration(milliseconds: 100));
-            expect(tester.takeException(), isNull, reason: 'upload failed');
-          },
-        );
-      }
-    }
   });
 }

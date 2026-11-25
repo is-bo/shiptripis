@@ -61,6 +61,7 @@ class TokenStore {
   static const _kLocale = 'app.locale';
   static const _kInstallationId = 'push.installation_id';
   static const _kPendingPushToken = 'push.pending_token';
+  static const _kPendingPhotoPick = 'profile_photo.pending_pick';
 
   /// The last profile the server confirmed for the stored credentials.
   ///
@@ -186,6 +187,17 @@ class TokenStore {
       ? _storage.delete(key: _kPendingPushToken)
       : _storage.write(key: _kPendingPushToken, value: token);
 
+  /// The account that had the camera or photo library open for a profile
+  /// photo, written before the picker opens and cleared when it answers. If
+  /// the phone ends the app meanwhile it is still here at the next launch,
+  /// which is how a recovered photo is known to belong to this account.
+  Future<String?> readPendingPhotoPick() =>
+      _storage.read(key: _kPendingPhotoPick);
+
+  Future<void> writePendingPhotoPick(String? accountId) => accountId == null
+      ? _storage.delete(key: _kPendingPhotoPick)
+      : _storage.write(key: _kPendingPhotoPick, value: accountId);
+
   /// Removes credentials and every user-scoped preference. Called on sign-out
   /// and whenever refresh fails terminally.
   Future<void> clear() {
@@ -206,6 +218,7 @@ class TokenStore {
     await _storage.delete(key: _kRefresh);
     await _storage.delete(key: _kAccountSnapshot);
     await _storage.delete(key: _kRoleContext);
+    await _storage.delete(key: _kPendingPhotoPick);
     await purgeLegacyArtifacts();
   }
 

@@ -172,6 +172,11 @@ class SessionController extends Notifier<SessionState> {
     Duration(seconds: 90),
   ];
   int _generation = 0;
+
+  /// Counts the starts and the ends of the member's own photo writes. A read
+  /// of the profile that began under a different count may predate a write
+  /// that has since finished, so it may not decide what the photo is.
+  int _photoWrites = 0;
   Timer? _revalidation;
 
   /// Monotonic; [_accountReadAt] is measured on it.
@@ -460,7 +465,13 @@ class SessionController extends Notifier<SessionState> {
     final current = state;
     if (current is! SessionSignedIn) return;
     final generation = _generation;
-    final photo = await change();
+    _photoWrites++;
+    final OwnPhoto? photo;
+    try {
+      photo = await change();
+    } finally {
+      _photoWrites++;
+    }
     final now = state;
     if (generation == _generation &&
         now is SessionSignedIn &&
@@ -472,6 +483,15 @@ class SessionController extends Notifier<SessionState> {
     }
   }
 
+  /// [fresh], a profile read that began when the photo-write count was
+  /// [startedAt], with the photo the session holds now if a write started or
+  /// finished since. The rest of the profile is the fresh read's.
+  Account _withNewestPhoto(Account fresh, int startedAt) {
+    final now = state;
+    if (startedAt == _photoWrites || now is! SessionSignedIn) return fresh;
+    return fresh.withPhoto(now.account.photo);
+  }
+
   /// Applies a profile change the server answered with the whole profile.
   /// The state moves only once the server has answered, and to the profile it
   /// returned, never to the value that was asked for.
@@ -480,11 +500,13 @@ class SessionController extends Notifier<SessionState> {
     if (current is! SessionSignedIn) return;
     final generation = _generation;
     final identity = _tokens.identityGeneration;
-    final account = await update();
+    final photoWrites = _photoWrites;
+    final answered = await update();
     if (generation == _generation &&
         state is SessionSignedIn &&
         (state as SessionSignedIn).account.id == current.account.id &&
-        account.id == current.account.id) {
+        answered.id == current.account.id) {
+      final account = _withNewestPhoto(answered, photoWrites);
       state = SessionSignedIn(account, generation: current.generation);
       unawaited(_remember(account, identity));
     }
@@ -504,13 +526,15 @@ class SessionController extends Notifier<SessionState> {
     if (current is! SessionSignedIn) return;
     final generation = _generation;
     final identity = _tokens.identityGeneration;
+    final photoWrites = _photoWrites;
     _markAccountRead();
     try {
-      final account = await _auth.me(fresh: true);
+      final answered = await _auth.me(fresh: true);
       if (generation == _generation &&
           state is SessionSignedIn &&
           (state as SessionSignedIn).account.id == current.account.id &&
-          account.id == current.account.id) {
+          answered.id == current.account.id) {
+        final account = _withNewestPhoto(answered, photoWrites);
         state = SessionSignedIn(account, generation: current.generation);
         unawaited(_remember(account, identity));
       }

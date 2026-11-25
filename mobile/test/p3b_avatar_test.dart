@@ -108,6 +108,96 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets(
+      'an address that expired is replaced by a fresh one, same version',
+      (tester) async {
+        // The first address had expired: the load failed and the initials show.
+        final failing = installPhotoCache(PhotoCacheBehavior.fail);
+        final photo = ValueNotifier<PersonPhoto>(
+          const PersonPhoto(
+            url: 'https://media.test/a.jpg?sig=old',
+            version: 'v1',
+          ),
+        );
+        await pumpApp(
+          tester,
+          ValueListenableBuilder<PersonPhoto>(
+            valueListenable: photo,
+            builder: (_, value, _) => _avatar(photo: value),
+          ),
+        );
+        await settlePhotos(tester);
+        expect(_picture, findsNothing);
+        expect(failing.urls, ['https://media.test/a.jpg?sig=old']);
+
+        // A refreshed payload brings a new address for the same photo, and the
+        // network can be reached now. The avatar on screen is the same one.
+        final serving = installPhotoCache(PhotoCacheBehavior.serve);
+        photo.value = const PersonPhoto(
+          url: 'https://media.test/a.jpg?sig=new',
+          version: 'v1',
+        );
+        await tester.pump();
+        await settlePhotos(tester);
+
+        expect(serving.urls, ['https://media.test/a.jpg?sig=new']);
+        expect(serving.keys, ['v1'], reason: 'the bytes are cached by version');
+        expect(_picture, findsOneWidget);
+      },
+    );
+
+    testWidgets('a photo that loaded is not fetched again for a new address', (
+      tester,
+    ) async {
+      final cache = installPhotoCache(PhotoCacheBehavior.serve);
+      final photo = ValueNotifier<PersonPhoto>(
+        const PersonPhoto(url: 'https://media.test/a.jpg?sig=1', version: 'v1'),
+      );
+      await pumpApp(
+        tester,
+        ValueListenableBuilder<PersonPhoto>(
+          valueListenable: photo,
+          builder: (_, value, _) => _avatar(photo: value),
+        ),
+      );
+      await settlePhotos(tester);
+      expect(_picture, findsOneWidget);
+
+      photo.value = const PersonPhoto(
+        url: 'https://media.test/a.jpg?sig=2',
+        version: 'v1',
+      );
+      await tester.pump();
+      await settlePhotos(tester);
+
+      expect(cache.urls, ['https://media.test/a.jpg?sig=1']);
+      expect(_picture, findsOneWidget, reason: 'no flash of initials');
+    });
+
+    testWidgets('a new version is a new picture', (tester) async {
+      final cache = installPhotoCache(PhotoCacheBehavior.serve);
+      final photo = ValueNotifier<PersonPhoto>(
+        const PersonPhoto(url: 'https://media.test/a.jpg?sig=1', version: 'v1'),
+      );
+      await pumpApp(
+        tester,
+        ValueListenableBuilder<PersonPhoto>(
+          valueListenable: photo,
+          builder: (_, value, _) => _avatar(photo: value),
+        ),
+      );
+      await settlePhotos(tester);
+
+      photo.value = const PersonPhoto(
+        url: 'https://media.test/b.jpg?sig=1',
+        version: 'v2',
+      );
+      await tester.pump();
+      await settlePhotos(tester);
+
+      expect(cache.keys, ['v1', 'v2']);
+    });
+
     testWidgets('it is read as the person, and the image is not in semantics', (
       tester,
     ) async {

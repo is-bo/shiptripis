@@ -2218,6 +2218,20 @@ class LFr extends L {
       'Impossible d\'ouvrir votre appareil photo ou vos photos. Vérifiez que Wassla y est autorisée dans les réglages de votre appareil.';
 
   @override
+  String get profilePhotoUnreadable =>
+      'Impossible de lire cette photo. Choisissez-la de nouveau.';
+
+  @override
+  String get profilePhotoRecovered =>
+      'Votre téléphone a fermé Wassla pendant le choix d\'une photo. Utiliser la photo choisie ?';
+
+  @override
+  String get profilePhotoUse => 'Utiliser cette photo';
+
+  @override
+  String get profilePhotoDiscard => 'Ignorer cette photo';
+
+  @override
   String get profilePassportStamp => 'Wassla · MEMBRE';
 
   @override

@@ -11,6 +11,7 @@ library;
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shiptrip/app/profile_photo_state.dart';
 import 'package:shiptrip/core/api/api_exception.dart';
 import 'package:shiptrip/core/api/error_codes.dart';
 import 'package:shiptrip/domain/account.dart';
@@ -26,7 +27,6 @@ import 'package:shiptrip/domain/payment.dart';
 import 'package:shiptrip/domain/person_photo.dart';
 import 'package:shiptrip/domain/public_discovery.dart';
 import 'package:shiptrip/domain/transport_mode.dart';
-import 'package:shiptrip/features/profile/profile_photo_section.dart';
 
 /// Builds the failure the client would see for a given response.
 ///
@@ -712,13 +712,51 @@ void main() {
       },
     );
 
-    test('the own photo is null for none, an unknown state or no url', () {
+    test('the own photo is null for none, an unknown state or no version', () {
       expect(OwnPhoto.maybe(null), isNull);
       expect(OwnPhoto.maybe(const {'state': 'pending'}), isNull);
       expect(
-        OwnPhoto.maybe(const {'state': 'active', 'url': null, 'version': 'v1'}),
+        OwnPhoto.maybe(const {'state': 'active', 'url': 'https://x.test/p'}),
         isNull,
       );
+      expect(
+        OwnPhoto.maybe(const {
+          'state': 'active',
+          'url': 'https://x.test/p',
+          'version': '',
+        }),
+        isNull,
+      );
+    });
+
+    test(
+      'an active own photo with no address is still the member\'s photo',
+      () {
+        // The server failed to sign the address: there is a photo to change or
+        // remove, but no picture to draw.
+        for (final unsigned in [
+          const {'state': 'active', 'url': null, 'version': 'v1'},
+          const {'state': 'active', 'version': 'v1'},
+          const {'state': 'active', 'url': '', 'version': 'v1'},
+        ]) {
+          final photo = OwnPhoto.maybe(unsigned)!;
+          expect(photo.isActive, isTrue);
+          expect(photo.isRemoved, isFalse);
+          expect(photo.version, 'v1');
+          expect(photo.photo, isNull, reason: 'nothing to draw');
+        }
+        final signed = OwnPhoto.maybe(const {
+          'state': 'active',
+          'url': 'https://x.test/p',
+          'version': 'v1',
+        })!;
+        expect(signed.photo?.url, 'https://x.test/p');
+      },
+    );
+
+    test('a public photo with no address stays no image', () {
+      expect(PersonPhoto.maybe(const {'url': null, 'version': 'v1'}), isNull);
+      expect(PersonPhoto.maybe(const {'version': 'v1'}), isNull);
     });
 
     test('/api/me carries the own photo, or null; the snapshot holds none', () {

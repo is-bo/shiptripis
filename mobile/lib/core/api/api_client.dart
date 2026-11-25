@@ -21,6 +21,7 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:dio/dio.dart';
@@ -302,6 +303,14 @@ class ApiClient {
   ///
   /// [method] is `POST` unless the endpoint replaces a resource, as the profile
   /// photo's `PUT` does. Like every write, it is sent once and never retried.
+  ///
+  /// **An upload is never re-sent automatically**, not even after a token
+  /// refresh: a 401 may refresh the token, but the member sends the file again
+  /// themselves (see [_AuthInterceptor]).
+  ///
+  /// The body is read as text and decoded here, after the status is known, so
+  /// that a refusal the edge proxy wrote (an HTML 413, an empty body, broken
+  /// JSON) still reaches [ApiException] with its status.
   Future<Json> upload(
     String path, {
     required FormData form,
@@ -309,24 +318,54 @@ class ApiClient {
     void Function(int sent, int total)? onProgress,
     CancelToken? cancelToken,
   }) async => _expectObject(
-    await _write(
-      (identity) => _dio.request<dynamic>(
-        path,
-        data: form,
-        cancelToken: cancelToken,
-        onSendProgress: onProgress,
-        options: Options(
-          method: method,
-          contentType: 'multipart/form-data',
-          extra: {'st.identity_generation': identity},
-          // An upload is bounded by bandwidth, not by server think-time.
-          sendTimeout: const Duration(minutes: 5),
-          receiveTimeout: const Duration(minutes: 2),
-        ),
-      ),
-    ),
+    await _write((identity) async {
+      try {
+        return _decodeAfterStatus(
+          await _dio.request<dynamic>(
+            path,
+            data: form,
+            cancelToken: cancelToken,
+            onSendProgress: onProgress,
+            options: Options(
+              method: method,
+              contentType: 'multipart/form-data',
+              responseType: ResponseType.plain,
+              extra: {
+                'st.identity_generation': identity,
+                _AuthInterceptor.noReplay: true,
+              },
+              // An upload is bounded by bandwidth, not by server think-time.
+              sendTimeout: const Duration(minutes: 5),
+              receiveTimeout: const Duration(minutes: 2),
+            ),
+          ),
+        );
+      } on DioException catch (error) {
+        // A 5xx is thrown rather than returned: its body is read the same way.
+        final response = error.response;
+        if (response != null) _decodeAfterStatus(response);
+        rethrow;
+      }
+    }),
     path,
   );
+
+  /// Turns a plain-text body into JSON when it is JSON, and leaves it as the
+  /// text it is when it is not. Only a success has to be JSON; a refusal is
+  /// read by its status whatever its body.
+  static Response<dynamic> _decodeAfterStatus(Response<dynamic> response) {
+    final body = response.data;
+    if (body is! String || body.trim().isEmpty) {
+      if (body is String) response.data = null;
+      return response;
+    }
+    try {
+      response.data = jsonDecode(body);
+    } on FormatException {
+      // Not JSON: a success is then malformed, a refusal keeps its status.
+    }
+    return response;
+  }
 
   // ---------------------------------------------------------------------------
   // Plumbing
@@ -542,6 +581,9 @@ class _AuthInterceptor extends Interceptor {
   Future<String?>? _refreshInFlight;
   int? _refreshGeneration;
 
+  /// Set on a request that must never be re-sent automatically: an upload.
+  static const noReplay = 'st.no_replay';
+
   static const _authPaths = [
     '/api/auth/sign-in',
     '/api/auth/sign-up',
@@ -630,7 +672,7 @@ class _AuthInterceptor extends Interceptor {
     }
     if (current != null &&
         request.headers['Authorization'] != 'Bearer $current') {
-      return _resolveReplay(handler, request, current, requestIdentity);
+      return _resolveReplay(handler, response, current, requestIdentity);
     }
 
     final refresh = await _tokens.readRefresh();
@@ -644,7 +686,7 @@ class _AuthInterceptor extends Interceptor {
 
     final rotated = await _refreshOnce(refresh, requestIdentity);
     if (rotated != null && requestIdentity == _tokens.identityGeneration) {
-      return _resolveReplay(handler, request, rotated, requestIdentity);
+      return _resolveReplay(handler, response, rotated, requestIdentity);
     }
 
     // Do not wipe credentials that a newer sign-in wrote while this was in
@@ -662,10 +704,14 @@ class _AuthInterceptor extends Interceptor {
 
   Future<void> _resolveReplay(
     ResponseInterceptorHandler handler,
-    RequestOptions request,
+    Response<dynamic> response,
     String access,
     int identityGeneration,
   ) async {
+    final request = response.requestOptions;
+    // The token is fresh now, so the member's next try will work; the request
+    // that met the 401 is not sent a second time on their behalf.
+    if (request.extra[noReplay] == true) return handler.next(response);
     try {
       handler.resolve(await _replay(request, access, identityGeneration));
     } on DioException catch (error) {

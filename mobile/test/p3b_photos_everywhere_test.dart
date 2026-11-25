@@ -342,10 +342,8 @@ void main() {
         container: container(
           account(
             photo: const OwnPhoto.active(
-              PersonPhoto(
-                url: 'https://media.test/me.jpg?sig=1',
-                version: 'm1',
-              ),
+              url: 'https://media.test/me.jpg?sig=1',
+              version: 'm1',
             ),
           ),
         ),

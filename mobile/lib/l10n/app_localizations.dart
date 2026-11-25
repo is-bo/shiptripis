@@ -3915,6 +3915,30 @@ abstract class L {
   /// **'We couldn\'t open your camera or photos. Check that Wassla is allowed to use them in your device settings.'**
   String get profilePhotoPickFailed;
 
+  /// No description provided for @profilePhotoUnreadable.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn\'t read that photo. Choose it again.'**
+  String get profilePhotoUnreadable;
+
+  /// No description provided for @profilePhotoRecovered.
+  ///
+  /// In en, this message translates to:
+  /// **'Your phone closed Wassla while you were choosing a photo. Use the photo you picked?'**
+  String get profilePhotoRecovered;
+
+  /// No description provided for @profilePhotoUse.
+  ///
+  /// In en, this message translates to:
+  /// **'Use this photo'**
+  String get profilePhotoUse;
+
+  /// No description provided for @profilePhotoDiscard.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard this photo'**
+  String get profilePhotoDiscard;
+
   /// No description provided for @profilePassportStamp.
   ///
   /// In en, this message translates to:

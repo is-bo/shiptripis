@@ -48,23 +48,31 @@ enum OwnPhotoState {
 }
 
 /// The member's own photo, from `GET /api/me` and `PUT /api/me/photo`.
+///
+/// An active photo is kept whether or not the server could sign its address:
+/// the member still has a photo, and may change or remove it, even when no
+/// picture can be drawn for the moment ([photo] is then null).
 class OwnPhoto {
-  const OwnPhoto.active(PersonPhoto this.photo)
+  const OwnPhoto.active({required String this.version, this.url})
     : state = OwnPhotoState.active,
       removedAt = null,
       reason = null;
 
   const OwnPhoto.removed({this.removedAt, this.reason})
     : state = OwnPhotoState.removed,
-      photo = null;
+      version = null,
+      url = null;
 
   /// Null for no photo, and for a state this build does not know.
   static OwnPhoto? maybe(Object? raw) {
     final json = readObject(raw);
     return switch (OwnPhotoState.maybe(json?['state'])) {
-      OwnPhotoState.active => switch (PersonPhoto.maybe(json)) {
-        final photo? => OwnPhoto.active(photo),
-        null => null,
+      OwnPhotoState.active => switch (readString(json?['version'])) {
+        final version? when version.isNotEmpty => OwnPhoto.active(
+          version: version,
+          url: readString(json?['url']),
+        ),
+        _ => null,
       },
       OwnPhotoState.removed => OwnPhoto.removed(
         removedAt: readDate(json?['removed_at']),
@@ -77,12 +85,26 @@ class OwnPhoto {
 
   final OwnPhotoState state;
 
-  /// Set while the photo is active.
-  final PersonPhoto? photo;
+  /// The active photo's version, whether or not it has an address.
+  final String? version;
+
+  /// Null while the photo is active but the server could not sign it.
+  final String? url;
   final DateTime? removedAt;
 
   /// What Wassla told the member when it removed the photo.
   final String? reason;
 
   bool get isRemoved => state == OwnPhotoState.removed;
+  bool get isActive => state == OwnPhotoState.active;
+
+  /// What the avatar can draw: null when there is no address to draw from.
+  PersonPhoto? get photo {
+    final address = url;
+    final key = version;
+    if (!isActive || address == null || address.isEmpty || key == null) {
+      return null;
+    }
+    return PersonPhoto(url: address, version: key);
+  }
 }

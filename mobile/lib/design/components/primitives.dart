@@ -142,7 +142,9 @@ class _PressScaleState extends State<_PressScale> {
   bool _down = false;
 
   void _set(bool value) {
-    if (!widget.enabled || _down == value) return;
+    // A finger that went down on a button and then scrolled the list lifts
+    // after the list has dropped the button.
+    if (!mounted || !widget.enabled || _down == value) return;
     setState(() => _down = value);
   }
 
@@ -688,6 +690,11 @@ class AppAvatar extends StatelessWidget {
             if (photo case final photo?)
               ClipOval(
                 child: CachedNetworkImage(
+                  // Keyed by the address too: an image that failed on an
+                  // expired signed address is loaded again as soon as a fresh
+                  // address arrives for the same version. The bytes stay
+                  // cached by version, so a working photo is not fetched twice.
+                  key: ValueKey(photo.url),
                   imageUrl: photo.url,
                   cacheKey: photo.version,
                   width: size,

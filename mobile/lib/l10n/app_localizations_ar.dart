@@ -2201,6 +2201,20 @@ class LAr extends L {
       'تعذّر فتح الكاميرا أو الصور. تأكد من السماح لتطبيق Wassla باستخدامهما في إعدادات جهازك.';
 
   @override
+  String get profilePhotoUnreadable =>
+      'تعذّرت قراءة هذه الصورة. اخترها مرة أخرى.';
+
+  @override
+  String get profilePhotoRecovered =>
+      'أغلق هاتفك Wassla أثناء اختيارك صورة. هل تستخدم الصورة التي اخترتها؟';
+
+  @override
+  String get profilePhotoUse => 'استخدام هذه الصورة';
+
+  @override
+  String get profilePhotoDiscard => 'تجاهل هذه الصورة';
+
+  @override
   String get profilePassportStamp => 'Wassla · عضو';
 
   @override

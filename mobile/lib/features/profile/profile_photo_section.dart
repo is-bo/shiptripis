@@ -9,21 +9,20 @@
 /// The server stores a centred square, so the preview crops to one: what the
 /// member sees while uploading is what others will see.
 ///
-/// **A photo is uploaded once per tap.** The upload is never retried by the
-/// app; every retry is the member pressing the button again, because each
-/// upload stores a new photo on the server.
+/// What is picked, uploaded or refused lives in `profilePhotoProvider` and not
+/// here: the Profile list is lazy, so this widget is disposed when it scrolls
+/// away, and a pending upload, its outcome and its busy flag must survive that.
+/// **A photo is uploaded once per press**; every retry is the member pressing a
+/// button.
 library;
 
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../../core/api/api_exception.dart';
-import '../../core/api/error_codes.dart';
-import '../../core/session/session.dart';
+import '../../app/profile_photo_state.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/images.dart';
 import '../../design/components/primitives.dart';
@@ -34,73 +33,6 @@ import '../../domain/account.dart';
 import '../../domain/person_photo.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/formatters.dart';
-
-/// The server's ceiling for a profile photo. Checked here as well, so an
-/// oversized file is refused before it is pushed up a mobile uplink.
-const _maxPhotoBytes = 10 * 1024 * 1024;
-
-const _allowedPhotoTypes = {'image/jpeg', 'image/png', 'image/webp'};
-
-/// The edge, in pixels, the picker scales a photo down to in native code. The
-/// server keeps a 512 px square, so 1024 leaves room to crop without sending a
-/// camera original.
-const _photoMaxEdge = 1024.0;
-const _photoQuality = 88;
-
-/// Opens the device's camera or photo library.
-typedef ProfilePhotoPicker = Future<XFile?> Function(ImageSource source);
-
-/// The picker, behind a provider: one place for the resize policy, and the
-/// seam a widget test overrides, because a test runner has no camera.
-final profilePhotoPickerProvider = Provider<ProfilePhotoPicker>((ref) {
-  final picker = ImagePicker();
-  return (source) => picker.pickImage(
-    source: source,
-    maxWidth: _photoMaxEdge,
-    maxHeight: _photoMaxEdge,
-    imageQuality: _photoQuality,
-  );
-});
-
-/// Why a photo did not go up, as the member needs to hear it.
-enum ProfilePhotoFailure {
-  tooLarge,
-  unsupported,
-  accountInactive,
-  storageUnavailable,
-  offline,
-  general,
-
-  /// The camera or library would not open: usually a refused permission.
-  pickFailed;
-
-  /// The same file may succeed if the member presses the button again.
-  bool get canRetry =>
-      this == storageUnavailable || this == offline || this == general;
-
-  /// Reads the server's refusal. **Any 413 is "too large"**, whatever its
-  /// body: the edge proxy refuses an oversized body with no JSON at all.
-  static ProfilePhotoFailure of(ApiException error) {
-    if (error.statusCode == 413 ||
-        error.code == ApiErrorCode.profilePhotoTooLarge) {
-      return tooLarge;
-    }
-    if (error.statusCode == 415 ||
-        error.code == ApiErrorCode.profilePhotoMediaTypeUnsupported) {
-      return unsupported;
-    }
-    if (error.code == ApiErrorCode.accountInactive) return accountInactive;
-    if (error.code == ApiErrorCode.profilePhotoStorageUnavailable) {
-      return storageUnavailable;
-    }
-    return switch (error.kind) {
-      ApiFailureKind.offline || ApiFailureKind.timeout => offline,
-      _ => general,
-    };
-  }
-}
-
-enum _Phase { idle, uploading, failed }
 
 class ProfilePhotoSection extends ConsumerStatefulWidget {
   const ProfilePhotoSection({required this.account, super.key});
@@ -113,16 +45,21 @@ class ProfilePhotoSection extends ConsumerStatefulWidget {
 }
 
 class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
-  _Phase _phase = _Phase.idle;
-  ProfilePhotoFailure? _failure;
+  @override
+  void initState() {
+    super.initState();
+    // If the phone ended the app while the camera was open, the photo being
+    // taken is offered here for the member to confirm. The controller does it
+    // once, whatever number of times this scrolls into view.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(profilePhotoProvider.notifier).recoverLostPick();
+      }
+    });
+  }
 
-  /// The file being uploaded, or the one that failed and can be tried again.
-  XFile? _picked;
-  String _pickedType = '';
-  double _progress = 0;
-  bool _removing = false;
-
-  bool get _busy => _phase == _Phase.uploading || _removing;
+  ProfilePhotoController get _controller =>
+      ref.read(profilePhotoProvider.notifier);
 
   Future<void> _choose() async {
     final source = await showAppSheet<ImageSource>(
@@ -151,89 +88,26 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
   }
 
   Future<void> _pick(ImageSource source) async {
-    XFile? picked;
-    try {
-      picked = await ref.read(profilePhotoPickerProvider)(source);
-    } on PlatformException {
-      if (!mounted) return;
-      setState(() {
-        _picked = null;
-        _phase = _Phase.failed;
-        _failure = ProfilePhotoFailure.pickFailed;
-      });
-      return;
-    }
-    if (picked == null || !mounted) return;
-
-    final type = picked.mimeType ?? _typeFromPath(picked.path);
-    final bytes = await picked.length();
-    if (!mounted) return;
-    final refusal = bytes > _maxPhotoBytes
-        ? ProfilePhotoFailure.tooLarge
-        : !_allowedPhotoTypes.contains(type)
-        ? ProfilePhotoFailure.unsupported
-        : null;
-    if (refusal != null) {
-      setState(() {
-        _picked = null;
-        _phase = _Phase.failed;
-        _failure = refusal;
-      });
-      return;
-    }
-
-    setState(() {
-      _picked = picked;
-      _pickedType = type;
-    });
-    await _upload();
+    final l = L.of(context);
+    final saved = await _controller.pick(source);
+    if (saved && mounted) AppSnack.success(context, l.profilePhotoUpdated);
   }
 
   Future<void> _upload() async {
-    final file = _picked;
-    if (file == null || _busy) return;
     final l = L.of(context);
-    setState(() {
-      _phase = _Phase.uploading;
-      _failure = null;
-      _progress = 0;
-    });
-    try {
-      await ref
-          .read(sessionProvider.notifier)
-          .uploadPhoto(
-            filePath: file.path,
-            fileName: file.name,
-            contentType: _pickedType,
-            onProgress: (sent, total) {
-              if (mounted && total > 0) {
-                setState(() => _progress = sent / total);
-              }
-            },
-          );
-      if (!mounted) return;
-      setState(() {
-        _picked = null;
-        _phase = _Phase.idle;
-      });
-      AppSnack.success(context, l.profilePhotoUpdated);
-    } on ApiException catch (error) {
-      if (!mounted) return;
-      final failure = ProfilePhotoFailure.of(error);
-      setState(() {
-        _phase = _Phase.failed;
-        _failure = failure;
-        // A file the server will never accept is not kept, and neither is
-        // one a banned account cannot send; the rest stay selected so the
-        // member can press the button again.
-        if (!failure.canRetry) _picked = null;
-      });
-    }
+    final saved = await _controller.upload();
+    if (saved && mounted) AppSnack.success(context, l.profilePhotoUpdated);
+  }
+
+  Future<void> _useRecovered() async {
+    final l = L.of(context);
+    final saved = await _controller.confirmRecovered();
+    if (saved && mounted) AppSnack.success(context, l.profilePhotoUpdated);
   }
 
   Future<void> _remove({required bool confirm}) async {
-    if (_busy) return;
     final l = L.of(context);
+    if (ref.read(profilePhotoProvider).busy) return;
     if (confirm) {
       final ok = await confirmAction(
         context,
@@ -244,25 +118,13 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
       );
       if (!ok || !mounted) return;
     }
-    setState(() => _removing = true);
-    try {
-      await ref.read(sessionProvider.notifier).removePhoto();
-      if (!mounted) return;
-      setState(() => _removing = false);
-      if (confirm) AppSnack.success(context, l.profilePhotoRemoved);
-    } on ApiException catch (error) {
-      if (!mounted) return;
-      setState(() => _removing = false);
+    final error = await _controller.remove();
+    if (!mounted) return;
+    if (error != null) {
       AppSnack.failure(context, error);
+    } else if (confirm) {
+      AppSnack.success(context, l.profilePhotoRemoved);
     }
-  }
-
-  static String _typeFromPath(String path) {
-    final lower = path.toLowerCase();
-    if (lower.endsWith('.png')) return 'image/png';
-    if (lower.endsWith('.webp')) return 'image/webp';
-    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
-    return '';
   }
 
   String _failureCopy(L l, ProfilePhotoFailure failure) => switch (failure) {
@@ -272,6 +134,7 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
     ProfilePhotoFailure.storageUnavailable => l.profilePhotoStorageUnavailable,
     ProfilePhotoFailure.offline => l.profilePhotoOffline,
     ProfilePhotoFailure.general => l.profilePhotoFailed,
+    ProfilePhotoFailure.unreadable => l.profilePhotoUnreadable,
     ProfilePhotoFailure.pickFailed => l.profilePhotoPickFailed,
   };
 
@@ -281,14 +144,19 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
     final c = context.colors;
     final text = Theme.of(context).textTheme;
     final account = widget.account;
+    final photo = ref.watch(profilePhotoProvider);
     final own = account.photo;
     final name = account.fullName.trim().isEmpty
         ? account.email
         : account.fullName;
-    final uploading = _phase == _Phase.uploading;
     final removedByWassla = own != null && own.isRemoved;
-    final hasPhoto = own != null && !own.isRemoved;
-    final failure = _phase == _Phase.failed ? _failure : null;
+    // An active photo the server could not sign is still the member's photo:
+    // initials are drawn, and it can still be changed or removed.
+    final hasPhoto = own != null && own.isActive;
+    final failure = photo.phase == ProfilePhotoPhase.failed
+        ? photo.failure
+        : null;
+    final confirming = photo.awaitingConfirmation && photo.picked != null;
 
     final help = hasPhoto ? l.profilePhotoHelpActive : l.profilePhotoHelpEmpty;
 
@@ -304,16 +172,16 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _PhotoFrame(
-                    picked: _picked,
-                    uploading: uploading,
-                    progress: _progress,
+                    picked: photo.picked,
+                    uploading: photo.uploading,
+                    progress: photo.progress,
                     name: name,
                     initials: initialsFor(name),
-                    account: account,
+                    photo: own?.photo,
                   ),
                   const SizedBox(width: AppSpace.lg),
                   Expanded(
-                    child: uploading
+                    child: photo.uploading
                         ? Semantics(
                             liveRegion: true,
                             child: Text(
@@ -338,7 +206,15 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
                   tone: StatusTone.bad,
                   icon: Icons.no_photography_outlined,
                   actionLabel: l.profilePhotoDismiss,
-                  onAction: _busy ? null : () => _remove(confirm: false),
+                  onAction: photo.busy ? null : () => _remove(confirm: false),
+                ),
+              ],
+              if (confirming) ...[
+                const SizedBox(height: AppSpace.lg),
+                InfoNotice(
+                  message: l.profilePhotoRecovered,
+                  tone: StatusTone.waiting,
+                  icon: Icons.restore_rounded,
                 ),
               ],
               if (failure != null) ...[
@@ -353,38 +229,59 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
                     _ => Icons.error_outline_rounded,
                   },
                   actionLabel: failure.canRetry ? l.actionRetry : null,
-                  onAction: failure.canRetry && !_busy ? _upload : null,
+                  onAction: failure.canRetry && !photo.busy ? _upload : null,
                 ),
               ],
               const SizedBox(height: AppSpace.lg),
-              if (hasPhoto && _picked == null) ...[
+              if (confirming) ...[
+                AppButton(
+                  label: l.profilePhotoUse,
+                  icon: Icons.check_rounded,
+                  onPressed: photo.busy ? null : _useRecovered,
+                ),
+              ] else if (hasPhoto) ...[
                 AppButton(
                   label: l.profilePhotoChange,
                   variant: AppButtonVariant.secondary,
                   icon: Icons.photo_camera_outlined,
-                  onPressed: _busy ? null : _choose,
+                  onPressed: photo.busy ? null : _choose,
                 ),
                 const SizedBox(height: AppSpace.sm),
+                // Stays available beside a failed replacement: the photo
+                // others see is the one on the server.
                 AppButton(
                   label: l.profilePhotoRemove,
                   variant: AppButtonVariant.tertiary,
                   icon: Icons.delete_outline_rounded,
-                  isLoading: _removing,
-                  onPressed: _busy ? null : () => _remove(confirm: true),
+                  isLoading: photo.removing,
+                  onPressed: photo.busy ? null : () => _remove(confirm: true),
                 ),
               ] else ...[
                 AppButton(
                   label: l.profilePhotoTake,
                   variant: AppButtonVariant.secondary,
                   icon: Icons.photo_camera_outlined,
-                  onPressed: _busy ? null : () => _pick(ImageSource.camera),
+                  onPressed: photo.busy
+                      ? null
+                      : () => _pick(ImageSource.camera),
                 ),
                 const SizedBox(height: AppSpace.sm),
                 AppButton(
                   label: l.profilePhotoChoose,
                   variant: AppButtonVariant.secondary,
                   icon: Icons.photo_library_outlined,
-                  onPressed: _busy ? null : () => _pick(ImageSource.gallery),
+                  onPressed: photo.busy
+                      ? null
+                      : () => _pick(ImageSource.gallery),
+                ),
+              ],
+              if (photo.picked != null && !photo.uploading) ...[
+                const SizedBox(height: AppSpace.sm),
+                AppButton(
+                  label: l.profilePhotoDiscard,
+                  variant: AppButtonVariant.tertiary,
+                  icon: Icons.close_rounded,
+                  onPressed: photo.busy ? null : _controller.discard,
                 ),
               ],
               const SizedBox(height: AppSpace.md),
@@ -420,17 +317,17 @@ class _PhotoFrame extends StatelessWidget {
     required this.progress,
     required this.name,
     required this.initials,
-    required this.account,
+    required this.photo,
   });
 
   static const double _size = 96;
 
-  final XFile? picked;
+  final PickedPhoto? picked;
   final bool uploading;
   final double progress;
   final String name;
   final String initials;
-  final Account account;
+  final PersonPhoto? photo;
 
   @override
   Widget build(BuildContext context) {
@@ -442,13 +339,14 @@ class _PhotoFrame extends StatelessWidget {
       return AppAvatar(
         initials: initials,
         name: name,
-        photo: account.photo?.photo,
+        photo: photo,
         size: _size,
       );
     }
 
     // The centred square the server will keep, drawn from the local file: the
-    // bytes are on the device already.
+    // bytes are on the device already. Each pick has a path of its own, so a
+    // new photo is never drawn as an earlier one cached under the same name.
     return Semantics(
       image: true,
       label: l.profilePhotoPreview,
@@ -463,6 +361,7 @@ class _PhotoFrame extends StatelessWidget {
               children: [
                 Image.file(
                   File(file.path),
+                  key: ValueKey(file.path),
                   fit: BoxFit.cover,
                   cacheWidth: decodeWidthFor(context, _size),
                   errorBuilder: (_, _, _) => ColoredBox(

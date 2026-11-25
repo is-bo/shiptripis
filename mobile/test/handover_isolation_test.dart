@@ -112,7 +112,7 @@ void main() {
         );
       }
 
-      // And the keys it writes are exactly the seven it is allowed to hold.
+      // And the keys it writes are exactly the eight it is allowed to hold.
       // The account snapshot (K5) is the user's own presentation profile —
       // its key set is pinned in k5_session_snapshot_test.dart.
       final store = File(
@@ -131,10 +131,15 @@ void main() {
           '_kLocale',
           '_kInstallationId',
           '_kPendingPushToken',
+          // The id of the account that had the photo picker open, so a photo
+          // recovered after the phone ended the app is offered to that account
+          // only. It names no code, token or person.
+          '_kPendingPhotoPick',
         },
         reason:
             'secure storage may hold session/push tokens, the account’s '
-            'own profile snapshot, a random install ID, a role and a locale '
+            'own profile snapshot, a random install ID, a role, a locale and '
+            'the account id of a photo pick in progress '
             '— never code material, a guest token or recipient details',
       );
     });
