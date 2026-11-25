@@ -3225,7 +3225,9 @@ Worked example: traveler 8 EUR/kg (800 cents), minimum 10 EUR (1000), parcel cha
 A request and a journey are compatible only if every check passes. Failed checks are listed as rejection codes (visible to staff in the match explanation):
 - `request_active` (open request), `journey_active` (active or in progress), `journey_not_paused`, `accounts_eligible` (both active, not banned, different people), `traveler_kyc_current`, `journey_leg_sequence`.
 - `item_safety_eligible` (sender confirmed the five safety declarations), `item_accepted_by_traveler`, `pricing_inputs_complete` (weight and deadline present), `target_traveler_eligible` (a request aimed at one traveler only matches that person), `request_has_no_active_deal`, `canonical_geography_complete`.
-- `pickup_before_delivery`: the pickup city and the drop-off city must both be stops of the journey, pickup before drop-off. Matching is by city, not by distance: an airport counts as the city it serves. There are no detour or kilometre limits for current journeys (detour checks pass automatically).
+- `pickup_stop_on_route` and `delivery_stop_on_route`: the journey must have a stop in the pickup city and a stop in the drop-off city. Matching is by city, not by distance: an airport counts as the city it serves. Example: a flight from Algiers (ALG) to Paris (CDG) does not pick up in Jijel, so a Jijel to Paris parcel fails `pickup_stop_on_route` even when the dates fit. Both codes appear when neither city is on the route. There are no detour or kilometre limits for current journeys (detour checks pass automatically).
+- `pickup_before_delivery`: both cities are on the route, but the journey never visits the pickup city and then a later drop-off stop. That happens when it goes the other way, and also when both request places count as the same stop (for example Orly to Charles de Gaulle on a flight that ends in Paris: both are Paris). It is about the order of stops, never about dates.
+- A request city the matching catalogue cannot place (for example an airport with no served city) fails only `canonical_geography_complete`; no stop is reported missing.
 - `stop_services_allow_handover`, `sea_legs_available`, `flight_proofs_approved`, `sea_proofs_approved`, `flight_coordinates_trusted`.
 - `route_time_order_feasible`: pickup time is in the future and before drop-off.
 - `pickup_within_ready_window`: the traveler's departure from the pickup stop is inside the sender's ready window.
@@ -3239,7 +3241,7 @@ Check in order:
 1. Request not `open` (states: awaiting deposit, already matched, closed, in progress). The screen then shows state `request_ineligible` with a reason (`awaiting_deposit`, `already_matched`, `closed`, `in_progress`), not an empty list.
 2. Journey not discoverable: not active/in progress, paused (by anyone), no leg left in the future, traveler inactive/banned/KYC missing or expired, owner is the same person.
 3. Any failed check from the list above (time window, deadline, capacity, ticket not approved, sea leg closed, stop does not accept pickup/drop-off, refused category or fragile).
-4. The journey does not pass through both cities in the right order.
+4. The journey does not stop in both cities (`pickup_stop_on_route`, `delivery_stop_on_route`), or does not visit the pickup city and then a later drop-off stop (`pickup_before_delivery`).
 5. Limits: only the first 200 candidate journeys are scanned (`candidate_scan_limit`) and at most 50 are returned (`result_limit`). Candidates with an exact pickup and drop-off node, then newest published, are scanned first. Both limits are stored matching settings with no console form.
 - An empty result is state `no_candidates` (normal, not an error).
 
