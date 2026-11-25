@@ -314,9 +314,10 @@ class ChatThreadsView(APIView):
     Returns every match the viewer may currently chat on (i.e. `chat_eligibility`
     is OK — accepted + paid, not closed), newest activity first, with the
     counterparty name, route, last-message snippet, and the viewer's unread
-    count. Eligibility is checked per-row through the same `chat_eligibility`
-    helper the send path uses, so the inbox never lists a thread the user can't
-    actually open.
+    count. Each row also carries the counterparty's profile photo, joined with
+    the two people so a longer inbox costs no extra query. Eligibility is
+    checked per-row through the same `chat_eligibility` helper the send path
+    uses, so the inbox never lists a thread the user can't actually open.
     """
 
     permission_classes = (IsAuthenticated,)
@@ -333,8 +334,15 @@ class ChatThreadsView(APIView):
             Match.objects.filter(Q(sender_id=uid) | Q(traveler_id=uid))
             # `deal` is the V1 chat gate, so it is joined rather than looked up
             # per row — without it every inbox render costs one extra query per
-            # match.
-            .select_related("sender", "traveler", "parcel", "deal")
+            # match. The same goes for each person's photo row.
+            .select_related(
+                "sender",
+                "traveler",
+                "sender__profile_photo",
+                "traveler__profile_photo",
+                "parcel",
+                "deal",
+            )
             .annotate(
                 last_body=Subquery(last_msg.values("body")[:1]),
                 last_at=Subquery(last_msg.values("created_at")[:1]),

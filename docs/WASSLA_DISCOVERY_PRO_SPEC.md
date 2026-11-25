@@ -649,12 +649,16 @@ reversing plan decision 5.1b. Fix plan P3A (server) and P3B (app). The rule live
 - **Everyone who sees the person's first name**, people without an account included (Ismail,
   2026-11-24): trip, request and profile cards, the person page, the member's own profile preview, route
   alerts that follow a person, Find Travelers, "Matches for you", both parties of a proposal (the
-  delivery screen reads its counterparty from the proposal), and the journey detail and list.
+  delivery screen reads its counterparty from the proposal), the journey detail and list, and chat:
+  the chat list and the chat header show the other person's photo (`counterparty_photo` on
+  `GET /api/chat/threads`). A blocked or closed thread keeps the photo, because it keeps the name; the
+  "Blocked people" list shows none, and messages and chat events carry none (no signed address ever
+  enters a message payload or a published event).
 - Each of those carries `photo`: `{"url", "version"}` or null (`sender_photo` and `traveler_photo` on a
   proposal, `traveler_photo` on a journey). The address is signed when the page is read and expires after 30 minutes
   (`PROFILE_PHOTO_URL_TTL_SECONDS`); nothing caches it. The app caches the image by `version`, which
   changes with every upload.
-- A photo of a banned or deactivated account is never shown. Chat is out of scope for now.
+- A photo of a banned, deactivated or deleted account is never shown.
 
 ### 21.3 Removal by Wassla
 

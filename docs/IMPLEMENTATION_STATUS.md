@@ -1,5 +1,17 @@
 # Waçla V1 Implementation Status
 
+## Wassla: chat photos, server side (P3C, 2026-11-24)
+
+- Ismail's answer after P3A: photos should appear in chat, in the conversation list and the chat
+  header. Fix plan P3C. Server only, the app is P3B. No migration, no Go or Dart change. Nothing
+  deployed.
+- `GET /api/chat/threads` rows carry `counterparty_photo: {url, version} | null`, which is
+  `public_photo` of the other person (null for no photo, a removed photo, a banned, deactivated or
+  deleted account). The two people's photo rows are joined, so the inbox query count stays flat.
+  Message payloads and the `chat.message.new` event are unchanged: no signed URL enters Redis. A
+  blocked or closed thread keeps the photo; the blocked-people list gets none. Spec 21.2 and the
+  helper knowledge updated. Detail: `docs/PHASE_P3C_CHAT_PHOTOS.md`.
+
 ## Wassla: profile photos, server side (P3A, 2026-11-24)
 
 - Ismail's phone test of 2026-11-24 ("Is there no option for profile pictures? Add it."), fix plan

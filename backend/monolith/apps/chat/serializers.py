@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from apps.accounts.photos import public_photo
+
 from .models import ChatMessage, ChatMessageReport
 
 
@@ -63,12 +65,19 @@ class ChatThreadSerializer(serializers.Serializer):
     needs to re-read what was agreed. `can_send` tells the client whether the
     composer should be live or the thread rendered read-only, so the client
     never has to infer that from a 402.
+
+    `counterparty_photo` is `public_photo` of the other person, `{url, version}`
+    or null (spec 21.2): no photo, a photo staff removed, a banned, deactivated
+    or deleted account. A blocked or closed thread keeps it, because it keeps
+    the name. The signed URL is built here, per request, and never enters a
+    message payload or a published event.
     """
 
     match_id = serializers.IntegerField(source="id", read_only=True)
     deal_id = serializers.SerializerMethodField()
     counterparty_id = serializers.SerializerMethodField()
     counterparty_name = serializers.SerializerMethodField()
+    counterparty_photo = serializers.SerializerMethodField()
     route = serializers.SerializerMethodField()
     status = serializers.CharField(read_only=True)
     can_send = serializers.SerializerMethodField()
@@ -100,6 +109,9 @@ class ChatThreadSerializer(serializers.Serializer):
 
     def get_counterparty_name(self, obj) -> str:
         return self._counterparty(obj).full_name
+
+    def get_counterparty_photo(self, obj) -> dict | None:
+        return public_photo(self._counterparty(obj))
 
     def get_counterparty_deleted(self, obj) -> bool:
         """The other member deleted their account; the app names them so."""
