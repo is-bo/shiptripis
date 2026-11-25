@@ -151,9 +151,10 @@ page submissions in `ReceiptEmailTests` and `PublicPageTests` (j7c) and
 `test_the_shared_page_hands_the_payer_to_the_provider` (j2). Their assertions are unchanged; the email
 test now also asserts no attempt after the second invalid address and the private headers on the 400.
 
-**The tests depend on the fix.** On `main`, the 13 browser tests and the 5 rewritten tests fail with
-the logged 403s. With `_recheck_guest_link` disabled, 9 tests fail: the 7 refusal tests in
-`CheckoutRecheckTests`, the mid-tap test in `BrowserCheckoutTests` and the real-thread race. All pass
+**The tests depend on the fix.** Against `main`'s production code, 27 of these tests fail: the 13
+browser tests and the 5 rewritten tests (with the logged 403s), the 7 refusal tests in
+`CheckoutRecheckTests` and both concurrency tests. With only `_recheck_guest_link` disabled, 9 fail:
+the 7 refusal tests, the mid-tap test in `BrowserCheckoutTests` and the real-thread race. All pass
 with the fix.
 
 ## Screenshots
@@ -172,9 +173,15 @@ change is the removed hidden token field.
 
 ## Checks
 
-See the PR for the exact results. Locally, against PostgreSQL (embedded cluster, `config.settings.
-test_pg`): `ruff check .` clean, `makemigrations --check --dry-run` no changes, the guest suites and
-the whole `apps/finance` suite. CI is authoritative for the full Django suite.
+Locally, against PostgreSQL (embedded cluster, `config.settings.test_pg`):
+
+- `ruff check .`: clean. `makemigrations --check --dry-run`: no changes.
+- Guest suites (j7c, guest payment, j2 guest payer, concurrency guest race): 81 passed.
+- Whole `apps/finance` suite: **1,145 passed, 0 failed**. A first run on this machine lost its
+  database partway through (the embedded server crashed with Windows status `0xC0000142`, and child
+  processes failed to start with the same code), so it was rerun on a fresh cluster.
+
+CI on the PR's commit: all checks green, Schema drift and the four Django shards included.
 
 ## Handoff
 
