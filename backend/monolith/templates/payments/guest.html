@@ -10,7 +10,9 @@ forwards this link forwards the ability to pay, not a receipt and not a record.
 
 The token is in the URL because it *is* the credential. The page never puts it
 in a query string, never logs it, and the server stores only its hash. The
-referrer is suppressed so the path never travels onward to anyone.
+referrer is suppressed so the path never travels onward to anyone. The form
+carries no CSRF token: its authority is the path, not a cookie (G1, see
+`guest_payment_page`).
 
 An unknown, expired, revoked or closed link is answered the same way, in the
 same words: the link is no longer active. Distinguishing them would let someone
@@ -34,7 +36,6 @@ Its look -- tokens, faces, header and language switch -- is the shared
     <div class="perf" aria-hidden="true"></div>
 
     <form method="post" action="{{ checkout_action }}">
-      {% csrf_token %}
       <input type="hidden" name="lang" value="{{ lang }}">
       {% if providers|length == 1 %}
         {% with option=providers.0 %}

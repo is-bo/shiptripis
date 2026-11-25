@@ -1289,6 +1289,10 @@ def start_checkout(
     obligation. The attempt row is written first so its id is the stable
     idempotency key we hand the provider, which is what makes a retried
     checkout reuse the provider's own session instead of creating a second one.
+
+    A guest link is read again under the order lock (`_recheck_guest_link`),
+    so the attempt is bound to a link that is live at that moment and belongs
+    to this order.
     """
 
     policy = policy or phase3_policy()
@@ -1299,6 +1303,8 @@ def start_checkout(
 
     with transaction.atomic():
         order = _order_for_update(order_id)
+        if guest_link is not None:
+            guest_link = _recheck_guest_link(order=order, link_id=guest_link.pk)
         from .mode_safety import require_order_mode
 
         require_order_mode(order)
@@ -3146,15 +3152,40 @@ def resolve_guest_link(token: str) -> GuestPaymentLink:
         .filter(token_hash=hash_guest_token(token))
         .first()
     )
-    now = timezone.now()
-    if (
-        link is None
-        or link.revoked_at is not None
-        or link.consumed_at is not None
-        or link.expires_at <= now
-        or not link.order.is_collectable
-        or link.order.outstanding_eur_cents <= 0
-    ):
+    if link is None or not _guest_link_payable(link, link.order):
+        raise GuestLinkInvalid("This payment link is not valid.")
+    return link
+
+
+def _guest_link_payable(link: GuestPaymentLink, order: PaymentOrder) -> bool:
+    """Whether a link can start a payment now: the one rule both reads apply."""
+
+    return (
+        link.revoked_at is None
+        and link.consumed_at is None
+        and link.expires_at > timezone.now()
+        and order.is_collectable
+        and order.outstanding_eur_cents > 0
+    )
+
+
+def _recheck_guest_link(*, order: PaymentOrder, link_id: int) -> GuestPaymentLink:
+    """The guest link read again, under the order lock the caller holds (G1).
+
+    `resolve_guest_link` reads without a lock, so a revocation or a replacement
+    can commit between that read and the checkout. Both take this order's lock
+    first (`revoke_guest_link`, `create_guest_link`), so with it held this read
+    is final: a link stopped before the lock is refused here, and a stop that
+    comes after it finds the open checkout and is refused itself. A link pays
+    its own order and no other. Every refusal is the same `guest_link_invalid`.
+    """
+
+    link = (
+        GuestPaymentLink.objects.select_for_update(no_key=True)
+        .filter(pk=link_id, order=order)
+        .first()
+    )
+    if link is None or not _guest_link_payable(link, order):
         raise GuestLinkInvalid("This payment link is not valid.")
     return link
 

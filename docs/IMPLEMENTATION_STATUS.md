@@ -1,5 +1,23 @@
 # Waçla V1 Implementation Status
 
+## Wassla: guest checkout without a browser-session dependency (G1, 2026-11-25)
+
+- Phone test 2, finding 1.1: pressing "Pay" on a shared guest link answered "CSRF verification
+  failed". The page's no-referrer policy makes Chromium submit with `Origin: null` and no Referer,
+  which Django's CSRF check refuses. Plan `WASSLA_PHONE_TEST_2_PLAN.md`, package G1. Server only, no
+  migration. Nothing deployed.
+- `guest_payment_page` alone is exempt from Django's CSRF check and its form carries no CSRF token:
+  the link token in the path is the authority, and the session is never read, so a signed-in member
+  pays as a guest. Every guest page response, redirects and errors included, sends
+  `Referrer-Policy: no-referrer` and `Cache-Control: private, no-store`. No global middleware or
+  trusted-origin change.
+- `start_checkout` reads a guest link again under the order lock that revoking and replacing take
+  (`_recheck_guest_link`), bound to its own order; a link stopped, expired, used or paired with another
+  order since the page read it starts nothing (`guest_link_invalid`). One validity rule,
+  `_guest_link_payable`, serves both reads. Provider idempotency and retries unchanged. Tests run with
+  CSRF enforced, including a real-thread revocation race. Detail:
+  `docs/PHASE_G1_GUEST_CHECKOUT_CSRF.md`.
+
 ## Wassla: missing route stops get their own rejection reasons (M1, 2026-11-25)
 
 - Phone test 2 (plan 1.6, 1.7): a Jijel → Paris request against an ALG → CDG flight was refused,

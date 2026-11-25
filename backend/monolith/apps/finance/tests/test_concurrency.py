@@ -14,7 +14,7 @@ threads in one process.
 from __future__ import annotations
 
 import unittest
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from copy import deepcopy
 from datetime import timedelta
 from threading import Barrier, Event
@@ -44,8 +44,10 @@ from apps.finance.providers.mock import MockGateway
 from apps.finance.services import (
     RefundExceedsCapture,
     cancel_order,
+    create_guest_link,
     ensure_posting_deposit_order,
     request_refund,
+    revoke_guest_link,
 )
 
 from .factories import (
@@ -295,6 +297,113 @@ class CheckoutRaceTests(FinanceConcurrencyTestCase):
         assert PaymentRefund.objects.filter(
             attempt=unapplied[0], reason=PaymentRefund.Reason.UNAPPLIED_PAYMENT
         ).exists()
+
+
+class GuestPageRaceTests(FinanceConcurrencyTestCase):
+    """G1: the guest page, submitted as the browser submits it, under contention."""
+
+    prefix = "conc-guest"
+
+    def setUp(self):
+        super().setUp()
+        self.issued = create_guest_link(
+            order_id=self.order.pk, actor_id=self.scenario.sender.pk
+        )
+        self.page = f"/pay/guest/{self.issued.token}"
+
+    def _tap(self):
+        connections.close_all()
+        try:
+            return Client(enforce_csrf_checks=True).post(
+                self.page,
+                {"provider": "mock", "lang": "en"},
+                secure=True,
+                HTTP_ORIGIN="null",
+            )
+        finally:
+            connections.close_all()
+
+    def test_a_revocation_committing_while_the_payer_taps_stops_the_payment(self):
+        """The page read the link before the revocation committed; checkout
+        waits on the order row the revocation holds, then reads it again."""
+
+        from apps.finance import guest_web
+
+        revoked = Event()
+        allow_commit = Event()
+        checkout_entered = Event()
+        real_start = guest_web.start_checkout
+
+        def entering_checkout(**kwargs):
+            checkout_entered.set()
+            return real_start(**kwargs)
+
+        def revoke():
+            connections.close_all()
+            try:
+                with transaction.atomic():
+                    count = revoke_guest_link(
+                        order_id=self.order.pk, actor_id=self.scenario.sender.pk
+                    )
+                    revoked.set()
+                    assert allow_commit.wait(timeout=10)
+                return count
+            finally:
+                connections.close_all()
+
+        with (
+            patch.object(guest_web, "start_checkout", side_effect=entering_checkout),
+            ThreadPoolExecutor(max_workers=2) as executor,
+        ):
+            revocation = executor.submit(revoke)
+            assert revoked.wait(timeout=10)
+            payment = executor.submit(self._tap)
+            try:
+                assert checkout_entered.wait(timeout=10)
+                done, _ = wait([payment], timeout=0.5)
+                assert not done, "Checkout did not wait for the revocation's lock."
+            finally:
+                allow_commit.set()
+            assert revocation.result(timeout=10) == 1
+            response = payment.result(timeout=10)
+
+        assert response.status_code == 409
+        assert "This link is no longer active" in response.content.decode()
+        assert not PaymentAttempt.objects.filter(order=self.order).exists()
+
+    def test_two_taps_at_once_leave_one_checkout_and_fund_once(self):
+        due = self.order.outstanding_eur_cents
+        barrier = Barrier(2)
+
+        def tap(_index):
+            barrier.wait(timeout=10)
+            return self._tap()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            responses = list(executor.map(tap, range(2)))
+
+        live = PaymentAttempt.objects.get(
+            order=self.order, status__in=PaymentAttempt.OPEN_STATUSES
+        )
+        # A tap that lost the race may have been superseded mid-handoff and was
+        # told to try again; any tap that was handed off went to the one live
+        # checkout.
+        handed_off = [res for res in responses if res.status_code == 302]
+        assert handed_off
+        assert {res["Location"] for res in handed_off} == {live.checkout_url}
+        assert {res.status_code for res in responses} <= {302, 503}
+
+        for attempt in PaymentAttempt.objects.filter(order=self.order).exclude(
+            provider_session_id=""
+        ):
+            MockGateway.mark(attempt.provider_session_id, "succeeded")
+            assert (
+                deliver_mock_webhook(Client(), succeed_attempt(attempt)).status_code
+                == 200
+            )
+        self.order.refresh_from_db()
+        assert self.order.paid_eur_cents == due > 0
+        assert LedgerTransaction.objects.filter(kind="deal_funding").count() == 1
 
 
 class RefundRaceTests(FinanceConcurrencyTestCase):

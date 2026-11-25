@@ -16,24 +16,43 @@ Wassla's own receipt, failure and refund messages. With transactional email
 off, none is ever sent, so the page does not ask.
 
 **The public page is the app, in the payer's language, and says nothing else.**
+
+G1 adds a fifth: **the page works in the browser that opens it.** The shared
+shell suppresses the referrer, so Chromium submits the form with `Origin: null`
+and no Referer, which Django's cookie-based CSRF check refuses. The page's
+authority is the link token in its path, so the page is exempt from that check
+and every submission here is made the way that browser makes it.
 """
 
 from __future__ import annotations
 
+import dataclasses
+import logging
 from copy import deepcopy
 from datetime import timedelta
 from unittest import mock
 
-from django.test import TestCase, override_settings
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.crypto import get_random_string
 from rest_framework.test import APIClient
 
 from apps.core.business_settings import get_active_business_settings
 from apps.core.models import BusinessSettingsVersion
+from apps.finance import guest_web
 from apps.finance.guest_web import _amount, _duration
-from apps.finance.models import GuestPaymentLink, PaymentAttempt, PaymentOrder
+from apps.finance.models import (
+    GuestPaymentLink,
+    LedgerTransaction,
+    PaymentAttempt,
+    PaymentOrder,
+    PaymentRefund,
+)
 from apps.finance.providers import ProviderError
+from apps.finance.providers.mock import MockGateway
 from apps.finance.services import (
     GuestCheckoutInProgress,
     cancel_order,
@@ -48,10 +67,31 @@ from apps.finance.services import (
 from .factories import (
     assert_page_withholds,
     build_scenario,
+    deliver_mock_webhook,
     open_mock_checkout,
     pay_order_with_mock,
+    succeed_attempt,
     visible_page_text,
 )
+
+#: How Chromium submits the page's form over HTTPS under the shell's
+#: `<meta name="referrer" content="no-referrer">`: `Origin: null` and no
+#: Referer (phone test 2, finding 1.1). Django's CSRF check refuses both.
+SHELL_SUBMIT = {"secure": True, "HTTP_ORIGIN": "null"}
+
+
+def browser() -> Client:
+    """A browser as Django sees one: the CSRF check on, no cookie yet."""
+
+    return Client(enforce_csrf_checks=True)
+
+
+def assert_private(response) -> None:
+    """The guest response is cached by nobody and names itself to nobody."""
+
+    assert response["Referrer-Policy"] == "no-referrer", response.status_code
+    directives = {part.strip() for part in response["Cache-Control"].split(",")}
+    assert {"private", "no-store"} <= directives, response["Cache-Control"]
 
 
 def _enable_mock() -> None:
@@ -335,8 +375,10 @@ class ReceiptEmailTests(_BalanceCase):
         assert "receipt" not in visible_page_text(page).lower()
 
         # Even a hand-crafted POST carrying an address does not get it stored.
-        posted = APIClient().post(
-            self.page, {"provider": "mock", "email": "someone@example.com"}
+        posted = browser().post(
+            self.page,
+            {"provider": "mock", "email": "someone@example.com"},
+            **SHELL_SUBMIT,
         )
         assert posted.status_code == 302
         attempt = PaymentAttempt.objects.get(order=self.order)
@@ -353,19 +395,28 @@ class ReceiptEmailTests(_BalanceCase):
         assert "Email for your receipt" in text
         assert "doesn't create an account" in text.replace("&#x27;", "'")
 
-        missing = APIClient().post(self.page, {"provider": "mock", "email": ""})
+        payer = browser()
+        missing = payer.post(
+            self.page, {"provider": "mock", "email": ""}, **SHELL_SUBMIT
+        )
         assert missing.status_code == 400
         assert "Enter a valid email address" in missing.content.decode()
         assert 'aria-invalid="true"' in missing.content.decode()
+        assert_private(missing)
         assert not PaymentAttempt.objects.filter(order=self.order).exists()
 
-        typo = APIClient().post(self.page, {"provider": "mock", "email": "aunt@"})
+        typo = payer.post(
+            self.page, {"provider": "mock", "email": "aunt@"}, **SHELL_SUBMIT
+        )
         assert typo.status_code == 400
         # What they typed is kept so they can fix it rather than retype it.
         assert 'value="aunt@"' in typo.content.decode()
+        assert not PaymentAttempt.objects.filter(order=self.order).exists()
 
-        ok = APIClient().post(
-            self.page, {"provider": "mock", "email": " aunt@example.com "}
+        ok = payer.post(
+            self.page,
+            {"provider": "mock", "email": " aunt@example.com "},
+            **SHELL_SUBMIT,
         )
         assert ok.status_code == 302
         assert PaymentAttempt.objects.get(order=self.order).guest_email == (
@@ -487,14 +538,16 @@ class PublicPageTests(_BalanceCase):
             "apps.finance.guest_web.start_checkout",
             side_effect=ProviderError("provider down"),
         ):
-            res = APIClient().post(self.page, {"provider": "mock", "lang": "en"})
+            res = browser().post(
+                self.page, {"provider": "mock", "lang": "en"}, **SHELL_SUBMIT
+            )
         assert res.status_code == 503
         assert "Payments are paused for a moment" in res.content.decode()
         assert "no longer active" not in res.content.decode()
 
     def test_the_page_hands_off_to_the_provider_without_touching_the_amount(self):
-        res = APIClient().post(
-            self.page, {"provider": "mock", "amount_eur_cents": "1"}
+        res = browser().post(
+            self.page, {"provider": "mock", "amount_eur_cents": "1"}, **SHELL_SUBMIT
         )
         assert res.status_code == 302
         attempt = PaymentAttempt.objects.get(order=self.order)
@@ -503,6 +556,427 @@ class PublicPageTests(_BalanceCase):
         assert attempt.guest_link_id == self.issued.link.pk
         self.order.refresh_from_db()
         assert self.order.status == PaymentOrder.Status.PENDING
+
+
+# --- G1: the page in the browser that opens it ------------------------------------
+
+#: The console's templates resolve static files, and tests build no manifest.
+UNHASHED_STATIC = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+    },
+}
+
+
+class BrowserCheckoutTests(_BalanceCase):
+    """The link token is the authority. Cookies, sessions and headers are not."""
+
+    prefix = "g1-browser"
+
+    def setUp(self):
+        super().setUp()
+        self.issued = create_guest_link(
+            order_id=self.order.pk,
+            actor_id=self.scenario.sender.pk,
+            communication_language="en",
+        )
+        self.link = self.issued.link
+        self.page = f"/pay/guest/{self.issued.token}"
+
+    def tap(self, client=None, *, path=None, data=None, **headers):
+        """Press the page's button, as the browser submits it unless told otherwise."""
+
+        return (client or browser()).post(
+            path or self.page,
+            {"provider": "mock", "lang": "en", **(data or {})},
+            **(headers or SHELL_SUBMIT),
+        )
+
+    def attempts(self):
+        return PaymentAttempt.objects.filter(order=self.order)
+
+    def assert_dead(self, response, *, status=404):
+        html = response.content.decode()
+        assert response.status_code == status, response.status_code
+        assert "This link is no longer active" in html
+        assert "€" not in visible_page_text(html)
+        assert_private(response)
+
+    def test_a_fresh_payer_without_cookies_reaches_hosted_checkout(self):
+        payer = browser()
+        page = payer.get(self.page, secure=True)
+        assert page.status_code == 200
+        html = page.content.decode()
+        assert "csrfmiddlewaretoken" not in html
+        assert '<meta name="referrer" content="no-referrer">' in html
+        assert not page.cookies
+
+        handed_off = self.tap(payer)
+
+        assert handed_off.status_code == 302, handed_off.content
+        attempt = self.attempts().get()
+        assert handed_off["Location"] == attempt.checkout_url
+        assert attempt.checkout_url.startswith("https://mock.invalid/checkout/")
+        assert not handed_off.cookies
+        # Nothing set a cookie, so the browser never had one to send.
+        assert not payer.cookies
+        assert attempt.status == PaymentAttempt.Status.CHECKOUT_PENDING
+        assert attempt.payer_id is None
+        assert attempt.guest_link_id == self.link.pk
+        assert attempt.amount_eur_cents == 2_500
+        self.order.refresh_from_db()
+        assert self.order.status == PaymentOrder.Status.PENDING
+
+    def test_a_submission_with_neither_origin_nor_referer_is_accepted(self):
+        handed_off = self.tap(secure=True)
+        assert handed_off.status_code == 302, handed_off.content
+        assert handed_off["Location"] == self.attempts().get().checkout_url
+
+    def test_a_signed_in_member_pays_as_a_guest_and_gains_nothing(self):
+        outsider = browser()
+        outsider.force_login(self.scenario.outsider)
+        assert self.tap(outsider).status_code == 302
+        attempt = self.attempts().get()
+        assert attempt.payer_id is None
+        assert attempt.guest_link_id == self.link.pk
+
+        # The owner's own session does not make the guest attempt theirs.
+        owner = browser()
+        owner.force_login(self.scenario.sender)
+        assert self.tap(owner)["Location"] == attempt.checkout_url
+        assert self.attempts().get().payer_id is None
+
+        # Paying is not membership: the order and its link stay shut.
+        api = APIClient()
+        api.force_authenticate(self.scenario.outsider)
+        assert api.get(self.url).status_code == 403
+        detail = reverse(
+            "finance-order-detail", args=[str(self.order.public_reference)]
+        )
+        assert api.get(detail).status_code == 403
+
+        # A session never rescues a link that does not work.
+        self.assert_dead(self.tap(outsider, path="/pay/guest/never-issued"))
+        assert self.attempts().count() == 1
+
+    def test_a_dead_link_starts_nothing_however_the_browser_submits(self):
+        sender = self.scenario.sender.pk
+        GuestPaymentLink.objects.filter(pk=self.link.pk).update(
+            expires_at=timezone.now() - timedelta(seconds=1)
+        )
+        self.assert_dead(self.tap())
+
+        revoked = create_guest_link(order_id=self.order.pk, actor_id=sender)
+        revoke_guest_link(order_id=self.order.pk, actor_id=sender)
+        self.assert_dead(self.tap(path=f"/pay/guest/{revoked.token}"))
+
+        consumed = create_guest_link(order_id=self.order.pk, actor_id=sender)
+        GuestPaymentLink.objects.filter(pk=consumed.link.pk).update(
+            consumed_at=timezone.now()
+        )
+        self.assert_dead(self.tap(path=f"/pay/guest/{consumed.token}"))
+
+        self.assert_dead(self.tap(path="/pay/guest/never-issued"))
+        assert not self.attempts().exists()
+
+    def test_a_link_stopped_while_the_payer_taps_starts_no_payment(self):
+        """The page reads the link unlocked; checkout reads it again under the
+        order lock that revoking and replacing take, so the later read wins."""
+
+        sender = self.scenario.sender.pk
+        stops = {
+            "revoked": lambda link: revoke_guest_link(
+                order_id=link.order_id, actor_id=sender
+            ),
+            "replaced": lambda link: create_guest_link(
+                order_id=link.order_id, actor_id=sender
+            ),
+            "expired": lambda link: GuestPaymentLink.objects.filter(
+                pk=link.pk
+            ).update(expires_at=timezone.now() - timedelta(seconds=1)),
+        }
+        real_resolve = guest_web.resolve_guest_link
+        for reason, stop in stops.items():
+            with self.subTest(reason):
+                token = create_guest_link(
+                    order_id=self.order.pk, actor_id=sender
+                ).token
+
+                def resolve_then_stop(value, stop=stop):
+                    link = real_resolve(value)
+                    stop(link)
+                    return link
+
+                with mock.patch.object(
+                    guest_web, "resolve_guest_link", side_effect=resolve_then_stop
+                ):
+                    response = self.tap(path=f"/pay/guest/{token}")
+                self.assert_dead(response, status=409)
+                assert not self.attempts().exists()
+
+    def test_a_payer_already_at_the_provider_freezes_revocation(self):
+        assert self.tap().status_code == 302
+        with self.assertRaises(GuestCheckoutInProgress):
+            revoke_guest_link(order_id=self.order.pk, actor_id=self.scenario.sender.pk)
+        self.link.refresh_from_db()
+        assert self.link.revoked_at is None
+
+    def test_a_second_tap_reuses_the_first_checkout_and_funds_once(self):
+        payer = browser()
+        first = self.tap(payer)
+        second = self.tap(payer)
+        assert first.status_code == second.status_code == 302
+        assert first["Location"] == second["Location"]
+        attempt = self.attempts().get()
+
+        event = succeed_attempt(attempt)
+        for _ in range(2):
+            assert deliver_mock_webhook(self.client, event).status_code == 200
+        self.order.refresh_from_db()
+        assert self.order.status == PaymentOrder.Status.PAID
+        assert self.order.paid_eur_cents == 2_500
+        assert LedgerTransaction.objects.filter(kind="deal_funding").count() == 1
+
+        # A tap after the payment lands says so and starts nothing.
+        after = self.tap(payer)
+        assert after.status_code == 200
+        assert "This payment has already been completed" in after.content.decode()
+        assert self.attempts().count() == 1
+
+    def test_a_provider_failure_funds_nothing_and_the_link_still_works(self):
+        with mock.patch.object(
+            MockGateway, "create_checkout", side_effect=ProviderError("rail down")
+        ):
+            failed = self.tap()
+        assert failed.status_code == 503
+        assert "Payments are paused for a moment" in failed.content.decode()
+        assert_private(failed)
+        attempt = self.attempts().get()
+        assert attempt.status == PaymentAttempt.Status.FAILED
+        assert attempt.checkout_url == ""
+        self.order.refresh_from_db()
+        assert self.order.status == PaymentOrder.Status.PENDING
+        assert self.order.paid_eur_cents == 0
+
+        # The link was never the problem: it still shows the amount and pays.
+        assert browser().get(self.page).status_code == 200
+        retried = self.tap()
+        assert retried.status_code == 302
+        live = self.attempts().get(status__in=PaymentAttempt.OPEN_STATUSES)
+        assert live.pk != attempt.pk
+        assert retried["Location"] == live.checkout_url
+        assert deliver_mock_webhook(self.client, succeed_attempt(live)).status_code == 200
+        self.order.refresh_from_db()
+        assert self.order.paid_eur_cents == 2_500
+        attempt.refresh_from_db()
+        assert attempt.status == PaymentAttempt.Status.FAILED
+
+    @override_settings(TRANSACTIONAL_EMAIL_ENABLED=False)
+    def test_fields_the_payer_adds_cannot_steer_the_payment(self):
+        other = build_scenario(prefix="g1-other")
+        other.accept(reward_eur_cents=2_000)
+        other_order = other.balance_order()
+        other_token = create_guest_link(
+            order_id=other_order.pk, actor_id=other.sender.pk
+        ).token
+        outsider = str(self.scenario.outsider.pk)
+        forged = {
+            "amount_eur_cents": "1",
+            "amount": "1",
+            "currency": "DZD",
+            "payment_currency": "DZD",
+            "provider_amount_minor": "1",
+            "order": str(other_order.pk),
+            "order_id": str(other_order.pk),
+            "reference": str(other_order.public_reference),
+            "token": other_token,
+            "payer": outsider,
+            "payer_id": outsider,
+            "actor_id": outsider,
+            "user_id": outsider,
+            "guest_link_id": "1",
+            "guest_email": "forged@example.com",
+            "email": "forged@example.com",
+            "idempotency_key": "forged",
+            "checkout_url": "https://evil.example/pay",
+            "success_url": "https://evil.example/ok",
+            "status": "succeeded",
+        }
+
+        response = self.tap(data=forged)
+
+        assert response.status_code == 302, response.content
+        attempt = self.attempts().get()
+        assert response["Location"] == attempt.checkout_url
+        assert "evil.example" not in response["Location"]
+        assert attempt.amount_eur_cents == 2_500
+        assert attempt.payment_currency == "EUR"
+        assert attempt.payer_id is None
+        assert attempt.guest_link_id == self.link.pk
+        assert attempt.guest_email == ""
+        assert attempt.idempotency_key != "forged"
+        assert attempt.status == PaymentAttempt.Status.CHECKOUT_PENDING
+        assert not PaymentAttempt.objects.filter(order=other_order).exists()
+        self.order.refresh_from_db()
+        assert self.order.status == PaymentOrder.Status.PENDING
+
+    def test_every_guest_response_is_private_and_sends_no_referrer(self):
+        responses = {
+            "page": browser().get(self.page),
+            "arabic": browser().get(f"{self.page}?lang=ar"),
+            "unknown link": browser().get("/pay/guest/never-issued"),
+            "wrong method": browser().put(self.page),
+        }
+        with mock.patch(
+            "apps.finance.views.GuestPaymentThrottle.allow_request",
+            return_value=False,
+        ):
+            responses["throttled"] = browser().get(self.page)
+        responses["handoff"] = self.tap()
+        deliver_mock_webhook(self.client, succeed_attempt(self.attempts().get()))
+        responses["already paid"] = browser().get(self.page)
+
+        assert {name: res.status_code for name, res in responses.items()} == {
+            "page": 200,
+            "arabic": 200,
+            "unknown link": 404,
+            "wrong method": 405,
+            "throttled": 429,
+            "handoff": 302,
+            "already paid": 200,
+        }
+        for name, response in responses.items():
+            with self.subTest(name):
+                assert_private(response)
+
+    def test_the_token_stays_out_of_the_provider_logs_and_navigation(self):
+        secrets = (self.issued.token, self.link.token_hash, self.link.token_seed)
+        sent = []
+        real_create = MockGateway.create_checkout
+
+        def capture(gateway, request):
+            sent.append(request)
+            return real_create(gateway, request)
+
+        records = []
+
+        class Collect(logging.Handler):
+            def emit(self, record):
+                records.append(record)
+
+        root = logging.getLogger()
+        handler = Collect(level=logging.DEBUG)
+        level = root.level
+        root.addHandler(handler)
+        root.setLevel(logging.DEBUG)
+        try:
+            with override_settings(PERFORMANCE_ACCESS_LOG_ENABLED=True):
+                browser().get(self.page)
+                with mock.patch.object(
+                    MockGateway, "create_checkout", side_effect=ProviderError("down")
+                ):
+                    assert self.tap().status_code == 503
+                with mock.patch.object(MockGateway, "create_checkout", capture):
+                    handed_off = self.tap()
+        finally:
+            root.removeHandler(handler)
+            root.setLevel(level)
+
+        assert handed_off.status_code == 302
+        assert len(sent) == 1
+        outbound = repr(dataclasses.asdict(sent[0]))
+        navigation = handed_off["Location"]
+        # `django.request` repeats the concrete path, and the production
+        # formatter replaces that message with the route template
+        # (`test_deployment_safety`). Every other line is checked as written.
+        logged = " ".join(
+            f"{record.name} {record.getMessage()} {vars(record)}"
+            for record in records
+            if record.name != "django.request"
+        )
+        assert "finance.guest_page_checkout_unavailable" in logged
+        for secret in secrets:
+            assert secret not in outbound
+            assert secret not in navigation
+            assert secret not in logged
+
+    @override_settings(STORAGES=UNHASHED_STATIC)
+    def test_csrf_still_guards_a_session_authorized_form(self):
+        """The exemption is this one page, not `Origin: null` everywhere."""
+
+        from apps.admin_panel.permissions import AdminRole, assign_admin_roles
+        from apps.admin_panel.tests.two_step_helpers import staff_login
+
+        staff = get_user_model().objects.create_user(
+            email="g1-staff@example.com",
+            username="g1-staff@example.com",
+            password="Strong-pass-123!",
+            is_staff=True,
+            is_superuser=True,
+        )
+        assign_admin_roles(staff, (AdminRole.SUPER_ADMIN,), elevate_super_admin=True)
+        console = browser()
+        staff_login(console, staff)
+        secret = get_random_string(32)
+        console.cookies[settings.CSRF_COOKIE_NAME] = secret
+        attempt = open_mock_checkout(self.order)
+        form = f"/admin/finance/refunds/new/{attempt.pk}/"
+        same_origin = {"secure": True, "HTTP_ORIGIN": "https://testserver"}
+
+        for name, data, headers in (
+            ("shell submission with the token", {"csrfmiddlewaretoken": secret}, SHELL_SUBMIT),
+            ("no origin or referer", {"csrfmiddlewaretoken": secret}, {"secure": True}),
+            ("same origin without the token", {}, same_origin),
+        ):
+            with self.subTest(name):
+                refused = console.post(form, data, **headers)
+                assert refused.status_code == 403
+                assert "CSRF verification failed" in refused.content.decode()
+
+        # The same browser, token in hand, from the site's own origin: let through.
+        allowed = console.post(form, {"csrfmiddlewaretoken": secret}, **same_origin)
+        assert allowed.status_code == 200
+        assert "CSRF verification failed" not in allowed.content.decode()
+        assert not PaymentRefund.objects.exists()
+
+        # And the guest page takes that browser's shell submission as a guest's.
+        assert self.tap(console).status_code == 302
+        assert self.attempts().get(
+            status__in=PaymentAttempt.OPEN_STATUSES
+        ).payer_id is None
+
+    def test_only_the_signed_webhook_funds_the_order(self):
+        assert self.tap().status_code == 302
+        attempt = self.attempts().get()
+
+        # Coming back from the provider proves nothing.
+        back = browser().get(
+            f"/pay/{self.order.public_reference}/return?result=success", secure=True
+        )
+        assert back.status_code == 200
+        self.order.refresh_from_db()
+        assert self.order.status == PaymentOrder.Status.PENDING
+
+        # A forged event is refused and moves no money.
+        forged = deliver_mock_webhook(
+            self.client, succeed_attempt(attempt), signature="forged"
+        )
+        assert forged.status_code == 400
+        self.order.refresh_from_db()
+        assert self.order.status == PaymentOrder.Status.PENDING
+        assert self.order.paid_eur_cents == 0
+
+        # The provider's signed event does.
+        assert deliver_mock_webhook(self.client, succeed_attempt(attempt)).status_code == 200
+        self.order.refresh_from_db()
+        assert self.order.status == PaymentOrder.Status.PAID
+        self.link.refresh_from_db()
+        assert self.link.consumed_at is not None
+        assert (
+            "This payment has already been completed"
+            in browser().get(self.page).content.decode()
+        )
 
 
 class PageFormattingTests(TestCase):
