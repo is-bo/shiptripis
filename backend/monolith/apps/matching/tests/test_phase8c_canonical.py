@@ -6,7 +6,9 @@ from types import SimpleNamespace
 from unittest import mock
 
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
+from rest_framework.test import APIClient
 
 from apps.accounts.models import User
 from apps.core.models import BusinessSettingsVersion
@@ -20,7 +22,7 @@ from apps.matching.public_contract import public_compatibility_payload
 from apps.parcels.models import DeliveryRequest, ParcelRequest
 from apps.parcels.serializers import ParcelRequestSerializer
 from apps.routing.geometry import GeoPoint, haversine_meters
-from apps.trips.models import Journey, JourneyLeg, JourneyLegProof
+from apps.trips.models import Airport, Journey, JourneyLeg, JourneyLegProof
 
 #: Phone test 2 (docs/WASSLA_PHONE_TEST_2_PLAN.md 1.6 and 1.7), in UTC. Request 1
 #: is ready from 24 Nov 21:18 to 30 Nov 21:18, with the same deadline; journey
@@ -391,10 +393,23 @@ class CanonicalLocalityMatchingTests(TestCase):
 
     # -- M1: route-stop reasons, on the phone test 2 dates ------------------
 
-    def _incident_request(self, origin: Place, destination: Place, **windows):
+    def _incident_request(
+        self,
+        origin: Place,
+        destination: Place,
+        *,
+        pickup_point: Location | None = None,
+        delivery_point: Location | None = None,
+        **windows,
+    ):
         """Request 1's window and deadline, between ``origin`` and ``destination``."""
 
-        request = self._request(origin, destination)
+        request = self._request(
+            origin,
+            destination,
+            pickup_point=pickup_point,
+            delivery_point=delivery_point,
+        )
         request.ready_window_start = windows.get("ready_start", INCIDENT_READY_START)
         request.ready_window_end = windows.get("ready_end", INCIDENT_READY_END)
         request.deadline_at = windows.get("deadline", INCIDENT_DEADLINE)
@@ -620,6 +635,137 @@ class CanonicalLocalityMatchingTests(TestCase):
         unresolved, _ = self._incident_journey(self._flight(oran_airport, self.cdg))
         result = self._incident(self.algiers, self.paris, unresolved)
         self.assertEqual(result.rejection_codes, ("journey_leg_sequence",))
+
+    def _legacy_airport(self, place: Place) -> Location:
+        return Location.objects.create(
+            kind=Location.Kind.AIRPORT,
+            normalized_label=f"{place.iata_code} airport",
+            public_label=place.name,
+            private_label=f"{place.iata_code} airport",
+            city=place.name,
+            country_code=place.country_id,
+            latitude=place.latitude,
+            longitude=place.longitude,
+            coarse_latitude=place.latitude.quantize(Decimal("0.1")),
+            coarse_longitude=place.longitude.quantize(Decimal("0.1")),
+            coordinates_trusted=True,
+            coordinate_dataset_version="airports-2026-01",
+            airport=Airport.objects.get(pk=place.iata_code),
+        )
+
+    def _legacy_journey_11(self) -> Journey:
+        """Journey 11 written the schema-1 way: Location rows, no catalogue."""
+
+        alg, cdg = self._legacy_airport(self.alg), self._legacy_airport(self.cdg)
+        journey = Journey.objects.create(
+            traveler=self.traveler,
+            start_location=alg,
+            destination_location=cdg,
+            status=Journey.Status.ACTIVE,
+            published_at=INCIDENT_AT,
+        )
+        flight = JourneyLeg.objects.create(
+            journey=journey,
+            position=0,
+            mode=JourneyLeg.Mode.FLIGHT,
+            origin=alg,
+            destination=cdg,
+            depart_at=INCIDENT_DEPART,
+            arrive_at=INCIDENT_ARRIVE,
+            capacity_kg=Decimal("8.00"),
+            flight_number="AH1000",
+        )
+        JourneyLegProof.objects.create(
+            leg=flight,
+            bucket="private",
+            object_key=f"phase8c/m1-legacy-{journey.pk}.jpg",
+            status=JourneyLegProof.Status.APPROVED,
+            reviewer=self.sender,
+            reviewed_at=INCIDENT_AT,
+        )
+        return journey
+
+    def _quote_at_incident(self, request: DeliveryRequest, journey: Journey):
+        client = APIClient()
+        client.force_authenticate(user=self.sender)
+        with mock.patch("django.utils.timezone.now", return_value=INCIDENT_AT):
+            return client.post(
+                reverse("matches-quote-v1"),
+                {"parcel_id": request.pk, "journey_id": journey.pk},
+                format="json",
+            )
+
+    def test_a_canonical_request_on_a_legacy_flight_is_only_a_catalogue_failure(
+        self,
+    ):
+        # Second pass (Astra): the preferred pins must not be searched for on
+        # a legacy route once the catalogue check has failed.
+        pickup_pin = self._preferred(self.algiers, "Pickup pin", "36.7538", "3.0588")
+        dropoff_pin = self._preferred(self.paris, "Drop-off pin", "48.8566", "2.3522")
+        request = self._incident_request(
+            self.algiers,
+            self.paris,
+            pickup_point=pickup_pin,
+            delivery_point=dropoff_pin,
+        )
+        self.assertIsNotNone(request.pickup_location_id)
+        self.assertIsNotNone(request.delivery_location_id)
+        journey = self._legacy_journey_11()
+        self.assertEqual(journey.schema_version, 1)
+
+        result = self._at_incident(request, journey)
+        response = self._quote_at_incident(request, journey)
+
+        self.assertEqual(result.rejection_codes, ("canonical_geography_complete",))
+        gates = self._gates(result)
+        for code in (
+            "pickup_stop_on_route",
+            "delivery_stop_on_route",
+            "pickup_before_delivery",
+        ):
+            self.assertNotIn(code, gates)
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertEqual(response.data["code"], "incompatible_candidate")
+        self.assertEqual(
+            response.data["rejection_codes"], ["canonical_geography_complete"]
+        )
+        self.assertEqual(
+            response.data["compatibility"]["rejection_codes"],
+            ["canonical_geography_complete"],
+        )
+
+    def test_a_retired_airport_mapping_is_only_a_catalogue_failure(self):
+        drive, _ = self._incident_journey(
+            (
+                JourneyLeg.Mode.DRIVE,
+                self.algiers,
+                self.jijel,
+                INCIDENT_DEPART,
+                INCIDENT_DEPART + timedelta(hours=5),
+            )
+        )
+        pickup_pin = self._preferred(self.alg, "Pickup pin", "36.6910", "3.2154")
+        dropoff_pin = self._preferred(self.jijel, "Drop-off pin", "36.8206", "5.7667")
+        request = self._incident_request(
+            self.alg, self.jijel, pickup_point=pickup_pin, delivery_point=dropoff_pin
+        )
+        # While ALG serves Algiers, the request rides the Algiers -> Jijel drive.
+        before = self._at_incident(request, drive)
+        self.assertTrue(before.compatible, before.rejection_codes)
+
+        # The mapping is retired after posting.
+        AirportLocalityMapping.objects.filter(airport=self.alg).update(active=False)
+        legacy = self._legacy_journey_11()
+        for journey in (drive, legacy):
+            with self.subTest(schema_version=journey.schema_version):
+                request.refresh_from_db()
+                result = self._at_incident(request, journey)
+                self.assertEqual(
+                    result.rejection_codes, ("canonical_geography_complete",)
+                )
+                gates = self._gates(result)
+                self.assertNotIn("pickup_stop_on_route", gates)
+                self.assertNotIn("delivery_stop_on_route", gates)
 
     def test_genuine_window_and_deadline_failures_stay_distinct(self):
         journey, _ = self._journey_11()

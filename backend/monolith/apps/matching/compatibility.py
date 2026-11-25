@@ -777,14 +777,16 @@ def evaluate_compatibility(
         delivery_request.target_traveler_id in (None, journey.traveler_id),
     )
     check("request_has_no_active_deal", not _has_active_deal(delivery_request))
+    geography_complete = True
     if canonical_request:
-        check(
-            "canonical_geography_complete",
+        geography_complete = (
             canonical_journey
             and _matching_locality_id(delivery_request.pickup_place) is not None
-            and _matching_locality_id(delivery_request.delivery_place) is not None,
+            and _matching_locality_id(delivery_request.delivery_place) is not None
         )
+        check("canonical_geography_complete", geography_complete)
     elif canonical_journey:
+        geography_complete = False
         check("canonical_geography_complete", False)
 
     empty = CompatibilityResult(
@@ -832,16 +834,16 @@ def evaluate_compatibility(
         )
 
     if _anchor_pair is None:
+        if not geography_complete:
+            # No route search can place this request on this journey: a
+            # request city the catalogue cannot place (an airport whose served
+            # mapping was retired, say), or a canonical request against a
+            # legacy journey or the other way round. The failed
+            # `canonical_geography_complete` is the whole answer: no stop is
+            # reported missing and no order is claimed, and a preferred pin is
+            # never searched for on a legacy route.
+            return refused()
         if canonical_flow:
-            if (
-                _matching_locality_id(delivery_request.pickup_place) is None
-                or _matching_locality_id(delivery_request.delivery_place) is None
-            ):
-                # The catalogue cannot place a request city, so there is no
-                # locality to look for on the route. The failed
-                # `canonical_geography_complete` is the whole answer: no stop
-                # is reported missing and no order is claimed.
-                return refused()
             pickup_anchors = _canonical_candidate_anchors(
                 delivery_request.pickup_place, legs
             )
@@ -872,10 +874,12 @@ def evaluate_compatibility(
             if _pickup_precedes_delivery(pickup, delivery)
         ]
         if not ordered_pairs:
-            # A route that never visits a request city and a route that visits
-            # both in the wrong order are different failures, and neither is a
-            # date problem, so each end has its own gate and
-            # `pickup_before_delivery` fails only when both stops are there.
+            # A route that never visits a request city is a different failure
+            # from one that visits both but has no pickup stop before a later
+            # drop-off stop (it goes the other way, or both request places are
+            # the same stop), and neither is a date problem. So each end has
+            # its own gate, and `pickup_before_delivery` fails only when both
+            # stops are there.
             check("pickup_stop_on_route", bool(pickup_anchors))
             check("delivery_stop_on_route", bool(delivery_anchors))
             if pickup_anchors and delivery_anchors:

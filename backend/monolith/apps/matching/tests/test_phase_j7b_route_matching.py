@@ -547,6 +547,33 @@ class RouteShapeTests(RouteMatchingFixture, TestCase):
         self.assertFalse(verdict.compatible)
         self.assertEqual(verdict.rejection_codes, ("pickup_before_delivery",))
 
+    def test_two_places_on_one_stop_are_an_order_failure_not_a_reversal(self):
+        # Second pass (Astra): Orly and Charles de Gaulle are distinct request
+        # places that both resolve to Paris. On ALG -> CDG both are stop 1, so
+        # no pickup stop comes before a later drop-off stop. The trip does not
+        # "go the other way"; there is one Paris stop.
+        orly = self._airport("FR", "Paris Orly", "ORY", self.paris)
+        journey, _ = self.journey_over(
+            self.other,
+            [
+                (self.alg, JourneyLeg.Mode.FLIGHT, self.d, self.d + timedelta(hours=3)),
+                self.cdg,
+            ],
+        )
+        request = self.request_between(orly, self.cdg, **self._window(self.d))
+
+        verdict = self.verdict(request, journey)
+
+        self.assertFalse(verdict.compatible)
+        self.assertEqual(verdict.rejection_codes, ("pickup_before_delivery",))
+        gates = {row["code"]: row for row in verdict.checks}
+        self.assertTrue(gates["pickup_stop_on_route"]["passed"])
+        self.assertTrue(gates["delivery_stop_on_route"]["passed"])
+        self.assertEqual(
+            gates["pickup_before_delivery"]["details"],
+            {"pickup_positions": [1.0], "delivery_positions": [1.0]},
+        )
+
     def test_a_same_named_twin_locality_does_not_match(self):
         request = self.request_between(
             self.paris_twin, self.jijel, **self._window(self.d)

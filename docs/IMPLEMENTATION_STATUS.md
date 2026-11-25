@@ -7,9 +7,10 @@
   only, no migration, no app change. Nothing deployed.
 - `evaluate_compatibility` now answers each route outcome separately: `pickup_stop_on_route` (no stop
   in the pickup city), `delivery_stop_on_route` (none in the drop-off city), both when neither is on
-  the route, `pickup_before_delivery` only for a real wrong order, and nothing beyond the existing
-  `canonical_geography_complete` when the catalogue cannot place a request city. Staff `checks` say
-  which end failed. Codes reach parties through the existing public projection. Anchor search,
+  the route, `pickup_before_delivery` only when both cities are on the route but no pickup stop comes
+  before a later drop-off stop, and nothing beyond the existing `canonical_geography_complete` when it
+  fails (an uncatalogued request city, or a canonical/legacy mix, with no pin search). Staff
+  `checks` say which end failed. Codes reach parties through the existing public projection. Anchor search,
   alternate-pair selection, every hard gate, covered legs and price inputs are unchanged, shown by a
   before/after recording of every evaluation in nine test apps. Helper knowledge updated. Detail and
   the M2 handoff: `docs/PHASE_M1_ROUTE_STOP_REASONS.md`.
