@@ -14,6 +14,7 @@
 library;
 
 import 'json.dart';
+import 'person_photo.dart';
 
 /// Why the server refused a send.
 enum ChatBlockReason {
@@ -103,6 +104,7 @@ class ChatThread {
     this.lastMessage,
     this.lastMessageAt,
     this.lastMessageRemoved = false,
+    this.counterpartyPhoto,
     this.counterpartyDeleted = false,
     this.blockedByMe = false,
   });
@@ -113,6 +115,7 @@ class ChatThread {
     dealId: readInt(json['deal_id']),
     counterpartyId: readInt(json['counterparty_id']) ?? 0,
     counterpartyName: readText(json['counterparty_name']),
+    counterpartyPhoto: PersonPhoto.maybe(json['counterparty_photo']),
     route: readText(json['route']),
     statusRaw: readText(json['status']),
     canSend: readBool(json['can_send']),
@@ -128,6 +131,9 @@ class ChatThread {
   final int? dealId;
   final int counterpartyId;
   final String counterpartyName;
+
+  /// Null when they have none, and when the account is gone.
+  final PersonPhoto? counterpartyPhoto;
 
   /// Coarse city pair only — never an address.
   final String route;

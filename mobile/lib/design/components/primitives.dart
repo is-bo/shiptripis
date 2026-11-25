@@ -5,9 +5,12 @@
 /// screenshot into an unusable screen.
 library;
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../../domain/person_photo.dart';
 import '../tokens.dart';
+import 'images.dart';
 import 'status.dart';
 
 // ---------------------------------------------------------------------------
@@ -630,10 +633,16 @@ class _NoticeAction extends StatelessWidget {
 /// A user's avatar. Initials rather than a generic silhouette — a silhouette
 /// says "no person here", which is the opposite of what a marketplace built on
 /// trusting a named individual should say.
+///
+/// With a [photo] the picture covers the initials, which stay underneath: they
+/// are what shows while the image loads and if it cannot be loaded. The image
+/// is cached by the photo's version, never by its address, because the signed
+/// address changes on every payload and the picture does not.
 class AppAvatar extends StatelessWidget {
   const AppAvatar({
     required this.initials,
     required this.name,
+    this.photo,
     this.size = 40,
     this.isVerified = false,
     super.key,
@@ -641,6 +650,7 @@ class AppAvatar extends StatelessWidget {
 
   final String initials;
   final String name;
+  final PersonPhoto? photo;
   final double size;
   final bool isVerified;
 
@@ -675,6 +685,22 @@ class AppAvatar extends StatelessWidget {
                 ),
               ),
             ),
+            if (photo case final photo?)
+              ClipOval(
+                child: CachedNetworkImage(
+                  imageUrl: photo.url,
+                  cacheKey: photo.version,
+                  width: size,
+                  height: size,
+                  fit: BoxFit.cover,
+                  memCacheWidth: decodeWidthFor(context, size),
+                  fadeInDuration: const Duration(milliseconds: 120),
+                  // Nothing while loading and nothing on error: the initials
+                  // underneath are the fallback.
+                  placeholder: (_, _) => const SizedBox.shrink(),
+                  errorWidget: (_, _, _) => const SizedBox.shrink(),
+                ),
+              ),
             if (isVerified)
               PositionedDirectional(
                 bottom: -1,

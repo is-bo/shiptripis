@@ -118,7 +118,11 @@ class _ThreadRow extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                AppAvatar(initials: initialsFor(name), name: name),
+                AppAvatar(
+                  initials: initialsFor(name),
+                  name: name,
+                  photo: chatCounterpartyPhoto(thread),
+                ),
                 const SizedBox(width: AppSpace.md),
                 Expanded(
                   child: Column(

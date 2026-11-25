@@ -299,19 +299,24 @@ class ApiClient {
   ///
   /// [onProgress] drives a real progress bar. A 25 MiB video on a mobile
   /// connection needs one, and a spinner for ninety seconds is not a state.
+  ///
+  /// [method] is `POST` unless the endpoint replaces a resource, as the profile
+  /// photo's `PUT` does. Like every write, it is sent once and never retried.
   Future<Json> upload(
     String path, {
     required FormData form,
+    String method = 'POST',
     void Function(int sent, int total)? onProgress,
     CancelToken? cancelToken,
   }) async => _expectObject(
     await _write(
-      (identity) => _dio.post<dynamic>(
+      (identity) => _dio.request<dynamic>(
         path,
         data: form,
         cancelToken: cancelToken,
         onSendProgress: onProgress,
         options: Options(
+          method: method,
           contentType: 'multipart/form-data',
           extra: {'st.identity_generation': identity},
           // An upload is bounded by bandwidth, not by server think-time.

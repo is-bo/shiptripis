@@ -5,13 +5,13 @@
 	<!-- iOS stops the app at the first camera or library access without these
 	     strings, and they are what the permission sheet shows, so they name
 	     every use: the identity check (face by camera, ID document from the
-	     library), travel tickets, item photos, the crossed cheque for DZD
+	     library), the profile photo, travel tickets, item photos, the crossed cheque for DZD
 	     payouts, and dispute evidence (library only). The translations are in
 	     <language>.lproj/InfoPlist.strings. -->
 	<key>NSCameraUsageDescription</key>
-	<string>Wassla uses your camera only when you choose to take a photo: your face for the identity check, your travel ticket, the item you are sending, or the crossed cheque for payouts in Algeria.</string>
+	<string>Wassla uses your camera only when you choose to take a photo: your face for the identity check, your profile photo, your travel ticket, the item you are sending, or the crossed cheque for payouts in Algeria.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Wassla opens your photos only when you choose one: your ID document for the identity check, your travel ticket, the item you are sending, the crossed cheque for payouts in Algeria, or photos and videos as evidence in a dispute.</string>
+	<string>Wassla opens your photos only when you choose one: your ID document for the identity check, your profile photo, your travel ticket, the item you are sending, the crossed cheque for payouts in Algeria, or photos and videos as evidence in a dispute.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<!-- The app's own languages, so iOS names them in Settings and picks the

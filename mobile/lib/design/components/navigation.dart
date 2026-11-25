@@ -238,6 +238,7 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
     this.subtitle,
     this.actions = const [],
     this.leading,
+    this.titleLeading,
     this.showBack = false,
     this.onBack,
     this.backLabel,
@@ -254,6 +255,11 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
   final String? subtitle;
   final List<Widget> actions;
   final Widget? leading;
+
+  /// A small widget before the title, such as a person's avatar. Decoration
+  /// only: the title stays the bar's accessible name, so give it no label of
+  /// its own.
+  final Widget? titleLeading;
 
   /// Renders an explicit back affordance. On iOS the left-edge swipe still
   /// works regardless — this is in addition to it, never instead of it.
@@ -272,6 +278,37 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
     final text = Theme.of(context).textTheme;
     final c = context.colors;
 
+    final titleColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (showMark)
+          Semantics(
+            header: true,
+            label: title,
+            excludeSemantics: true,
+            child: const ShipTripMark(size: 28),
+          )
+        else
+          Semantics(
+            header: true,
+            child: Text(
+              title,
+              style: text.headlineSmall,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        if (subtitle != null)
+          Text(
+            subtitle!,
+            style: text.bodySmall?.copyWith(color: c.textSecondary),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+      ],
+    );
+
     return AppBar(
       automaticallyImplyLeading: false,
       leading:
@@ -288,36 +325,15 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
                 )
               : null),
       titleSpacing: leading == null && !showBack ? AppSpace.gutter : 0,
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (showMark)
-            Semantics(
-              header: true,
-              label: title,
-              excludeSemantics: true,
-              child: const ShipTripMark(size: 28),
-            )
-          else
-            Semantics(
-              header: true,
-              child: Text(
-                title,
-                style: text.headlineSmall,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+      title: titleLeading == null
+          ? titleColumn
+          : Row(
+              children: [
+                ExcludeSemantics(child: titleLeading!),
+                const SizedBox(width: AppSpace.sm),
+                Expanded(child: titleColumn),
+              ],
             ),
-          if (subtitle != null)
-            Text(
-              subtitle!,
-              style: text.bodySmall?.copyWith(color: c.textSecondary),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-        ],
-      ),
       actions: [
         ...actions,
         const SizedBox(width: AppSpace.sm),

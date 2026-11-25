@@ -873,6 +873,7 @@ class _TripDetailSheet extends StatelessWidget {
                 AppAvatar(
                   initials: travelerInitial(traveler.displayName),
                   name: traveler.displayName,
+                  photo: traveler.photo,
                   size: 44,
                   isVerified: traveler.identityVerified,
                 ),

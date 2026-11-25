@@ -23,6 +23,7 @@ import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../domain/public_discovery.dart';
 import '../../l10n/app_localizations.dart';
+import '../common/traveler_candidate_card.dart' show travelerInitial;
 import 'discovery_actions.dart';
 import 'discovery_widgets.dart';
 
@@ -179,9 +180,26 @@ class _AlertCardState extends ConsumerState<_AlertCard> {
                     ),
                   ),
                   const SizedBox(height: AppSpace.xs),
-                  Text(
-                    watching,
-                    style: text.bodySmall?.copyWith(color: c.textSecondary),
+                  Row(
+                    children: [
+                      if (alert.followsPerson) ...[
+                        AppAvatar(
+                          initials: travelerInitial(alert.subjectName ?? ''),
+                          name: alert.subjectName ?? '',
+                          photo: alert.subjectPhoto,
+                          size: 20,
+                        ),
+                        const SizedBox(width: AppSpace.sm),
+                      ],
+                      Expanded(
+                        child: Text(
+                          watching,
+                          style: text.bodySmall?.copyWith(
+                            color: c.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

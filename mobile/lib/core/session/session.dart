@@ -16,6 +16,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/auth_repository.dart';
 import '../../domain/account.dart';
 import '../../domain/communication_language.dart';
+import '../../domain/person_photo.dart';
 import '../api/api_client.dart';
 import '../api/api_exception.dart';
 import '../api/error_codes.dart';
@@ -429,6 +430,45 @@ class SessionController extends Notifier<SessionState> {
     } on ApiException catch (error) {
       if (error.code != ApiErrorCode.nameAlreadySet) rethrow;
       await refreshAccount();
+    }
+  }
+
+  /// Sets the member's photo. The account moves only once the server has
+  /// answered, to the photo it returned. Sent once and never repeated here:
+  /// the screen's button is the only retry.
+  Future<void> uploadPhoto({
+    required String filePath,
+    required String fileName,
+    required String contentType,
+    void Function(int sent, int total)? onProgress,
+  }) => _updatePhoto(
+    () => _auth.uploadPhoto(
+      filePath: filePath,
+      fileName: fileName,
+      contentType: contentType,
+      onProgress: onProgress,
+    ),
+  );
+
+  /// Removes the photo, or dismisses the notice that Wassla removed it.
+  Future<void> removePhoto() => _updatePhoto(() async {
+    await _auth.removePhoto();
+    return null;
+  });
+
+  Future<void> _updatePhoto(Future<OwnPhoto?> Function() change) async {
+    final current = state;
+    if (current is! SessionSignedIn) return;
+    final generation = _generation;
+    final photo = await change();
+    final now = state;
+    if (generation == _generation &&
+        now is SessionSignedIn &&
+        now.account.id == current.account.id) {
+      state = SessionSignedIn(
+        now.account.withPhoto(photo),
+        generation: now.generation,
+      );
     }
   }
 

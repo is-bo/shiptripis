@@ -319,8 +319,12 @@ ApiClient apiClientFor(
 ///
 /// [preferredLanguage] is passed through verbatim, including `null` and `''`,
 /// so a test can reproduce a legacy row exactly as an older deployment would
-/// serialise it rather than as the client wishes it looked.
-Map<String, dynamic> meFixture({Object? preferredLanguage = 'en'}) => {
+/// serialise it rather than as the client wishes it looked. [photo] is the
+/// member's own photo block, null for none.
+Map<String, dynamic> meFixture({
+  Object? preferredLanguage = 'en',
+  Map<String, dynamic>? photo,
+}) => {
   'id': 42,
   'email': 'sender@example.com',
   'full_name': 'Amina Bouzid',
@@ -334,6 +338,7 @@ Map<String, dynamic> meFixture({Object? preferredLanguage = 'en'}) => {
   'kyc_status': 'verified',
   'kyc_rejection_reason': null,
   'date_joined': '2026-01-04T09:00:00Z',
+  'photo': photo,
 };
 
 /// `GET /api/deals/{id}` as the **sender** sees it.
@@ -389,16 +394,24 @@ Map<String, dynamic> discoveryPlace(
   String country = 'FR',
 ]) => {'place_id': id, 'label': label, 'country_code': country};
 
+/// A person's `photo` block, as every public payload publishes it.
+Map<String, dynamic> photoFixture([String version = 'v1']) => {
+  'url': 'https://media.test/profile-photos/$version.jpg?sig=1',
+  'version': version,
+};
+
 Map<String, dynamic> discoveryPersonFields({
   String name = 'Samira',
   bool verified = true,
   Object? rating,
   int deliveries = 0,
+  Map<String, dynamic>? photo,
 }) => {
   'display_name': name,
   'identity_verified': verified,
   'rating': rating,
   'completed_deliveries': deliveries,
+  'photo': photo,
 };
 
 /// A trip card. [id] doubles as the journey id.
@@ -410,12 +423,14 @@ Map<String, dynamic> tripCardFixture(
   String departs = '2026-12-02T10:00:00Z',
   int freeWeightKg = 8,
   Map<String, dynamic>? price,
+  Map<String, dynamic>? photo,
 }) => {
   'journey_id': id,
   'traveler': discoveryPersonFields(
     name: name,
     rating: {'state': 'rated', 'average': 4.8, 'count': 24},
     deliveries: 3,
+    photo: photo,
   ),
   'stops': [discoveryPlace(1, from), discoveryPlace(2, to, 'DZ')],
   'legs': [
@@ -439,9 +454,10 @@ Map<String, dynamic> requestCardFixture(
   String sender = 'Yacine',
   String from = 'Algiers',
   String to = 'Paris',
+  Map<String, dynamic>? photo,
 }) => {
   'request_id': id,
-  'sender': {'display_name': sender},
+  'sender': {'display_name': sender, 'photo': photo},
   'pickup': discoveryPlace(2, from, 'DZ'),
   'delivery': discoveryPlace(1, to),
   'title': title,
@@ -459,9 +475,10 @@ Map<String, dynamic> profileCardFixture({
   String id = 'p-1',
   String name = 'Samira',
   List<Map<String, dynamic>> routes = const [],
+  Map<String, dynamic>? photo,
 }) => {
   'id': id,
-  ...discoveryPersonFields(name: name, deliveries: 2),
+  ...discoveryPersonFields(name: name, deliveries: 2, photo: photo),
   'member_since': '2026-03',
   'usual_routes': routes,
 };

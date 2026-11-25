@@ -370,6 +370,7 @@ class _Header extends StatelessWidget {
               AppAvatar(
                 initials: initialsFor(match.counterpartyName(viewerId)),
                 name: match.counterpartyName(viewerId),
+                photo: match.counterpartyPhoto(viewerId),
               ),
               const SizedBox(width: AppSpace.md),
               Expanded(

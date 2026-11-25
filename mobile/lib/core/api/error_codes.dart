@@ -55,6 +55,20 @@ class ApiErrorCode {
   /// `PATCH /api/me` sets a name only while the account has none.
   static const nameAlreadySet = ApiErrorCode('name_already_set');
 
+  /// A deactivated or banned account may not upload a profile photo.
+  static const accountInactive = ApiErrorCode('account_inactive');
+
+  /// `PUT /api/me/photo`. A 413 is "too large" whatever its body, because the
+  /// edge proxy may refuse a big body before Django sees it.
+  static const profilePhotoMissing = ApiErrorCode('profile_photo_missing');
+  static const profilePhotoTooLarge = ApiErrorCode('profile_photo_too_large');
+  static const profilePhotoMediaTypeUnsupported = ApiErrorCode(
+    'profile_photo_media_type_unsupported',
+  );
+  static const profilePhotoStorageUnavailable = ApiErrorCode(
+    'profile_photo_storage_unavailable',
+  );
+
   // ---------------------------------------------------------------------------
   // Deleting the account (`/api/me/deletion`)
   // ---------------------------------------------------------------------------

@@ -12,15 +12,21 @@ library;
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shiptrip/core/api/api_exception.dart';
+import 'package:shiptrip/core/api/error_codes.dart';
+import 'package:shiptrip/domain/account.dart';
 import 'package:shiptrip/domain/chat.dart';
 import 'package:shiptrip/domain/deal.dart';
 import 'package:shiptrip/domain/delivery_request.dart';
 import 'package:shiptrip/domain/discovery.dart';
+import 'package:shiptrip/domain/find_travelers.dart';
 import 'package:shiptrip/domain/journey.dart';
 import 'package:shiptrip/domain/location.dart';
 import 'package:shiptrip/domain/offer.dart';
 import 'package:shiptrip/domain/payment.dart';
+import 'package:shiptrip/domain/person_photo.dart';
+import 'package:shiptrip/domain/public_discovery.dart';
 import 'package:shiptrip/domain/transport_mode.dart';
+import 'package:shiptrip/features/profile/profile_photo_section.dart';
 
 /// Builds the failure the client would see for a given response.
 ///
@@ -640,6 +646,340 @@ void main() {
       });
       expect(all.allConfirmed, isTrue);
       expect(all.toJson().length, 5);
+    });
+  });
+
+  group('profile photos', () {
+    const block = {'url': 'https://media.test/p.jpg?sig=1', 'version': 'v1'};
+
+    void expectPhoto(PersonPhoto? photo) {
+      expect(photo, isNotNull);
+      expect(photo!.url, 'https://media.test/p.jpg?sig=1');
+      expect(photo.version, 'v1');
+    }
+
+    test(
+      'a person block reads url and version, and nothing else is needed',
+      () {
+        expectPhoto(PersonPhoto.maybe(block));
+      },
+    );
+
+    test('no block, or a block missing a key, is no photo', () {
+      expect(PersonPhoto.maybe(null), isNull);
+      expect(PersonPhoto.maybe('https://media.test/p.jpg'), isNull);
+      expect(
+        PersonPhoto.maybe(const {'url': 'https://media.test/p.jpg'}),
+        isNull,
+      );
+      expect(PersonPhoto.maybe(const {'version': 'v1'}), isNull);
+      expect(PersonPhoto.maybe(const {'url': '', 'version': 'v1'}), isNull);
+    });
+
+    test(
+      'the own photo: active, removed with a reason, removed without one',
+      () {
+        final active = OwnPhoto.maybe(const {
+          'state': 'active',
+          'url': 'https://media.test/p.jpg?sig=1',
+          'version': 'v1',
+          'removed_at': null,
+          'reason': null,
+        })!;
+        expect(active.isRemoved, isFalse);
+        expectPhoto(active.photo);
+
+        final removed = OwnPhoto.maybe(const {
+          'state': 'removed',
+          'url': null,
+          'version': 'v0',
+          'removed_at': '2026-11-24T10:00:00Z',
+          'reason': 'Not a photo of you.',
+        })!;
+        expect(removed.isRemoved, isTrue);
+        expect(removed.photo, isNull);
+        expect(removed.reason, 'Not a photo of you.');
+        expect(removed.removedAt, isNotNull);
+
+        final unexplained = OwnPhoto.maybe(const {
+          'state': 'removed',
+          'url': null,
+          'version': 'v0',
+          'removed_at': '2026-11-24T10:00:00Z',
+          'reason': null,
+        })!;
+        expect(unexplained.reason, isNull);
+      },
+    );
+
+    test('the own photo is null for none, an unknown state or no url', () {
+      expect(OwnPhoto.maybe(null), isNull);
+      expect(OwnPhoto.maybe(const {'state': 'pending'}), isNull);
+      expect(
+        OwnPhoto.maybe(const {'state': 'active', 'url': null, 'version': 'v1'}),
+        isNull,
+      );
+    });
+
+    test('/api/me carries the own photo, or null; the snapshot holds none', () {
+      const me = {
+        'id': 1,
+        'email': 'a@example.com',
+        'full_name': 'Amina Bouzid',
+        'role': 'both',
+      };
+      final withPhoto = Account.fromJson({
+        ...me,
+        'photo': {
+          'state': 'active',
+          'url': 'https://media.test/p.jpg?sig=1',
+          'version': 'v1',
+          'removed_at': null,
+          'reason': null,
+        },
+      });
+      expectPhoto(withPhoto.photo?.photo);
+      // A signed address would be stale on disk: the launch snapshot has none.
+      expect(withPhoto.toSnapshotJson().containsKey('photo'), isFalse);
+
+      expect(Account.fromJson({...me, 'photo': null}).photo, isNull);
+      expect(Account.fromJson(me).photo, isNull);
+      expect(withPhoto.withPhoto(null).photo, isNull);
+    });
+
+    test('a public person, a trip traveler and a profile card', () {
+      expectPhoto(
+        PublicPerson.fromJson({'display_name': 'Samira', 'photo': block}).photo,
+      );
+      expect(
+        PublicPerson.fromJson(const {'display_name': 'Samira'}).photo,
+        isNull,
+      );
+
+      final trip = TripCard.fromJson({
+        'journey_id': 1,
+        'traveler': {'display_name': 'Samira', 'photo': block},
+      });
+      expectPhoto(trip.traveler.photo);
+      expect(
+        TripCard.fromJson(const {
+          'journey_id': 1,
+          'traveler': {'display_name': 'Samira', 'photo': null},
+        }).traveler.photo,
+        isNull,
+      );
+
+      final card = ProfileCard.fromJson({
+        'id': 'p-1',
+        'display_name': 'Samira',
+        'photo': block,
+      });
+      expectPhoto(card.person.photo);
+      expect(
+        ProfileCard.fromJson(const {
+          'id': 'p-1',
+          'display_name': 'Samira',
+        }).person.photo,
+        isNull,
+      );
+    });
+
+    test('a request card reads the sender photo', () {
+      final card = RequestCard.fromJson({
+        'request_id': 5,
+        'sender': {'display_name': 'Yacine', 'photo': block},
+      });
+      expect(card.sender, 'Yacine');
+      expectPhoto(card.senderPhoto);
+      expect(
+        RequestCard.fromJson(const {
+          'request_id': 5,
+          'sender': {'display_name': 'Yacine', 'photo': null},
+        }).senderPhoto,
+        isNull,
+      );
+    });
+
+    test('an alert reads the followed person\'s photo', () {
+      const base = {
+        'id': 4,
+        'watches': 'trips',
+        'origin': {'place_id': 1, 'label': 'Paris', 'country_code': 'FR'},
+        'destination': {'place_id': 2, 'label': 'Alger', 'country_code': 'DZ'},
+      };
+      final following = RouteAlert.maybe({
+        ...base,
+        'subject': {'id': 'p-1', 'display_name': 'Samira', 'photo': block},
+      })!;
+      expectPhoto(following.subjectPhoto);
+      expect(
+        RouteAlert.maybe({
+          ...base,
+          'subject': {'id': 'p-1', 'display_name': 'Samira', 'photo': null},
+        })!.subjectPhoto,
+        isNull,
+      );
+      expect(
+        RouteAlert.maybe({...base, 'subject': null})!.subjectPhoto,
+        isNull,
+      );
+    });
+
+    test('a Find Travelers traveler carries photo, and avatar_url is gone', () {
+      final traveler = CandidateTraveler.fromJson({
+        'id': 3,
+        'display_name': 'Amina',
+        'photo': block,
+        // The old placeholder is not read any more.
+        'avatar_url': 'https://media.test/old.jpg',
+      });
+      expectPhoto(traveler.photo);
+      expect(CandidateTraveler.fromJson(const {'id': 3}).photo, isNull);
+      expect(
+        CandidateTraveler.fromJson(const {'id': 3, 'photo': null}).photo,
+        isNull,
+      );
+    });
+
+    test('a proposal carries both parties\' photos and names the other', () {
+      final match = Match.fromJson({
+        'id': 77,
+        'sender_id': 42,
+        'traveler_id': 99,
+        'sender_name': 'Amina',
+        'traveler_name': 'Karim',
+        'sender_photo': block,
+        'traveler_photo': {...block, 'version': 'v2'},
+        'status': 'pending',
+      });
+      expect(match.counterpartyPhoto(42)?.version, 'v2');
+      expect(match.counterpartyPhoto(99)?.version, 'v1');
+
+      final bare = Match.fromJson(const {
+        'id': 77,
+        'sender_id': 42,
+        'traveler_id': 99,
+        'sender_photo': null,
+        'status': 'pending',
+      });
+      expect(bare.counterpartyPhoto(42), isNull);
+      expect(bare.counterpartyPhoto(99), isNull);
+    });
+
+    test('a journey carries the traveler photo beside the name', () {
+      final journey = Journey.fromJson({
+        'id': 9,
+        'traveler_id': 3,
+        'traveler_name': 'Samira Ait',
+        'traveler_photo': block,
+      });
+      expectPhoto(journey.travelerPhoto);
+      expect(
+        Journey.fromJson(const {'id': 9, 'traveler_photo': null}).travelerPhoto,
+        isNull,
+      );
+    });
+
+    test('a chat thread row carries counterparty_photo, or null', () {
+      const thread = {
+        'match_id': 55,
+        'counterparty_id': 9,
+        'counterparty_name': 'Amina K.',
+        'route': 'Algiers → Paris',
+        'status': 'completed',
+        'can_send': false,
+        'unread_count': 0,
+      };
+      expectPhoto(
+        ChatThread.fromJson({
+          ...thread,
+          'counterparty_photo': block,
+        }).counterpartyPhoto,
+      );
+      expect(
+        ChatThread.fromJson({
+          ...thread,
+          'counterparty_photo': null,
+        }).counterpartyPhoto,
+        isNull,
+      );
+      expect(ChatThread.fromJson(thread).counterpartyPhoto, isNull);
+    });
+
+    group('upload refusals', () {
+      test('the stable codes are the server\'s', () {
+        expect(ApiErrorCode.profilePhotoMissing.raw, 'profile_photo_missing');
+        expect(
+          ApiErrorCode.profilePhotoTooLarge.raw,
+          'profile_photo_too_large',
+        );
+        expect(
+          ApiErrorCode.profilePhotoMediaTypeUnsupported.raw,
+          'profile_photo_media_type_unsupported',
+        );
+        expect(
+          ApiErrorCode.profilePhotoStorageUnavailable.raw,
+          'profile_photo_storage_unavailable',
+        );
+        expect(ApiErrorCode.accountInactive.raw, 'account_inactive');
+      });
+
+      test('each answer reads as its own refusal', () {
+        ProfilePhotoFailure of(int status, Object? data) =>
+            ProfilePhotoFailure.of(_failure(statusCode: status, data: data));
+
+        expect(
+          of(413, const {'code': 'profile_photo_too_large'}),
+          ProfilePhotoFailure.tooLarge,
+        );
+        expect(
+          of(415, const {'code': 'profile_photo_media_type_unsupported'}),
+          ProfilePhotoFailure.unsupported,
+        );
+        expect(
+          of(403, const {'code': 'account_inactive'}),
+          ProfilePhotoFailure.accountInactive,
+        );
+        expect(
+          of(503, const {'code': 'profile_photo_storage_unavailable'}),
+          ProfilePhotoFailure.storageUnavailable,
+        );
+        expect(
+          of(400, const {'code': 'profile_photo_missing'}),
+          ProfilePhotoFailure.general,
+        );
+        expect(of(500, const {'detail': 'boom'}), ProfilePhotoFailure.general);
+      });
+
+      test('any 413 is too large, whatever its body', () {
+        // The edge proxy answers 413 with HTML, or with nothing at all.
+        expect(
+          ProfilePhotoFailure.of(
+            _failure(statusCode: 413, data: '<html>413</html>'),
+          ),
+          ProfilePhotoFailure.tooLarge,
+        );
+        expect(
+          ProfilePhotoFailure.of(_failure(statusCode: 413, data: null)),
+          ProfilePhotoFailure.tooLarge,
+        );
+        expect(
+          ProfilePhotoFailure.of(
+            _failure(statusCode: 413, data: const {'detail': 'Too large'}),
+          ),
+          ProfilePhotoFailure.tooLarge,
+        );
+      });
+
+      test('only the refusals that can pass next time offer a retry', () {
+        expect(ProfilePhotoFailure.tooLarge.canRetry, isFalse);
+        expect(ProfilePhotoFailure.unsupported.canRetry, isFalse);
+        expect(ProfilePhotoFailure.accountInactive.canRetry, isFalse);
+        expect(ProfilePhotoFailure.pickFailed.canRetry, isFalse);
+        expect(ProfilePhotoFailure.storageUnavailable.canRetry, isTrue);
+        expect(ProfilePhotoFailure.offline.canRetry, isTrue);
+        expect(ProfilePhotoFailure.general.canRetry, isTrue);
+      });
     });
   });
 }

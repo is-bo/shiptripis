@@ -23,6 +23,7 @@ import 'discovery.dart';
 import 'json.dart';
 import 'location.dart';
 import 'money_perspective.dart';
+import 'person_photo.dart';
 
 enum OfferStatus {
   pending,
@@ -347,6 +348,8 @@ class Match {
     required this.senderName,
     required this.travelerName,
     required this.status,
+    this.senderPhoto,
+    this.travelerPhoto,
     this.journeyId,
     this.startLegId,
     this.endLegId,
@@ -376,6 +379,8 @@ class Match {
       travelerId: readInt(json['traveler_id']) ?? 0,
       senderName: readText(json['sender_name']),
       travelerName: readText(json['traveler_name']),
+      senderPhoto: PersonPhoto.maybe(json['sender_photo']),
+      travelerPhoto: PersonPhoto.maybe(json['traveler_photo']),
       status: readEnum(
         json['status'],
         MatchStatus.values,
@@ -410,6 +415,8 @@ class Match {
   final int travelerId;
   final String senderName;
   final String travelerName;
+  final PersonPhoto? senderPhoto;
+  final PersonPhoto? travelerPhoto;
   final MatchStatus status;
   final DistanceBand? matchedDistanceBand;
   final Compatibility? compatibility;
@@ -427,6 +434,9 @@ class Match {
 
   String counterpartyName(int viewerId) =>
       viewerId == senderId ? travelerName : senderName;
+
+  PersonPhoto? counterpartyPhoto(int viewerId) =>
+      viewerId == senderId ? travelerPhoto : senderPhoto;
 
   bool isSender(int viewerId) => viewerId == senderId;
 

@@ -2112,6 +2112,95 @@ class LAr extends L {
   String get profileAccount => 'الحساب';
 
   @override
+  String get profilePhotoTitle => 'الصورة الشخصية';
+
+  @override
+  String get profilePhotoHelpEmpty =>
+      'أضف صورة ليتعرّف عليك الآخرون. الصورة اختيارية. كل من يرى اسمك الأول يرى صورتك أيضاً، بمن فيهم الزوّار.';
+
+  @override
+  String get profilePhotoHelpActive =>
+      'كل من يرى اسمك الأول يرى هذه الصورة أيضاً، بمن فيهم الزوّار.';
+
+  @override
+  String get profilePhotoFormatRule =>
+      'JPEG أو PNG أو WebP، حتى 10 ميغابايت. تُقصّ الصورة إلى مربّع في المنتصف.';
+
+  @override
+  String get profilePhotoTake => 'التقاط صورة';
+
+  @override
+  String get profilePhotoChoose => 'اختيار من المعرض';
+
+  @override
+  String get profilePhotoChange => 'تغيير الصورة';
+
+  @override
+  String get profilePhotoRemove => 'إزالة الصورة';
+
+  @override
+  String get profilePhotoPreview => 'صورتك الجديدة';
+
+  @override
+  String get profilePhotoUploading => 'جارٍ رفع صورتك…';
+
+  @override
+  String get profilePhotoUpdated => 'تم تحديث الصورة';
+
+  @override
+  String get profilePhotoRemoved => 'تمت إزالة الصورة';
+
+  @override
+  String get profilePhotoRemoveTitle => 'إزالة صورتك؟';
+
+  @override
+  String get profilePhotoRemoveBody =>
+      'سيرى الآخرون الحروف الأولى من اسمك بدلاً منها. يمكنك إضافة صورة جديدة في أي وقت.';
+
+  @override
+  String get profilePhotoWassla => 'أزالت وصلة صورتك';
+
+  @override
+  String get profilePhotoWasslaBody =>
+      'لم تلتزم الصورة بقواعدنا. يمكنك إضافة صورة أخرى.';
+
+  @override
+  String profilePhotoWasslaReason(String reason) {
+    return 'السبب: $reason';
+  }
+
+  @override
+  String get profilePhotoDismiss => 'إغلاق';
+
+  @override
+  String get profilePhotoTooLarge =>
+      'هذه الصورة كبيرة جداً. اختر صورة أقل من 10 ميغابايت.';
+
+  @override
+  String get profilePhotoTypeNotAllowed =>
+      'نوع الملف غير مقبول. استخدم صورة JPEG أو PNG أو WebP.';
+
+  @override
+  String get profilePhotoAccountInactive =>
+      'لا يمكن لحسابك إضافة صورة حالياً. تواصل مع الدعم إذا ظننت أن هذا خطأ.';
+
+  @override
+  String get profilePhotoStorageUnavailable =>
+      'تخزين الصور غير متاح حالياً. ما زالت صورتك محدّدة. أعد المحاولة بعد قليل.';
+
+  @override
+  String get profilePhotoOffline =>
+      'أنت غير متصل بالإنترنت. ما زالت صورتك محدّدة. أعد المحاولة عند عودة الاتصال.';
+
+  @override
+  String get profilePhotoFailed =>
+      'لم يتم رفع صورتك. ما زالت محدّدة. أعد المحاولة.';
+
+  @override
+  String get profilePhotoPickFailed =>
+      'تعذّر فتح الكاميرا أو الصور. تأكد من أن وصلة مسموح لها باستخدامهما في إعدادات جهازك.';
+
+  @override
   String get profilePassportStamp => 'Wassla · عضو';
 
   @override

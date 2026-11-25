@@ -20,6 +20,7 @@ library;
 
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,6 +31,7 @@ import 'package:shiptrip/core/push/notification_socket.dart';
 import 'package:shiptrip/core/push/push_coordinator.dart';
 import 'package:shiptrip/core/session/session.dart';
 import 'package:shiptrip/data/repositories.dart';
+import 'package:shiptrip/design/components/primitives.dart';
 import 'package:shiptrip/features/chat/chat_thread_controller.dart';
 import 'package:shiptrip/features/chat/chat_thread_screen.dart';
 import 'package:shiptrip/features/profile/blocked_people_screen.dart';
@@ -39,6 +41,7 @@ import 'package:shiptrip/l10n/app_localizations.dart';
 import 'support/fake_api.dart';
 import 'support/fake_social_sign_in.dart';
 import 'support/harness.dart';
+import 'support/photo_cache.dart';
 
 final L _en = lookupL(const Locale('en'));
 final L _ar = lookupL(const Locale('ar'));
@@ -201,6 +204,135 @@ void main() {
         TextDirection.rtl,
       );
       await tester.ensureVisible(find.text(_ar.chatReportSend));
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('the counterparty photo in the chat header', () {
+    const photo = {
+      'url': 'https://media.test/karim.jpg?sig=1',
+      'version': 'k1',
+    };
+
+    Finder pictures() => find.descendant(
+      of: find.byType(AppAvatar),
+      matching: find.byType(RawImage),
+    );
+
+    setUp(() => imageCache.clear());
+
+    testWidgets('a small avatar with the photo sits before the name', (
+      tester,
+    ) async {
+      installPhotoCache(PhotoCacheBehavior.serve);
+      final server = _ChatServer([_message(1, senderId: 99, body: 'Hello')])
+        ..counterpartyPhoto = photo;
+      await _openThread(tester, server);
+      await settlePhotos(tester);
+
+      expect(
+        find.byType(AppAvatar),
+        findsOneWidget,
+        reason: 'the header only: message bubbles carry no avatar',
+      );
+      expect(pictures(), findsOneWidget);
+      expect(
+        tester.getCenter(find.byType(AppAvatar)).dx,
+        lessThan(tester.getCenter(find.text('Karim')).dx),
+      );
+      expect(
+        tester.getSize(find.byType(AppAvatar)).width,
+        lessThanOrEqualTo(40),
+      );
+    });
+
+    testWidgets('no photo is the initials', (tester) async {
+      final server = _ChatServer([_message(1, senderId: 99)]);
+      await _openThread(tester, server);
+
+      expect(find.byType(AppAvatar), findsOneWidget);
+      expect(find.byType(CachedNetworkImage), findsNothing);
+      expect(find.text('K'), findsOneWidget);
+    });
+
+    testWidgets(
+      'a deleted counterparty is initials, whatever the row carries',
+      (tester) async {
+        installPhotoCache(PhotoCacheBehavior.serve);
+        final server = _ChatServer([_message(1, senderId: 99)])
+          ..counterpartyPhoto = photo
+          ..counterpartyDeleted = true;
+        await _openThread(tester, server);
+        await settlePhotos(tester);
+
+        expect(find.byType(CachedNetworkImage), findsNothing);
+        expect(find.text(_en.chatDeletedAccount), findsWidgets);
+      },
+    );
+
+    testWidgets('a blocked thread still shows the photo', (tester) async {
+      installPhotoCache(PhotoCacheBehavior.serve);
+      final server = _ChatServer([_message(1, senderId: 99)])
+        ..counterpartyPhoto = photo
+        ..blockedByMe = true;
+      await _openThread(tester, server);
+      await settlePhotos(tester);
+
+      expect(pictures(), findsOneWidget);
+    });
+
+    testWidgets('no avatar while the thread row is still unknown', (
+      tester,
+    ) async {
+      final gate = Completer<FakeResponse>();
+      final server = _ChatServer([_message(1, senderId: 99)])
+        ..counterpartyPhoto = photo;
+      server.backend.handle('GET', '/api/chat/threads', (_) => gate.future);
+      await pumpApp(
+        tester,
+        const ChatThreadScreen(matchId: 7),
+        container: containerFor(server.backend),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byType(AppAvatar), findsNothing);
+      expect(find.text(_en.chatTitle), findsOneWidget);
+      gate.complete(const FakeResponse(200, <Object>[]));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the avatar adds nothing to what a screen reader says', (
+      tester,
+    ) async {
+      installPhotoCache(PhotoCacheBehavior.serve);
+      final handle = tester.ensureSemantics();
+      final server = _ChatServer([_message(1, senderId: 99)])
+        ..counterpartyPhoto = photo;
+      await _openThread(tester, server);
+      await settlePhotos(tester);
+
+      expect(find.bySemanticsLabel('Karim'), findsOneWidget);
+      handle.dispose();
+    });
+
+    testWidgets('fits a small phone in Arabic, the avatar on the right', (
+      tester,
+    ) async {
+      installPhotoCache(PhotoCacheBehavior.serve);
+      final server = _ChatServer([_message(1, senderId: 99)])
+        ..counterpartyPhoto = photo;
+      await _openThread(
+        tester,
+        server,
+        locale: const Locale('ar'),
+        device: DeviceProfile.smallAndroid,
+      );
+      await settlePhotos(tester);
+
+      expect(
+        tester.getCenter(find.byType(AppAvatar)).dx,
+        greaterThan(tester.getCenter(find.text('Karim')).dx),
+      );
       expect(tester.takeException(), isNull);
     });
   });
@@ -413,6 +545,8 @@ class _ChatServer {
             'deal_id': 3,
             'counterparty_id': 99,
             'counterparty_name': 'Karim',
+            'counterparty_photo': counterpartyPhoto,
+            'counterparty_deleted': counterpartyDeleted,
             'route': 'Paris - Algiers',
             'status': 'accepted',
             'can_send': !_blocked,
@@ -463,6 +597,10 @@ class _ChatServer {
   final List<Map<String, dynamic>> messages;
   bool blockedByMe = false;
   bool blockedByOther = false;
+
+  /// The thread row's `counterparty_photo`: null for none.
+  Map<String, dynamic>? counterpartyPhoto;
+  bool counterpartyDeleted = false;
   VoidCallback? onBlock;
   VoidCallback? onUnblock;
 

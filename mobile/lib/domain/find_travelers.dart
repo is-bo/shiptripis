@@ -21,6 +21,7 @@
 library;
 
 import 'json.dart';
+import 'person_photo.dart';
 import 'transport_mode.dart';
 
 /// What the whole page is, before any row is read.
@@ -191,7 +192,7 @@ class CandidateTraveler {
     required this.identityVerified,
     required this.rating,
     required this.completedDeliveries,
-    this.avatarUrl,
+    this.photo,
   });
 
   factory CandidateTraveler.fromJson(Map<String, dynamic>? json) {
@@ -205,7 +206,7 @@ class CandidateTraveler {
       identityVerified: readBool(data['identity_verified']),
       rating: TravelerRating.fromJson(readObject(data['rating'])),
       completedDeliveries: readInt(data['completed_deliveries']) ?? 0,
-      avatarUrl: readString(data['avatar_url']),
+      photo: PersonPhoto.maybe(data['photo']),
     );
   }
 
@@ -219,9 +220,8 @@ class CandidateTraveler {
   final TravelerRating rating;
   final int completedDeliveries;
 
-  /// Always null in V1: no profile photo exists anywhere in the data model.
-  /// The field is here so landing photos later is not a contract change.
-  final String? avatarUrl;
+  /// Null when they have none, and when Wassla removed it.
+  final PersonPhoto? photo;
 }
 
 /// One node on the carrying route.

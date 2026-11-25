@@ -2112,6 +2112,95 @@ class LEn extends L {
   String get profileAccount => 'Account';
 
   @override
+  String get profilePhotoTitle => 'Profile photo';
+
+  @override
+  String get profilePhotoHelpEmpty =>
+      'Add a photo so people recognise you. It\'s optional. Anyone who sees your first name also sees your photo, visitors included.';
+
+  @override
+  String get profilePhotoHelpActive =>
+      'Anyone who sees your first name also sees this photo, visitors included.';
+
+  @override
+  String get profilePhotoFormatRule =>
+      'JPEG, PNG or WebP, up to 10 MB. It is cropped to a centred square.';
+
+  @override
+  String get profilePhotoTake => 'Take a photo';
+
+  @override
+  String get profilePhotoChoose => 'Choose from library';
+
+  @override
+  String get profilePhotoChange => 'Change photo';
+
+  @override
+  String get profilePhotoRemove => 'Remove photo';
+
+  @override
+  String get profilePhotoPreview => 'Your new photo';
+
+  @override
+  String get profilePhotoUploading => 'Uploading your photo…';
+
+  @override
+  String get profilePhotoUpdated => 'Photo updated';
+
+  @override
+  String get profilePhotoRemoved => 'Photo removed';
+
+  @override
+  String get profilePhotoRemoveTitle => 'Remove your photo?';
+
+  @override
+  String get profilePhotoRemoveBody =>
+      'People will see your initials instead. You can add a new photo at any time.';
+
+  @override
+  String get profilePhotoWassla => 'Wassla removed your photo';
+
+  @override
+  String get profilePhotoWasslaBody =>
+      'It didn\'t follow our rules. You can add a different photo.';
+
+  @override
+  String profilePhotoWasslaReason(String reason) {
+    return 'Reason: $reason';
+  }
+
+  @override
+  String get profilePhotoDismiss => 'Dismiss';
+
+  @override
+  String get profilePhotoTooLarge =>
+      'That image is too large. Choose one under 10 MB.';
+
+  @override
+  String get profilePhotoTypeNotAllowed =>
+      'That file type isn\'t accepted. Use a JPEG, PNG or WebP image.';
+
+  @override
+  String get profilePhotoAccountInactive =>
+      'Your account can\'t add a photo right now. Contact support if you think this is a mistake.';
+
+  @override
+  String get profilePhotoStorageUnavailable =>
+      'Photo storage is unavailable right now. Your photo is still selected. Try again in a moment.';
+
+  @override
+  String get profilePhotoOffline =>
+      'You\'re offline. Your photo is still selected. Try again once you\'re connected.';
+
+  @override
+  String get profilePhotoFailed =>
+      'Your photo didn\'t upload. It\'s still selected. Try again.';
+
+  @override
+  String get profilePhotoPickFailed =>
+      'We couldn\'t open your camera or photos. Check that Wassla is allowed to use them in your device settings.';
+
+  @override
   String get profilePassportStamp => 'Wassla · MEMBER';
 
   @override
