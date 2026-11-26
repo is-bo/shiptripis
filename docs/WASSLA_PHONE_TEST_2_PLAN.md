@@ -270,3 +270,7 @@ Ismail, 25 November 2026:
 - **Q2 = no (corrected by Ismail the same day).** CCP postal account with the full crossed cheque only, as recommended. No bank RIB rail and no F3 package for now.
 - **Q3 = yes.** M3 as recommended: an optional "Other departures to Paris" browse result with "You would need to bring the parcel to Algiers". The sender arranges the first mile, and the original request is unchanged.
 - **Q4 = both.** A1 offers the route alert after an empty two-city search **and** after posting (a request or a journey), each created only on confirmation.
+
+Ismail, 26 November 2026:
+
+- **Q5 · No currency conversion (new).** The traveler chooses how to be paid: euros, dinars or both. The sender may pay only in a currency the traveler accepts, and Wassla never converts money between the payment and the payout. Today the code still allows one conversion: a dinars-only traveler paid by card in euros (`apps/finance/payout_snapshots.py` `preflight`/`choose_method` convert at the admin rate). The payment options (`apps/finance/providers/__init__.py` `available_providers`) are also not filtered by the traveler's choice, so a euros-only traveler's sender is offered Chargily and refused only at checkout. A new package **C1** (planned by an Opus extra-high planner, money area) enforces this on the server, after F1 merges because both touch `payout_snapshots.py`. F2 then shows only the accepted options on the phone. EUR integer cents stay the canonical record. A dinar payment for a dinar payout uses one snapshotted rate on both sides.
