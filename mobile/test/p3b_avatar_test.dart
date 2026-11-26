@@ -10,6 +10,7 @@ import 'dart:io' show SocketException;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shiptrip/core/media/avatar_cache.dart';
 import 'package:shiptrip/design/components/navigation.dart';
 import 'package:shiptrip/design/components/primitives.dart';
 import 'package:shiptrip/domain/person_photo.dart';
@@ -59,11 +60,13 @@ void main() {
         find.byType(CachedNetworkImage),
       );
       expect(image.imageUrl, _photo.url);
-      expect(image.cacheKey, 'v1');
-      expect(cache.keys, ['v1']);
+      expect(image.cacheKey, avatarCacheKey(_photo));
+      expect(cache.keys.map(versionOf), ['v1']);
 
       // A refreshed payload brings a new signed address for the same picture:
-      // the cache key is unchanged, so nothing is asked of the network.
+      // it is a load of its own (named by version and address), and the disk
+      // cache, which is by version alone, is what spares the network (see
+      // p3b_avatar_cache_test.dart).
       await pumpApp(
         tester,
         _avatar(
@@ -74,8 +77,8 @@ void main() {
         ),
       );
       await settlePhotos(tester);
-      expect(cache.keys, ['v1']);
-      expect(cache.urls, [_photo.url]);
+      expect(cache.keys.map(versionOf), ['v1', 'v1']);
+      expect(cache.urls, [_photo.url, 'https://media.test/a.jpg?sig=2']);
       expect(_picture, findsOneWidget);
     });
 
@@ -143,16 +146,19 @@ void main() {
         await settlePhotos(tester);
 
         expect(serving.urls, ['https://media.test/a.jpg?sig=new']);
-        expect(serving.keys, ['v1'], reason: 'the bytes are cached by version');
+        expect(serving.keys.map(versionOf), [
+          'v1',
+        ], reason: 'the bytes are cached by version');
         expect(_picture, findsOneWidget);
       },
     );
 
     testWidgets(
-      'a fresh address that joined a stale load is tried when that load fails',
+      'a fresh address is never joined to the load of an expired one',
       (tester) async {
-        // The old address is still loading when the fresh one arrives; to the
-        // image cache they are one image, so the fresh address joins that load.
+        // The old address is still loading when the fresh one arrives. A load
+        // is named by version and address, so the fresh one is a request of its
+        // own, and it does not depend on how the old one ends.
         final cache = installPhotoCache(
           PhotoCacheBehavior.serve,
           behaviorFor: (url) =>
@@ -182,20 +188,65 @@ void main() {
         await settlePhotos(tester);
         expect(cache.urls, [
           'https://media.test/a.jpg?sig=old',
-        ], reason: 'joined the load in flight: no second request yet');
+          'https://media.test/a.jpg?sig=new',
+        ], reason: 'its own request, at once');
+        expect(_picture, findsOneWidget, reason: 'the old load is still held');
 
-        // The old address had expired: its load fails, and the joined one with it.
+        // The old address had expired: its load fails, and nothing else moves.
         cache.stalled['https://media.test/a.jpg?sig=old']!.addError(
           const SocketException('expired'),
         );
         await settlePhotos(tester);
         await settlePhotos(tester);
 
-        expect(cache.urls, [
-          'https://media.test/a.jpg?sig=old',
-          'https://media.test/a.jpg?sig=new',
-        ], reason: 'the fresh address is tried on a load of its own');
+        expect(cache.urls, hasLength(2), reason: 'no retry of a replaced load');
         expect(_picture, findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'two avatars with different addresses for one version load separately',
+      (tester) async {
+        // Mounted together, with the first request held: the second is not
+        // joined to it and shows its picture while the first is still waiting.
+        final cache = installPhotoCache(
+          PhotoCacheBehavior.serve,
+          behaviorFor: (url) =>
+              url.contains('sig=first') ? PhotoCacheBehavior.stall : null,
+        );
+        const first = PersonPhoto(
+          url: 'https://media.test/a.jpg?sig=first',
+          version: 'v1',
+        );
+        const second = PersonPhoto(
+          url: 'https://media.test/a.jpg?sig=second',
+          version: 'v1',
+        );
+        await pumpApp(
+          tester,
+          Column(
+            children: [
+              _avatar(photo: first),
+              _avatar(photo: second),
+            ],
+          ),
+        );
+        await settlePhotos(tester);
+
+        expect(cache.urls.toSet(), {first.url, second.url});
+        expect(cache.keys.toSet(), {
+          avatarCacheKey(first),
+          avatarCacheKey(second),
+        }, reason: 'named by version and address');
+        expect(cache.keys.map(versionOf).toSet(), {'v1'});
+        expect(_picture, findsOneWidget, reason: 'only the second has loaded');
+
+        // The first address had expired.
+        cache.stalled[first.url]!.addError(const SocketException('expired'));
+        await settlePhotos(tester);
+        await settlePhotos(tester);
+
+        expect(_picture, findsOneWidget, reason: 'the second is unaffected');
       },
     );
 
@@ -213,7 +264,7 @@ void main() {
       },
     );
 
-    testWidgets('a photo that loaded is not fetched again for a new address', (
+    testWidgets('a new address for a loaded photo keeps it, by version', (
       tester,
     ) async {
       final cache = installPhotoCache(PhotoCacheBehavior.serve);
@@ -237,7 +288,9 @@ void main() {
       await tester.pump();
       await settlePhotos(tester);
 
-      expect(cache.urls, ['https://media.test/a.jpg?sig=1']);
+      // Whether the network is asked again is the disk cache's business, which
+      // answers by version (p3b_avatar_cache_test.dart).
+      expect(cache.keys.map(versionOf).toSet(), {'v1'});
       expect(_picture, findsOneWidget, reason: 'no flash of initials');
     });
 
@@ -262,7 +315,7 @@ void main() {
       await tester.pump();
       await settlePhotos(tester);
 
-      expect(cache.keys, ['v1', 'v2']);
+      expect(cache.keys.map(versionOf), ['v1', 'v2']);
     });
 
     testWidgets('it is read as the person, and the image is not in semantics', (

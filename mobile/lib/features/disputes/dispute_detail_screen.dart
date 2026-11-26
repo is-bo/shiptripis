@@ -21,7 +21,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart' show ImageSource;
+import 'package:image_picker/image_picker.dart' show ImageSource, XFile;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../common/contact_support.dart';
@@ -120,16 +120,24 @@ class _DisputeDetailScreenState extends ConsumerState<DisputeDetailScreen> {
   Future<void> _addFile(EvidenceKind kind) async {
     final l = L.of(context);
     final guard = ref.read(pickGuardProvider);
-    final picked = kind == EvidenceKind.video
-        ? await guard.pickVideo(
-            PickPurpose.disputeEvidence,
-            source: ImageSource.gallery,
-          )
-        : await guard.pickImage(
-            PickPurpose.disputeEvidence,
-            source: ImageSource.gallery,
-            imageQuality: 92,
-          );
+    final XFile? picked;
+    try {
+      picked = kind == EvidenceKind.video
+          ? await guard.pickVideo(
+              PickPurpose.disputeEvidence,
+              source: ImageSource.gallery,
+            )
+          : await guard.pickImage(
+              PickPurpose.disputeEvidence,
+              source: ImageSource.gallery,
+              imageQuality: 92,
+            );
+    } on PickBlockedException {
+      if (mounted) {
+        AppSnack.failure(context, null, fallback: l.photoPickBlocked);
+      }
+      return;
+    }
     if (picked == null || !mounted) return;
 
     final bytes = await File(picked.path).length();

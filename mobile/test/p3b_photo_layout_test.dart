@@ -16,13 +16,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shiptrip/core/media/photo_prepare.dart' show PhotoPrepareFailed;
 import 'package:shiptrip/design/components/navigation.dart';
 import 'package:shiptrip/design/components/primitives.dart';
 import 'package:shiptrip/features/profile/profile_photo_section.dart';
 import 'package:shiptrip/l10n/app_localizations.dart';
 
 import 'support/fake_api.dart';
-import 'support/fake_image_picker.dart';
 import 'support/harness.dart';
 import 'support/photo_cache.dart';
 import 'support/photo_rig.dart';
@@ -268,19 +268,36 @@ List<_Scenario> _scenarios() => [
     actions: [(l) => l.profilePhotoTake, (l) => l.profilePhotoChoose],
   ),
   _Scenario(
-    'a photo recovered after the app was closed',
+    'a pick that an earlier pick may have answered',
     make: () => PhotoRig(
       FakeBackend(),
-      tokens: FakeTokenStore()..pendingPick = 'profilePhoto:42:abc',
-      imagePicker: FakeImagePicker(lost: XFile(sourceFile())),
+      tokens: FakeTokenStore()..pendingPick = 'identityDocument:abc',
+      picker: (_) async => XFile(sourceFile()),
     ),
-    drive: (tester, rig) => untilReached(
-      tester,
-      () =>
-          find.text(rig.l(tester).profilePhotoRecovered).evaluate().isNotEmpty,
+    drive: _chooseUntilNotice,
+    messages: [(l) => l.profilePhotoUncertain],
+    actions: [(l) => l.profilePhotoTake, (l) => l.profilePhotoChoose],
+  ),
+  _Scenario(
+    'a photo the phone could not get ready',
+    make: () => PhotoRig(
+      FakeBackend(),
+      picker: (_) async => XFile(sourceFile()),
+      preparer: (_) async => throw const PhotoPrepareFailed(),
     ),
-    messages: [(l) => l.profilePhotoRecovered],
-    actions: [(l) => l.profilePhotoUse, (l) => l.profilePhotoDiscard],
+    drive: _chooseUntilNotice,
+    messages: [(l) => l.profilePhotoPrepareFailed],
+    actions: [(l) => l.profilePhotoTake, (l) => l.profilePhotoChoose],
+  ),
+  _Scenario(
+    'the pick could not be given an owner',
+    make: () => PhotoRig(
+      FakeBackend(),
+      tokens: FakeTokenStore()..pendingPickWritesFail = true,
+    ),
+    drive: _chooseUntilNotice,
+    messages: [(l) => l.photoPickBlocked],
+    actions: [(l) => l.profilePhotoTake, (l) => l.profilePhotoChoose],
   ),
   _Scenario(
     'a failed replacement of an active photo',

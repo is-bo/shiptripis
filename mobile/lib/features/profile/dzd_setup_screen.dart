@@ -83,6 +83,9 @@ class _DzdSetupScreenState extends ConsumerState<DzdSetupScreen> {
           _chequeError = null;
         });
       }
+    } on PickBlockedException {
+      if (!mounted) return;
+      AppSnack.failure(context, null, fallback: L.of(context).photoPickBlocked);
     } on Object catch (e) {
       if (!mounted) return;
       AppSnack.failure(context, e);

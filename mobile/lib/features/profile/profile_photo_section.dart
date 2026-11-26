@@ -45,19 +45,6 @@ class ProfilePhotoSection extends ConsumerStatefulWidget {
 }
 
 class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
-  @override
-  void initState() {
-    super.initState();
-    // If the phone ended the app while the camera was open, the photo being
-    // taken is offered here for the member to confirm. The controller does it
-    // once, whatever number of times this scrolls into view.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        ref.read(profilePhotoProvider.notifier).recoverLostPick();
-      }
-    });
-  }
-
   ProfilePhotoController get _controller =>
       ref.read(profilePhotoProvider.notifier);
 
@@ -99,12 +86,6 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
     if (saved && mounted) AppSnack.success(context, l.profilePhotoUpdated);
   }
 
-  Future<void> _useRecovered() async {
-    final l = L.of(context);
-    final saved = await _controller.confirmRecovered();
-    if (saved && mounted) AppSnack.success(context, l.profilePhotoUpdated);
-  }
-
   Future<void> _remove({required bool confirm}) async {
     final l = L.of(context);
     if (ref.read(profilePhotoProvider).busy) return;
@@ -136,6 +117,9 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
     ProfilePhotoFailure.general => l.profilePhotoFailed,
     ProfilePhotoFailure.unreadable => l.profilePhotoUnreadable,
     ProfilePhotoFailure.pickFailed => l.profilePhotoPickFailed,
+    ProfilePhotoFailure.pickBlocked => l.photoPickBlocked,
+    ProfilePhotoFailure.pickUncertain => l.profilePhotoUncertain,
+    ProfilePhotoFailure.prepareFailed => l.profilePhotoPrepareFailed,
   };
 
   @override
@@ -156,7 +140,6 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
     final failure = photo.phase == ProfilePhotoPhase.failed
         ? photo.failure
         : null;
-    final confirming = photo.awaitingConfirmation && photo.picked != null;
 
     final help = hasPhoto ? l.profilePhotoHelpActive : l.profilePhotoHelpEmpty;
 
@@ -209,14 +192,6 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
                   onAction: photo.busy ? null : () => _remove(confirm: false),
                 ),
               ],
-              if (confirming) ...[
-                const SizedBox(height: AppSpace.lg),
-                InfoNotice(
-                  message: l.profilePhotoRecovered,
-                  tone: StatusTone.waiting,
-                  icon: Icons.restore_rounded,
-                ),
-              ],
               if (failure != null) ...[
                 const SizedBox(height: AppSpace.lg),
                 InfoNotice(
@@ -233,13 +208,7 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
                 ),
               ],
               const SizedBox(height: AppSpace.lg),
-              if (confirming) ...[
-                AppButton(
-                  label: l.profilePhotoUse,
-                  icon: Icons.check_rounded,
-                  onPressed: photo.busy ? null : _useRecovered,
-                ),
-              ] else if (hasPhoto) ...[
+              if (hasPhoto) ...[
                 AppButton(
                   label: l.profilePhotoChange,
                   variant: AppButtonVariant.secondary,

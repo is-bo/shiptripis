@@ -3921,17 +3921,23 @@ abstract class L {
   /// **'We couldn\'t read that photo. Choose it again.'**
   String get profilePhotoUnreadable;
 
-  /// No description provided for @profilePhotoRecovered.
+  /// No description provided for @photoPickBlocked.
   ///
   /// In en, this message translates to:
-  /// **'Your phone closed Wassla while you were choosing a photo. Use the photo you picked?'**
-  String get profilePhotoRecovered;
+  /// **'We couldn\'t open your camera or photos safely just now. Try again in a moment.'**
+  String get photoPickBlocked;
 
-  /// No description provided for @profilePhotoUse.
+  /// No description provided for @profilePhotoUncertain.
   ///
   /// In en, this message translates to:
-  /// **'Use this photo'**
-  String get profilePhotoUse;
+  /// **'We couldn\'t be sure that photo was the one you chose, so it wasn\'t used. Choose it again.'**
+  String get profilePhotoUncertain;
+
+  /// No description provided for @profilePhotoPrepareFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn\'t get that photo ready. Try again, or choose a different photo.'**
+  String get profilePhotoPrepareFailed;
 
   /// No description provided for @profilePhotoDiscard.
   ///

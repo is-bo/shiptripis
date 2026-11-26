@@ -23,7 +23,9 @@
   1024 px by the phone), a centred-square preview, a confirmation before removing, and every state (empty,
   uploading, active, removed by Wassla with the staff's reason, too large, unsupported type, inactive
   account, storage unavailable, offline, general error, camera refused). An upload is sent once and never
-  retried by the app; any HTTP 413 reads as "too large".
+  retried by the app; any HTTP 413 reads as "too large". If the phone ends the app while a picker is open,
+  the photo is never recovered, and one a late copy of another pick might have answered is refused (a
+  photo's disk cache keeps the version and bytes only, never the signed address).
 - `AppAvatar` draws a photo through `CachedNetworkImage`, cached by the photo's version, with initials
   while loading and on error. Photos show wherever a person is named, guests included: person rows, trip,
   request and profile cards, Find Travelers, the person page, alerts, proposals, the chat list and a new

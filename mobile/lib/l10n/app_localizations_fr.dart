@@ -2222,11 +2222,16 @@ class LFr extends L {
       'Impossible de lire cette photo. Choisissez-la de nouveau.';
 
   @override
-  String get profilePhotoRecovered =>
-      'Votre téléphone a fermé Wassla pendant le choix d\'une photo. Utiliser la photo choisie ?';
+  String get photoPickBlocked =>
+      'Impossible d\'ouvrir votre appareil photo ou vos photos en toute sécurité pour le moment. Réessayez dans un instant.';
 
   @override
-  String get profilePhotoUse => 'Utiliser cette photo';
+  String get profilePhotoUncertain =>
+      'Nous ne pouvons pas être sûrs que cette photo est celle que vous avez choisie, elle n\'a donc pas été utilisée. Choisissez-la de nouveau.';
+
+  @override
+  String get profilePhotoPrepareFailed =>
+      'Impossible de préparer cette photo. Réessayez ou choisissez une autre photo.';
 
   @override
   String get profilePhotoDiscard => 'Ignorer cette photo';

@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shiptrip/app/app_state.dart';
+import 'package:shiptrip/core/media/avatar_cache.dart' show versionOf;
 import 'package:shiptrip/core/session/session.dart';
 import 'package:shiptrip/design/components/primitives.dart';
 import 'package:shiptrip/domain/account.dart';
@@ -294,7 +295,7 @@ void main() {
       await settlePhotos(tester);
 
       // The viewer is the sender (id 42), so the counterparty is the traveler.
-      expect(cache.keys, ['karim']);
+      expect(cache.keys.map(versionOf), ['karim']);
       expect(_pictures, findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(seconds: 5));

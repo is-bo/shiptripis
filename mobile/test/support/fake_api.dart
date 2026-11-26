@@ -263,11 +263,31 @@ class FakeTokenStore extends TokenStore {
   /// Which pick had a picker open, as secure storage holds it.
   String? pendingPick;
 
+  /// Set to make secure storage refuse a change to the pending pick, as a
+  /// keystore that cannot be written would.
+  bool pendingPickWritesFail = false;
+
   @override
   Future<String?> readPendingPick() async => pendingPick;
 
   @override
-  Future<void> writePendingPick(String? marker) async => pendingPick = marker;
+  Future<({bool applied, String? previous})> exchangePendingPick(
+    String marker, {
+    required int expectedIdentityGeneration,
+  }) async {
+    if (pendingPickWritesFail) throw StateError('secure storage refused');
+    if (identityGeneration != expectedIdentityGeneration) {
+      return (applied: false, previous: null);
+    }
+    final previous = pendingPick;
+    pendingPick = marker;
+    return (applied: true, previous: previous);
+  }
+
+  @override
+  Future<void> releasePendingPick(String marker) async {
+    if (pendingPick == marker) pendingPick = null;
+  }
 
   @override
   Future<void> writeRoleContext(String value) async => _roleContext = value;

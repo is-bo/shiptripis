@@ -465,7 +465,7 @@ void main() {
     );
 
     testWidgets(
-      'a result that is not JPEG, PNG or WebP is refused on the phone',
+      'a prepared file that is not JPEG, PNG or WebP is refused on the phone',
       (tester) async {
         final backend = FakeBackend();
         final rig = PhotoRig(
@@ -479,9 +479,12 @@ void main() {
         await tester.tap(photoButton(l.profilePhotoChoose));
         await untilReached(
           tester,
-          () => find.text(l.profilePhotoTypeNotAllowed).evaluate().isNotEmpty,
+          () => find.text(l.profilePhotoPrepareFailed).evaluate().isNotEmpty,
         );
 
+        // The platform method is told to write a JPEG: bytes that are not an
+        // image mean it failed, which is no verdict on the picture.
+        expect(find.text(l.profilePhotoTypeNotAllowed), findsNothing);
         expect(backend.to('PUT', _put), isEmpty);
       },
     );

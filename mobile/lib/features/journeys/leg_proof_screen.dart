@@ -113,9 +113,17 @@ class _LegProofScreenState extends ConsumerState<LegProofScreen> {
 
   Future<void> _pick(ImageSource source) async {
     final l = L.of(context);
-    final picked = await ref
-        .read(pickGuardProvider)
-        .pickImage(PickPurpose.ticketProof, source: source, imageQuality: 92);
+    final XFile? picked;
+    try {
+      picked = await ref
+          .read(pickGuardProvider)
+          .pickImage(PickPurpose.ticketProof, source: source, imageQuality: 92);
+    } on PickBlockedException {
+      if (mounted) {
+        AppSnack.failure(context, null, fallback: l.photoPickBlocked);
+      }
+      return;
+    }
     if (picked == null || !mounted) return;
 
     final bytes = await File(picked.path).length();

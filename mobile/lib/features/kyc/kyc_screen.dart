@@ -79,15 +79,24 @@ class _KycScreenState extends ConsumerState<KycScreen> {
 
   Future<void> _pick(void Function(XFile) assign, {bool selfie = false}) async {
     final l = L.of(context);
-    final file = await ref
-        .read(pickGuardProvider)
-        .pickImage(
-          PickPurpose.identityDocument,
-          source: selfie ? ImageSource.camera : ImageSource.gallery,
-          preferredCameraDevice: CameraDevice.front,
-          imageQuality: 92,
-        );
-    if (file == null || !mounted) return;
+    final XFile? picked;
+    try {
+      picked = await ref
+          .read(pickGuardProvider)
+          .pickImage(
+            PickPurpose.identityDocument,
+            source: selfie ? ImageSource.camera : ImageSource.gallery,
+            preferredCameraDevice: CameraDevice.front,
+            imageQuality: 92,
+          );
+    } on PickBlockedException {
+      if (mounted) {
+        AppSnack.failure(context, null, fallback: l.photoPickBlocked);
+      }
+      return;
+    }
+    if (picked == null || !mounted) return;
+    final file = picked;
 
     // Checked locally so the user is not charged a 8 MB upload to be told no.
     // The server remains the authority; this only avoids the obvious waste.

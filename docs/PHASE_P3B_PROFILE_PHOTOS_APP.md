@@ -31,14 +31,16 @@ to 10 MB. It is cropped to a centred square.").
 | Active | the photo, "Change photo" (asks camera or library in a sheet) and "Remove photo" (asks first) |
 | Removed by Wassla | a notice with the server's reason (a generic sentence when it gave none), "Dismiss", and the two upload buttons |
 | Too large | "That image is too large. Choose one under 10 MB." The file is dropped, no retry |
-| Unsupported type | "That file type isn't accepted." The file is dropped, no retry |
+| Unsupported type | "That file type isn't accepted." Only when a decoder refused the picture. The file is dropped, no retry |
 | Account inactive | "Your account can't add a photo right now. Contact support..." (`account_inactive`, also for banned). No retry |
 | Storage unavailable | the file stays selected, "Try again" |
 | Offline or timeout | the file stays selected, "Try again" |
 | General error | the file stays selected, "Try again" |
 | Camera or library refused | "We couldn't open your camera or photos. Check that Wassla is allowed to use them..." |
 | The picked file is gone | "We couldn't read that photo. Choose it again." The selection is cleared, the buttons are usable |
-| Recovered after the phone closed the app | the photo, "Your phone closed Wassla while you were choosing a photo. Use the photo you picked?", "Use this photo" and "Discard this photo". Never uploaded unasked |
+| The pick could not be given an owner | "We couldn't open your camera or photos safely just now. Try again in a moment." No picker was opened |
+| A result not provably this press's | "We couldn't be sure that photo was the one you chose, so it wasn't used. Choose it again." The file is deleted, never shown or sent |
+| The platform could not get the photo ready | "We couldn't get that photo ready. Try again, or choose a different photo." (memory, a write, a missing method: not the picture's fault) |
 | A failed replacement of an active photo | the error, "Try again", "Change photo", "Remove photo" (the server photo's) and "Discard this photo" |
 | Active photo the server could not sign | initials, "Change photo" and "Remove photo": it is still the member's photo |
 
@@ -53,13 +55,21 @@ to 10 MB. It is cropped to a centred square.").
   - **Android** (`PhotoPrepare.kt`): the bounds are read without decoding; the sample is the smallest power
     of two that keeps the decode within about 6 megapixels, **whatever the picture's shape** (a 48 MP photo
     and a 32000 x 1500 panorama both decode at about 3 MP, and the long edge stays above 1200 px, so the
-    scale to 1024 never enlarges); the orientation and the scale are one matrix; transparency is flattened
-    onto white; an out-of-memory decode is retried at a larger sample. HEIF that `BitmapFactory` cannot read
-    goes through `ImageDecoder` (API 28 and up), which applies the orientation itself.
+    scale to 1024 never enlarges); a decode that returns nothing or runs out of memory is retried at a
+    larger sample, up to three times, on both decoders; HEIF that `BitmapFactory` cannot read goes through
+    `ImageDecoder` (API 28 and up), which applies the orientation itself and is sampled in the same way
+    from the picture's own size in `onHeaderDecoded`. **Whatever the decoder produced is only the source:**
+    the output is always drawn into a fresh sRGB ARGB_8888 bitmap of a size computed first (upright, longer
+    side at most 1024, **neither side below one pixel**, so a 4096 x 1 strip is 1024 x 1), white first so
+    transparency becomes white, and that bitmap is what is compressed; no profile, gain map or wide-gamut
+    pixels reach the file. The arithmetic is pure Kotlin (`PhotoGeometry`) and is mirrored as an
+    executable specification in `p3b_photo_prepare_test.dart`.
   - **iOS** (`AppDelegate.swift`): ImageIO builds a thumbnail from the file URL with the transform applied
     and `kCGImageSourceThumbnailMaxPixelSize` 1024 (never above the picture's own size), which decodes at the
     reduced size and reads HEIC like any other format; the JPEG is written without properties, so it carries
-    no metadata.
+    no metadata. The app now uses the **UIScene lifecycle** (see "Round three, 3").
+  - **Leftover files.** Both platforms delete the prepared files of an earlier run (prefix `wassla-photo-`)
+    when the engine starts: a new engine owns none, so any that remain belong to a run that ended.
   - The earlier pipeline (a Dart header probe through `ImageDescriptor`, then `flutter_image_compress`) is
     gone, and so is the dependency: the probe itself fully decoded a HEIC on Android, a panorama sampled by
     1, and the compressor rotated but never reflected.
@@ -69,7 +79,8 @@ to 10 MB. It is cropped to a centred square.").
 - **The type is read from the bytes.** The upload is declared by the first bytes of the prepared file
   (JPEG, PNG or WebP), never by its name, and named `photo.<ext>` to match. The native resizer is told to
   write JPEG, so in practice the content type is always `image/jpeg`; a `.webp` name on JPEG bytes is sent
-  as a JPEG (tested). Bytes that are none of the three are "unsupported" on the phone.
+  as a JPEG (tested). Bytes that are none of the three mean the platform did not do its job, so they are a
+  failed preparation, not a verdict on the picture.
 - **Never retried automatically.** One `PUT /api/me/photo` per press of a button. The app has no retry loop,
   timer or reconnect hook for it, and **the client does not re-send it after a token refresh either**:
   `ApiClient.upload` marks the request `st.no_replay`, so a 401 refreshes the token and the member sees "try
@@ -87,20 +98,26 @@ to 10 MB. It is cropped to a centred square.").
   `DELETE`, which the server answers 204 even when there is nothing.
 - The session moves to the photo the server answered, and not before (`SessionController.uploadPhoto` and
   `removePhoto`, with the same stale-session guards as the profile update). A profile read that began before
-  a photo write finished (counted at each write's start and end) keeps the session's newer photo and
-  applies the rest.
+  a photo write was applied (counted when the server accepted it and the session applied it; a write that failed
+  changed nothing and is not counted) keeps the session's newer photo and applies the rest.
 - After an upload or a removal, the retained reads that hold the member's own photo are invalidated: the
   own public profile (Home's opt-in card and the Public profile preview) and every person page.
 - A failed replacement can be discarded; "Remove photo" for the server's photo stays available beside it;
   a removal clears the obsolete error and the pending pick.
-- **If the phone ends the app while the picker is open.** The picker keeps **one** lost result for every
-  kind of pick, so every pick in the app (the profile photo, the identity check, ticket proofs, item photos,
-  the payout cheque, dispute evidence) goes through `PickGuard` (`core/media/pick_guard.dart`): before a
-  picker opens, any earlier lost result is consumed and thrown away and a marker (`purpose:account:nonce`) is
-  written to secure storage; the pick that wrote the marker clears it, and nobody else does. At the next
-  launch the profile section accepts a lost result only if the marker names the profile photo and the same
-  signed-in account; a result whose marker names anything else is consumed and discarded. It is offered for
-  confirmation, once, and never uploaded unasked.
+- **If the phone ends the app while the picker is open, nothing is recovered.** The picker keeps **one**
+  lost result for every kind of pick, and a copy of the chosen file that finishes late can answer the
+  callback of the *next* pick of any kind, so the plugin gives no way to bind a result to the pick that
+  asked for it. The decision (round three, 1): **the profile photo never recovers a lost photo** (the
+  "use the photo you picked" offer is gone) **and refuses any result it cannot prove came from its own
+  launch.** Every pick in the app goes through `PickGuard` (`core/media/pick_guard.dart`): it makes itself
+  the pending pick in secure storage (purpose and a nonce, one serialized step in the credentials' own
+  queue that answers the marker it replaced) **before** the picker opens, and if storage refuses, or the
+  sign-in moved, the picker does not open and the member is told so (`PickBlockedException`); it consumes
+  and **deletes** any earlier lost result; and the pick is *tainted* when a lost result was found or the
+  marker it replaced was not empty (an earlier pick never ended; a sign-out leaves a bare `signed-out`
+  tombstone for the same purpose). A tainted pick, and any pick whose result arrives within 30 seconds of
+  such a finding, is refused by the profile photo: the file is deleted, the member is asked to choose
+  again. The pick that wrote a marker clears it, and nobody else does.
 - **A second tap cannot open the picker twice.** `pick` reserves the operation before its first await
   (`picking`), so the buttons are disabled at once and only the first call writes and clears the marker.
 - **No prepared file outlives its pick.** A file is deleted when another pick replaces it, when it is
@@ -125,12 +142,13 @@ to 10 MB. It is cropped to a centred square.").
 - A deleted counterparty shows initials whatever the row carries (`chatCounterpartyPhoto`); message bubbles
   carry no avatar; the header shows no avatar until the thread row is known; a blocked or closed thread
   still shows the photo; "Blocked people" shows none.
-- `AppAvatar` draws the photo with `CachedNetworkImage`, `cacheKey` = the photo's `version`, over the
-  initials. While it loads, and if it fails, the initials show. The whole avatar is one semantics node
+- `AppAvatar` draws the photo with `CachedNetworkImage` over the initials; the bytes are stored on disk by
+  the photo's `version` (`core/media/avatar_cache.dart`, round three 7 and 12). While it loads, and if it fails, the initials show. The whole avatar is one semantics node
   labelled with the person's name; the image is excluded. A refreshed payload brings a new signed address
-  for the same version, so nothing is downloaded again (tested). The image is keyed by its address too, so
-  an avatar that failed on an expired address loads again as soon as a fresh one arrives for the same
-  version (tested on the same mounted avatar).
+  for the same version, so nothing is downloaded again once the bytes are on disk (tested against a real cache
+  manager). A load is named by version **and** address, so an avatar that failed on an expired address
+  loads again as soon as a fresh one arrives, and two avatars holding different addresses for one version
+  never share a load (tested with the first request held).
 - Parsing is forgiving: a block missing `url` or `version`, or empty, is no photo and costs no card.
 - The deal screen names nobody (the server's Deal payload has no person), so it shows no photo.
 
@@ -146,9 +164,9 @@ to 10 MB. It is cropped to a centred square.").
 - **Reason text in Arabic.** The staff reason is the staff's own words in any language, so it is wrapped in
   Unicode isolates to keep a right-to-left sentence in order around it.
 - **iOS Arabic permission text.** Both Arabic prompts write the brand as "Wassla", like `app_ar.arb`.
-- **Secure storage gains one key**, the pending pick (purpose, account id and a nonce). The test that pins
-  the keys the store may write (`handover_isolation_test.dart`) lists it now, with the reason: it names no
-  code, token or person.
+- **Secure storage gains one key**, the pending pick (the purpose and a nonce, or `signed-out`). The test
+  that pins the keys the store may write (`handover_isolation_test.dart`) lists it now, with the reason: it
+  names no code, token, account or person.
 - **A latent bug found on the way, fixed:** `_PressScale` (every button's press animation) called
   `setState` when a finger that went down on a button and then scrolled the list lifted after the list had
   dropped the button.
@@ -171,28 +189,42 @@ New files, in `mobile/test/`:
   the upload surviving scrolling away and back, a failure while scrolled away, and a sign-out; a missing
   file before and after a failed upload; two picks of one name drawing their own files; discarding a failed
   replacement, removing around it, a removal that fails; the request preview sheet's avatar for a guest;
-  the recovered photo (offered, confirmed, discarded, another account's, no marker, nothing lost, the
-  marker written and cleared, a refused picker).
-- `p3b_photo_layout_test.dart` (22): 17 states (empty, active, active without an address, removed with and
+  the photo the phone lost (never offered, shown or sent; a restored identity file that answers a new
+  profile pick refused and deleted; a lost result found at the start of a pick; the suspicion window and a
+  pick believed after it; a pick that cannot be given an owner opening no picker; the marker written and
+  cleared; a refused picker).
+- `p3b_photo_layout_test.dart` (22): 19 states (empty, active, active without an address, removed with and
   without a reason, uploading, too large, unsupported, inactive, storage, offline, general, 401, file gone,
-  picker refused, recovered, failed replacement) on 360 px, 320 px, landscape and 1.6x text in English,
+  picker refused, a pick an earlier pick may have answered, a failed preparation, a pick with no owner,
+  failed replacement) on 360 px, 320 px, landscape and 1.6x text in English,
   French and Arabic: the message is on screen, every action is reachable (inside the screen and not
   covered) and nothing overflows; then 5 of them inside the real app (`ShipTripApp` on its real router, Profile tab, real
   tab shell with its Arabic labels) under the bottom navigation on Android, Android with the gesture bar,
   iPhone, 320 px and landscape, in English and Arabic:
   the end of the list is above the bar and every action of the section is reachable and above it.
-- `p3b_photo_prepare_test.dart` (13): the Dart side of the platform method with a fake channel: one `prepare`
-  call with the path, the answer used, `not_found` as a file error, every other code, a missing method, a
-  null or empty answer as an unsupported photo; the signature check for JPEG, PNG and WebP.
+- `p3b_photo_prepare_test.dart` (19): the Dart side of the platform method with a fake channel: one `prepare`
+  call with the path, the answer used, `not_found` as a file error, `unsupported` as the only refusal of the
+  picture, every other code, a missing method and a null or empty answer as a failed preparation; the
+  signature check for JPEG, PNG and WebP; and the executable specification of the Kotlin arithmetic
+  (samples, retries, the eight orientations, a 4096 x 1 strip, no side below one pixel).
 - `p3b_photo_round2_test.dart` (25), round two (below): an upload never going out under another account
   (a sign-in while the file is read, while the photo is prepared, and while the request is in flight); a
   public-profile write begun before a removal; the launch confirmation against a photo changed meanwhile; a
   file that vanishes during a failed upload; Profile, restart, KYC, restart; a double tap; and the life of
   each prepared file.
-- `p3b_avatar_test.dart` (16): initials only, cache key = version, a refreshed address asks the network for
-  nothing, loading and error fall back to initials, an expired address replaced by a fresh one on the same
-  mounted avatar, a fresh address that joined a load in flight and is tried when that load fails, one retry
-  and then initials, semantics, person row order in LTR and RTL, the top bar slot.
+- `p3b_avatar_test.dart` (17): initials only, load key = version and address, loading and error fall back to
+  initials, an expired address replaced by a fresh one on the same mounted avatar, a fresh address never
+  joined to the load of an expired one, two avatars with different addresses for one version loading
+  separately with the first request held, one retry and then initials, semantics, person row order in LTR
+  and RTL, the top bar slot.
+- `p3b_avatar_cache_test.dart` (10): the disk cache run for real (real manager, real folder, fake network):
+  the record on disk holds the version and no address (with the rewrite switched off, the record
+  holds the address), a version on disk answers any address without the network, one address is one request, a fresh
+  address is not joined to an expired one in flight, two answers leave one picture.
+- `p3b_photo_round4_test.dart` (15), round three (below): the marker queue (exchange, conditional release,
+  a stale sign-in, the sign-out tombstone, a sign-out queued behind a marker write, storage that refuses),
+  a sign-in that lands while the picker is open or the photo is prepared, a file check overtaken by a
+  sign-in, the launch confirmation after a failed write, and the two different failure messages.
 - `p3b_photos_everywhere_test.dart` (14): trip, request, Find Travelers and profile cards, a signed-out
   guest's Browse trips and requests, the person page (also Arabic at 360 px), alerts, the negotiation
   header, the passport and photo section.
@@ -209,24 +241,32 @@ states including an active one with no address, the snapshot holding none, `avat
 semantics, Arabic at 320 px); `phase8ff4_chat_test.dart` (`counterparty_photo` in the thread fixture);
 `support/fake_api.dart` (fixtures take a `photo`; `FakeResponse.raw` sends a body exactly as written; the
 adapter now reads a request body to its end, as a real one does, so a file it came from is closed;
-`FakeTokenStore` holds the pending pick).
+`FakeTokenStore` holds the pending pick and can refuse to write it; `photo_rig.dart` takes a clock for the
+suspicion window).
 
 **Tests rewritten, and why.** `phase_j4_test.dart` and `phase_j5_find_travelers_test.dart` sent
 `avatar_url` and asserted `avatarUrl`; P3A removed that key, so they now send and assert `photo`.
 `handover_isolation_test.dart` pinned the keys secure storage may hold at seven; the pending photo pick
 makes eight, and the test says why. The device-shape loop that used to sit in `p3b_profile_photo_test.dart`
-(three states) is replaced by `p3b_photo_layout_test.dart` (seventeen states, and the real Profile screen).
-No test was skipped, deleted or weakened.
+(three states) is replaced by `p3b_photo_layout_test.dart` (nineteen states, and the real Profile screen).
+In round three, `p3b_profile_photo_test.dart` "a result that is not JPEG, PNG or WebP is refused" now expects
+"We couldn't get that photo ready" and not "That file type isn't accepted": the rule changed (bytes the
+platform method wrote that are not an image are a failed preparation, and only a decoder's refusal is an
+unsupported photo, finding 11); the avatar tests that expected a refreshed address to ask the network for
+nothing, and a fresh address to join a load in flight, now state the new rule (a load is named by version and
+address; the disk cache answers by version). The recovery tests were rewritten to the rule that nothing is
+recovered (finding 1). No test was skipped, deleted or weakened.
 
-No new runtime dependency (the `flutter_image_compress` of the first second-pass is removed again). Android
-names `androidx.exifinterface:exifinterface` for its own code. Two dev dependencies, both already resolved
-through `cached_network_image`: `flutter_cache_manager` and `file`, so a test can implement the image cache.
+No new package (the `flutter_image_compress` of the first second-pass is removed again). Android names
+`androidx.exifinterface:exifinterface` for its own code. `flutter_cache_manager`, already resolved through
+`cached_network_image`, moved from dev to regular dependencies in round three because the avatar disk cache
+is built on it; `file` stays a dev dependency for the tests.
 
 ## Checks
 
 `dart format --set-exit-if-changed lib test`: nothing to change. `flutter analyze --fatal-infos`: no
-issues. `flutter test`: 1828 passed. `tools/check_ios_config.py`: passes. CI on the pull request: all ten
-jobs green. `l10n_untranslated.json` stays empty.
+issues. `flutter test`: 1860 passed. `tools/check_ios_config.py`: passes. CI on the pull request: all jobs
+green. `l10n_untranslated.json` stays empty.
 
 ## Gate screenshots
 
@@ -234,8 +274,8 @@ jobs green. `l10n_untranslated.json` stays empty.
 a throwaway golden rig (not committed) and a drawn portrait:
 
 - `profile-photo-1-empty`, `-2-uploading`, `-3-active`, `-4-removed-by-wassla`, `-5-too-large`,
-  `-6-offline`, `-7-remove-confirm`, `-8-recovered`, `-9-failed-replacement`: the Profile photo section in
-  each main state;
+  `-6-offline`, `-7-remove-confirm`, `-9-failed-replacement` (`-8-recovered` was removed in round three
+  with the screen it showed): the Profile photo section in each main state;
 - `request-preview-sheet`: the sender's avatar beside "From <name>";
 - `trip-card` (one with a photo, one with initials), `find-travelers-card` (the same), `person-page`,
   `proposal` (the negotiation header), `chat-list` (a photo row and an initials row), `chat-header`.
@@ -255,9 +295,20 @@ a throwaway golden rig (not committed) and a drawn portrait:
   4. all eight EXIF orientations, with an asymmetric picture (a letter or a face on one side), the four
      mirrored ones (2, 4, 5, 7) included: the uploaded photo reads the right way round, not mirrored;
   5. a PNG with transparency: the background is white, not black;
-  6. Android with "Don't keep activities": close the app while the camera is open, reopen Profile, and the
-     photo is offered for confirmation; then Profile, restart, identity check (selfie), restart, Profile: the
-     selfie is **not** offered.
+  6. Android with "Don't keep activities": close the app while the camera is open, reopen Profile: nothing is
+     offered; take a photo within 30 seconds and it is refused with "We couldn't be sure ..."; take one
+     later and it goes up. Then Profile, restart, identity check (selfie), restart, Profile: the selfie never
+     appears in the profile slot;
+  7. a 4096 x 1 PNG and a 1 x 4096 PNG: a 1024 x 1 and a 1 x 1024 JPEG, no crash;
+  8. an Ultra HDR JPEG and a wide-gamut (Display P3) photo on Android 14: the uploaded photo is plain sRGB;
+  9. a very large HEIC on Android 9 to 12 (the `ImageDecoder` path), and a decode that fails for memory on a
+     low-RAM phone: it retries larger and still produces a photo;
+  10. iOS 26 and the next iOS: the app launches (scene manifest and `FlutterSceneDelegate`), plugins work
+      (sign-in, push, picker), and the photo channel answers (a photo prepares);
+  11. leftover files: pick a photo, kill the app before uploading, relaunch: no `wassla-photo-*.jpg` remains
+      in the cache (Android) or temporary (iOS) folder;
+  12. the avatar disk cache on a phone: after a photo has loaded, the cache database
+      (`wassla_profile_photos`) holds the version in its `url` column and no signed address.
 - **Not tested on a device.** The rig and the widget tests stand in for the camera and the network; the
   first real check is the next phone build: take a photo, choose one, remove it, and see a second member's
   photo on a card and in chat.
@@ -322,3 +373,46 @@ the camera or library is open), so none were regenerated.
 **Could not do here.** Compile or run the Kotlin or the Swift, or build an Android or iOS binary; run a native
 test (there is no native test setup in the repository, and none is added unrun). The device checks above are
 the owner's or the next build's.
+
+## Round three
+
+Astra 6.2 rejected head `d8c3607` with 4 blockers and 9 should-fixes. All were accepted and fixed on the same
+branch (rebased on `main` at `eb1665d`, a docs-only move).
+
+| Finding | Fix | Test |
+| --- | --- | --- |
+| **1. Blocker: a late Android picker result crossing purposes** (a restored copy of an identity file could answer a new profile pick) | **Decision: the profile photo no longer recovers a lost photo at all, and refuses any result it cannot prove came from its own launch.** Reason: `image_picker_android` keeps one lost result for every picker and lets a copy worker that outlived its app complete the plugin's *current* callback; nothing in the plugin binds a result to the pick that asked, so no marker can prove a recovered file is the profile photo's. `recoverLostPick`, `confirmRecovered`, the "Use this photo" notice and their strings are gone. A pick is tainted when a lost result is found at its start or the marker it replaced was not empty, and a result that arrives tainted, or within 30 seconds of such a finding, is deleted and refused with "We couldn't be sure that photo was the one you chose" | `p3b_photo_state_test.dart` group 14 (a restored identity file answering a new profile pick is refused and deleted and never shown or sent; a lost result found at the start taints the pick; the window, then a pick is believed; nothing is offered at launch), `p3b_photo_round2_test.dart` C14 (Profile, restart, KYC, restart, Profile: the ID file never reaches the profile slot) |
+| **2. Blocker: marker durability and ordering** (a failed write was swallowed; begin, cleanup and sign-out were separate steps) | `TokenStore.exchangePendingPick` (write the marker and answer the one it replaced, in the credentials' own queue, refusing if the sign-in moved) and `releasePendingPick` (conditional). A marker that cannot be written, or whose sign-in moved, throws `PickBlockedException` **before any picker opens**; every picker call site (profile photo, identity check, ticket proof, item photo, payout cheque, dispute evidence) tells the member in a translated message (EN, FR, MSA). Sign-out, in the same queue, leaves a bare `signed-out` tombstone instead of the marker so the next pick still hears of it | `p3b_photo_round4_test.dart` group 2 (exchange and conditional release, a stale sign-in writes nothing, the tombstone, a sign-out queued behind a held marker write lands after it, storage that refuses opens no picker and reads no lost result, counted by a fake picker), group 14 "a pick that could not be given an owner opens no picker", layout scenario "the pick could not be given an owner" |
+| **3. Blocker: iOS launch with the UIScene lifecycle** | Migrated exactly as Flutter's own template and migration do (pinned Flutter 3.47.1, `ios.tmpl/Runner/AppDelegate.swift` and `lib/src/migrations/uiscene_migration.dart`; guide: https://flutter.dev/to/uiscene-migration). `AppDelegate` is `FlutterAppDelegate, FlutterImplicitEngineDelegate`; plugins and the `wassla/photo_prepare` channel are registered in `didInitializeImplicitFlutterEngine` through `engineBridge.pluginRegistry`; `Info.plist` gains `UIApplicationSceneManifest` with `FlutterSceneDelegate` (no extra Swift file, so the Xcode project is unchanged) | `tools/check_ios_config.py` now fails if the manifest, the delegate or either registration is missing (it passes). **Not run on iOS** |
+| **4. Blocker: the account-switch window** (B's tokens saved while the account provider still said A) | The credential generation is read at the press (`_Launch`: owner, generation, operation), checked after every wait, and carried to the dispatch: `SessionController.uploadPhoto` and `AuthRepository.uploadPhoto` take it as `expectedIdentity`, and `ApiClient.upload` refuses to send if it moved. A flow that finds itself no longer live deletes its file and starts over, so it is never left busy | `p3b_photo_round4_test.dart` group 4 (the generation moves while the picker is open, with the account still 42: nothing prepared, nothing sent, state reset; while the photo is prepared: the file is deleted; a pick after the credentials settled works), `p3b_photo_round2_test.dart` B |
+| **5.** Awaits on the file system were followed by state writes | `_prepare` and `_upload` re-ask `_live` after every file wait (`readHead`, `length`, `exists`, deletes) before setting state, invalidating or returning success | group 5: a failed upload whose `File.exists` is held while a sign-in lands writes no retry notice, deletes the file, sends once (confirmed to fail without the check) |
+| **6.** A failed overlapping PUT made the launch confirmation replace the server's photo with null | The session counts photo writes it **applied**, not started or finished; a failed write is not counted | group 6: a failed PUT, then a confirmation carrying photo `v7` keeps `v7`; the same for a removal notice. The earlier "newer photo stays" test still passes |
+| **7.** Two avatars with different signed addresses for one version shared a load | A load is named by version and address (`avatarCacheKey`); the disk cache loads once per address and stores by version, and drops a response whose version arrived first | `p3b_avatar_test.dart` (two mounted avatars, first request held; a fresh address not joined to an expired one), `p3b_avatar_cache_test.dart` (the real manager) |
+| **8.** Bounded decode for a large HEIF; larger-sample retries for null or out-of-memory | `ImageDecoder` samples from `onHeaderDecoded` and both decoders retry at a larger sample up to three times (`PhotoGeometry.nextSample`) | the arithmetic as an executable specification; **device check** |
+| **9.** The decoder's bitmap could carry a profile, wide gamut or a gain map | Always drawn into a fresh sRGB ARGB_8888 bitmap, with an sRGB target colour space asked of both decoders (API-guarded); that bitmap is compressed | **device check** (Ultra HDR, Display P3) |
+| **10.** A 4096 x 1 PNG gave a zero short side | `PhotoGeometry.outputSize` computes the upright size, clamped to at least one pixel a side, and the picture is drawn into exactly it | specification: 4096 x 1 is 1024 x 1, 1 x 4096 is 1 x 1024, a quarter turn included; no side below 1 or above 1024 over a grid of sizes |
+| **11.** Every platform error was "unsupported" | `unsupported` is the only refusal of the picture; anything else (memory, a write, a missing method, an empty answer, bytes that are not an image) is `PhotoPrepareFailed`, with its own message ("We couldn't get that photo ready ...", EN, FR, MSA) | `p3b_photo_prepare_test.dart` (mapping), group 11 (both messages through the screen), layout scenario |
+| **12.** `flutter_cache_manager` wrote the signed address into its on-disk record (spec 21.2) | `AvatarCacheManager` stores the picture under the version and rewrites every record so its address column holds the version; the address lives in memory for the length of a request | `p3b_avatar_cache_test.dart` reads the record that reaches the disk: no signature, no `https://`, `"url":"v1"`; with the rewrite switched off the same test fails and shows the address, so it tests the fix |
+| **13.** The preparation tests had lost their executable arithmetic and the "no marker, no offer" check | Both restored. Gradle cannot run a Kotlin unit test here (no JDK 17, no Android SDK), so the arithmetic is mirrored in Dart, named as such in the test file; the no-marker check is now "no marker, no picker" with a counting fake | `p3b_photo_prepare_test.dart` last group; group 14 and `p3b_photo_round4_test.dart` group 2 |
+| Also: stale prepared files | Both platforms delete the `wassla-photo-` files of an earlier run when the engine starts (Android on the same single thread as `prepare`, so before any photo of the run; iOS older than the call) | **device check** |
+
+Two things found while testing: a marker is written *before* the lost result is consumed, so a test that
+waits for the marker must also wait for the picker to open; and a test double for a held secure-storage write
+must hold only the first write, since a sign-out writes the same key.
+
+Screenshots: the "recovered" screen is gone, so `en-` and `ar-profile-photo-8-recovered.png` were deleted.
+The three new notices (a refused pick, a failed preparation, a pick with no owner) are the same notice
+component as "too large", covered by the layout matrix (three more scenarios on every phone shape and
+language); no new screenshot was rendered.
+
+**Could not fully fix, and why.**
+
+- **Finding 1 is a refusal, not a proof.** The plugin cannot bind a result to its pick, so a late copy that
+  answers a profile pick with no stale marker, no lost result and no sign-out before it cannot be told from a
+  real answer. The window and the taint cover the cases the phone can produce (a pick open when the app was
+  ended, a lost result, a sign-out), and recovery is gone, but no code here can close the case entirely; the
+  only complete fix is a picker that returns the pick's own identity (a custom picker), which is not built.
+- **Findings 8, 9, 10 and 13 (Kotlin) and 3 (Swift)** have never been compiled or run: no JDK 17, Android SDK,
+  Xcode or Swift on the workstation, the pull-request checks build neither app, and Gradle cannot run a
+  Kotlin test here. The Dart specification proves the arithmetic, not that the Kotlin matches it. The device
+  checks 6 to 12 above are what a build must confirm.

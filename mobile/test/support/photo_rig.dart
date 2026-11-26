@@ -138,6 +138,7 @@ class PhotoRig {
     this.preparer,
     this.imagePicker,
     this.tokens,
+    this.clock,
     Map<String, dynamic>? photo,
   }) : _photo = photo;
 
@@ -149,6 +150,10 @@ class PhotoRig {
   /// have kept. A fresh one when null.
   final FakeImagePicker? imagePicker;
   final FakeTokenStore? tokens;
+
+  /// The time the pick guard measures its suspicion window by; the real clock
+  /// when null.
+  final DateTime Function()? clock;
   final Map<String, dynamic>? _photo;
 
   late final ProviderContainer container;
@@ -174,6 +179,8 @@ class PhotoRig {
           preparer ?? preparerWriting(jpegBytes),
         ),
         imagePickerProvider.overrideWithValue(imagePicker ?? FakeImagePicker()),
+        if (clock != null)
+          pickGuardProvider.overrideWith((ref) => PickGuard(ref, now: clock)),
       ],
     );
     addTearDown(container.dispose);

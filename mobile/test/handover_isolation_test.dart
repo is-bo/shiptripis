@@ -131,15 +131,15 @@ void main() {
           '_kLocale',
           '_kInstallationId',
           '_kPendingPushToken',
-          // Which pick had the photo picker open (purpose, account id, nonce), so
-          // a photo recovered after the phone ended the app is offered to that
-          // purpose and that account only. It names no code, token or person.
+          // Which pick had the photo picker open (purpose and a nonce), so the
+          // next pick knows an earlier one may still answer. It names no code,
+          // token, account or person.
           '_kPendingPick',
         },
         reason:
             'secure storage may hold session/push tokens, the account’s '
             'own profile snapshot, a random install ID, a role, a locale and '
-            'the purpose and account id of a photo pick in progress '
+            'the purpose of a photo pick in progress '
             '— never code material, a guest token or recipient details',
       );
     });

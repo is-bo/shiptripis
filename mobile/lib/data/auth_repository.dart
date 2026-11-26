@@ -141,20 +141,22 @@ class AuthRepository {
   /// never repeats this on its own: every retry is the member pressing the
   /// button again. The content type is stated rather than inferred, because a
   /// gallery can hand back a path with no extension at all.
+  ///
+  /// [expectedIdentity] is the credential generation the caller read when the
+  /// member pressed the button, before the file was prepared: a member who
+  /// signs in meanwhile must not send this file under their own token.
   Future<OwnPhoto> uploadPhoto({
     required String filePath,
     required String fileName,
     required String contentType,
+    required int expectedIdentity,
     void Function(int sent, int total)? onProgress,
     CancelToken? cancelToken,
   }) async {
-    // Before any asynchronous work: reading the file takes time, and a member
-    // who signs in meanwhile must not send this file under their own token.
-    final identity = _api.identityGeneration;
     final body = await _api.upload(
       '/api/me/photo',
       method: 'PUT',
-      expectedIdentity: identity,
+      expectedIdentity: expectedIdentity,
       form: FormData.fromMap({
         'photo': await MultipartFile.fromFile(
           filePath,

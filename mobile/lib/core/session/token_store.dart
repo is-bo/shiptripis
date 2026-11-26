@@ -62,6 +62,7 @@ class TokenStore {
   static const _kInstallationId = 'push.installation_id';
   static const _kPendingPushToken = 'push.pending_token';
   static const _kPendingPick = 'media.pending_pick';
+  static const _kPickClosedBySignOut = 'signed-out';
 
   /// The last profile the server confirmed for the stored credentials.
   ///
@@ -187,17 +188,42 @@ class TokenStore {
       ? _storage.delete(key: _kPendingPushToken)
       : _storage.write(key: _kPendingPushToken, value: token);
 
-  /// Which pick had the camera or photo library open, and for whom: the
-  /// purpose, the account and a nonce, written before the picker opens and
-  /// cleared by the same pick when it answers. If the phone ends the app
-  /// meanwhile it is still here at the next launch, which is how a recovered
-  /// photo is known to belong to one purpose and one account (see
-  /// `PickGuard`).
-  Future<String?> readPendingPick() => _storage.read(key: _kPendingPick);
+  /// Which pick had the camera or photo library open: the purpose, the account
+  /// and a nonce, written before the picker opens and cleared by the same pick
+  /// when it answers. If the phone ends the app meanwhile it is still here at
+  /// the next launch, which tells the next pick that a result of the earlier
+  /// one may still arrive (see `PickGuard`).
+  ///
+  /// Every change goes through the same queue as the credentials, so a pick
+  /// beginning, another pick ending and a sign-out never interleave.
+  Future<String?> readPendingPick() => _readCredential(_kPendingPick);
 
-  Future<void> writePendingPick(String? marker) => marker == null
-      ? _storage.delete(key: _kPendingPick)
-      : _storage.write(key: _kPendingPick, value: marker);
+  /// Makes [marker] the pending pick and answers the one it replaced (null when
+  /// there was none), in one step. Nothing is written, and [applied] is false,
+  /// when a sign-in or sign-out happened since [expectedIdentityGeneration]: a
+  /// pick that began for one member never leaves its marker in another's
+  /// store. Throws when storage refuses; the caller must then not open a
+  /// picker.
+  Future<({bool applied, String? previous})> exchangePendingPick(
+    String marker, {
+    required int expectedIdentityGeneration,
+  }) => _serializeCredentialWrite(() async {
+    if (_identityGeneration != expectedIdentityGeneration) {
+      return (applied: false, previous: null);
+    }
+    final previous = await _storage.read(key: _kPendingPick);
+    await _storage.write(key: _kPendingPick, value: marker);
+    return (applied: true, previous: previous);
+  });
+
+  /// Clears the pending pick, but only while it is still [marker]: a pick that
+  /// began since owns the new one.
+  Future<void> releasePendingPick(String marker) =>
+      _serializeCredentialWrite(() async {
+        if (await _storage.read(key: _kPendingPick) == marker) {
+          await _storage.delete(key: _kPendingPick);
+        }
+      });
 
   /// Removes credentials and every user-scoped preference. Called on sign-out
   /// and whenever refresh fails terminally.
@@ -219,7 +245,12 @@ class TokenStore {
     await _storage.delete(key: _kRefresh);
     await _storage.delete(key: _kAccountSnapshot);
     await _storage.delete(key: _kRoleContext);
-    await _storage.delete(key: _kPendingPick);
+    // A pick still open at sign-out may yet answer, for nobody: its marker
+    // becomes a bare "something was open" so the next pick still hears of it,
+    // and names no account.
+    if (await _storage.read(key: _kPendingPick) != null) {
+      await _storage.write(key: _kPendingPick, value: _kPickClosedBySignOut);
+    }
     await purgeLegacyArtifacts();
   }
 

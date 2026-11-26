@@ -2205,11 +2205,16 @@ class LEn extends L {
       'We couldn\'t read that photo. Choose it again.';
 
   @override
-  String get profilePhotoRecovered =>
-      'Your phone closed Wassla while you were choosing a photo. Use the photo you picked?';
+  String get photoPickBlocked =>
+      'We couldn\'t open your camera or photos safely just now. Try again in a moment.';
 
   @override
-  String get profilePhotoUse => 'Use this photo';
+  String get profilePhotoUncertain =>
+      'We couldn\'t be sure that photo was the one you chose, so it wasn\'t used. Choose it again.';
+
+  @override
+  String get profilePhotoPrepareFailed =>
+      'We couldn\'t get that photo ready. Try again, or choose a different photo.';
 
   @override
   String get profilePhotoDiscard => 'Discard this photo';

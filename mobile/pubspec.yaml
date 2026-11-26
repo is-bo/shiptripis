@@ -33,6 +33,9 @@ dependencies:
   # Media
   image_picker: ^1.1.2
   cached_network_image: ^3.4.1
+  # The disk cache behind profile photos (`core/media/avatar_cache.dart`) is
+  # built on the manager `cached_network_image` already drives.
+  flutter_cache_manager: ^3.4.1
 
   # Maps. flutter_map needs no API key, which keeps V1 buildable and testable
   # before a production map provider is contracted. It sits behind
@@ -71,10 +74,8 @@ dev_dependencies:
   flutter_lints: ^6.0.0
 
   # A test stands in for the image cache that `cached_network_image` drives
-  # (profile photos), because a test runner has no application directory. Both
-  # are already resolved through it; naming them here is what lets a test
-  # import them.
-  flutter_cache_manager: ^3.4.1
+  # (profile photos), because a test runner has no application directory.
+  # Already resolved through it; naming it here is what lets a test import it.
   file: ^7.0.1
 
 flutter:

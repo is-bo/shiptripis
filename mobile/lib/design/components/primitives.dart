@@ -8,6 +8,7 @@ library;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/media/avatar_cache.dart';
 import '../../domain/person_photo.dart';
 import '../tokens.dart';
 import 'images.dart';
@@ -715,14 +716,14 @@ class AppAvatar extends StatelessWidget {
 /// The picture over an avatar's initials.
 ///
 /// Keyed by its address: an image that failed on an expired signed address is
-/// loaded again as soon as a fresh address arrives for the same version, and
-/// the bytes stay cached by version, so a working photo is not fetched twice.
+/// loaded again as soon as a fresh address arrives for the same version. A load
+/// is named by the version and the address ([avatarCacheKey]), so two avatars
+/// that hold different addresses for one version never share a load and an
+/// expired address cannot fail a fresh one. The bytes are stored by version
+/// (`AvatarCacheManager`), so a working photo is not fetched twice.
 ///
-/// One case needs more. Two addresses for one version are the same image to
-/// the image cache, so a fresh address that arrives while the old address is
-/// still loading **joins** that load; if it then fails (the old address had
-/// expired) the fresh one is never tried. So a failed load is tried once more,
-/// which starts a load of its own with the address the avatar holds now. A
+/// A failed load is still tried once more, with the address the avatar holds
+/// now, in case that address was replaced while the load was on its way. A
 /// photo that cannot be loaded at all costs one extra request, then the
 /// initials stay.
 class _AvatarPhoto extends StatefulWidget {
@@ -757,7 +758,7 @@ class _AvatarPhotoState extends State<_AvatarPhoto> {
       PaintingBinding.instance.imageCache.evict(
         CachedNetworkImageProvider(
           widget.photo.url,
-          cacheKey: widget.photo.version,
+          cacheKey: avatarCacheKey(widget.photo),
           maxWidth: memCacheWidth,
         ),
       );
@@ -773,7 +774,7 @@ class _AvatarPhotoState extends State<_AvatarPhoto> {
       child: CachedNetworkImage(
         key: ValueKey('${photo.url}#$_attempt'),
         imageUrl: photo.url,
-        cacheKey: photo.version,
+        cacheKey: avatarCacheKey(photo),
         width: widget.size,
         height: widget.size,
         fit: BoxFit.cover,

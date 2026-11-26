@@ -845,7 +845,15 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
 
   Future<void> _pickPhoto(ImageSource source) async {
     final l = L.of(context);
-    final picked = await ref.read(itemPhotoPickerProvider)(source);
+    final XFile? picked;
+    try {
+      picked = await ref.read(itemPhotoPickerProvider)(source);
+    } on PickBlockedException {
+      if (mounted) {
+        AppSnack.failure(context, null, fallback: l.photoPickBlocked);
+      }
+      return;
+    }
     if (picked == null || !mounted) return;
 
     final bytes = await File(picked.path).length();

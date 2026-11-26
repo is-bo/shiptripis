@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +7,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'app/app.dart';
 import 'core/format/locale_formats.dart';
 import 'core/env/app_config.dart';
+import 'core/media/avatar_cache.dart';
 import 'core/push/push_messaging.dart';
 
 Future<void> main() async {
@@ -26,6 +28,10 @@ Future<void> main() async {
       systemNavigationBarDividerColor: Colors.transparent,
     ),
   );
+
+  // Profile photos are cached by version, with no signed address on disk
+  // (core/media/avatar_cache.dart). Set before the first image is drawn.
+  CachedNetworkImageProvider.defaultCacheManager = AvatarCacheManager();
 
   // Month names and number patterns for fr and ar_DZ. Must land before the
   // first DateFormat call, so it is awaited rather than fired and forgotten.

@@ -35,6 +35,8 @@ class MainActivity : FlutterActivity() {
      * JPEG of at most 1024 px with no metadata (see [PhotoPreparer]).
      */
     private fun configurePhotoPrepare(flutterEngine: FlutterEngine) {
+        // First on the single thread, so before any photo of this run is prepared.
+        photoExecutor.execute { PhotoPreparer(cacheDir).removeLeftovers() }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "wassla/photo_prepare")
             .setMethodCallHandler { call, result ->
                 if (call.method != "prepare") {

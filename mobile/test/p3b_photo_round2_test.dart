@@ -28,6 +28,7 @@ import 'package:shiptrip/app/profile_photo_state.dart';
 import 'package:shiptrip/core/api/api_exception.dart';
 import 'package:shiptrip/core/media/pick_guard.dart';
 import 'package:shiptrip/core/session/session.dart';
+import 'package:shiptrip/design/components/primitives.dart' show InfoNotice;
 import 'package:shiptrip/domain/account.dart';
 
 import 'support/fake_api.dart';
@@ -76,6 +77,7 @@ void main() {
           filePath: file,
           fileName: 'photo.jpg',
           contentType: 'image/jpeg',
+          expectedIdentity: rig.tokenStore.identityGeneration,
         );
         // The file is being read; another member's sign-in lands now.
         rig.tokenStore.invalidateIdentity();
@@ -327,6 +329,7 @@ void main() {
           filePath: file,
           fileName: 'photo.jpg',
           contentType: 'image/jpeg',
+          expectedIdentity: rig.tokenStore.identityGeneration,
         );
         // The confirmation lands last, and says there is no photo.
         held.complete(
@@ -443,7 +446,7 @@ void main() {
       }
 
       testWidgets(
-        'Profile, restart, KYC, restart: the ID photo is not offered',
+        'Profile, restart, KYC, restart: the ID photo never reaches Profile',
         (tester) async {
           final tokens = FakeTokenStore();
           final picker = FakeImagePicker();
@@ -459,9 +462,9 @@ void main() {
           final first = await launch(tester, tokens, picker);
           await tester.runAsync(() async {
             unawaited(_photo(first).pick(ImageSource.gallery));
-            await _until(() => tokens.pendingPick != null);
+            await _until(() => picker.lost != null);
           });
-          expect(tokens.pendingPick, startsWith('profilePhoto:42:'));
+          expect(tokens.pendingPick, startsWith('profilePhoto:'));
           expect(picker.lost, isNotNull);
 
           // Launch 2: before Profile is opened, the identity check opens its
@@ -484,37 +487,54 @@ void main() {
               () =>
                   tokens.pendingPick?.startsWith('identityDocument:') ?? false,
             );
+            // The picker is open once it has saved the ID photo.
+            await _until(() => picker.lost?.path == idFile);
           });
           expect(
-            picker.lost?.path,
-            idFile,
-            reason:
-                'the profile photo was consumed first; this is the ID photo',
+            File(profileFile).existsSync(),
+            isFalse,
+            reason: 'the profile photo was consumed and deleted first',
           );
+          expect(picker.lost?.path, idFile);
 
-          // Launch 3: Profile opens. The lost result is the ID photo's: it is
-          // discarded, and nothing is offered as a public photo.
+          // Launch 3: Profile opens. Nothing is offered: the profile photo does
+          // not recover a lost result at all.
           final backend = FakeBackend()
             ..on('PUT', _put, FakeResponse(200, photoActive()));
-          final third = PhotoRig(backend, tokens: tokens, imagePicker: picker);
+          final third = PhotoRig(
+            backend,
+            tokens: tokens,
+            imagePicker: picker,
+            picker: (_) async => XFile(idFile),
+          );
           await third.pump(tester);
           await tester.runAsync(
             () => Future<void>.delayed(const Duration(milliseconds: 120)),
           );
           await tester.pump();
+          expect(find.byType(InfoNotice), findsNothing);
+          expect(third.container.read(profilePhotoProvider).picked, isNull);
+          expect(backend.to('PUT', _put), isEmpty);
 
-          expect(
-            find.text(third.l(tester).profilePhotoRecovered),
-            findsNothing,
+          // The member now picks a profile photo, and the ID file's late copy
+          // is what answers: it is refused and deleted, never kept or sent.
+          await tester.tap(photoButton(third.l(tester).profilePhotoChoose));
+          await untilReached(
+            tester,
+            () => find
+                .text(third.l(tester).profilePhotoUncertain)
+                .evaluate()
+                .isNotEmpty,
           );
           expect(backend.to('PUT', _put), isEmpty);
-          expect(picker.lost, isNull, reason: 'consumed, never offered later');
-          expect(tokens.pendingPick, isNull);
+          expect(File(idFile).existsSync(), isFalse);
           expect(third.container.read(profilePhotoProvider).picked, isNull);
+          expect(picker.lost, isNull, reason: 'consumed, deleted');
+          expect(tokens.pendingPick, isNull);
         },
       );
 
-      testWidgets('Profile, restart, Profile: the photo is offered', (
+      testWidgets('Profile, restart, Profile: the photo is not offered', (
         tester,
       ) async {
         final tokens = FakeTokenStore();
@@ -527,22 +547,20 @@ void main() {
         final first = await launch(tester, tokens, picker);
         await tester.runAsync(() async {
           unawaited(_photo(first).pick(ImageSource.gallery));
-          await _until(() => tokens.pendingPick != null);
+          await _until(() => picker.lost != null);
         });
 
-        final second = PhotoRig(
-          FakeBackend(),
-          tokens: tokens,
-          imagePicker: picker,
-        );
+        final backend = FakeBackend();
+        final second = PhotoRig(backend, tokens: tokens, imagePicker: picker);
         await second.pump(tester);
-        final l = second.l(tester);
-        await untilReached(
-          tester,
-          () => find.text(l.profilePhotoRecovered).evaluate().isNotEmpty,
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 120)),
         );
+        await tester.pump();
 
-        expect(second.container.read(profilePhotoProvider).picked, isNotNull);
+        expect(find.byType(InfoNotice), findsNothing);
+        expect(second.container.read(profilePhotoProvider).picked, isNull);
+        expect(backend.to('PUT', _put), isEmpty);
       });
 
       testWidgets(
@@ -643,7 +661,7 @@ void main() {
           expect(picker.picks, [ImageSource.gallery], reason: 'opened once');
           expect(
             tokens.pendingPick,
-            startsWith('profilePhoto:42:'),
+            startsWith('profilePhoto:'),
             reason: 'the second tap did not clear the first one\'s marker',
           );
           expect(rig.container.read(profilePhotoProvider).picking, isTrue);

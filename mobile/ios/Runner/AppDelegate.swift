@@ -3,20 +3,27 @@ import ImageIO
 import UIKit
 
 @main
-@objc class AppDelegate: FlutterAppDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    GeneratedPluginRegistrant.register(with: self)
-    registerPhotoPrepare()
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  /// The UIScene lifecycle (Info.plist `UIApplicationSceneManifest`, see
+  /// https://flutter.dev/to/uiscene-migration) creates the engine after launch,
+  /// so plugins and the photo channel are registered when it is ready.
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    registerPhotoPrepare(engineBridge.pluginRegistry)
   }
 
   /// `wassla/photo_prepare`: `prepare(path)` answers the path of a new upright
   /// JPEG of at most 1024 px with no metadata (see `PhotoPrepare`).
-  private func registerPhotoPrepare() {
-    guard let registrar = registrar(forPlugin: "WasslaPhotoPrepare") else { return }
+  private func registerPhotoPrepare(_ registry: FlutterPluginRegistry) {
+    guard let registrar = registry.registrar(forPlugin: "WasslaPhotoPrepare") else { return }
+    DispatchQueue.global(qos: .utility).async { PhotoPrepare.removeLeftovers() }
     let channel = FlutterMethodChannel(
       name: "wassla/photo_prepare",
       binaryMessenger: registrar.messenger()
@@ -81,6 +88,27 @@ enum PhotoPrepareError: Error {
 enum PhotoPrepare {
   static let maxEdge = 1024
   static let quality = 0.88
+  static let prefix = "wassla-photo-"
+
+  /// Deletes prepared photos an earlier run left behind. Called once, when the
+  /// engine starts: a new engine owns no prepared file, so every one that is
+  /// still here belongs to a run that ended. Only files older than the call
+  /// go, so one made by a photo prepared meanwhile is never taken.
+  static func removeLeftovers() {
+    let cutoff = Date()
+    let directory = FileManager.default.temporaryDirectory
+    guard
+      let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path)
+    else { return }
+    for name in names where name.hasPrefix(prefix) && name.hasSuffix(".jpg") {
+      let url = directory.appendingPathComponent(name)
+      let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+      guard let modified = attributes?[.modificationDate] as? Date, modified < cutoff else {
+        continue
+      }
+      try? FileManager.default.removeItem(at: url)
+    }
+  }
 
   static func prepare(path: String) throws -> String {
     guard FileManager.default.fileExists(atPath: path) else {
@@ -117,7 +145,7 @@ enum PhotoPrepare {
     let image = try flattened(thumbnail)
 
     let target = FileManager.default.temporaryDirectory
-      .appendingPathComponent("wassla-photo-\(UUID().uuidString).jpg")
+      .appendingPathComponent("\(prefix)\(UUID().uuidString).jpg")
     guard
       let destination = CGImageDestinationCreateWithURL(
         target as CFURL, "public.jpeg" as CFString, 1, nil)

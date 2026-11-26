@@ -14,12 +14,17 @@
 /// picture's shape:
 ///
 /// * Android (`PhotoPrepare.kt`) reads the bounds without decoding, picks a
-///   power-of-two sample that keeps the decode near 6 megapixels, applies the
-///   orientation and the scale in one matrix, and writes the JPEG; HEIF that
-///   `BitmapFactory` cannot read goes through `ImageDecoder` on API 28 and up.
+///   power-of-two sample that keeps the decode near 6 megapixels (a larger one
+///   if a decode fails for memory), and draws the upright, scaled picture into a
+///   new sRGB ARGB_8888 bitmap whose size is computed (never below one pixel a
+///   side) before it writes the JPEG; HEIF that `BitmapFactory` cannot read goes
+///   through `ImageDecoder` on API 28 and up, sampled the same way.
 /// * iOS (`AppDelegate.swift`) asks ImageIO for a 1024 px thumbnail with the
 ///   transform applied, which decodes at the reduced size, handles HEIC and
 ///   orientation in one step, and writes the JPEG.
+///
+/// Both sides delete the prepared files an earlier run left behind (the
+/// `wassla-photo-` prefix) when the engine starts, since a new engine owns none.
 ///
 /// Dart only calls it, maps its failures, and checks the answer.
 library;
@@ -31,7 +36,7 @@ import 'package:flutter/services.dart';
 /// The platform method that prepares a profile photo.
 const photoPrepareChannel = MethodChannel('wassla/photo_prepare');
 
-/// The native decoder cannot read this file.
+/// The native decoder refused this file: it is not a picture it can read.
 class UnsupportedPhoto implements Exception {
   const UnsupportedPhoto([this.cause]);
 
@@ -41,12 +46,25 @@ class UnsupportedPhoto implements Exception {
   String toString() => 'UnsupportedPhoto($cause)';
 }
 
+/// The photo could not be prepared for a reason that is not the picture's: the
+/// phone ran out of memory, the platform method was missing, or it answered
+/// with nothing. A different picture, or the same one again, may work.
+class PhotoPrepareFailed implements Exception {
+  const PhotoPrepareFailed([this.cause]);
+
+  final Object? cause;
+
+  @override
+  String toString() => 'PhotoPrepareFailed($cause)';
+}
+
 /// Asks the platform for an upright JPEG of about 1024 px made from
 /// [sourcePath], and returns its path.
 ///
-/// Throws [FileSystemException] when the source is gone (`not_found`) and
-/// [UnsupportedPhoto] for anything else the platform reports: a picture it
-/// cannot decode, or one it ran out of memory on.
+/// Throws [FileSystemException] when the source is gone (`not_found`),
+/// [UnsupportedPhoto] only when a decoder refused the picture (`unsupported`),
+/// and [PhotoPrepareFailed] for everything else the platform reports (memory, a
+/// write that failed, a missing method, an empty answer).
 Future<String> prepareProfilePhoto(
   String sourcePath, {
   MethodChannel channel = photoPrepareChannel,
@@ -60,11 +78,12 @@ Future<String> prepareProfilePhoto(
     if (error.code == 'not_found') {
       throw FileSystemException('The picked photo is gone', sourcePath);
     }
-    throw UnsupportedPhoto(error);
+    if (error.code == 'unsupported') throw UnsupportedPhoto(error);
+    throw PhotoPrepareFailed(error);
   } on MissingPluginException catch (error) {
-    throw UnsupportedPhoto(error);
+    throw PhotoPrepareFailed(error);
   }
-  if (prepared == null || prepared.isEmpty) throw const UnsupportedPhoto();
+  if (prepared == null || prepared.isEmpty) throw const PhotoPrepareFailed();
   return prepared;
 }
 

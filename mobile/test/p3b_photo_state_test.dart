@@ -16,6 +16,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shiptrip/app/discovery_state.dart';
 import 'package:shiptrip/app/profile_photo_state.dart';
+import 'package:shiptrip/core/media/pick_guard.dart';
 import 'package:shiptrip/core/session/session.dart';
 import 'package:shiptrip/design/components/primitives.dart';
 import 'package:shiptrip/design/components/sheets.dart' show AppSheet;
@@ -351,6 +352,7 @@ void main() {
           filePath: file,
           fileName: 'photo.jpg',
           contentType: 'image/jpeg',
+          expectedIdentity: rig.tokenStore.identityGeneration,
         );
         // The older answer arrives last: it says v1.
         gate.complete(FakeResponse(200, meFixture(photo: photoActive('v1'))));
@@ -833,106 +835,142 @@ void main() {
 
   // ---------------------------------------------------------------------------
   group('14. the phone ended the app while the picker was open', () {
-    const mine = 'profilePhoto:42:abc';
+    // The profile photo never recovers a photo the phone lost: the picker keeps
+    // one lost result for every kind of pick, so a recovered file could be an
+    // identity document. A pick that may have been answered by another one is
+    // refused instead.
+    const stale = 'identityDocument:abc';
+
+    testWidgets('a photo the phone lost is never offered, shown or sent', (
+      tester,
+    ) async {
+      final backend = FakeBackend();
+      final picker = FakeImagePicker(lost: XFile(sourceFile(name: 'lost.jpg')));
+      final tokens = FakeTokenStore()..pendingPick = 'profilePhoto:abc';
+      final rig = PhotoRig(backend, tokens: tokens, imagePicker: picker);
+      await rig.pump(tester);
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 80)),
+      );
+      await tester.pump();
+
+      expect(_notice, findsNothing);
+      expect(_previewPath(tester), isNull);
+      expect(backend.to('PUT', _put), isEmpty);
+      expect(picker.lostReads, 0, reason: 'nothing here asks for it');
+      expect(photoButton(rig.l(tester).profilePhotoTake), findsOneWidget);
+    });
 
     testWidgets(
-      'the photo is offered to the same account, never sent unasked',
+      'a restored identity file that answers a new profile pick is refused',
       (tester) async {
-        final backend = FakeBackend()
-          ..on('PUT', _put, FakeResponse(200, photoActive('v5')));
-        final tokens = FakeTokenStore()..pendingPick = mine;
+        // The phone ended the app while the identity check's picker was open;
+        // its copy of the file finishes late and answers the next pick.
+        final idFile = sourceFile(name: 'id-document.jpg');
+        final backend = FakeBackend();
+        final tokens = FakeTokenStore()..pendingPick = stale;
         final rig = PhotoRig(
           backend,
           tokens: tokens,
-          imagePicker: FakeImagePicker(
-            lost: XFile(sourceFile(name: 'lost.jpg')),
-          ),
+          picker: (_) async => XFile(idFile),
         );
         await rig.pump(tester);
         final l = rig.l(tester);
-        await untilReached(
-          tester,
-          () => find.text(l.profilePhotoRecovered).evaluate().isNotEmpty,
-        );
 
-        expect(backend.to('PUT', _put), isEmpty, reason: 'asked first');
-        expect(photoButton(l.profilePhotoUse), findsOneWidget);
-        expect(photoButton(l.profilePhotoDiscard), findsOneWidget);
-        expect(_previewPath(tester), isNotNull, reason: 'the member sees it');
-        expect(tokens.pendingPick, isNull, reason: 'the marker is spent');
+        await tester.tap(photoButton(l.profilePhotoChoose));
+        await _untilNotice(tester);
 
-        await tester.tap(photoButton(l.profilePhotoUse));
-        await untilReached(tester, () => rig.account.photo != null);
-
-        expect(backend.to('PUT', _put), hasLength(1));
-        expect(rig.account.photo?.version, 'v5');
+        expect(find.text(l.profilePhotoUncertain), findsOneWidget);
+        expect(backend.to('PUT', _put), isEmpty, reason: 'never sent');
+        expect(_previewPath(tester), isNull, reason: 'never shown');
+        expect(File(idFile).existsSync(), isFalse, reason: 'never kept');
+        expect(tokens.pendingPick, isNull, reason: 'the pick still ended');
       },
     );
 
-    testWidgets('the member may discard it', (tester) async {
+    testWidgets('a lost result found when a pick begins taints that pick', (
+      tester,
+    ) async {
+      final lostFile = sourceFile(name: 'lost.jpg');
+      final answer = sourceFile(name: 'answer.jpg');
+      final picker = FakeImagePicker(lost: XFile(lostFile))
+        ..onPick = (_) async => XFile(answer);
       final backend = FakeBackend();
-      final tokens = FakeTokenStore()..pendingPick = mine;
+      final rig = PhotoRig(backend, imagePicker: picker);
+      await rig.pump(tester);
+      final l = rig.l(tester);
+
+      await tester.tap(photoButton(l.profilePhotoChoose));
+      await _untilNotice(tester);
+
+      expect(picker.lostReads, 1);
+      expect(File(lostFile).existsSync(), isFalse, reason: 'consumed, deleted');
+      expect(File(answer).existsSync(), isFalse);
+      expect(find.text(l.profilePhotoUncertain), findsOneWidget);
+      expect(backend.to('PUT', _put), isEmpty);
+    });
+
+    testWidgets('the suspicion lasts a window, then a pick is believed', (
+      tester,
+    ) async {
+      var now = DateTime(2026, 11, 26, 12);
+      final first = sourceFile(name: 'first.jpg');
+      final second = sourceFile(name: 'second.jpg');
+      final third = sourceFile(name: 'third.jpg');
+      final answers = [first, second, third];
+      final backend = FakeBackend()
+        ..on('PUT', _put, FakeResponse(200, photoActive('v9')));
+      final tokens = FakeTokenStore()..pendingPick = stale;
       final rig = PhotoRig(
         backend,
         tokens: tokens,
-        imagePicker: FakeImagePicker(lost: XFile(sourceFile(name: 'lost.jpg'))),
+        clock: () => now,
+        picker: (_) async => XFile(answers.removeAt(0)),
       );
       await rig.pump(tester);
       final l = rig.l(tester);
-      await untilReached(
-        tester,
-        () => find.text(l.profilePhotoRecovered).evaluate().isNotEmpty,
-      );
 
-      await tester.tap(photoButton(l.profilePhotoDiscard));
-      await untilReached(
-        tester,
-        () => find.text(l.profilePhotoRecovered).evaluate().isEmpty,
-      );
+      Future<void> pickAndSettle() async {
+        await tester.tap(photoButton(l.profilePhotoChoose));
+        await untilReached(
+          tester,
+          () =>
+              find.text(l.profilePhotoUncertain).evaluate().isNotEmpty ||
+              backend.to('PUT', _put).isNotEmpty,
+        );
+      }
 
-      expect(backend.to('PUT', _put), isEmpty);
-      expect(photoButton(l.profilePhotoTake), findsOneWidget);
+      await pickAndSettle();
+      expect(backend.to('PUT', _put), isEmpty, reason: 'the stale marker');
+
+      now = now.add(const Duration(seconds: 10));
+      await pickAndSettle();
+      expect(backend.to('PUT', _put), isEmpty, reason: 'still in the window');
+      expect(File(second).existsSync(), isFalse);
+
+      now = now.add(PickGuard.suspectWindow);
+      await pickAndSettle();
+      await untilReached(tester, () => rig.account.photo != null);
+      expect(backend.to('PUT', _put), hasLength(1), reason: 'after it');
+      expect(rig.account.photo?.version, 'v9');
     });
 
-    testWidgets('another account\'s pick is not offered to this one', (
+    testWidgets('a pick that could not be given an owner opens no picker', (
       tester,
     ) async {
-      final picker = FakeImagePicker(lost: XFile(sourceFile()));
-      final tokens = FakeTokenStore()..pendingPick = 'profilePhoto:7:abc';
+      final picker = FakeImagePicker();
+      final tokens = FakeTokenStore()..pendingPickWritesFail = true;
       final rig = PhotoRig(FakeBackend(), tokens: tokens, imagePicker: picker);
       await rig.pump(tester);
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 80)),
-      );
-      await tester.pump();
+      final l = rig.l(tester);
 
-      expect(find.text(rig.l(tester).profilePhotoRecovered), findsNothing);
-      expect(picker.lost, isNull, reason: 'consumed, so never offered later');
-      expect(tokens.pendingPick, isNull);
-    });
+      await tester.tap(photoButton(l.profilePhotoChoose));
+      await _untilNotice(tester);
 
-    testWidgets('no marker, no offer', (tester) async {
-      final picker = FakeImagePicker(lost: XFile(sourceFile()));
-      final rig = PhotoRig(FakeBackend(), imagePicker: picker);
-      await rig.pump(tester);
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 80)),
-      );
-
-      expect(find.text(rig.l(tester).profilePhotoRecovered), findsNothing);
-    });
-
-    testWidgets('a marker with nothing lost offers nothing', (tester) async {
-      final tokens = FakeTokenStore()..pendingPick = mine;
-      final rig = PhotoRig(FakeBackend(), tokens: tokens);
-      await rig.pump(tester);
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 80)),
-      );
-      await tester.pump();
-
-      expect(find.text(rig.l(tester).profilePhotoRecovered), findsNothing);
-      expect(tokens.pendingPick, isNull);
+      expect(picker.picks, isEmpty, reason: 'no marker, no picker');
+      expect(picker.lostReads, 0);
+      expect(find.text(l.photoPickBlocked), findsOneWidget);
+      expect(photoButtonEnabled(tester, l.profilePhotoChoose), isTrue);
     });
 
     testWidgets(
@@ -955,7 +993,7 @@ void main() {
         await tester.tap(photoButton(rig.l(tester).profilePhotoChoose));
         await untilReached(tester, () => rig.account.photo != null);
 
-        expect(whileOpen, startsWith('profilePhoto:42:'));
+        expect(whileOpen, startsWith('profilePhoto:'));
         expect(tokens.pendingPick, isNull);
       },
     );

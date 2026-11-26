@@ -2205,11 +2205,16 @@ class LAr extends L {
       'تعذّرت قراءة هذه الصورة. اخترها مرة أخرى.';
 
   @override
-  String get profilePhotoRecovered =>
-      'أغلق هاتفك Wassla أثناء اختيارك صورة. هل تستخدم الصورة التي اخترتها؟';
+  String get photoPickBlocked =>
+      'تعذّر فتح الكاميرا أو الصور بشكل آمن الآن. أعد المحاولة بعد قليل.';
 
   @override
-  String get profilePhotoUse => 'استخدام هذه الصورة';
+  String get profilePhotoUncertain =>
+      'لم نتأكد أن هذه هي الصورة التي اخترتها، لذلك لم تُستخدم. اخترها مرة أخرى.';
+
+  @override
+  String get profilePhotoPrepareFailed =>
+      'تعذّر تجهيز هذه الصورة. أعد المحاولة أو اختر صورة أخرى.';
 
   @override
   String get profilePhotoDiscard => 'تجاهل هذه الصورة';

@@ -173,10 +173,11 @@ class SessionController extends Notifier<SessionState> {
   ];
   int _generation = 0;
 
-  /// Counts the starts and the ends of the member's own photo writes. A read
-  /// of the profile that began under a different count may predate a write
-  /// that has since finished, so it may not decide what the photo is.
-  int _photoWrites = 0;
+  /// Counts the member's own photo writes the server accepted and this session
+  /// applied (a failed write is not one: it changed nothing). A read of the
+  /// profile that began under a different count may predate a write that has
+  /// since finished, so it may not decide what the photo is.
+  int _photoApplied = 0;
   Timer? _revalidation;
 
   /// Monotonic; [_accountReadAt] is measured on it.
@@ -262,7 +263,7 @@ class SessionController extends Notifier<SessionState> {
     required int attempt,
   }) async {
     final identity = _tokens.identityGeneration;
-    final photoWrites = _photoWrites;
+    final photoWrites = _photoApplied;
     _markAccountRead();
     try {
       final answered = await _auth.me();
@@ -447,16 +448,22 @@ class SessionController extends Notifier<SessionState> {
   /// Sets the member's photo. The account moves only once the server has
   /// answered, to the photo it returned. Sent once and never repeated here:
   /// the screen's button is the only retry.
+  ///
+  /// [expectedIdentity] is the credential generation read when the member
+  /// pressed the button (see `TokenStore.identityGeneration`): if a sign-in or
+  /// sign-out has happened since, nothing is sent.
   Future<void> uploadPhoto({
     required String filePath,
     required String fileName,
     required String contentType,
+    required int expectedIdentity,
     void Function(int sent, int total)? onProgress,
   }) => _updatePhoto(
     () => _auth.uploadPhoto(
       filePath: filePath,
       fileName: fileName,
       contentType: contentType,
+      expectedIdentity: expectedIdentity,
       onProgress: onProgress,
     ),
   );
@@ -471,17 +478,12 @@ class SessionController extends Notifier<SessionState> {
     final current = state;
     if (current is! SessionSignedIn) return;
     final generation = _generation;
-    _photoWrites++;
-    final OwnPhoto? photo;
-    try {
-      photo = await change();
-    } finally {
-      _photoWrites++;
-    }
+    final photo = await change();
     final now = state;
     if (generation == _generation &&
         now is SessionSignedIn &&
         now.account.id == current.account.id) {
+      _photoApplied++;
       state = SessionSignedIn(
         now.account.withPhoto(photo),
         generation: now.generation,
@@ -489,17 +491,19 @@ class SessionController extends Notifier<SessionState> {
     }
   }
 
-  /// How many photo writes have started or finished. Another part of the app
-  /// that holds the member's own photo compares it before and after a read or
-  /// a write of its own, and re-reads when it moved.
-  int get photoWrites => _photoWrites;
+  /// How many photo writes the server accepted and the session applied. Another
+  /// part of the app that holds the member's own photo compares it before and
+  /// after a read or a write of its own, and re-reads when it moved. A write
+  /// that failed is not counted: it left the photo as it was, so an overlapping
+  /// read still decides what the photo is.
+  int get photoWrites => _photoApplied;
 
-  /// [fresh], a profile read that began when the photo-write count was
-  /// [startedAt], with the photo the session holds now if a write started or
-  /// finished since. The rest of the profile is the fresh read's.
+  /// [fresh], a profile read that began when the applied-write count was
+  /// [startedAt], with the photo the session holds now if a write was applied
+  /// since. The rest of the profile is the fresh read's.
   Account _withNewestPhoto(Account fresh, int startedAt) {
     final now = state;
-    if (startedAt == _photoWrites || now is! SessionSignedIn) return fresh;
+    if (startedAt == _photoApplied || now is! SessionSignedIn) return fresh;
     return fresh.withPhoto(now.account.photo);
   }
 
@@ -511,7 +515,7 @@ class SessionController extends Notifier<SessionState> {
     if (current is! SessionSignedIn) return;
     final generation = _generation;
     final identity = _tokens.identityGeneration;
-    final photoWrites = _photoWrites;
+    final photoWrites = _photoApplied;
     final answered = await update();
     if (generation == _generation &&
         state is SessionSignedIn &&
@@ -537,7 +541,7 @@ class SessionController extends Notifier<SessionState> {
     if (current is! SessionSignedIn) return;
     final generation = _generation;
     final identity = _tokens.identityGeneration;
-    final photoWrites = _photoWrites;
+    final photoWrites = _photoApplied;
     _markAccountRead();
     try {
       final answered = await _auth.me(fresh: true);
