@@ -484,6 +484,17 @@ jobs:
         working-directory: mobile/android
         run: ./gradlew :app:testDebugUnitTest --no-daemon
 
+      # Gradle reports a task with no test source as a success, so the three
+      # test classes are looked for in its results.
+      - name: The photo tests ran
+        working-directory: mobile/android/app/build/test-results/testDebugUnitTest
+        run: |
+          for suite in PhotoGeometryTest JpegMetadataTest PickLaunchGateTest; do
+            file="TEST-eu.wassla.app.$suite.xml"
+            test -f "$file" || { echo "$suite did not run"; exit 1; }
+            grep -o 'tests="[0-9]*"' "$file" | head -1
+          done
+
   # ── Schema-drift gate (CLAUDE.md §G3) ───────────────────────────────────
   # G3 requires BOTH steps: re-export schema.sql from Django AND re-run the
   # generators. Running only the generators would check Go against a stale
