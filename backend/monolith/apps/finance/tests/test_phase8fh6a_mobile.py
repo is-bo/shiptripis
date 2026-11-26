@@ -8,6 +8,7 @@ from django.db import transaction
 from django.test import override_settings
 from rest_framework.test import APIClient
 
+from apps.core.storage import StorageNotConfigured
 from apps.finance.models import (
     DzdPayoutProfileRevision,
     Payout,
@@ -25,7 +26,8 @@ from apps.finance.payout_execution import execute_payout
 from apps.finance.payout_manual import prepare, begin, confirm
 from apps.finance.payout_evidence import upload_evidence
 from apps.notifications.models import Notification, OutboundMessage
-from .factories import make_user
+from apps.finance.providers.base import ProviderUnavailable
+from .factories import ccp_rip, make_user
 from .payout_execution_harness import H3_SETTINGS, build_stripe_payout, FakeConnect, authorise_auto_stripe
 from .test_phase8fh2_accounts import H2, FakeGateway, ready_snapshot, snapshot
 from .test_phase8fh2_webhooks import connect_event, post as post_webhook
@@ -179,7 +181,7 @@ def test_dzd_replacement_immutable_history_and_review(configured_h4):
     proof = client.post("/api/payouts/proofs", {"image": image_upload()}, format="multipart")
     assert proof.status_code == 201
     data = {"expected_revision": response.data["method"]["revision"], "first_name": "QA",
-            "last_name": "Synthetic", "ccp_number": "1234567890", "ccp_key": "12", "rip": "1" * 20,
+            "last_name": "Synthetic", "ccp_number": "1234567890", "ccp_key": "12", "rip": ccp_rip("1234567890", "12"),
             "proof_reference": proof.data["reference"], "consent_policy": "payout_profile_v1"}
     assert client.post("/api/payouts/profiles/dzd", {**data, "approved": True}, format="json").status_code == 400
     response = client.post("/api/payouts/profiles/dzd", data, format="json")
@@ -495,7 +497,7 @@ def finance_state():
 
 def dzd_body(revision, proof, **names):
     return {"expected_revision": revision, "first_name": "QA", "last_name": "Synthetic",
-            "ccp_number": "1234567890", "ccp_key": "12", "rip": "1" * 20,
+            "ccp_number": "1234567890", "ccp_key": "12", "rip": ccp_rip("1234567890", "12"),
             "proof_reference": str(proof), "consent_policy": "payout_profile_v1", **names}
 
 
@@ -548,6 +550,8 @@ def test_f1_profiles_off_is_a_stable_read_and_a_stable_refusal(connect):
         assert body[rail]["supported"] is False and body[rail]["selectable"] is False
     assert dzd.status_code == 200 and dzd.data["method"] is None
     assert dzd.data["dzd"]["unavailable_reason"] == "payout_profiles_disabled"
+    # The DZD read carries the same common contract as the methods read.
+    assert dzd.data["contract_version"] == "f1.v1" and dzd.data["setup"] == body["setup"]
     for name, response in writes.items():
         assert response.status_code == 409, (name, response.data)
         assert response.data["code"] == "payout_profiles_disabled", name
@@ -561,6 +565,9 @@ def test_f1_profiles_on_offers_each_rail_by_its_own_gate(configured_h4, connect)
     client = client_for(make_user(f"f1on{connect}@h6a.test", is_email_verified=True))
     with override_settings(STRIPE_CONNECT_ENABLED=connect):
         body = summary(client)
+        dzd = client.get("/api/payouts/profiles/dzd").data
+    assert dzd["contract_version"] == "f1.v1" and dzd["setup"] == body["setup"]
+    assert dzd["dzd"] == body["dzd"]
     assert body["setup"]["available"] is True and body["setup"]["unavailable_reason"] is None
     assert body["preference_required"] is True
     assert body["dzd"]["available_actions"] == ["configure_dzd"]
@@ -756,7 +763,7 @@ def test_f1_reads_hide_private_fields_claim_no_execution_and_leave_funding_alone
     proof = client.post("/api/payouts/proofs", {"image": image_upload()}, format="multipart")
     replaced = client.post("/api/payouts/profiles/dzd", dzd_body(
         revision, proof.data["reference"], first_name="Privategiven", last_name="Privatefamily",
-        ccp_number="9876543210", ccp_key="34", rip="2" * 20), format="json")
+        ccp_number="9876543210", ccp_key="34", rip=ccp_rip("9876543210", "34")), format="json")
     assert replaced.status_code == 201, replaced.data
     bodies = [replaced.data]
     for switches in ({}, NO_CONNECT, NO_COUNTRIES, OFF):
@@ -769,7 +776,7 @@ def test_f1_reads_hide_private_fields_claim_no_execution_and_leave_funding_alone
                 detail["fx_rate_micros"], detail["display_state"]) == (
             "manual_dzd", 6000, 15600, 260000000, "ready")
     text = json.dumps(bodies, default=str)
-    for private in ("Privategiven", "Privatefamily", "9876543210", "2" * 20,
+    for private in ("Privategiven", "Privatefamily", "9876543210", ccp_rip("9876543210", "34"),
                     str(proof.data["reference"]), '"first_name"', '"last_name"',
                     '"ccp_number"', '"ccp_key"', '"rip"', '"proof_reference"'):
         assert private not in text, private
@@ -811,8 +818,6 @@ def test_f1_history_publishes_only_usable_setup_actions_of_the_funded_rail(confi
 
 
 def test_f1_outages_are_temporary_failures_not_unavailable_setup(monkeypatch):
-    from apps.finance.providers.base import ProviderUnavailable
-
     user = make_user("f1outage@h6a.test", is_email_verified=True)
     client = client_for(user)
     with override_settings(**NO_STORE):
@@ -834,3 +839,279 @@ def test_f1_outages_are_temporary_failures_not_unavailable_setup(monkeypatch):
     eur = summary(client)["eur"]
     assert eur["state"] == "setup_required" and eur["available_actions"] == ["configure_eur"]
     assert not StripePayoutAccount.objects.filter(traveler=user).exists()
+
+
+# ---------------------------------------------------------------------------
+# F1 round 2 (Astra review of 317b55e). Each test names the finding it closes.
+# ---------------------------------------------------------------------------
+
+def connect_gateway(monkeypatch, gateway):
+    monkeypatch.setattr("apps.finance.payout_accounts.get_connect_gateway", lambda: gateway)
+    monkeypatch.setattr("apps.finance.payout_account_api.get_connect_gateway", lambda: gateway)
+    return gateway
+
+
+def eur_version(user):
+    return TravelerPayoutMethod.objects.get(traveler=user, currency="EUR").current_version
+
+
+def test_f1_eur_choice_follows_what_a_declaration_can_be_and_is_stored_normalized(configured_h4):
+    """Finding 2: selectability, retained, replaced and normalized countries."""
+    user = make_user("f1declare@h6a.test", is_email_verified=True)
+    client = client_for(user)
+    saved = preference(client, "both", country="FR")
+    assert saved.status_code == 200, saved.data
+    version = eur_version(user)
+    # Retaining: no country keeps the saved declaration and makes no version.
+    kept = preference(client, "both", eur=saved.data["revisions"]["EUR"],
+                      dzd=saved.data["revisions"]["DZD"], country="")
+    assert kept.status_code == 200, kept.data
+    assert eur_version(user).pk == version.pk
+    revisions = kept.data["revisions"]
+    with override_settings(STRIPE_CONNECT_ALLOWED_COUNTRIES=["DE"]):
+        body = summary(client)
+        # The saved FR is closed, so keeping it is refused...
+        refused = preference(client, "both", eur=revisions["EUR"], dzd=revisions["DZD"], country="")
+        # ...while a new, open declaration is accepted, lowercase or not.
+        replaced = preference(client, "both", eur=revisions["EUR"], dzd=revisions["DZD"], country="de")
+        after = summary(client)
+    eur = body["eur"]
+    assert eur["selectable"] is True and eur["country"] == "FR" and eur["country_supported"] is False
+    assert eur["supported_countries"] == ["DE"] and eur["blocking_reason"] == "payout_country_unsupported"
+    assert body["setup"]["preference_options"] == ["eur_only", "dzd_only", "both"]
+    assert refused.status_code == 400 and refused.data["code"] == "payout_country_unsupported"
+    assert refused.data["supported_countries"] == ["DE"]
+    assert replaced.status_code == 200, replaced.data
+    assert eur_version(user).country == "DE"
+    assert after["eur"]["country"] == "DE" and after["eur"]["country_supported"] is True
+    # The DZD rail never takes the EUR account country.
+    dzd = TravelerPayoutMethod.objects.get(traveler=user, currency="DZD").current_version
+    assert dzd.country == ""
+    # The single-currency route stores the normalized country too.
+    other = make_user("f1declare-post@h6a.test", is_email_verified=True)
+    posted = client_for(other).post("/api/payouts/methods", {
+        "currency": "EUR", "enabled": True, "expected_revision": 0, "country": "fr",
+        "consent_policy": "payout_profile_v1"}, format="json")
+    assert posted.status_code == 200, posted.data
+    assert eur_version(other).country == "FR"
+
+
+@override_settings(STRIPE_CONNECT_ALLOWED_COUNTRIES=["FR", "DE"])
+def test_f1_an_account_opened_for_another_country_is_never_offered_as_a_new_setup(
+    monkeypatch, configured_h4
+):
+    """Finding 3: a bound DE account cannot serve an FR declaration."""
+    gateway = connect_gateway(monkeypatch, FakeGateway(create=snapshot(country="DE")))
+    user = make_user("f1mismatch@h6a.test", is_email_verified=True)
+    client = client_for(user)
+    first = preference(client, "eur_only", country="DE")
+    assert client.post("/api/payouts/methods/stripe/onboarding", {}, format="json").status_code == 201
+    account = StripePayoutAccount.objects.get(traveler=user)
+    moved = preference(client, "eur_only", eur=summary(client)["revisions"]["EUR"],
+                       dzd=first.data["revisions"]["DZD"], country="FR")
+    assert moved.status_code == 200, moved.data
+    eur = summary(client)["eur"]
+    assert eur["state"] == "needs_attention" and eur["account_country"] == "DE"
+    assert eur["unavailable_reason"] == "stripe_account_country_mismatch"
+    assert eur["available_actions"] == []
+    before = finance_state()
+    refused = client.post("/api/payouts/methods/stripe/onboarding", {}, format="json")
+    assert refused.status_code == 409, refused.data
+    assert refused.data["code"] == "stripe_account_country_mismatch"
+    assert refused.data["account_country"] == "DE"
+    assert finance_state() == before
+    # Declaring the account's own country again makes the setup usable, and
+    # onboarding binds the same account instead of creating another.
+    back = preference(client, "eur_only", eur=moved.data["revisions"]["EUR"],
+                      dzd=moved.data["revisions"]["DZD"], country="DE")
+    assert back.status_code == 200, back.data
+    assert summary(client)["eur"]["available_actions"] == ["configure_eur"]
+    creations = [name for name, _ in gateway.calls].count("create_account")
+    resumed = client.post("/api/payouts/methods/stripe/onboarding", {}, format="json")
+    assert resumed.status_code == 201, resumed.data
+    assert [name for name, _ in gateway.calls].count("create_account") == creations
+    assert StripePayoutAccount.objects.filter(traveler=user).count() == 1
+    assert eur_version(user).stripe_account_id == account.pk
+    assert "configure_eur" not in summary(client)["eur"]["available_actions"]
+
+
+@pytest.mark.parametrize("profiles, role, code, status", [
+    (False, "traveler", "payout_profiles_disabled", 409),
+    (True, "sender", "payout_traveler_required", 403),
+])
+def test_f1_writes_meet_the_same_refusal_order_as_the_read(configured_h4, profiles, role, code, status):
+    """Finding 5: an unconfirmed email never outranks profiles off or the role."""
+    user = make_user(f"f1order-{role}@h6a.test", is_email_verified=False)
+    user.role = role
+    user.save(update_fields=["role"])
+    client = client_for(user)
+    with override_settings(PAYOUT_PROFILES_ENABLED=profiles):
+        before = finance_state()
+        body = summary(client)
+        writes = setup_writes(client)
+        after = finance_state()
+    assert body["setup"]["unavailable_reason"] == code
+    for name, response in writes.items():
+        assert response.status_code == status, (name, response.data)
+        assert response.data["code"] == code, name
+    assert after == before
+
+
+@pytest.mark.parametrize("number, ccp_mask, rip_mask", [
+    ("1234567890", "7890", "9012"),
+    ("12345678", "5678", "7812"),
+    ("1234567", "567", ""),
+    ("1234", "34", ""),
+    ("0000001234", "34", ""),
+    ("7", "", ""),
+])
+def test_f1_a_mask_never_shows_more_than_half_of_the_ccp_number(configured_h4, number, ccp_mask, rip_mask):
+    """Finding 6: owner reads with profiles off never return a whole number.
+
+    The RIP ends with the number's last two digits and a key computed from the
+    whole number, so its ending is shown only beside a four-digit CCP ending.
+    """
+    user = make_user(f"f1mask{number}@h6a.test", is_email_verified=True)
+    client = client_for(user)
+    chosen = preference(client, "dzd_only", country="")
+    proof = client.post("/api/payouts/proofs", {"image": image_upload()}, format="multipart")
+    submitted = client.post("/api/payouts/profiles/dzd", {
+        **dzd_body(chosen.data["revisions"]["DZD"], proof.data["reference"]),
+        "ccp_number": number, "rip": ccp_rip(number, "12")}, format="json")
+    assert submitted.status_code == 201, submitted.data
+    with override_settings(**OFF):
+        reads = [summary(client)["dzd"]["profile"], client.get("/api/payouts/profiles/dzd").data["dzd"]["profile"],
+                 client.get("/api/payouts/profiles/dzd").data["method"]["profile"]]
+    for profile in reads:
+        assert (profile["ccp_last_four"], profile["rip_last_four"]) == (ccp_mask, rip_mask)
+    assert 2 * len(ccp_mask) <= len(number.lstrip("0"))
+
+
+@pytest.mark.parametrize("case, field, values", [
+    ("eleven-digits", "ccp_number", {"ccp_number": "12345678901", "rip": ccp_rip("2345678901")}),
+    ("only-zeros", "ccp_number", {"ccp_number": "0000", "rip": "00799999" + "0" * 12}),
+    ("not-a-ccp-rip", "rip", {"rip": "00799998" + "1234567890" + "12"}),
+    ("another-account", "rip", {"rip": ccp_rip("1234567891", "12")}),
+    ("short-key", "ccp_key", {"ccp_key": "1"}),
+])
+def test_f1_a_ccp_account_must_be_one_algerie_poste_can_hold(configured_h4, case, field, values):
+    """Finding 6: at most ten digits, and a CCP RIP that carries the number."""
+    user = make_user(f"f1ccp-{case}@h6a.test", is_email_verified=True)
+    client = client_for(user)
+    chosen = preference(client, "dzd_only", country="")
+    proof = client.post("/api/payouts/proofs", {"image": image_upload()}, format="multipart")
+    before = finance_state()
+    refused = client.post("/api/payouts/profiles/dzd", {
+        **dzd_body(chosen.data["revisions"]["DZD"], proof.data["reference"]), **values}, format="json")
+    assert refused.status_code == 400 and set(refused.data) == {field}, refused.data
+    for value in values.values():
+        assert value not in json.dumps(refused.data)
+    assert finance_state() == before
+
+
+def test_f1_one_account_has_one_spelling(configured_h4):
+    """Finding 6: leading zeros do not make a second fingerprint or a wider mask."""
+    from apps.finance.sensitive_data import postal_account
+
+    padded = postal_account(ccp_number="0012 345678", ccp_key="12", rip=ccp_rip("12345678", "12"))
+    assert padded == postal_account(ccp_number="12345678", ccp_key="12", rip=ccp_rip("12345678", "12"))
+    assert padded[0] == "12345678"
+
+
+def test_f1_a_proof_uploaded_before_the_store_closed_is_not_submitted(configured_h4):
+    """Finding 8: the read and the submission agree when the store switch changes."""
+    user = make_user("f1storeclosed@h6a.test", is_email_verified=True)
+    client = client_for(user)
+    chosen = preference(client, "dzd_only", country="")
+    proof = client.post("/api/payouts/proofs", {"image": image_upload()}, format="multipart")
+    assert proof.status_code == 201
+
+    class ClosedStore:
+        def require_bucket(self):
+            raise StorageNotConfigured("No bucket is configured for the payout object store.")
+
+    # The deconfigured store, in place of the fixture's fake one.
+    with patch("apps.finance.payout_evidence.storage_for", return_value=ClosedStore()):
+        before = finance_state()
+        body = summary(client)
+        refused = client.post("/api/payouts/profiles/dzd",
+                              dzd_body(chosen.data["revisions"]["DZD"], proof.data["reference"]),
+                              format="json")
+        after = finance_state()
+    assert body["dzd"]["available_actions"] == []
+    assert body["dzd"]["unavailable_reason"] == "payout_evidence_unavailable"
+    assert refused.status_code == 503 and refused.data["code"] == "payout_evidence_unavailable"
+    assert after == before
+    # Back on, the same unused proof is still the traveler's to submit.
+    submitted = client.post("/api/payouts/profiles/dzd",
+                            dzd_body(chosen.data["revisions"]["DZD"], proof.data["reference"]),
+                            format="json")
+    assert submitted.status_code == 201, submitted.data
+
+
+class FlakyGateway(FakeGateway):
+    """Fails one step that runs after the account is bound, once."""
+
+    def __init__(self, *, failing, **kwargs):
+        super().__init__(**kwargs)
+        self.failing = failing
+
+    def set_payout_schedule(self, **kwargs):
+        if self.failing == "schedule":
+            self.calls.append(("set_payout_schedule", "failed"))
+            raise ProviderUnavailable("synthetic schedule outage")
+        return super().set_payout_schedule(**kwargs)
+
+    def create_account_link(self, **kwargs):
+        if self.failing == "link":
+            self.calls.append(("create_account_link", "failed"))
+            raise ProviderUnavailable("synthetic link outage")
+        return super().create_account_link(**kwargs)
+
+
+@pytest.mark.parametrize("failing", ["link", "schedule"])
+def test_f1_a_failure_after_binding_keeps_the_account_and_the_retry_reuses_it(
+    monkeypatch, configured_h4, failing
+):
+    """Finding 9: the 502 does not claim nothing changed, and a retry finishes."""
+    created = snapshot(payout_schedule_interval="daily" if failing == "schedule" else "manual")
+    connect_gateway(monkeypatch, FlakyGateway(failing=failing, create=created))
+    user = make_user(f"f1kept-{failing}@h6a.test", is_email_verified=True)
+    client = client_for(user)
+    assert preference(client, "eur_only").status_code == 200
+    failed = client.post("/api/payouts/methods/stripe/onboarding", {}, format="json")
+    assert failed.status_code == 502 and failed.data["code"] == "stripe_connect_provider_error"
+    assert "Nothing changed" not in failed.data["detail"]
+    account = StripePayoutAccount.objects.get(traveler=user)
+    assert eur_version(user).stripe_account_id == account.pk
+    retry = connect_gateway(monkeypatch, FakeGateway(create=created, retrieve=snapshot()))
+    resumed = client.post("/api/payouts/methods/stripe/onboarding", {}, format="json")
+    assert resumed.status_code == 201, resumed.data
+    names = [name for name, _ in retry.calls]
+    assert "create_account" not in names and "create_account_link" in names
+    assert ("set_payout_schedule" in names) is (failing == "schedule")
+    assert StripePayoutAccount.objects.filter(traveler=user).count() == 1
+    account.refresh_from_db()
+    assert account.payout_schedule_interval == "manual"
+
+
+def test_f1_a_staff_ban_ends_the_session_before_any_payout_read_or_write(configured_h4):
+    """Finding 10: a ban clears is_active, so a real bearer token is refused 401."""
+    from rest_framework_simplejwt.tokens import RefreshToken
+    from apps.admin_panel.permissions import AdminRole, assign_admin_roles
+    from apps.admin_panel.staff_actions import set_account_ban
+
+    traveler = make_user("f1ban@h6a.test", is_email_verified=True)
+    staff = make_user("f1ban-staff@h6a.test", is_staff=True)
+    assign_admin_roles(staff, (AdminRole.SUPER_ADMIN,), elevate_super_admin=True)
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(traveler).access_token}")
+    assert client.get("/api/payouts/methods").status_code == 200
+    set_account_ban(actor=staff, user_id=traveler.pk, banned=True, reason="F1 synthetic ban.")
+    before = finance_state()
+    reads = [client.get("/api/payouts/methods"), client.get("/api/payouts/profiles/dzd"),
+             client.get("/api/payouts?page=1")]
+    writes = setup_writes(client)
+    for response in reads + list(writes.values()):
+        assert response.status_code == 401, response.data
+    assert finance_state() == before

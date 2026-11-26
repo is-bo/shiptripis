@@ -117,12 +117,68 @@ def normalize_digits(value: str, *, minimum: int, maximum: int) -> str:
         raise ValidationError("Invalid postal account format.") from None
 
 
+#: Every CCP RIP is Algérie Poste's bank and agency code, then the CCP number
+#: padded with zeros to ten digits, then a two-digit key, so a CCP number has
+#: at most ten digits: 007 99999 0012345678 90.
+CCP_RIP_PREFIX = "00799999"
+CCP_NUMBER_DIGITS = 10
+
+
+@sensitive_variables()
+def postal_account(*, ccp_number, ccp_key, rip) -> tuple[str, str, str]:
+    """The canonical CCP number, key and RIP, or a ValidationError per field.
+
+    The number loses its leading zeros, so one account has one spelling, one
+    fingerprint and one mask. The RIP must be a CCP RIP that carries this
+    number. Messages name the expected shape and never repeat a value.
+    """
+
+    errors, values = {}, {}
+    for field, value, minimum, maximum in (
+        ("ccp_number", ccp_number, 1, CCP_NUMBER_DIGITS),
+        ("ccp_key", ccp_key, 2, 2),
+        ("rip", rip, 20, 20),
+    ):
+        try:
+            values[field] = normalize_digits(value, minimum=minimum, maximum=maximum)
+        except ValidationError:
+            errors[field] = (
+                f"Expected {maximum} digits." if minimum == maximum
+                else f"Expected {minimum} to {maximum} digits."
+            )
+    number = values.get("ccp_number", "").lstrip("0")
+    if "ccp_number" in values and not number:
+        errors["ccp_number"] = "Expected a CCP account number."
+    if number and "rip" in values and (
+        not values["rip"].startswith(CCP_RIP_PREFIX)
+        or values["rip"][len(CCP_RIP_PREFIX):-2] != number.zfill(CCP_NUMBER_DIGITS)
+    ):
+        errors["rip"] = "Expected the RIP of this CCP account."
+    if errors:
+        raise ValidationError(errors)
+    return number, values["ccp_key"], values["rip"]
+
+
+@sensitive_variables()
+def postal_account_masks(number: str, rip: str) -> tuple[str, str]:
+    """The CCP and RIP endings a projection may show, from canonical values.
+
+    Never more than half of the number. The RIP ends with the number's last two
+    digits and a key computed from the whole number, so its ending is shown
+    only when the CCP ending already shows four digits of a number at least
+    twice that long; otherwise it is empty.
+    """
+
+    shown = min(4, len(number) // 2)
+    return number[len(number) - shown:], rip[-4:] if shown == 4 else ""
+
+
 @sensitive_variables()
 def account_fingerprint(ccp_number: str, ccp_key: str, rip: str) -> str:
     _, _, key = key_configuration()
     parts = [
         "dz-ccp-v1",
-        normalize_digits(ccp_number, minimum=1, maximum=20),
+        normalize_digits(ccp_number, minimum=1, maximum=CCP_NUMBER_DIGITS),
         normalize_digits(ccp_key, minimum=2, maximum=2),
         normalize_digits(rip, minimum=20, maximum=20),
     ]

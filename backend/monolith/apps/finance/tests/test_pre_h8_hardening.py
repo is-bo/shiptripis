@@ -25,7 +25,7 @@ from apps.finance.payout_profiles import (
 )
 from apps.finance.payout_release import evaluate_payout_release
 from apps.finance.payout_snapshots import create_snapshot
-from .factories import build_scenario
+from .factories import build_scenario, ccp_rip
 from .payout_execution_harness import H3_SETTINGS, build_stripe_payout
 from .test_phase8fh4_manual import build_manual, configured_h4, image_upload  # noqa: F401
 from .test_phase8fh5_control_plane import no_provider_network  # noqa: F401
@@ -138,7 +138,7 @@ def replacement(s, profile):
     proof = upload_evidence(actor=s.traveler, upload=image_upload())
     return submit_dzd_profile(actor=s.traveler, expected_revision=profile.method.revision,
         first_name="QA", last_name="Synthetic", ccp_number="1111111111", ccp_key="11",
-        rip="1" * 20, proof_reference=proof.public_reference)
+        rip=ccp_rip("1111111111"), proof_reference=proof.public_reference)
 
 
 def test_h7_frozen_approval_survives_reattestation_and_replacement(configured_h4):

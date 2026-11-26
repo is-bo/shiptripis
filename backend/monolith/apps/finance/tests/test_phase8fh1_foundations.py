@@ -28,7 +28,7 @@ from apps.finance.payout_domain import revise_amount_locked, validate_transition
 from apps.finance.payout_snapshots import create_snapshot
 from apps.finance.models import PaymentAttempt, Payout, PayoutMethodVersion
 from apps.finance.money import convert_eur_cents
-from .factories import build_scenario
+from .factories import build_scenario, ccp_rip
 
 KEYS = dict(
     PAYOUT_PROFILES_ENABLED=True,
@@ -129,9 +129,9 @@ def test_profile_version_and_safe_projection(configured):
         expected_revision=1,
         first_name="PrivateGiven",
         last_name="PrivateFamily",
-        ccp_number="00123456789",
+        ccp_number="0123456789",
         ccp_key="01",
-        rip="00123456789012345678",
+        rip=ccp_rip("0123456789", "01"),
         proof_reference=_profile_proof(user).public_reference,
     )
     profile = method.current_version.dzd_profile_revision
@@ -140,8 +140,8 @@ def test_profile_version_and_safe_projection(configured):
     for secret in (
         "PrivateGiven",
         "PrivateFamily",
-        "00123456789",
-        "00123456789012345678",
+        "123456789",
+        ccp_rip("0123456789", "01"),
         profile.account_fingerprint,
     ):
         assert secret not in text
@@ -590,9 +590,9 @@ def test_instruction_amendment_keeps_original_snapshot(funded_snapshot):
         expected_revision=1,
         first_name="Example",
         last_name="Holder",
-        ccp_number="00123456789",
+        ccp_number="0123456789",
         ccp_key="01",
-        rip="00123456789012345678",
+        rip=ccp_rip("0123456789", "01"),
         proof_reference=_profile_proof(scenario.traveler).public_reference,
     )
     # H4 will own evidence-backed review. This domain test supplies its ready

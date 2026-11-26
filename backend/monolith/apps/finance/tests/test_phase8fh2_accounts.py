@@ -685,7 +685,7 @@ class TestOwnershipAndMode:
         assert StripePayoutAccount.objects.count() == 0
 
     def test_normal_onboarding_also_refuses_to_repost_an_expired_unknown_creation(
-        self, db, h2, traveler
+        self, db, h2, traveler, monkeypatch
     ):
         with pytest.raises(ProviderUnavailable):
             start_onboarding(actor=traveler, gateway=FakeGateway(create=ProviderUnavailable("timeout")))
@@ -699,6 +699,20 @@ class TestOwnershipAndMode:
         assert "create_account" not in [name for name, _ in gateway.calls]
         operation.refresh_from_db()
         assert operation.status == "unknown"
+        assert PayoutProviderOperation.objects.count() == 1
+        # F1: the read stops offering the setup this refusal blocks, and a
+        # direct call says why, with the same code, and still posts nothing.
+        client = APIClient()
+        client.force_authenticate(traveler)
+        eur = client.get(reverse("payout-methods")).json()["eur"]
+        assert eur["state"] == "needs_attention"
+        assert eur["unavailable_reason"] == AccountCreationUnresolved.code
+        assert eur["available_actions"] == []
+        monkeypatch.setattr(accounts, "get_connect_gateway", lambda: gateway)
+        refused = client.post(reverse("payout-stripe-onboarding"), {}, format="json")
+        assert refused.status_code == 409
+        assert refused.json()["code"] == AccountCreationUnresolved.code
+        assert "create_account" not in [name for name, _ in gateway.calls]
         assert PayoutProviderOperation.objects.count() == 1
 
     def test_an_account_belonging_to_another_traveler_is_never_adopted(

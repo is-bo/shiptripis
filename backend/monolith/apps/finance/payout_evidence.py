@@ -42,14 +42,20 @@ FORMATS = {
 }
 
 
-def evidence_store_configured():
-    """Whether the private store a cheque upload writes to has a key and bucket.
+def require_evidence_store():
+    """Refuse unless the private store a cheque upload writes to has a key and bucket.
 
     Configuration only, no network call: an outage of a configured store still
-    surfaces on the upload itself as `payout_evidence_unavailable`.
+    surfaces on the upload itself as `payout_evidence_unavailable`. A DZD profile
+    submission asks it too, because Finance reviews the cheque from that store.
     """
+    storage_for("payout").require_bucket()
+
+
+def evidence_store_configured():
+    """`require_evidence_store` as the read model asks it."""
     try:
-        storage_for("payout").require_bucket()
+        require_evidence_store()
     except StorageNotConfigured:
         return False
     return True

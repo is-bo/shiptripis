@@ -22,7 +22,13 @@ from .models import (
     PayoutIdentityRevocation,
     PayoutEvidence,
 )
-from .sensitive_data import encrypt, decrypt, account_fingerprint, normalize_digits
+from .sensitive_data import (
+    account_fingerprint,
+    decrypt,
+    encrypt,
+    postal_account,
+    postal_account_masks,
+)
 
 POLICY_VERSION = "payout_profile_v1"
 
@@ -66,11 +72,14 @@ def _traveler(actor):
 
 
 def _method(actor, currency, expected_revision):
+    from apps.core.financial_locks import lock_payout_method_set
+
     user = _traveler(actor)
     # A fixed row exists for each preference once set. Serialize initial insert
-    # with the user witness, before method rows; funding takes existing methods
-    # only and never acquires User after Payout.
+    # with the user witness, then the method set funding also takes; funding
+    # never acquires User after Payout.
     User.objects.select_for_update(no_key=True).get(pk=user.pk)
+    lock_payout_method_set(user.pk)
     if currency not in ("EUR", "DZD"):
         raise ValidationError("Unsupported payout currency.")
     method, _ = TravelerPayoutMethod.objects.get_or_create(
@@ -130,16 +139,22 @@ def set_preference(
     method = _method(actor, currency, expected_revision)
     method.currency = currency
     method.save(update_fields=["currency"])
-    if enabled and currency == "EUR":
+    if currency == "DZD":
+        # The account country belongs to the Stripe EUR rail. A DZD manual
+        # instruction is Algeria-side, and stamping a European country onto its
+        # version would make the snapshot say something untrue about the
+        # destination; the profile version records DZ itself.
+        country = ""
+    elif enabled:
         # H2 owns the country decision so there is exactly one answer to "can
         # this account country hold a Stripe EUR payout account here", and the
-        # refusal carries a distinct machine code the client can act on.
+        # refusal carries a distinct machine code the client can act on. The
+        # stored country is the normalized one it accepted.
         from .payout_accounts import require_supported_country
 
-        require_supported_country(country)
-    if not enabled and method.current_version_id is None:
-        # Disabled method is a preference only, not a destination snapshot.
-        country = ""
+        country = require_supported_country(country)
+    # A disabled method is a preference only, not a destination snapshot, so
+    # only an enabled one records a version.
     if enabled and method.current_version_id is None:
         method.current_version = _version(method, actor=actor, country=country)
     elif enabled and currency == "EUR" and country != method.current_version.country:
@@ -207,10 +222,9 @@ def submit_dzd_profile(
         raise ValidationError("A new owned full crossed cheque image is required.")
     method.currency = "DZD"
     method.save(update_fields=["currency"])
-    number = normalize_digits(ccp_number, minimum=1, maximum=20)
-    key = normalize_digits(ccp_key, minimum=2, maximum=2)
-    rip = normalize_digits(rip, minimum=20, maximum=20)
+    number, key, rip = postal_account(ccp_number=ccp_number, ccp_key=ccp_key, rip=rip)
     fingerprint = account_fingerprint(number, key, rip)
+    ccp_mask, rip_mask = postal_account_masks(number, rip)
     sequence = (
         method.dzd_revisions.order_by("-sequence")
         .values_list("sequence", flat=True)
@@ -220,8 +234,8 @@ def submit_dzd_profile(
     profile = DzdPayoutProfileRevision(
         method=method,
         sequence=sequence,
-        ccp_last_four=number[-4:],
-        rip_last_four=rip[-4:],
+        ccp_last_four=ccp_mask,
+        rip_last_four=rip_mask,
         account_fingerprint=fingerprint,
         evidence=proof,
     )

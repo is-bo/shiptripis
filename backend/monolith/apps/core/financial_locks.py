@@ -21,6 +21,7 @@ in this order::
     -> PaymentProviderEvent
     -> PaymentRefund (ascending id)
     -> Payout
+    -> the traveler's payout-method set (transaction advisory lock)
     -> TravelerPayoutMethod (ascending id)
     -> StripePayoutAccount (ascending id)
     -> FinanceHold / payout allocations / attempts / operations (ascending id)
@@ -31,7 +32,10 @@ A Deal's money can sit in two obligations -- its balance order and the
 posting-deposit order whose cash was credited into that balance. Any transition that reaches more than one acquires the complete set in
 ascending id order before processing them in its domain-specific refund order.
 
-H1 profile writers lock User then method only. They never lock prior Deals;
+H1 profile writers lock User, then the method set (`lock_payout_method_set`),
+then methods only. Funding takes the same set lock after the Deal aggregate, so
+it reads a traveler's methods before or after a whole preference change, never
+half of one. Profile writers never lock prior Deals;
 future account refresh must enqueue work after commit instead of acquiring a
 Deal while holding an account. Future multi-Deal disbursements must lock the
 union table-by-table, never loop this single-Deal helper after taking Payout.
@@ -98,6 +102,10 @@ funding -- so it adds no new edge into the money graph.
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+#: First key of the two-key advisory lock `lock_payout_method_set` takes. Two-key
+#: advisory locks never collide with the one-key locks used elsewhere.
+PAYOUT_METHOD_SET_LOCK = 51420301
 
 
 @dataclass(frozen=True, slots=True)
@@ -344,4 +352,36 @@ def models_q_deal_or_deposit(deal_id: int, request_id: int):
     return Q(deal_id=deal_id) | Q(
         delivery_request_id=request_id,
         purpose=PaymentOrder.Purpose.POSTING_DEPOSIT,
+    )
+
+
+def lock_payout_method_set(traveler_id: int) -> tuple:
+    """Lock a traveler's payout methods as one set, then each row, ascending id.
+
+    Funding reads which methods are enabled while it holds the Deal aggregate,
+    so it cannot take the User row that serializes profile writers. Row locks
+    alone do not protect the set: a change that disables one row and inserts
+    another makes funding wait for the row it updated, but the inserted row
+    stays invisible to a funding query that started before the change
+    committed, so funding would read a set with no enabled method that never
+    existed. Funding and every writer that adds a method or changes which are
+    enabled take this lock first; a writer that only updates one existing row
+    (readiness, a new version) is already serialized with funding by that row's
+    lock. Travelers whose ids share a slot only wait for each other.
+    """
+
+    from django.db import connection
+
+    from apps.finance.models import TravelerPayoutMethod
+
+    if connection.vendor == "postgresql":
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT pg_advisory_xact_lock(%s, %s)",
+                [PAYOUT_METHOD_SET_LOCK, traveler_id & 0x7FFFFFFF],
+            )
+    return tuple(
+        TravelerPayoutMethod.objects.select_for_update(no_key=True)
+        .filter(traveler_id=traveler_id)
+        .order_by("pk")
     )

@@ -41,12 +41,12 @@ from apps.finance.payout_profiles import (
     submit_dzd_profile,
 )
 
-from .factories import build_scenario
+from .factories import build_scenario, ccp_rip
 from .test_phase8fh4_manual import configured_h4, image_upload  # noqa: F401
 from apps.admin_panel.tests.two_step_helpers import staff_login
 
-SECRET_CCP = "0000000000"
-SECRET_RIP = "0" * 20
+SECRET_CCP = "6283749105"
+SECRET_RIP = ccp_rip(SECRET_CCP)
 
 
 @pytest.fixture(autouse=True)
@@ -345,7 +345,7 @@ def test_the_destination_is_masked_until_a_deliberate_audited_reveal(
     assert masked["Cache-Control"] == "no-store, private"
     body = masked.content.decode()
     assert SECRET_CCP not in body and SECRET_RIP not in body
-    assert "•••• 0000" in body
+    assert f"•••• {SECRET_CCP[-4:]}" in body
 
     revealed = client.post(url, {"action": "reveal"})
     assert revealed["Cache-Control"] == "no-store, private"

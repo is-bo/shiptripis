@@ -39,6 +39,7 @@ from rest_framework.views import APIView
 from apps.accounts.permissions import EmailVerifiedToWrite
 
 from .payout_accounts import (
+    AccountKeptProviderError,
     open_dashboard,
     read_onboarding_state,
     refresh_account,
@@ -47,8 +48,7 @@ from .payout_accounts import (
     start_onboarding,
 )
 from .payout_mobile import setup_gate
-from .payout_profile_api import StrictInput, method_projection, setup_refusal
-from .payout_profiles import _traveler
+from .payout_profile_api import PayoutSetupMember, StrictInput, method_projection, setup_refusal
 from .providers.base import ProviderError
 from .providers.stripe_connect import get_connect_gateway
 from .models import TravelerPayoutMethod
@@ -72,21 +72,15 @@ class OnboardingInput(StrictInput):
 
 
 class ConnectView(APIView):
-    # Writing payout setup needs a confirmed email (L18A, as `ProfileView`).
-    permission_classes = [IsAuthenticated, EmailVerifiedToWrite]
+    # As `ProfileView`: the member setup gate, then a confirmed email (L18A),
+    # both before the body is read.
+    permission_classes = [IsAuthenticated, PayoutSetupMember, EmailVerifiedToWrite]
     throttle_classes = [ConnectThrottle]
 
     def finalize_response(self, request, response, *args, **kwargs):
         response = super().finalize_response(request, response, *args, **kwargs)
         response["Cache-Control"] = "no-store, private"
         return response
-
-    def initial(self, request, *args, **kwargs):
-        super().initial(request, *args, **kwargs)
-        # The member setup gate, before the body is read: switched-off profiles
-        # and an account that cannot hold payout setup each refuse with their
-        # own stable code, as every profile write already does.
-        _traveler(request.user)
 
     def _method(self, request):
         method = TravelerPayoutMethod.objects.filter(
@@ -117,12 +111,16 @@ class ConnectView(APIView):
             return refusal
         if isinstance(exc, ProviderError):
             # Provider prose never reaches the client; a stable machine code
-            # does. An outage leaves the stored readiness exactly as it was.
+            # does. A failed read or creation leaves the stored readiness as it
+            # was. A failure after the account was bound keeps that account,
+            # and the next call reuses it; the client refetches either way.
             logger.warning("finance.connect_provider_error code=%s", exc.code)
             return Response(
                 {
                     "code": "stripe_connect_provider_error",
-                    "detail": "Stripe could not be reached. Nothing changed.",
+                    "detail": "Stripe did not finish this step after your payout account was saved. Try again."
+                    if isinstance(exc, AccountKeptProviderError)
+                    else "Stripe could not be reached. Try again.",
                 },
                 status=502,
             )

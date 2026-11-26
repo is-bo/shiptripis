@@ -13,6 +13,12 @@
   beside the existing ones. History detail shows only its funded rail's usable setup actions. Funding,
   revisions, review and execution untouched. Detail and the F2 shapes:
   `docs/PHASE_F1_PAYOUT_AVAILABILITY.md`.
+- Round 2 (Astra review of `317b55e`): funding and preference changes take one per-traveler method-set
+  lock, so funding never reads half a change (a pre-existing race; two-connection PostgreSQL test).
+  Every write meets the read's refusal order. A CCP number has at most ten digits and its RIP must be
+  `00799999` plus that number; masks never show more than half of it. An account of another country or
+  an unresolved creation is no longer offered as a new setup; a Stripe failure after binding keeps the
+  account and the retry finishes it. The DZD read carries the common contract.
 
 ## Wassla: the bell names the ticket decision (N2, 2026-11-26)
 

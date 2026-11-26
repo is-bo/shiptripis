@@ -11,12 +11,17 @@ from apps.parcels import tracking
 
 from .models import FinanceHold, Payout, PayoutProfileReview, TravelerPayoutMethod
 from .payout_accounts import (
+    AccountCountryMismatch,
+    AccountCreationUnresolved,
     ConnectUnavailable,
     CountryUnsupported,
+    account_country,
     allowed_countries,
+    creation_unresolved,
     evaluate_readiness,
     expected_mode,
     require_connect_enabled,
+    standing_accounts,
 )
 from .payout_evidence import evidence_store_configured
 from .payout_manual_profiles import approved_profile
@@ -82,6 +87,12 @@ def eur_method(method, gate):
     countries = list(gate.countries)
     country = version.country if version else ""
     country_supported = not country or country in countries
+    # An active account this version is not bound to: onboarding binds it when
+    # it was opened for the declared country and refuses otherwise.
+    held = standing_accounts(method.traveler_id).first() if method and not account else None
+    held_country = account_country(account or held) if account or held else None
+    mismatch = bool(held and held_country != country)
+    unresolved = bool(method and not account and not held and creation_unresolved(method))
     state, reason = "not_configured", "payout_setup_required"
     if account:
         verdict = evaluate_readiness(account)
@@ -94,6 +105,8 @@ def eur_method(method, gate):
             else "payout_setup_required" if state == "setup_required"
             else "payout_profile_needs_attention"
         )
+    elif mismatch or unresolved:
+        state, reason = "needs_attention", "payout_profile_needs_attention"
     elif version:
         state = "setup_required"
     if not country_supported:
@@ -104,13 +117,19 @@ def eur_method(method, gate):
         unavailable = ConnectUnavailable.code
     elif not countries:
         unavailable = NO_COUNTRIES
-    elif not country_supported:
+    elif held_country and held_country not in countries:
         unavailable = CountryUnsupported.code
+    elif mismatch:
+        unavailable = AccountCountryMismatch.code
+    elif unresolved:
+        unavailable = AccountCreationUnresolved.code
     else:
         unavailable = None
     # Each action follows the write it leads to: every Stripe call needs the
-    # member gate and Connect; a new or resumed onboarding also needs the
-    # account country to be open, which refresh and dashboard access do not.
+    # member gate and Connect; a resumed onboarding also needs the account
+    # country to be open, which refresh and dashboard access do not. A new
+    # setup collects the account country first, so a saved country that has
+    # closed does not stop it.
     connect = gate.refusal is None and gate.connect
     actions = []
     account_usable = bool(account and account.active and account.provider_mode == expected_mode()
@@ -121,15 +140,19 @@ def eur_method(method, gate):
             actions.append("manage_eur")
         if state == "setup_required" and method.enabled and country in countries:
             actions.append("resume_eur_setup")
-    elif connect and not account and countries and country_supported:
+    elif not account and unavailable is None:
         actions.append("configure_eur")
     return {"state": state, "ready": state == "ready", "blocking_reason": reason or None,
             "available_actions": actions, "country": country or None,
+            # The saved declaration's own eligibility; None when none is saved.
+            "country_supported": country in countries if country else None,
+            # The country of the Traveler's Stripe account, when one exists.
+            "account_country": held_country or None,
             "supported_countries": countries,
             "supported": bool(gate.connect and countries and country_supported),
-            # The preference PATCH accepts EUR on a supported account country;
+            # The preference PATCH accepts EUR with any open account country;
             # it does not need Connect, which only onboarding calls.
-            "selectable": bool(gate.refusal is None and countries and country_supported),
+            "selectable": bool(gate.refusal is None and countries),
             "unavailable_reason": unavailable,
             "checked_at": account.readiness_checked_at if account else None}
 
