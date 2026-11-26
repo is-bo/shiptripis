@@ -1,5 +1,4 @@
 import logging
-from uuid import UUID
 
 from django.db import transaction
 from django.utils import timezone
@@ -16,6 +15,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.notifications.models import OutboundMessage
 from apps.notifications.outbox import cancel_message, enqueue_secret_message
 from apps.notifications.push import unregister_push_device
+from apps.notifications.serializers import PushDeviceUnregisterSerializer
 
 from . import deletion, photos
 from .apple import AppleAuthError, AppleAuthUnavailable, verify_identity_token
@@ -109,17 +109,13 @@ class SignOutView(APIView):
                 {"detail": "Invalid or expired refresh token."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        installation_id = request.data.get("installation_id")
-        if installation_id:
+        # Device cleanup is best-effort and must never trap a user in an
+        # account or weaken refresh-token validation: a body without a usable
+        # installation and binding number simply leaves the device alone.
+        device = PushDeviceUnregisterSerializer(data=request.data)
+        if device.is_valid():
             try:
-                unregister_push_device(
-                    user=request.user,
-                    installation_id=UUID(str(installation_id)),
-                )
-            except (TypeError, ValueError):
-                # Device cleanup metadata is best-effort and must never trap a
-                # user in an account or weaken refresh-token validation.
-                pass
+                unregister_push_device(user=request.user, **device.validated_data)
             except Exception:
                 logger.warning(
                     "push device cleanup failed during logout user_id=%s",

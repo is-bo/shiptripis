@@ -4,15 +4,19 @@
 
 - Phone test 2 (plan 1.2): Ismail decided the app asks for notification permission on its own, once,
   the first time it is opened, including for a guest, instead of only from Profile > Notifications.
-  App only, no server change. Nothing deployed.
-- The app-wide push coordinator asks after the first frame and Firebase's start, once the session has
-  resolved and the app is in the foreground. Startup, resume and the Profile button share one request,
-  so the system is never asked twice at once. A per-installation request count (kept through logout)
-  decides whether Android 13+, which reports a never-asked permission as a denial, still has its first
-  prompt. No automatic retry after a dismissal or denial: Profile offers one more Android request, then
-  system Settings; iOS offers Settings after its first denial. A missing or failed Firebase asks nothing
-  and spends nothing. Registering the phone still waits for sign-in. Spec and runbook updated. Detail,
-  screenshots and the device checks still owed on real phones: `docs/PHASE_N1_NOTIFICATION_FIRST_OPEN.md`.
+  Nothing deployed.
+- The app-wide push coordinator asks after a painted, usable screen (not the splash, sign-in, the guest
+  payment screen or a notification still opening), with the app resumed and Firebase started. Startup,
+  resume and the Profile button share one request. A per-installation request count (kept through
+  logout, taken back when the system was never reached) keeps Android 13+ from asking twice, including
+  after a killed dialog. No automatic retry; Profile recovers, and the system, not a count, says when
+  only Settings is left. A guest can reach the same controls from guest Profile. Registering the phone
+  waits for sign-in.
+- Astra round 2 required a server change: registrations and sign-outs of one installation are numbered
+  by the app and ordered by the server (`PushInstallationBinding`, migration `notifications.0009`), so a
+  registration that was slow on the network can never rebind the phone to an account that has since
+  signed out or been replaced. Spec and runbook updated. Detail, screenshots and the device checks still
+  owed on real phones: `docs/PHASE_N1_NOTIFICATION_FIRST_OPEN.md`.
 
 ## Wassla: the bell names the ticket decision (N2, 2026-11-26)
 

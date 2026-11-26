@@ -300,6 +300,11 @@ class _GuestProfile extends ConsumerWidget {
 
           SectionHeader(title: l.guestSettings),
           _Row(
+            icon: Icons.notifications_active_outlined,
+            label: l.profileNotificationSettings,
+            onTap: () => context.pushNamed(Routes.profileNotifications),
+          ),
+          _Row(
             icon: Icons.translate_rounded,
             label: l.profileLanguage,
             value: ProfileScreen._localeLabel(context, ref),

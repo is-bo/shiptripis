@@ -3459,6 +3459,14 @@ class LAr extends L {
   String get pushPermissionEnabled => 'الإشعارات مفعّلة.';
 
   @override
+  String get pushPermissionEnabledGuest =>
+      'الإشعارات مسموحة على هذا الهاتف. سجّل الدخول وسيبدأ Wassla بإرسالها إليك هنا.';
+
+  @override
+  String get pushGuestSignInNote =>
+      'سجّل الدخول لتستلم إشعارات حسابك وتختار أنواعها.';
+
+  @override
   String get pushPermissionDeniedRequestable =>
       'لا تزال الإشعارات متوقفة. اختر تفعيل الإشعارات ليطلبها Android مرة أخرى. يبقى صندوق الإشعارات داخل التطبيق متاحًا في كل الأحوال.';
 

@@ -22,6 +22,9 @@ class NotificationSerializer(serializers.ModelSerializer):
 class PushDeviceRegistrationSerializer(serializers.Serializer):
     token = serializers.CharField(write_only=True, min_length=20, max_length=4096)
     installation_id = serializers.UUIDField()
+    # The app's own counter for this installation, one number per registration
+    # and per sign-out; see PushInstallationBinding.
+    binding_sequence = serializers.IntegerField(min_value=1, max_value=2**62)
     platform = serializers.ChoiceField(choices=PushDevice.Platform.choices)
     app_version = serializers.CharField(
         required=False,
@@ -50,6 +53,7 @@ class PushDeviceSerializer(serializers.ModelSerializer):
 
 class PushDeviceUnregisterSerializer(serializers.Serializer):
     installation_id = serializers.UUIDField()
+    binding_sequence = serializers.IntegerField(min_value=1, max_value=2**62)
 
 
 class NotificationPreferenceSerializer(serializers.ModelSerializer):

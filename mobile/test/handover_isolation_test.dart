@@ -112,14 +112,15 @@ void main() {
         );
       }
 
-      // And the keys it writes are exactly the eight it is allowed to hold.
+      // And the keys it writes are exactly the nine it is allowed to hold.
       // The account snapshot (K5) is the user's own presentation profile —
       // its key set is pinned in k5_session_snapshot_test.dart.
       final store = File(
         'lib/core/session/token_store.dart',
       ).readAsStringSync();
       final written = RegExp(
-        r'\.write\(\s*key:\s*(_k[A-Za-z]+)',
+        // A key is written directly, or through the counter helper.
+        r'(?:\.write\(\s*key:\s*|_addToCounter\(\s*)(_k[A-Za-z]+)',
       ).allMatches(store).map((m) => m.group(1)).toSet();
       expect(
         written,
@@ -132,11 +133,13 @@ void main() {
           '_kInstallationId',
           '_kPendingPushToken',
           '_kPushPermissionRequests',
+          '_kPushBindingSequence',
         },
         reason:
             'secure storage may hold session/push tokens, the account’s '
             'own profile snapshot, a random install ID, a count of '
-            'notification permission requests, a role and a locale '
+            'notification permission requests, the number of the newest push '
+            'registration, a role and a locale '
             '— never code material, a guest token or recipient details',
       );
     });

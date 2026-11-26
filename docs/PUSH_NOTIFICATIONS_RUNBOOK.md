@@ -123,26 +123,37 @@ Android has four normal-importance channels: Messages, Delivery updates,
 Account and verification, and Payments and payouts. The operating-system
 permission is requested on the app's own, once per installation, the first time
 the app is open on a usable screen (decision of Ismail after the 2026-11-26
-phone test): after the first frame and Firebase's start, with the app in the
-foreground and the session resolved, whether or not the person has signed in.
-Sign-in, resume and preference changes never display the prompt again. The
-installation keeps a count of the requests it made, which survives logout and
-account changes, because Android 13 and newer report a permission that was never
-asked for as a plain denial; the system status and that history decide together
-whether the prompt is still unspent. iOS asks when the status is undetermined and
-respects authorized and provisional. Android below 13 has no runtime prompt. A
-missing Firebase configuration or a failed start asks nothing and spends
-nothing, so the next launch that can ask still does.
+phone test): after the first frame and Firebase's start, with the app resumed
+and the session resolved, whether or not the person has signed in, and never
+over the splash, a sign-in or payment screen, or a notification still being
+opened (it waits for the next screen). Sign-in, resume and preference changes
+never display the prompt again. The installation keeps a count of the requests
+it made, which survives logout and account changes, because Android 13 and newer
+report a permission that was never asked for as a plain denial or as
+undetermined, and the pinned plugin writes its own history only after the dialog
+is answered; on Android the prompt goes ahead only while that count is zero. iOS
+asks when the status is undetermined (its status is exact, and a reinstall resets
+it) and respects authorized and provisional. Android below 13 has no runtime
+prompt. A missing Firebase configuration or a failed start asks nothing and
+spends nothing, so the next launch that can ask still does. A request the system
+never received (the person left the app, the call failed) is taken back.
 
-Profile > Notifications is the recovery path and the only later request. Android
-13 and newer shows its dialog at most twice: after the first-open prompt the
-button offers one more request, and after the second denial the screen offers
-the app's system notification settings instead. A permanent denial, an older
-Android version whose notifications are disabled, or an iOS denial links to
-those settings. Returning from settings refreshes the displayed permission state
-and registers the phone if it was granted there. The first-open prompt, a resume
-and the Profile button share one request, so the system is never asked twice at
-once. A denial does not disable the app or its in-app inbox.
+Profile > Notifications is the recovery path and the only later request, for a
+guest as well (guest Profile has the row). The system decides when Settings is
+the only way: Android reports a permanent denial only after a denial it will not
+show again, and keeps a dismissal requestable, so Enable stays until then. A
+permanent denial, an older Android version whose notifications are disabled, or
+an iOS denial links to the app's system notification settings. Returning from
+settings refreshes the displayed permission state and registers the phone if it
+was granted there. The first-open prompt, a resume and the Profile button share
+one request, so the system is never asked twice at once. A denial does not
+disable the app or its in-app inbox.
+
+The phone registers to an account only after sign-in. The app numbers every
+registration and every sign-out of an installation, and the server applies them
+in that order (`PushInstallationBinding`): a request overtaken by a later one is
+refused (`409 push_registration_superseded`), so a slow registration can never
+rebind the phone to an account that signed out or was replaced.
 
 The permission state and ShipTrip notification-type preferences are separate.
 Preferences control Messages and Marketplace delivery across the account;

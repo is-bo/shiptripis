@@ -6027,6 +6027,18 @@ abstract class L {
   /// **'Notifications are enabled.'**
   String get pushPermissionEnabled;
 
+  /// No description provided for @pushPermissionEnabledGuest.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications are allowed on this phone. Sign in and Wassla will start sending them here.'**
+  String get pushPermissionEnabledGuest;
+
+  /// No description provided for @pushGuestSignInNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to receive notifications for your account and to choose which kinds you get.'**
+  String get pushGuestSignInNote;
+
   /// No description provided for @pushPermissionDeniedRequestable.
   ///
   /// In en, this message translates to:

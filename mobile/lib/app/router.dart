@@ -182,6 +182,7 @@ const _publicLocations = <String>[
   '/profile',
   '/profile/language',
   '/profile/appearance',
+  '/profile/notifications',
   '/how-it-works',
   '/location/pick',
   '/discover/',

@@ -3484,6 +3484,14 @@ class LFr extends L {
   String get pushPermissionEnabled => 'Les notifications sont activées.';
 
   @override
+  String get pushPermissionEnabledGuest =>
+      'Les notifications sont autorisées sur ce téléphone. Connectez-vous et Wassla commencera à vous en envoyer ici.';
+
+  @override
+  String get pushGuestSignInNote =>
+      'Connectez-vous pour recevoir les notifications de votre compte et choisir lesquelles vous recevez.';
+
+  @override
   String get pushPermissionDeniedRequestable =>
       'Les notifications sont toujours désactivées. Choisissez Activer les notifications pour les redemander à Android. La boîte de réception de l’application reste disponible dans tous les cas.';
 

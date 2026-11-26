@@ -199,6 +199,20 @@ class FakeTokenStore extends TokenStore {
   Future<int> recordPushPermissionRequest() async => ++_pushPermissionRequests;
 
   @override
+  Future<int> releasePushPermissionRequest() async => _pushPermissionRequests =
+      _pushPermissionRequests > 0 ? _pushPermissionRequests - 1 : 0;
+
+  int _pushBindingSequence = 0;
+
+  @override
+  Future<int> nextPushBindingSequence() async => ++_pushBindingSequence;
+
+  @override
+  Future<void> raisePushBindingSequence(int sequence) async {
+    if (sequence > _pushBindingSequence) _pushBindingSequence = sequence;
+  }
+
+  @override
   Future<void> save({required String access, required String refresh}) async {
     invalidateIdentity();
     accountSnapshot = null;
@@ -327,8 +341,11 @@ ApiClient apiClientFor(
 /// [preferredLanguage] is passed through verbatim, including `null` and `''`,
 /// so a test can reproduce a legacy row exactly as an older deployment would
 /// serialise it rather than as the client wishes it looked.
-Map<String, dynamic> meFixture({Object? preferredLanguage = 'en'}) => {
-  'id': 42,
+Map<String, dynamic> meFixture({
+  Object? preferredLanguage = 'en',
+  int id = 42,
+}) => {
+  'id': id,
   'email': 'sender@example.com',
   'full_name': 'Amina Bouzid',
   'phone': '+213555000111',

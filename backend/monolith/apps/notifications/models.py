@@ -115,6 +115,29 @@ class PushDevice(models.Model):
         return f"PushDevice#{self.pk} {self.platform} {self.token_fingerprint[:12]}"
 
 
+class PushInstallationBinding(models.Model):
+    """The newest binding sequence the app reported for one installation.
+
+    The app numbers every registration and every sign-out of an installation
+    from one counter that only grows. A request carrying a number below this
+    one was overtaken by a later registration or sign-out and is refused, so a
+    registration that was slow on the network can never rebind the phone to an
+    account that has since signed out or been replaced. The row exists apart
+    from ``PushDevice`` because a sign-out can arrive before the registration
+    it overtakes has created a device.
+    """
+
+    installation_id = models.UUIDField(primary_key=True)
+    sequence = models.BigIntegerField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "notification_push_installation_binding"
+
+    def __str__(self) -> str:
+        return f"PushInstallationBinding {self.installation_id} #{self.sequence}"
+
+
 class NotificationPreference(models.Model):
     """Small cross-device push preference set; essential push has no opt-out."""
 

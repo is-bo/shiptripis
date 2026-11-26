@@ -1,11 +1,12 @@
 /// Phase 8F-D: push taps route only from structured, non-secret identifiers.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:go_router/go_router.dart';
 import 'package:shiptrip/app/router.dart';
 import 'package:shiptrip/core/push/notification_socket.dart';
 import 'package:shiptrip/core/push/push_coordinator.dart';
@@ -17,6 +18,7 @@ import 'package:shiptrip/domain/push.dart';
 import 'package:shiptrip/features/profile/notification_settings_screen.dart';
 
 import 'support/harness.dart';
+import 'support/push_router.dart';
 import 'support/fake_api.dart';
 
 class _PushTokenStore extends FakeTokenStore {
@@ -98,17 +100,37 @@ class _FakePushMessaging implements PushMessaging {
   Future<String?> token() async => currentToken;
 }
 
-/// Waits, on real time, until the coordinator reaches [registration].
-Future<void> _untilRegistration(
-  ProviderContainer container,
-  PushRegistrationState registration,
-) async {
-  for (var i = 0; i < 300; i++) {
-    if (container.read(pushCoordinatorProvider).registration == registration) {
-      return;
-    }
-    await Future<void>.delayed(const Duration(milliseconds: 10));
+Future<void> _settle(WidgetTester tester) async {
+  for (var i = 0; i < 10; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
   }
+}
+
+/// A signed-in coordinator with a router on screen: the first-open prompt asks
+/// only once a usable screen is painted.
+Future<ProviderContainer> _mountedCoordinator(
+  WidgetTester tester,
+  FakeBackend backend,
+  FakeTokenStore tokens,
+  PushMessaging messaging,
+) async {
+  final router = pushTestRouter();
+  final container = ProviderContainer(
+    overrides: [
+      tokenStoreProvider.overrideWithValue(tokens),
+      apiClientProvider.overrideWithValue(apiClientFor(backend, tokens)),
+      sessionProvider.overrideWith(_FixedSession.new),
+      routerProvider.overrideWithValue(router),
+      notificationSocketProvider.overrideWithValue(_NoopSocket()),
+      pushMessagingProvider.overrideWithValue(messaging),
+    ],
+  );
+  addTearDown(() {
+    container.dispose();
+    router.dispose();
+  });
+  await mountRouter(tester, container, router);
+  return container;
 }
 
 class _FixedSession extends SessionController {
@@ -252,6 +274,7 @@ void main() {
       expect(online.lastTo('POST', '/api/auth/sign-out')?.body, {
         'refresh': 'refresh-token',
         'installation_id': 'ca7eedc0-1665-4bbd-bfae-45f841beb8d7',
+        'binding_sequence': 1,
       });
 
       final offline = FakeBackend();
@@ -278,6 +301,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         pushCoordinatorProvider.overrideWith(() => coordinator),
+        sessionProvider.overrideWith(_FixedSession.new),
         pushPreferencesProvider.overrideWith(
           (ref) async => const PushPreferences(
             essentialEnabled: true,
@@ -314,6 +338,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         pushCoordinatorProvider.overrideWith(() => coordinator),
+        sessionProvider.overrideWith(_FixedSession.new),
         pushPreferencesProvider.overrideWith(
           (ref) async => const PushPreferences(
             essentialEnabled: true,
@@ -350,6 +375,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         pushCoordinatorProvider.overrideWith(() => coordinator),
+        sessionProvider.overrideWith(_FixedSession.new),
         pushPreferencesProvider.overrideWith(
           (ref) async => const PushPreferences(
             essentialEnabled: true,
@@ -385,6 +411,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         pushCoordinatorProvider.overrideWith(() => coordinator),
+        sessionProvider.overrideWith(_FixedSession.new),
         pushPreferencesProvider.overrideWith(
           (ref) async => const PushPreferences(
             essentialEnabled: true,
@@ -413,9 +440,9 @@ void main() {
     expect(find.textContaining('could not finish registering'), findsOneWidget);
   });
 
-  test(
+  testWidgets(
     'the first-open grant uses the existing secure device registration API',
-    () async {
+    (tester) async {
       final backend = FakeBackend()
         ..on(
           'POST',
@@ -424,28 +451,15 @@ void main() {
         );
       final tokens = _PushTokenStore();
       final messaging = _FakePushMessaging();
-      final router = GoRouter(
-        routes: [
-          GoRoute(path: '/', builder: (_, _) => const SizedBox.shrink()),
-        ],
+      final container = await _mountedCoordinator(
+        tester,
+        backend,
+        tokens,
+        messaging,
       );
-      final container = ProviderContainer(
-        overrides: [
-          tokenStoreProvider.overrideWithValue(tokens),
-          apiClientProvider.overrideWithValue(apiClientFor(backend, tokens)),
-          sessionProvider.overrideWith(_FixedSession.new),
-          routerProvider.overrideWithValue(router),
-          notificationSocketProvider.overrideWithValue(_NoopSocket()),
-          pushMessagingProvider.overrideWithValue(messaging),
-        ],
-      );
-      addTearDown(() {
-        container.dispose();
-        router.dispose();
-      });
 
       container.read(pushCoordinatorProvider);
-      await _untilRegistration(container, PushRegistrationState.registered);
+      await _settle(tester);
       expect(
         container.read(pushCoordinatorProvider).registration,
         PushRegistrationState.registered,
@@ -456,62 +470,51 @@ void main() {
       expect(backend.lastTo('POST', '/api/notifications/devices')?.body, {
         'token': 'fcm-token-that-never-enters-the-ui',
         'installation_id': 'ca7eedc0-1665-4bbd-bfae-45f841beb8d7',
+        'binding_sequence': 1,
         'platform': 'android',
         'app_version': '',
       });
     },
   );
 
-  test(
-    'failed device registration can be retried without re-prompting',
-    () async {
-      var attempts = 0;
-      final backend = FakeBackend()
-        ..handle('POST', '/api/notifications/devices', (_) {
-          attempts++;
-          return attempts == 1
-              ? const FakeResponse(500, {'detail': 'temporary failure'})
-              : const FakeResponse(201, {'id': 3, 'active': true});
-        });
-      final tokens = _PushTokenStore();
-      final messaging = _FakePushMessaging();
-      final router = GoRouter(
-        routes: [
-          GoRoute(path: '/', builder: (_, _) => const SizedBox.shrink()),
-        ],
-      );
-      final container = ProviderContainer(
-        overrides: [
-          tokenStoreProvider.overrideWithValue(tokens),
-          apiClientProvider.overrideWithValue(apiClientFor(backend, tokens)),
-          sessionProvider.overrideWith(_FixedSession.new),
-          routerProvider.overrideWithValue(router),
-          notificationSocketProvider.overrideWithValue(_NoopSocket()),
-          pushMessagingProvider.overrideWithValue(messaging),
-        ],
-      );
-      addTearDown(() {
-        container.dispose();
-        router.dispose();
+  testWidgets('failed device registration can be retried without re-prompting', (
+    tester,
+  ) async {
+    var attempts = 0;
+    final backend = FakeBackend()
+      ..handle('POST', '/api/notifications/devices', (_) {
+        attempts++;
+        // A refusal, not a server failure: the HTTP layer retries those on real
+        // timers, which a widget test's fake clock never fires.
+        return attempts == 1
+            ? const FakeResponse(400, {'detail': 'not accepted'})
+            : const FakeResponse(201, {'id': 3, 'active': true});
       });
+    final messaging = _FakePushMessaging();
+    final container = await _mountedCoordinator(
+      tester,
+      backend,
+      _PushTokenStore(),
+      messaging,
+    );
 
-      final coordinator = container.read(pushCoordinatorProvider.notifier);
-      await _untilRegistration(container, PushRegistrationState.failed);
-      expect(
-        container.read(pushCoordinatorProvider).registration,
-        PushRegistrationState.failed,
-      );
-      expect(messaging.requests, 1);
+    final coordinator = container.read(pushCoordinatorProvider.notifier);
+    await _settle(tester);
+    expect(
+      container.read(pushCoordinatorProvider).registration,
+      PushRegistrationState.failed,
+    );
+    expect(messaging.requests, 1);
 
-      await coordinator.retryRegistration();
-      expect(
-        container.read(pushCoordinatorProvider).registration,
-        PushRegistrationState.registered,
-      );
-      expect(messaging.requests, 1);
-      expect(backend.to('POST', '/api/notifications/devices'), hasLength(2));
-    },
-  );
+    unawaited(coordinator.retryRegistration());
+    await _settle(tester);
+    expect(
+      container.read(pushCoordinatorProvider).registration,
+      PushRegistrationState.registered,
+    );
+    expect(messaging.requests, 1);
+    expect(backend.to('POST', '/api/notifications/devices'), hasLength(2));
+  });
 
   testWidgets('Arabic preferences are RTL and essential remains fixed', (
     tester,
@@ -524,6 +527,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         pushCoordinatorProvider.overrideWith(() => coordinator),
+        sessionProvider.overrideWith(_FixedSession.new),
         pushPreferencesProvider.overrideWith(
           (ref) async => const PushPreferences(
             essentialEnabled: true,

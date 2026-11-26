@@ -166,10 +166,17 @@ class AuthRepository {
     if (refresh != null) {
       try {
         final installationId = await _tokens.readOrCreateInstallationId();
+        // Numbered after every registration already started, so the server
+        // ends the phone's binding in the order the app did.
+        final bindingSequence = await _tokens.nextPushBindingSequence();
         if (_tokens.identityGeneration != signOutIdentity) return;
         await _api.postVoid(
           '/api/auth/sign-out',
-          body: {'refresh': refresh, 'installation_id': installationId},
+          body: {
+            'refresh': refresh,
+            'installation_id': installationId,
+            'binding_sequence': bindingSequence,
+          },
         );
       } on Object {
         // Push cleanup is best-effort. An expired session, unreachable API,

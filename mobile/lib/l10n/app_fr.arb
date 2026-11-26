@@ -1002,6 +1002,8 @@
   "pushPermissionHeading": "Sur ce téléphone",
   "pushPermissionBody": "Recevez à temps les nouvelles concernant les offres, paiements, livraisons, messages et vérifications. Wassla demande l’autorisation une seule fois, à la première ouverture de l’application, et vous pouvez activer les notifications ici à tout moment.",
   "pushPermissionEnabled": "Les notifications sont activées.",
+  "pushPermissionEnabledGuest": "Les notifications sont autorisées sur ce téléphone. Connectez-vous et Wassla commencera à vous en envoyer ici.",
+  "pushGuestSignInNote": "Connectez-vous pour recevoir les notifications de votre compte et choisir lesquelles vous recevez.",
   "pushPermissionDeniedRequestable": "Les notifications sont toujours désactivées. Choisissez Activer les notifications pour les redemander à Android. La boîte de réception de l’application reste disponible dans tous les cas.",
   "pushPermissionDenied": "Les notifications sont désactivées dans le système. Vous pouvez les activer dans les réglages.",
   "pushPermissionUnavailable": "Les notifications push ne sont pas configurées dans cette version. Les notifications dans l’application restent disponibles.",

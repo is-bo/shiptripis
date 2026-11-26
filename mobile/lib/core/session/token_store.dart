@@ -7,8 +7,8 @@
 /// fields only — see `Account.toSnapshotJson`). All four go in the platform
 /// keystore, and all four are wiped on sign-out. Beside them sit a few things
 /// that belong to the phone rather than the account and so survive sign-out: a
-/// random installation ID, a pending push token and the count of notification
-/// permission requests.
+/// random installation ID, a pending push token, the count of notification
+/// permission requests and the number of the newest push registration.
 ///
 /// **Never stored, at any layer:** a pickup code, a delivery code, a guest
 /// payment token, recipient contact details, or a payment provider secret.
@@ -41,6 +41,7 @@ class TokenStore {
   final FlutterSecureStorage _storage;
   int _identityGeneration = 0;
   Future<void> _credentialWriteTail = Future<void>.value();
+  Future<void> _counterWriteTail = Future<void>.value();
 
   /// Changes synchronously before any credential mutation awaits platform
   /// storage. Token refresh uses it to reject a response started by an older
@@ -65,6 +66,7 @@ class TokenStore {
   static const _kInstallationId = 'push.installation_id';
   static const _kPendingPushToken = 'push.pending_token';
   static const _kPushPermissionRequests = 'push.permission_requests';
+  static const _kPushBindingSequence = 'push.binding_sequence';
 
   /// The last profile the server confirmed for the stored credentials.
   ///
@@ -197,10 +199,53 @@ class TokenStore {
 
   /// Counts one more request, to be written *before* the system is asked: a
   /// prompt interrupted by the app being killed still counts as spent.
-  Future<int> recordPushPermissionRequest() async {
-    final next = await readPushPermissionRequests() + 1;
-    await _storage.write(key: _kPushPermissionRequests, value: '$next');
-    return next;
+  Future<int> recordPushPermissionRequest() =>
+      _addToCounter(_kPushPermissionRequests, 1);
+
+  /// Takes back a count whose system dialog never opened: the app left the
+  /// screen between the count and the request, or the request itself failed.
+  Future<int> releasePushPermissionRequest() =>
+      _addToCounter(_kPushPermissionRequests, -1);
+
+  /// The next number for a push registration or a sign-out of this
+  /// installation. The server applies them in this order and refuses a request
+  /// numbered below one it has already applied, so a registration that was
+  /// slow on the network can never rebind the phone to an account that has
+  /// since signed out or been replaced. Like the installation ID it belongs to
+  /// the phone and only grows; it holds no account information.
+  Future<int> nextPushBindingSequence() =>
+      _addToCounter(_kPushBindingSequence, 1);
+
+  /// Moves the counter up to at least [sequence], the newest number the server
+  /// reported, so a phone whose counter was lost numbers its next request
+  /// above everything the server has seen. Never lowers it.
+  Future<void> raisePushBindingSequence(int sequence) => _serializeCounterWrite(
+    () async {
+      final current =
+          int.tryParse(await _storage.read(key: _kPushBindingSequence) ?? '') ??
+          0;
+      if (sequence > current) {
+        await _storage.write(key: _kPushBindingSequence, value: '$sequence');
+      }
+    },
+  );
+
+  Future<int> _addToCounter(String key, int delta) =>
+      _serializeCounterWrite(() async {
+        final current = int.tryParse(await _storage.read(key: key) ?? '') ?? 0;
+        final next = current + delta < 0 ? 0 : current + delta;
+        await _storage.write(key: key, value: '$next');
+        return next;
+      });
+
+  /// Counter updates read, add and write, so two at once would lose one.
+  Future<T> _serializeCounterWrite<T>(Future<T> Function() operation) {
+    final result = _counterWriteTail.then((_) => operation());
+    _counterWriteTail = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return result;
   }
 
   Future<String?> readPendingPushToken() =>

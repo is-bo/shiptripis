@@ -2022,6 +2022,7 @@ class PushRepository {
   Future<void> registerDevice({
     required String token,
     required String installationId,
+    required int bindingSequence,
     required String platform,
     required String appVersion,
   }) async {
@@ -2030,6 +2031,7 @@ class PushRepository {
       body: {
         'token': token,
         'installation_id': installationId,
+        'binding_sequence': bindingSequence,
         'platform': platform,
         'app_version': appVersion,
       },

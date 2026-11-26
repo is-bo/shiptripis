@@ -3453,6 +3453,14 @@ class LEn extends L {
   String get pushPermissionEnabled => 'Notifications are enabled.';
 
   @override
+  String get pushPermissionEnabledGuest =>
+      'Notifications are allowed on this phone. Sign in and Wassla will start sending them here.';
+
+  @override
+  String get pushGuestSignInNote =>
+      'Sign in to receive notifications for your account and to choose which kinds you get.';
+
+  @override
   String get pushPermissionDeniedRequestable =>
       'Notifications are still off. Choose Enable notifications to ask Android again. Your in-app inbox keeps working either way.';
 

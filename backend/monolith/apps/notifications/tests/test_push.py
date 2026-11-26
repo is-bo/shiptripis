@@ -63,9 +63,12 @@ def _user(email: str, language: str = "en") -> User:
     )
 
 
-def _registration(installation_id, token: str, platform: str = "android") -> dict:
+def _registration(
+    installation_id, token: str, platform: str = "android", sequence: int = 1
+) -> dict:
     return {
         "installation_id": str(installation_id),
+        "binding_sequence": sequence,
         "token": token,
         "platform": platform,
         "app_version": "1.0.0",
@@ -158,7 +161,7 @@ class PushDeviceAPITests(TestCase):
         self.client.force_authenticate(self.other)
         response = self.client.post(
             "/api/notifications/devices/unregister",
-            {"installation_id": str(self.installation)},
+            {"installation_id": str(self.installation), "binding_sequence": 2},
             format="json",
         )
         self.assertEqual(response.status_code, 204)
@@ -169,7 +172,7 @@ class PushDeviceAPITests(TestCase):
         self.client.force_authenticate(self.user)
         response = self.client.post(
             "/api/notifications/devices/unregister",
-            {"installation_id": str(self.installation)},
+            {"installation_id": str(self.installation), "binding_sequence": 2},
             format="json",
         )
         self.assertEqual(response.status_code, 204)
@@ -190,11 +193,144 @@ class PushDeviceAPITests(TestCase):
             {
                 "refresh": str(RefreshToken.for_user(self.user)),
                 "installation_id": str(self.installation),
+                "binding_sequence": 2,
             },
             format="json",
         )
         self.assertEqual(response.status_code, 205)
         self.assertFalse(PushDevice.objects.get().active)
+
+    # ---- A registration that was slow on the network (N1) -----------------
+    # The app numbers every registration and sign-out of one installation from
+    # a counter that only grows. A request overtaken by a later one must not
+    # rebind the phone, whatever order the requests reach the server in.
+
+    def _register(self, user, sequence, token=None, installation=None):
+        self.client.force_authenticate(user)
+        return self.client.post(
+            "/api/notifications/devices",
+            _registration(
+                installation or self.installation,
+                token or self.token,
+                sequence=sequence,
+            ),
+            format="json",
+        )
+
+    def _sign_out(self, user, sequence):
+        self.client.force_authenticate(user)
+        return self.client.post(
+            "/api/auth/sign-out",
+            {
+                "refresh": str(RefreshToken.for_user(user)),
+                "installation_id": str(self.installation),
+                "binding_sequence": sequence,
+            },
+            format="json",
+        )
+
+    def test_registration_delayed_past_sign_out_does_not_rebind_the_phone(self):
+        # Registered earlier, then a token-refresh registration (2) is held up
+        # while the person signs out (3).
+        self.assertEqual(self._register(self.user, 1).status_code, 200)
+        self.assertEqual(self._sign_out(self.user, 3).status_code, 205)
+        self.assertFalse(PushDevice.objects.get().active)
+
+        late = self._register(self.user, 2, token="fcm-token-late-1234567890")
+
+        self.assertEqual(late.status_code, 409)
+        self.assertEqual(late.data["code"], "push_registration_superseded")
+        self.assertEqual(
+            late.data["current_sequence"], 3, "the app can catch its counter up"
+        )
+        device = PushDevice.objects.get()
+        self.assertEqual(device.user, self.user)
+        self.assertFalse(device.active)
+        self.assertEqual(device.token, self.token, "the late token is not stored")
+
+    def test_first_registration_delayed_past_sign_out_creates_no_device(self):
+        # The sign-out reaches the server before the very first registration
+        # does: there is no device to deactivate, so the sign-out is recorded.
+        self.assertEqual(self._sign_out(self.user, 2).status_code, 205)
+        self.assertEqual(PushDevice.objects.count(), 0)
+
+        late = self._register(self.user, 1)
+
+        self.assertEqual(late.status_code, 409)
+        self.assertEqual(PushDevice.objects.count(), 0)
+
+    def test_registration_delayed_past_the_next_account_keeps_that_account(self):
+        # A's registration (1) is slow; A signs out (2); B signs in on the same
+        # phone and registers (3); only then does A's request arrive.
+        self.assertEqual(self._sign_out(self.user, 2).status_code, 205)
+        self.assertEqual(self._register(self.other, 3).status_code, 200)
+
+        late = self._register(self.user, 1)
+
+        self.assertEqual(late.status_code, 409)
+        device = PushDevice.objects.get()
+        self.assertEqual(device.user, self.other)
+        self.assertTrue(device.active)
+
+    def test_registration_delayed_past_the_next_account_without_a_sign_out(self):
+        # The sign-out never reached the server (offline); B's registration
+        # still overtakes A's late one.
+        self.assertEqual(self._register(self.other, 3).status_code, 200)
+
+        late = self._register(self.user, 1)
+
+        self.assertEqual(late.status_code, 409)
+        device = PushDevice.objects.get()
+        self.assertEqual(device.user, self.other)
+        self.assertTrue(device.active)
+
+    def test_sign_in_after_sign_out_registers_again(self):
+        self.assertEqual(self._sign_out(self.user, 2).status_code, 205)
+        self.assertEqual(self._register(self.user, 3).status_code, 200)
+        device = PushDevice.objects.get()
+        self.assertEqual(device.user, self.user)
+        self.assertTrue(device.active)
+
+    def test_sign_out_delayed_past_the_next_registration_changes_nothing(self):
+        # The same person signed back in (3) before the earlier sign-out (2)
+        # arrived: it must not switch the new registration off.
+        self.assertEqual(self._register(self.user, 3).status_code, 200)
+
+        self.assertEqual(self._sign_out(self.user, 2).status_code, 205)
+
+        self.assertTrue(PushDevice.objects.get().active)
+
+    def test_a_repeated_registration_is_idempotent(self):
+        self.assertEqual(self._register(self.user, 4).status_code, 200)
+        self.assertEqual(self._register(self.user, 4).status_code, 200)
+        self.assertEqual(PushDevice.objects.count(), 1)
+        self.assertTrue(PushDevice.objects.get().active)
+
+    def test_sign_out_without_a_binding_number_still_signs_out_and_leaves_the_device(
+        self,
+    ):
+        self.assertEqual(self._register(self.user, 1).status_code, 200)
+        self.client.force_authenticate(self.user)
+        response = self.client.post(
+            "/api/auth/sign-out",
+            {
+                "refresh": str(RefreshToken.for_user(self.user)),
+                "installation_id": str(self.installation),
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 205)
+        self.assertTrue(PushDevice.objects.get().active)
+
+    def test_a_binding_sequence_is_required(self):
+        self.client.force_authenticate(self.user)
+        body = _registration(self.installation, self.token)
+        del body["binding_sequence"]
+        response = self.client.post(
+            "/api/notifications/devices", body, format="json"
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(PushDevice.objects.count(), 0)
 
     def test_preferences_have_two_real_toggles_and_essential_is_fixed(self):
         self.client.force_authenticate(self.user)

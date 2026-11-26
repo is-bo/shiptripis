@@ -12,7 +12,9 @@ library;
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -24,15 +26,20 @@ import 'package:shiptrip/core/push/push_messaging.dart';
 import 'package:shiptrip/core/session/session.dart';
 import 'package:shiptrip/domain/account.dart';
 import 'package:shiptrip/domain/push.dart';
+import 'package:shiptrip/features/auth/sign_in_screen.dart';
 import 'package:shiptrip/features/home/home_screen.dart';
 import 'package:shiptrip/features/profile/notification_settings_screen.dart';
 import 'package:shiptrip/features/splash/splash_screen.dart';
 
 import 'support/fake_api.dart';
 import 'support/harness.dart';
+import 'support/push_router.dart';
 
 class _PushTokenStore extends FakeTokenStore {
   _PushTokenStore({super.refresh});
+
+  /// While set, the write that counts a system request stays pending.
+  Completer<void>? recordGate;
 
   @override
   Future<String> readOrCreateInstallationId() async => 'installation';
@@ -42,19 +49,36 @@ class _PushTokenStore extends FakeTokenStore {
 
   @override
   Future<void> writePendingPushToken(String? token) async {}
+
+  @override
+  Future<int> recordPushPermissionRequest() async {
+    final count = await super.recordPushPermissionRequest();
+    await recordGate?.future;
+    return count;
+  }
 }
 
 class _FakePushMessaging implements PushMessaging {
   _FakePushMessaging({
     this.currentPermission = PushPermission.notDetermined,
     this.requestResult = PushPermission.authorized,
+    this.launchMessage,
   });
 
   PushPermission currentPermission;
 
   /// What the person answers when the system asks.
   PushPermission requestResult;
+
+  /// The notification the app was opened from, if any.
+  final PushMessage? launchMessage;
   int requests = 0;
+
+  /// Runs at the instant the system is asked, before the dialog opens.
+  void Function()? onRequest;
+
+  /// How many of the next requests fail before the system shows anything.
+  int failures = 0;
 
   /// While set, the system dialog stays open until it completes.
   Completer<void>? dialog;
@@ -70,12 +94,17 @@ class _FakePushMessaging implements PushMessaging {
   @override
   Stream<String> get tokenRefresh => const Stream.empty();
   @override
-  Future<PushMessage?> initialMessage() async => null;
+  Future<PushMessage?> initialMessage() async => launchMessage;
   @override
   Future<PushPermission> permission() async => currentPermission;
   @override
   Future<PushPermission> requestPermission() async {
     requests++;
+    onRequest?.call();
+    if (failures > 0) {
+      failures--;
+      throw PlatformException(code: 'no-activity');
+    }
     await dialog?.future;
     currentPermission = requestResult;
     return requestResult;
@@ -105,7 +134,8 @@ class _HandSession extends SessionController {
   @override
   SessionState build() => const SessionSignedOut();
 
-  void enter() => state = SessionSignedIn(Account.fromJson(meFixture()));
+  void enter({int id = 42}) =>
+      state = SessionSignedIn(Account.fromJson(meFixture(id: id)));
   void leave() => state = const SessionSignedOut();
 }
 
@@ -125,6 +155,14 @@ Never _offline(RecordedRequest r) => throw DioException(
   requestOptions: RequestOptions(path: r.path),
   type: DioExceptionType.connectionError,
 );
+
+/// The location on top of [container]'s router stack, pushed routes included.
+String _topLocation(ProviderContainer container) => container
+    .read(routerProvider)
+    .routerDelegate
+    .currentConfiguration
+    .last
+    .matchedLocation;
 
 Future<void> _settle(WidgetTester tester, [int frames = 20]) async {
   for (var i = 0; i < frames; i++) {
@@ -161,31 +199,34 @@ Future<void> _shutdown(WidgetTester tester) async {
   await _settle(tester, 5);
 }
 
-/// A signed-in coordinator over [push], without a widget tree. [session]
-/// replaces the signed-in member, for a test that starts as a guest.
-ProviderContainer _coordinatorContainer(
+/// A signed-in coordinator over [push], with a router on screen: the prompt
+/// asks only once a usable screen is painted, so a coordinator with nothing on
+/// display would never ask. [session] replaces the signed-in member, for a test
+/// that starts as a guest; [router] replaces the one that starts on Home.
+Future<ProviderContainer> _coordinatorContainer(
+  WidgetTester tester,
   FakeBackend backend,
   FakeTokenStore tokens,
   PushMessaging push, {
   SessionController Function()? session,
-}) {
-  final router = GoRouter(
-    routes: [GoRoute(path: '/', builder: (_, _) => const SizedBox.shrink())],
-  );
+  GoRouter? router,
+}) async {
+  final screens = router ?? pushTestRouter();
   final container = ProviderContainer(
     overrides: [
       tokenStoreProvider.overrideWithValue(tokens),
       apiClientProvider.overrideWithValue(apiClientFor(backend, tokens)),
       sessionProvider.overrideWith(session ?? _FixedSession.new),
-      routerProvider.overrideWithValue(router),
+      routerProvider.overrideWithValue(screens),
       notificationSocketProvider.overrideWithValue(_NoopSocket()),
       pushMessagingProvider.overrideWithValue(push),
     ],
   );
   addTearDown(() {
     container.dispose();
-    router.dispose();
+    screens.dispose();
   });
+  await mountRouter(tester, container, screens);
   return container;
 }
 
@@ -253,7 +294,12 @@ void main() {
           const FakeResponse(201, {'id': 3, 'active': true}),
         );
       final push = DeferredPushMessaging();
-      final container = _coordinatorContainer(backend, _PushTokenStore(), push);
+      final container = await _coordinatorContainer(
+        tester,
+        backend,
+        _PushTokenStore(),
+        push,
+      );
 
       container.read(pushCoordinatorProvider);
       // A resume can land before Firebase is up; it waits instead of failing.
@@ -286,7 +332,12 @@ void main() {
     ) async {
       final backend = FakeBackend();
       final push = DeferredPushMessaging();
-      final container = _coordinatorContainer(backend, _PushTokenStore(), push);
+      final container = await _coordinatorContainer(
+        tester,
+        backend,
+        _PushTokenStore(),
+        push,
+      );
       container.read(pushCoordinatorProvider);
 
       await push.start(() async => throw StateError('no google-services'));
@@ -317,6 +368,7 @@ void main() {
               ),
             ),
           ),
+          sessionProvider.overrideWith(_FixedSession.new),
           pushPreferencesProvider.overrideWith(
             (ref) async => const PushPreferences(
               essentialEnabled: true,
@@ -363,7 +415,8 @@ void main() {
     ) async {
       final backend = devices();
       final push = _FakePushMessaging();
-      final container = _coordinatorContainer(
+      final container = await _coordinatorContainer(
+        tester,
         backend,
         _PushTokenStore(),
         push,
@@ -392,7 +445,8 @@ void main() {
     ) async {
       final push = _FakePushMessaging();
       final tokens = _PushTokenStore();
-      final container = _coordinatorContainer(
+      final container = await _coordinatorContainer(
+        tester,
         devices(),
         tokens,
         push,
@@ -420,7 +474,7 @@ void main() {
         currentPermission: PushPermission.deniedRequestable,
         requestResult: PushPermission.deniedRequestable,
       );
-      final one = _coordinatorContainer(devices(), tokens, first);
+      final one = await _coordinatorContainer(tester, devices(), tokens, first);
       one.read(pushCoordinatorProvider);
       await _settle(tester, 3);
       expect(first.requests, 1);
@@ -430,7 +484,12 @@ void main() {
       final second = _FakePushMessaging(
         currentPermission: PushPermission.deniedRequestable,
       );
-      final two = _coordinatorContainer(devices(), tokens, second);
+      final two = await _coordinatorContainer(
+        tester,
+        devices(),
+        tokens,
+        second,
+      );
       two.read(pushCoordinatorProvider);
       await _settle(tester, 3);
 
@@ -448,7 +507,8 @@ void main() {
       final push = _FakePushMessaging(
         currentPermission: PushPermission.deniedRequestable,
       );
-      final container = _coordinatorContainer(
+      final container = await _coordinatorContainer(
+        tester,
         devices(),
         _PushTokenStore(),
         push,
@@ -463,14 +523,17 @@ void main() {
       );
     });
 
-    testWidgets('after a denial Profile retries once, then needs Settings', (
+    testWidgets('a denial and a dismissal still leave Profile offering Enable', (
       tester,
     ) async {
+      // Android keeps a permission it was dismissed on requestable: the dialog
+      // can still show, so the button must not be replaced by Settings.
       final push = _FakePushMessaging(
         currentPermission: PushPermission.deniedRequestable,
         requestResult: PushPermission.deniedRequestable,
       );
-      final container = _coordinatorContainer(
+      final container = await _coordinatorContainer(
+        tester,
         devices(),
         _PushTokenStore(),
         push,
@@ -478,10 +541,6 @@ void main() {
       container.read(pushCoordinatorProvider);
       await _settle(tester, 3);
       expect(push.requests, 1, reason: 'the first-open prompt');
-      expect(
-        container.read(pushCoordinatorProvider).permission,
-        PushPermission.deniedRequestable,
-      );
 
       await background(tester);
       await resume(tester);
@@ -490,11 +549,40 @@ void main() {
 
       final coordinator = container.read(pushCoordinatorProvider.notifier);
       await coordinator.requestPermission();
-      expect(push.requests, 2, reason: 'the Profile button is explicit');
+      await coordinator.requestPermission();
+      expect(push.requests, 3, reason: 'the Profile button is explicit');
+      expect(
+        container.read(pushCoordinatorProvider).permission,
+        PushPermission.deniedRequestable,
+        reason: 'the system, not a count, says when Settings is the only way',
+      );
+    });
+
+    testWidgets('a refusal the system calls permanent leads to Settings', (
+      tester,
+    ) async {
+      final push = _FakePushMessaging(
+        currentPermission: PushPermission.deniedRequestable,
+        requestResult: PushPermission.deniedRequestable,
+      );
+      final container = await _coordinatorContainer(
+        tester,
+        devices(),
+        _PushTokenStore(),
+        push,
+      );
+      container.read(pushCoordinatorProvider);
+      await _settle(tester, 3);
+      expect(push.requests, 1);
+
+      push.requestResult = PushPermission.settingsRequired;
+      await container
+          .read(pushCoordinatorProvider.notifier)
+          .requestPermission();
+      expect(push.requests, 2);
       expect(
         container.read(pushCoordinatorProvider).permission,
         PushPermission.settingsRequired,
-        reason: 'Android shows its dialog twice; the next denial is final',
       );
 
       await background(tester);
@@ -506,11 +594,126 @@ void main() {
       );
     });
 
+    testWidgets('Android that reads undetermined after a lost dialog is not '
+        'asked twice', (tester) async {
+      // The app was killed with the dialog open: the plugin has not recorded
+      // the request yet and reports an undetermined permission again.
+      final tokens = _PushTokenStore();
+      await tokens.recordPushPermissionRequest();
+      final push = _FakePushMessaging();
+      final container = await _coordinatorContainer(
+        tester,
+        devices(),
+        tokens,
+        push,
+      );
+      container.read(pushCoordinatorProvider);
+      await _settle(tester, 3);
+
+      expect(push.requests, 0);
+      expect(
+        container.read(pushCoordinatorProvider).permission,
+        PushPermission.notDetermined,
+        reason: 'Profile still offers Enable',
+      );
+    });
+
+    testWidgets('an iPhone that kept its history is asked again after a '
+        'reinstall', (tester) async {
+      // The keychain survives a reinstall but the permission does not.
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      try {
+        final tokens = _PushTokenStore();
+        await tokens.recordPushPermissionRequest();
+        final push = _FakePushMessaging();
+        final container = await _coordinatorContainer(
+          tester,
+          devices(),
+          tokens,
+          push,
+        );
+        container.read(pushCoordinatorProvider);
+        await _settle(tester, 3);
+
+        expect(push.requests, 1);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets('leaving the app while the request is being counted keeps the '
+        'prompt pending', (tester) async {
+      for (final away in [
+        AppLifecycleState.paused,
+        AppLifecycleState.inactive,
+      ]) {
+        final tokens = _PushTokenStore()..recordGate = Completer<void>();
+        final push = _FakePushMessaging();
+        final container = await _coordinatorContainer(
+          tester,
+          devices(),
+          tokens,
+          push,
+        );
+        container.read(pushCoordinatorProvider);
+        await _settle(tester, 3);
+        expect(push.requests, 0, reason: 'the count is still being written');
+        expect(await tokens.readPushPermissionRequests(), 1);
+
+        tester.binding.handleAppLifecycleStateChanged(away);
+        tokens.recordGate!.complete();
+        await _settle(tester, 3);
+        expect(push.requests, 0, reason: 'nobody is looking at the app: $away');
+        expect(
+          await tokens.readPushPermissionRequests(),
+          0,
+          reason: 'the count is taken back, nothing was asked',
+        );
+
+        await resume(tester);
+        expect(push.requests, 1, reason: 'asked when the app is back: $away');
+        expect(await tokens.readPushPermissionRequests(), 1);
+      }
+    });
+
+    testWidgets('a call that fails is taken back and tried again, twice at '
+        'most', (tester) async {
+      final tokens = _PushTokenStore();
+      final push = _FakePushMessaging()..failures = 9;
+      final container = await _coordinatorContainer(
+        tester,
+        devices(),
+        tokens,
+        push,
+      );
+      container.read(pushCoordinatorProvider);
+      await _settle(tester, 3);
+      expect(push.requests, 1);
+      expect(await tokens.readPushPermissionRequests(), 0);
+
+      await resume(tester);
+      expect(push.requests, 2, reason: 'the next trigger tries again');
+      expect(await tokens.readPushPermissionRequests(), 0);
+
+      await resume(tester);
+      await resume(tester);
+      expect(push.requests, 2, reason: 'then it leaves the person alone');
+
+      push.failures = 0;
+      unawaited(
+        container.read(pushCoordinatorProvider.notifier).requestPermission(),
+      );
+      await _settle(tester, 3);
+      expect(push.requests, 3, reason: 'Profile asks whenever it is pressed');
+      expect(await tokens.readPushPermissionRequests(), 1);
+    });
+
     testWidgets('a refusal on iPhone is not asked again', (tester) async {
       final push = _FakePushMessaging(
         requestResult: PushPermission.settingsRequired,
       );
-      final container = _coordinatorContainer(
+      final container = await _coordinatorContainer(
+        tester,
         devices(),
         _PushTokenStore(),
         push,
@@ -538,7 +741,12 @@ void main() {
       final push = _FakePushMessaging(
         currentPermission: PushPermission.settingsRequired,
       );
-      final container = _coordinatorContainer(devices(), tokens, push);
+      final container = await _coordinatorContainer(
+        tester,
+        devices(),
+        tokens,
+        push,
+      );
       container.read(pushCoordinatorProvider);
       await _settle(tester, 3);
       await background(tester);
@@ -561,7 +769,8 @@ void main() {
       ]) {
         final backend = devices();
         final push = _FakePushMessaging(currentPermission: granted);
-        final container = _coordinatorContainer(
+        final container = await _coordinatorContainer(
+          tester,
           backend,
           _PushTokenStore(),
           push,
@@ -583,7 +792,12 @@ void main() {
       final push = _FakePushMessaging(
         currentPermission: PushPermission.settingsRequired,
       );
-      final container = _coordinatorContainer(backend, _PushTokenStore(), push);
+      final container = await _coordinatorContainer(
+        tester,
+        backend,
+        _PushTokenStore(),
+        push,
+      );
       container.read(pushCoordinatorProvider);
       await _settle(tester, 3);
       expect(
@@ -619,7 +833,12 @@ void main() {
             ),
           ),
         ]) {
-          final container = _coordinatorContainer(devices(), tokens, failing);
+          final container = await _coordinatorContainer(
+            tester,
+            devices(),
+            tokens,
+            failing,
+          );
           container.read(pushCoordinatorProvider);
           await _settle(tester, 3);
           expect(container.read(sessionProvider), isA<SessionSignedIn>());
@@ -628,47 +847,48 @@ void main() {
 
         // The next launch that can ask still does.
         final working = _FakePushMessaging();
-        _coordinatorContainer(
+        (await _coordinatorContainer(
+          tester,
           devices(),
           tokens,
           working,
-        ).read(pushCoordinatorProvider);
+        )).read(pushCoordinatorProvider);
         await _settle(tester, 3);
         expect(working.requests, 1);
       },
     );
 
-    // Plain `test`, not `testWidgets`: the failed request is retried by the
-    // HTTP layer on real timers, which a widget test's fake clock never fires.
-    test('registration that fails after the prompt is retried without '
-        'asking again', () async {
+    testWidgets('registration that fails after the prompt is retried without '
+        'asking again', (tester) async {
       var attempts = 0;
       final backend = FakeBackend()
         ..handle('POST', '/api/notifications/devices', (_) {
           attempts++;
+          // A refusal, not a server failure: the HTTP layer retries those on
+          // real timers, which a widget test's fake clock never fires.
           return attempts == 1
-              ? const FakeResponse(500, {'detail': 'temporary failure'})
+              ? const FakeResponse(400, {'detail': 'not accepted'})
               : const FakeResponse(201, {'id': 3, 'active': true});
         });
       final push = _FakePushMessaging();
-      final container = _coordinatorContainer(backend, _PushTokenStore(), push);
+      final container = await _coordinatorContainer(
+        tester,
+        backend,
+        _PushTokenStore(),
+        push,
+      );
       container.read(pushCoordinatorProvider);
-      for (var i = 0; i < 300; i++) {
-        if (container.read(pushCoordinatorProvider).registration ==
-            PushRegistrationState.failed) {
-          break;
-        }
-        await Future<void>.delayed(const Duration(milliseconds: 10));
-      }
+      await _settle(tester, 3);
       expect(push.requests, 1);
       expect(
         container.read(pushCoordinatorProvider).registration,
         PushRegistrationState.failed,
       );
 
-      await container
-          .read(pushCoordinatorProvider.notifier)
-          .retryRegistration();
+      unawaited(
+        container.read(pushCoordinatorProvider.notifier).retryRegistration(),
+      );
+      await _settle(tester, 3);
 
       expect(
         container.read(pushCoordinatorProvider).registration,
@@ -683,7 +903,12 @@ void main() {
     ) async {
       final tokens = _PushTokenStore();
       final push = _FakePushMessaging()..dialog = Completer<void>();
-      final container = _coordinatorContainer(devices(), tokens, push);
+      final container = await _coordinatorContainer(
+        tester,
+        devices(),
+        tokens,
+        push,
+      );
       final coordinator = container.read(pushCoordinatorProvider.notifier);
       await _settle(tester, 3);
       expect(push.requests, 1, reason: 'the first-open prompt is showing');
@@ -710,7 +935,8 @@ void main() {
       tester,
     ) async {
       final push = DeferredPushMessaging();
-      final container = _coordinatorContainer(
+      final container = await _coordinatorContainer(
+        tester,
         devices(),
         _PushTokenStore(),
         push,
@@ -737,7 +963,8 @@ void main() {
         ),
       );
       final push = _FakePushMessaging();
-      final container = _coordinatorContainer(
+      final container = await _coordinatorContainer(
+        tester,
         devices(),
         _PushTokenStore(),
         push,
@@ -767,7 +994,14 @@ void main() {
         )
         ..fallback = (_) => const FakeResponse(503, {'detail': 'unavailable'});
       final push = _FakePushMessaging();
-      final container = await _boot(
+      var homePainted = false;
+      String? topAtRequest;
+      late ProviderContainer container;
+      push.onRequest = () {
+        homePainted = find.byType(HomeScreen).evaluate().isNotEmpty;
+        topAtRequest = _topLocation(container);
+      };
+      container = await _boot(
         tester,
         backend: backend,
         tokens: _PushTokenStore(),
@@ -788,11 +1022,151 @@ void main() {
       expect(container.read(sessionProvider), isA<SessionSignedIn>());
       expect(push.requests, 1);
       expect(
+        [homePainted, topAtRequest],
+        [true, '/home'],
+        reason: 'the system is asked once Home is built, never over the splash',
+      );
+      expect(
         container.read(pushCoordinatorProvider).registration,
         PushRegistrationState.registered,
       );
 
       await _shutdown(tester);
+    });
+
+    testWidgets('a guest who opens sign-in while Firebase is slow is not '
+        'interrupted', (tester) async {
+      final deferred = DeferredPushMessaging();
+      final tokens = _PushTokenStore(refresh: null);
+      final container = await _boot(
+        tester,
+        backend: FakeBackend()..emptyDiscovery(),
+        tokens: tokens,
+        push: deferred,
+      );
+      await _settle(tester, 10);
+      expect(find.byType(HomeScreen), findsOneWidget);
+
+      final router = container.read(routerProvider);
+      unawaited(router.push('/auth/sign-in'));
+      await _settle(tester, 5);
+      expect(find.byType(SignInScreen), findsOneWidget);
+
+      final push = _FakePushMessaging();
+      String? topAtRequest;
+      push.onRequest = () => topAtRequest = _topLocation(container);
+      await deferred.start(() async => push);
+      await _settle(tester, 10);
+      expect(
+        push.requests,
+        0,
+        reason: 'Firebase finished over the sign-in screen: wait',
+      );
+
+      router.pop();
+      await _settle(tester, 10);
+
+      expect(push.requests, 1, reason: 'asked once the person is back on Home');
+      expect(topAtRequest, '/home', reason: 'sign-in was no longer on top');
+      expect(find.byType(SignInScreen), findsNothing);
+
+      await _shutdown(tester);
+    });
+
+    testWidgets('a notification still being opened is not covered by the '
+        'dialog', (tester) async {
+      final push = _FakePushMessaging(
+        launchMessage: const PushMessage(
+          data: {'channel': 'deal.updated', 'deal_id': '9'},
+        ),
+      );
+      String? topAtRequest;
+      var opened = false;
+      late ProviderContainer container;
+      push.onRequest = () {
+        topAtRequest = _topLocation(container);
+        opened = screenAt('/deals/9').evaluate().isNotEmpty;
+      };
+      container = await _coordinatorContainer(
+        tester,
+        devices(),
+        _PushTokenStore(),
+        push,
+        session: _HandSession.new,
+      );
+      container.read(pushCoordinatorProvider);
+      await _settle(tester, 5);
+      // A guest opened the app from a notification: sign-in comes first.
+      expect(screenAt('/auth/sign-in'), findsOneWidget);
+      expect(push.requests, 0);
+
+      (container.read(sessionProvider.notifier) as _HandSession).enter();
+      await _settle(tester, 5);
+
+      expect(push.requests, 1);
+      expect(
+        [topAtRequest, opened],
+        ['/deals/9', true],
+        reason: 'the opened screen is built before the system is asked',
+      );
+    });
+
+    testWidgets('the guest payment screen is never covered', (tester) async {
+      final push = _FakePushMessaging();
+      final router = pushTestRouter(initialLocation: '/guest/pay/token');
+      final container = await _coordinatorContainer(
+        tester,
+        devices(),
+        _PushTokenStore(),
+        push,
+        session: _HandSession.new,
+        router: router,
+      );
+      container.read(pushCoordinatorProvider);
+      await _settle(tester, 5);
+      expect(push.requests, 0);
+
+      router.go('/home');
+      await _settle(tester, 5);
+      expect(push.requests, 1);
+    });
+
+    testWidgets('a second account on the phone registers with a newer number '
+        'and is never asked again', (tester) async {
+      final backend = devices();
+      final push = _FakePushMessaging();
+      final container = await _coordinatorContainer(
+        tester,
+        backend,
+        _PushTokenStore(),
+        push,
+        session: _HandSession.new,
+      );
+      container.read(pushCoordinatorProvider);
+      await _settle(tester, 3);
+      final session = container.read(sessionProvider.notifier) as _HandSession;
+
+      session.enter();
+      await _settle(tester, 3);
+      session.leave();
+      await _settle(tester, 3);
+      session.enter(id: 43);
+      await _settle(tester, 3);
+
+      final registrations = backend.to('POST', '/api/notifications/devices');
+      expect(
+        [for (final r in registrations) r.body['binding_sequence']],
+        [1, 2],
+      );
+      expect(
+        {for (final r in registrations) r.body['installation_id']},
+        {'installation'},
+      );
+      expect(push.requests, 1);
+      expect(
+        container.read(pushCoordinatorProvider).registration,
+        PushRegistrationState.registered,
+      );
     });
 
     testWidgets('the first frame is drawn before anything asks', (

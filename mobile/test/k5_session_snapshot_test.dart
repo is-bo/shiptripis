@@ -613,6 +613,43 @@ void main() {
       },
     );
 
+    test(
+      'push registrations are numbered one after another, for good',
+      () async {
+        final tokens = TokenStore(_MemoryStorage());
+        final numbers = await Future.wait([
+          tokens.nextPushBindingSequence(),
+          tokens.nextPushBindingSequence(),
+          tokens.nextPushBindingSequence(),
+        ]);
+        expect(numbers..sort(), [1, 2, 3], reason: 'no two requests share one');
+
+        await tokens.clear();
+        expect(
+          await tokens.nextPushBindingSequence(),
+          4,
+          reason: 'logout keeps it',
+        );
+
+        await tokens.raisePushBindingSequence(40);
+        expect(await tokens.nextPushBindingSequence(), 41);
+        await tokens.raisePushBindingSequence(7);
+        expect(
+          await tokens.nextPushBindingSequence(),
+          42,
+          reason: 'never lowered',
+        );
+      },
+    );
+
+    test('a request count taken back never goes below nothing', () async {
+      final tokens = TokenStore(_MemoryStorage());
+      expect(await tokens.releasePushPermissionRequest(), 0);
+      expect(await tokens.recordPushPermissionRequest(), 1);
+      expect(await tokens.releasePushPermissionRequest(), 0);
+      expect(await tokens.readPushPermissionRequests(), 0);
+    });
+
     test('a plain clear deletes it', () async {
       final (tokens, storage) = seeded();
       await tokens.clear();

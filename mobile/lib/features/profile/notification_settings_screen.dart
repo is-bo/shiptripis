@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/push/push_coordinator.dart';
 import '../../core/push/push_messaging.dart';
+import '../../core/session/session.dart';
 import '../../data/repositories.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/navigation.dart';
@@ -39,7 +40,10 @@ class _NotificationSettingsScreenState
   Widget build(BuildContext context) {
     final l = L.of(context);
     final runtime = ref.watch(pushCoordinatorProvider);
-    final preferences = ref.watch(pushPreferencesProvider);
+    // Someone without an account can still control this phone's permission,
+    // which is the phone's own. What an account receives, and the device
+    // registration that delivers it, come with signing in.
+    final isGuest = ref.watch(isGuestProvider);
 
     return AppScaffold(
       topBar: AppTopBar(title: l.profileNotificationSettings, showBack: true),
@@ -47,55 +51,73 @@ class _NotificationSettingsScreenState
         padding: AppScrollPadding.page(context),
         children: [
           SectionHeader(title: l.pushPermissionHeading),
-          _permissionNotice(context, runtime),
+          _permissionNotice(context, runtime, isGuest: isGuest),
           const SizedBox(height: AppSpace.xl),
-          SectionHeader(title: l.pushPreferencesHeading),
-          Text(
-            l.pushPreferencesBody,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: context.colors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: AppSpace.md),
-          preferences.when(
-            loading: () => const SkeletonDetail(),
-            error: (error, _) => InlineFailure(
-              error: error,
-              onRetry: () => ref.invalidate(pushPreferencesProvider),
-            ),
-            data: (value) => Column(
-              children: [
-                _PreferenceRow(
-                  title: l.pushEssentialTitle,
-                  body: l.pushEssentialBody,
-                  value: value.essentialEnabled,
-                  onChanged: null,
-                ),
-                _PreferenceRow(
-                  title: l.pushMessagesTitle,
-                  body: l.pushMessagesBody,
-                  value: value.messagesEnabled,
-                  onChanged: _saving
-                      ? null
-                      : (enabled) => _update(messagesEnabled: enabled),
-                ),
-                _PreferenceRow(
-                  title: l.pushMarketplaceTitle,
-                  body: l.pushMarketplaceBody,
-                  value: value.marketplaceEnabled,
-                  onChanged: _saving
-                      ? null
-                      : (enabled) => _update(marketplaceEnabled: enabled),
-                ),
-              ],
-            ),
-          ),
+          if (isGuest)
+            InfoNotice(
+              message: l.pushGuestSignInNote,
+              icon: Icons.person_outline_rounded,
+            )
+          else
+            ..._preferenceSection(context),
         ],
       ),
     );
   }
 
-  Widget _permissionNotice(BuildContext context, PushRuntimeState runtime) {
+  List<Widget> _preferenceSection(BuildContext context) {
+    final l = L.of(context);
+    final preferences = ref.watch(pushPreferencesProvider);
+    return [
+      SectionHeader(title: l.pushPreferencesHeading),
+      Text(
+        l.pushPreferencesBody,
+        style: Theme.of(
+          context,
+        ).textTheme.bodyMedium?.copyWith(color: context.colors.textSecondary),
+      ),
+      const SizedBox(height: AppSpace.md),
+      preferences.when(
+        loading: () => const SkeletonDetail(),
+        error: (error, _) => InlineFailure(
+          error: error,
+          onRetry: () => ref.invalidate(pushPreferencesProvider),
+        ),
+        data: (value) => Column(
+          children: [
+            _PreferenceRow(
+              title: l.pushEssentialTitle,
+              body: l.pushEssentialBody,
+              value: value.essentialEnabled,
+              onChanged: null,
+            ),
+            _PreferenceRow(
+              title: l.pushMessagesTitle,
+              body: l.pushMessagesBody,
+              value: value.messagesEnabled,
+              onChanged: _saving
+                  ? null
+                  : (enabled) => _update(messagesEnabled: enabled),
+            ),
+            _PreferenceRow(
+              title: l.pushMarketplaceTitle,
+              body: l.pushMarketplaceBody,
+              value: value.marketplaceEnabled,
+              onChanged: _saving
+                  ? null
+                  : (enabled) => _update(marketplaceEnabled: enabled),
+            ),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  Widget _permissionNotice(
+    BuildContext context,
+    PushRuntimeState runtime, {
+    required bool isGuest,
+  }) {
     final l = L.of(context);
     // Firebase starts just after the first frame; until it settles this is
     // the same neutral notice as a permission that has not been read yet.
@@ -115,8 +137,14 @@ class _NotificationSettingsScreenState
       );
     }
     return switch (runtime.permission) {
-      PushPermission.authorized ||
-      PushPermission.provisional => _grantedNotice(runtime),
+      PushPermission.authorized || PushPermission.provisional =>
+        isGuest
+            ? InfoNotice(
+                message: l.pushPermissionEnabledGuest,
+                tone: StatusTone.good,
+                icon: Icons.notifications_active_outlined,
+              )
+            : _grantedNotice(runtime),
       PushPermission.deniedRequestable => _permissionAction(
         message: l.pushPermissionDeniedRequestable,
         label: l.pushEnableAction,
