@@ -46,6 +46,28 @@ otherwise take the first `not_started` package whose dependencies are all `merge
 | L10 | Final acceptance (runs last, after L18B) | Opus | high | merged | `claude/project-thread-0b81ct` | #49 | `464fe51` | `docs/PHASE_L10_FINAL_ACCEPTANCE.md` |
 | L19 | Findings of final acceptance (added 2026-11-15, plan 5.1g) | Opus | high | merged | `claude/project-thread-gz2i0k` | #51 | `bfecca1` | `docs/PHASE_L19_ACCEPTANCE_FINDINGS.md` |
 
+**Fixes after the phone tests (on `main` since 2026-11-16).** The 2026-11-24 fix plan (P-series)
+and the phone test 2 plan (`docs/WASSLA_PHONE_TEST_2_PLAN.md`: G1, N1, N2, F1, F2, M1, M2, A1, M3).
+Nothing below is deployed yet; the live server runs `5ee8cd2`. Second passes are by Astra 6.2.
+
+| Package | What | Model | Effort | Status | Branch | Pull request | Merge commit | Phase doc |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| P1 | Build log says whether Google sign-in is offered | Sonnet | medium | merged | `claude/p1-google-signin-build-state` | #60 | `9266f89` | `docs/PHASE_P1_GOOGLE_SIGNIN_BUILD_STATE.md` |
+| P4 | Space left shows real kilos | Sonnet | medium | merged | `claude/p4-space-left-kilos` | #61 | `f1475a2` | `docs/PHASE_P4_SPACE_LEFT_KILOS.md` |
+| P2 | Cards show cities, detail pages the catalogue place | Opus | high | merged | `claude/p2-public-city-names` | #62 | `5cb73b7` | `docs/PHASE_P2_PUBLIC_CITY_NAMES.md` |
+| P3A | Profile photos, server side | Opus | high | merged | `claude/p3a-profile-photos` | #64 | `4d65629` | `docs/PHASE_P3A_PROFILE_PHOTOS.md` |
+| P3C | Chat photos, server side | Sonnet | high | merged | `claude/p3c-chat-photos` | #65 | `f039f67` | `docs/PHASE_P3C_CHAT_PHOTOS.md` |
+| P3B | Profile photos in the app | Sonnet | high | in_review | `claude/p3b-profile-photos-app` | #66 | | `docs/PHASE_P3B_PROFILE_PHOTOS_APP.md` |
+| G1 | Guest checkout without a browser-session dependency | Opus | xhigh | changes_requested | `claude/g1-guest-checkout-csrf` | #67 | | `docs/PHASE_G1_GUEST_CHECKOUT_CSRF.md` |
+| M1 | Missing route stops get their own rejection reasons | Opus | xhigh | merged | `claude/m1-route-stop-reasons` | #68 | `da475ec` | `docs/PHASE_M1_ROUTE_STOP_REASONS.md` |
+| F1 | Payout setup availability and actions, server | Opus | xhigh | in_progress | `claude/f1-payout-availability` | | | |
+| N1 | Ask for notifications once on first open | Sonnet | high | in_progress | `claude/n1-notification-first-open` | | | |
+| N2 | Name the ticket decision in the bell | Sonnet | medium | not_started | | | | |
+| F2 | Payout history and method setup on the phone (after F1, P3B) | Opus | high | not_started | | | | |
+| M2 | Route and date failures explained on the phone (after M1, P3B) | Opus | high | not_started | | | | |
+| A1 | Offer a route alert after an empty search and after posting | Sonnet | high | not_started | | | | |
+| M3 | Other departure cities, browse only (after A1, M2) | Opus | high | not_started | | | | |
+
 **Parked on 2026-11-13 (Ismail's decision, plan 5.1e).** Wassla now targets fast delivery: urgent
 parcels, mostly on flights and drives made the same day. These packages are not part of this build and
 are never picked up. Their full text is in `docs/parked/WASSLA_PROFESSIONAL_AND_COURIER_PLAN.md`.
