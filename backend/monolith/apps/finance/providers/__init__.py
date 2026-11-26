@@ -23,6 +23,8 @@ from django.conf import settings
 from ..models import PaymentProvider
 from ..policy import Phase3Policy
 from .base import (
+    CHECKOUT_CLOSED,
+    CHECKOUT_COLLECTED,
     MODE_LIVE,
     MODE_NOT_CONFIGURED,
     MODE_TEST,
@@ -48,6 +50,8 @@ from .mock import MockGateway
 from .stripe import StripeGateway
 
 __all__ = [
+    "CHECKOUT_CLOSED",
+    "CHECKOUT_COLLECTED",
     "MODE_LIVE",
     "MODE_NOT_CONFIGURED",
     "MODE_TEST",

@@ -191,6 +191,11 @@ MODE_LIVE = "live"
 MODE_UNKNOWN = "unknown"
 MODE_NOT_CONFIGURED = "not_configured"
 
+#: What `close_checkout` confirmed (G1). A checkout that is neither is still
+#: open as far as anyone can tell, and the call raises instead.
+CHECKOUT_CLOSED = "closed"
+CHECKOUT_COLLECTED = "collected"
+
 
 class PaymentGateway(Protocol):
     """The full rail interface. Not every rail supports every capability."""
@@ -214,6 +219,15 @@ class PaymentGateway(Protocol):
         ...
 
     def create_checkout(self, request: CheckoutRequest) -> CheckoutResult: ...
+
+    def close_checkout(self, *, provider_session_id: str) -> str:
+        """Stop a hosted checkout from collecting, and say what the provider confirmed.
+
+        `CHECKOUT_CLOSED` once the provider reports the checkout can no longer
+        take a payment, `CHECKOUT_COLLECTED` when it already took one or is
+        taking one. Raises `ProviderError` when neither can be confirmed.
+        """
+        ...
 
     def fetch_attempt(
         self, *, provider_session_id: str, provider_payment_id: str

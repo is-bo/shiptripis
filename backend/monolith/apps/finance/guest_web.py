@@ -51,7 +51,6 @@ from .providers import ProviderError
 from .services import (
     CheckoutInProgress,
     FinanceError,
-    GuestCheckoutInProgress,
     guest_payment_view,
     hash_guest_token,
     resolve_guest_link,
@@ -80,10 +79,6 @@ COPY: dict[str, dict[str, str]] = {
             "due. It doesn't create an account."
         ),
         "email_error": "Enter a valid email address so we can send your receipt.",
-        "email_conflict": (
-            "A payment with this link is already open under another email "
-            "address. Use that address to continue it, or try again later."
-        ),
         "pay": "Pay {amount}",
         "pay_generic": "Continue to payment",
         "handoff": (
@@ -108,10 +103,10 @@ COPY: dict[str, dict[str, str]] = {
             "Your link is fine — we just can't take a payment right now. Please "
             "try again shortly; there's no need to ask for a new link."
         ),
-        "opening_title": "Your payment page is being opened",
-        "opening_body": (
-            "A payment for this link was started a moment ago, perhaps by you. "
-            "Wait a few seconds, then try again."
+        "in_progress_title": "A payment is already under way",
+        "in_progress_body": (
+            "Someone, perhaps you, is already paying this. Try again in a few "
+            "minutes."
         ),
         "try_again": "Try again",
         "purpose_posting_deposit": "Deposit for a delivery request",
@@ -139,11 +134,6 @@ COPY: dict[str, dict[str, str]] = {
             "remboursement vous est dû. Aucun compte n’est créé."
         ),
         "email_error": "Saisissez une adresse e-mail valide pour recevoir votre reçu.",
-        "email_conflict": (
-            "Un paiement est déjà ouvert avec ce lien sous une autre adresse "
-            "e-mail. Utilisez cette adresse pour le poursuivre, ou réessayez "
-            "plus tard."
-        ),
         "pay": "Payer {amount}",
         "pay_generic": "Continuer vers le paiement",
         "handoff": (
@@ -170,10 +160,10 @@ COPY: dict[str, dict[str, str]] = {
             "pour l’instant. Réessayez dans un moment ; inutile de demander un "
             "nouveau lien."
         ),
-        "opening_title": "Votre page de paiement est en cours d’ouverture",
-        "opening_body": (
-            "Un paiement a été lancé avec ce lien il y a un instant, peut-être "
-            "par vous. Patientez quelques secondes, puis réessayez."
+        "in_progress_title": "Un paiement est déjà en cours",
+        "in_progress_body": (
+            "Quelqu’un, peut-être vous, est déjà en train de payer. Réessayez "
+            "dans quelques minutes."
         ),
         "try_again": "Réessayer",
         "purpose_posting_deposit": "Acompte pour une demande de livraison",
@@ -201,10 +191,6 @@ COPY: dict[str, dict[str, str]] = {
             "لك أي حساب."
         ),
         "email_error": "أدخل بريدًا إلكترونيًا صالحًا لنرسل إليك الإيصال.",
-        "email_conflict": (
-            "توجد دفعة مفتوحة بالفعل عبر هذا الرابط ببريد إلكتروني آخر. استخدم "
-            "ذلك البريد لمتابعتها، أو أعد المحاولة لاحقًا."
-        ),
         "pay": "ادفع {amount}",
         "pay_generic": "المتابعة إلى الدفع",
         "handoff": (
@@ -229,10 +215,9 @@ COPY: dict[str, dict[str, str]] = {
             "رابطك صالح، لكن لا يمكننا استلام الدفع حاليًا. أعد المحاولة بعد "
             "قليل، ولا حاجة لطلب رابط جديد."
         ),
-        "opening_title": "جارٍ فتح صفحة الدفع",
-        "opening_body": (
-            "بدأ أحدهم الدفع عبر هذا الرابط قبل لحظات، وربما كنت أنت. انتظر بضع "
-            "ثوانٍ ثم أعد المحاولة."
+        "in_progress_title": "هناك دفعة جارية بالفعل",
+        "in_progress_body": (
+            "يقوم أحدهم بالدفع الآن، وربما كنت أنت. أعد المحاولة بعد بضع دقائق."
         ),
         "try_again": "أعد المحاولة",
         "purpose_posting_deposit": "عربون لطلب توصيل",
@@ -383,13 +368,13 @@ def _no_rail(request: HttpRequest, lang: str) -> HttpResponse:
     )
 
 
-def _opening(
+def _in_progress(
     request: HttpRequest, lang: str, *, provider: str, email: str
 ) -> HttpResponse:
-    """A checkout for this link is already being opened, likely a tap ago (G1).
+    """A payment for this is already under way, perhaps a tap ago (G1).
 
-    Neither a dead link nor an outage. The same choices sent again in a moment
-    are handed that one checkout, so the page offers to resend them.
+    Neither a dead link nor an outage, and the same for every holder of the
+    link, whatever they sent. The page offers to send the same choices again.
     """
 
     return _page(
@@ -397,7 +382,7 @@ def _opening(
         lang,
         {
             "payable": False,
-            "opening": True,
+            "in_progress": True,
             "chosen": provider,
             "email": email,
             "checkout_action": request.path,
@@ -546,15 +531,7 @@ def guest_payment_page(request: HttpRequest, token: str) -> HttpResponse:
                 )
                 return _no_rail(request, lang)
             except CheckoutInProgress:
-                return _opening(request, lang, provider=chosen, email=email)
-            except GuestCheckoutInProgress:
-                # The link's open checkout carries another receipt address.
-                # The payer can correct theirs; with no field to correct, it
-                # is the same wait as a checkout still opening (G1).
-                if not email_required:
-                    return _opening(request, lang, provider=chosen, email=email)
-                email_error = t["email_conflict"]
-                status = 409
+                return _in_progress(request, lang, provider=chosen, email=email)
             except FinanceError:
                 # Includes a link revoked, replaced or expired since it was read
                 # above: checkout reads it again under the order lock.

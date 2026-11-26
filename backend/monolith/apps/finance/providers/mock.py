@@ -22,6 +22,8 @@ import secrets
 from django.conf import settings
 
 from .base import (
+    CHECKOUT_CLOSED,
+    CHECKOUT_COLLECTED,
     MODE_TEST,
     AttemptSnapshot,
     CheckoutRequest,
@@ -59,6 +61,10 @@ class MockGateway:
     _sessions: dict[str, dict[str, int | str]] = {}
     _refunds: dict[str, RefundResult] = {}
     _refund_calls: dict[str, int] = {}
+    #: Sessions `close_checkout` expired: they can no longer take a payment.
+    _closed: set[str] = set()
+    #: Session id -> exception `close_checkout` raises instead of closing it.
+    _close_failures: dict[str, Exception] = {}
 
     def __init__(self, *, webhook_secret: str = MOCK_WEBHOOK_SECRET):
         self.webhook_secret = webhook_secret
@@ -81,12 +87,30 @@ class MockGateway:
         cls._outcomes[session_id] = outcome
 
     @classmethod
+    def fail_close(cls, session_id: str, error: Exception) -> None:
+        """Make `close_checkout` raise `error` for one session. Test helper."""
+
+        cls._close_failures[session_id] = error
+
+    @classmethod
+    def is_payable(cls, session_id: str) -> bool:
+        """Whether a payer holding this session's URL could still pay it."""
+
+        return (
+            session_id in cls._sessions
+            and session_id not in cls._closed
+            and cls._outcomes.get(session_id) != "succeeded"
+        )
+
+    @classmethod
     def reset(cls) -> None:
         cls._outcomes.clear()
         cls._checkouts.clear()
         cls._sessions.clear()
         cls._refunds.clear()
         cls._refund_calls.clear()
+        cls._closed.clear()
+        cls._close_failures.clear()
 
     @classmethod
     def successful_funds_minor(
@@ -155,6 +179,17 @@ class MockGateway:
             "currency": request.currency,
         }
         return result
+
+    def close_checkout(self, *, provider_session_id: str) -> str:
+        failure = self._close_failures.get(provider_session_id)
+        if failure is not None:
+            raise failure
+        if provider_session_id not in self._sessions:
+            raise ProviderError("No mock checkout to close.")
+        if self._outcomes.get(provider_session_id) == "succeeded":
+            return CHECKOUT_COLLECTED
+        self._closed.add(provider_session_id)
+        return CHECKOUT_CLOSED
 
     def fetch_attempt(
         self, *, provider_session_id: str, provider_payment_id: str

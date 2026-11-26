@@ -31,6 +31,8 @@ import requests
 from django.conf import settings
 
 from .base import (
+    CHECKOUT_CLOSED,
+    CHECKOUT_COLLECTED,
     MODE_LIVE,
     MODE_NOT_CONFIGURED,
     MODE_TEST,
@@ -371,6 +373,32 @@ class StripeGateway:
             checkout_url=checkout_url,
             provider_status=body.get("status", "open"),
             raw=_scrub(body),
+        )
+
+    def close_checkout(self, *, provider_session_id: str) -> str:
+        """Expire an open Checkout Session, or learn why it cannot be expired.
+
+        Stripe expires only an `open` session, and atomically: a payer cannot
+        complete it afterwards. Any other refusal is answered by reading the
+        session, so an already expired or completed one is reported as such.
+        """
+
+        if not provider_session_id:
+            raise ProviderError("No Stripe session to close.")
+        path = f"/v1/checkout/sessions/{provider_session_id}"
+        try:
+            body = self._request("POST", f"{path}/expire", operation="checkout_expire")
+        except ProviderUnavailable:
+            raise
+        except ProviderError:
+            body = self._request("GET", path, operation="checkout_fetch")
+        status = body.get("status", "")
+        if status == "expired":
+            return CHECKOUT_CLOSED
+        if status == "complete":
+            return CHECKOUT_COLLECTED
+        raise ProviderError(
+            "Stripe did not confirm the session closed.", provider_code="session_open"
         )
 
     def fetch_attempt(

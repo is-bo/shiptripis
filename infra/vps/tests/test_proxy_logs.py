@@ -3,14 +3,21 @@
 The path of a guest payment link is the credential: `/pay/guest/<token>` for
 the page and `/api/payments/guest/<token>[/checkout]` for the app. Neither
 Caddy keeps access logs, but Caddy's error logger is separate from access
-logging and records the request URI of every failed request -- a 502 while an
-upstream is down, for instance. Both Caddyfiles therefore filter `request>uri`
-on the default logger.
+logging and records the request of every failed one -- a 502 while an upstream
+is down, for instance. Caddy logs the URI as the client sent it, so a regex on
+the guest prefix is defeated by an encoded separator (`/pay%2Fguest/...`) that
+the application still routes. Both Caddyfiles therefore drop `request>uri` and
+`request>headers>Referer` from every log entry.
+
+The proxy also answers that 502 itself, so Django's private headers are never
+set on it. Both Caddyfiles add `Referrer-Policy: no-referrer` and
+`Cache-Control: private, no-store` to every error they answer.
 
 Each case runs the shipped Caddyfile unchanged, with its upstream deliberately
-absent, sends a synthetic token, and reads what Caddy logged. The 502 and the
-`http.log.error` line are asserted too, so the check cannot pass because
-nothing was logged at all.
+absent, sends a synthetic token under plain and encoded paths and Referers, and
+reads what Caddy logged. The 502s, their headers and one `http.log.error` line
+per request are asserted too, so the check cannot pass because nothing was
+logged at all.
 
 Uses `CADDY_BIN` or a `caddy` on PATH when present, otherwise Docker with the
 pinned production image; skips when neither is available.
@@ -37,7 +44,6 @@ HERE = Path(__file__).resolve().parents[1]
 IMAGE = re.search(
     r"^\s*image:\s*(caddy:\S+)", (HERE / "compose.yml").read_text(), re.M
 ).group(1)
-REDACTED = "REDACTED"
 
 
 def _free_port() -> int:
@@ -46,12 +52,22 @@ def _free_port() -> int:
         return probe.getsockname()[1]
 
 
-def _get(url: str, **headers: str) -> int:
+def _get(url: str, **headers: str):
+    """The status and headers of one GET, an HTTP error included."""
+
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
-        return opener.open(urllib.request.Request(url, headers=headers), timeout=15).status
+        response = opener.open(urllib.request.Request(url, headers=headers), timeout=15)
     except urllib.error.HTTPError as error:
-        return error.code
+        response = error
+    with response:
+        return response.status, response.headers
+
+
+def _fragments(token: str, width: int = 8) -> set[str]:
+    """Every run of `width` characters of the token."""
+
+    return {token[start : start + width] for start in range(len(token) - width + 1)}
 
 
 class _Caddy:
@@ -120,20 +136,38 @@ class _Caddy:
 class ProxyErrorLogTests(unittest.TestCase):
     def _assert_tokens_redacted(self, config: Path, env: dict[str, str], port: int):
         token = "g1" + secrets.token_urlsafe(32)
+        # Plain, then encodings the application decodes to the same route: an
+        # encoded separator, in either case, an encoded letter, and an encoded
+        # separator before the token.
         paths = (
             f"/pay/guest/{token}?lang=en",
             f"/api/payments/guest/{token}",
             f"/api/payments/guest/{token}/checkout",
+            f"/pay%2Fguest/{token}",
+            f"/pay%2fguest/{token}",
+            f"/api%2Fpayments%2Fguest/{token}/checkout",
+            f"/%70ay/guest/{token}",
+            f"/pay/guest%2F{token}",
         )
         # A browser that ignored the page's no-referrer policy would name the
-        # page in Referer on its next request; that header is filtered too.
-        referer = f"https://wassla.example/pay/guest/{token}"
+        # page in Referer on its next request, encoded or not.
+        referers = (
+            f"https://wassla.example/pay/guest/{token}",
+            f"https://wassla.example/pay%2Fguest/{token}",
+        )
         with _Caddy(config, env, port) as caddy:
-            statuses = [
-                _get(f"http://127.0.0.1:{port}{path}", Referer=referer) for path in paths
+            answers = [
+                _get(f"http://127.0.0.1:{port}{path}", Referer=referer)
+                for path in paths
+                for referer in referers
             ]
         log = caddy.output
-        self.assertEqual(statuses, [502, 502, 502], log)
+        self.assertEqual({status for status, _ in answers}, {502}, log)
+        # The proxy answers the 502 itself, with the guest page's headers.
+        for _, headers in answers:
+            self.assertEqual(headers["Referrer-Policy"], "no-referrer")
+            directives = {part.strip() for part in headers["Cache-Control"].split(",")}
+            self.assertEqual(directives, {"private", "no-store"})
         errors = []
         for line in log.splitlines():
             try:
@@ -142,24 +176,14 @@ class ProxyErrorLogTests(unittest.TestCase):
                 continue
             if entry.get("logger") == "http.log.error":
                 errors.append(entry)
-        # The error logger fired for every request, with the URI redacted.
-        self.assertEqual(len(errors), len(paths), log)
-        self.assertEqual(
-            sorted(entry["request"]["uri"] for entry in errors),
-            sorted(
-                [
-                    "/pay/guest/REDACTED?lang=en",
-                    "/api/payments/guest/REDACTED",
-                    "/api/payments/guest/REDACTED/checkout",
-                ]
-            ),
-        )
+        # The error logger fired for every request, without the URI or Referer.
+        self.assertEqual(len(errors), len(answers), log)
         for entry in errors:
-            self.assertEqual(
-                entry["request"]["headers"]["Referer"],
-                ["https://wassla.example/pay/guest/REDACTED"],
-            )
-        self.assertNotIn(token, log)
+            self.assertEqual(entry["status"], 502)
+            self.assertNotIn("uri", entry["request"])
+            self.assertNotIn("Referer", entry["request"].get("headers", {}))
+        leaked = sorted(part for part in _fragments(token) if part in log)
+        self.assertEqual(leaked, [], log)
 
     def test_the_gateway_redacts_the_token_when_django_is_down(self):
         # Nothing listens on the gateway's Django upstream, 127.0.0.1:8000.

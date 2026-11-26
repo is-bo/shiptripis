@@ -17,8 +17,13 @@ runtime = importlib.machinery.SourceFileLoader(
 class EmailBoundaryTests(unittest.TestCase):
     def test_both_vps_proxy_layers_preserve_application_referrer_policy(self):
         gateway = (HERE / "gateway.Caddyfile").read_text()
-        self.assertEqual(gateway.count("Referrer-Policy"), 1)
+        # A default under the application's own policy, and a fixed value only
+        # on errors the proxy answers itself, where there is no application
+        # response to preserve (G1).
+        self.assertEqual(gateway.count("Referrer-Policy"), 2)
         self.assertIn('?Referrer-Policy "strict-origin-when-cross-origin"', gateway)
+        errors = gateway[gateway.index("handle_errors {") :]
+        self.assertIn("header Referrer-Policy no-referrer", errors)
         self.assertIn("trusted_proxies static private_ranges", gateway)
         self.assertIn("auto_https off", gateway)
         self.assertIn("?Referrer-Policy strict-origin-when-cross-origin", (HERE / "Caddyfile").read_text())
