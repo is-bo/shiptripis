@@ -487,12 +487,12 @@ jobs:
       # Gradle reports a task with no test source as a success, so the three
       # test classes are looked for in its results.
       - name: The photo tests ran
-        working-directory: mobile/android/app/build/test-results/testDebugUnitTest
+        # Flutter moves the app module's build directory to mobile/build/app.
         run: |
           for suite in PhotoGeometryTest JpegMetadataTest PickLaunchGateTest; do
-            file="TEST-eu.wassla.app.$suite.xml"
-            test -f "$file" || { echo "$suite did not run"; exit 1; }
-            grep -o 'tests="[0-9]*"' "$file" | head -1
+            file="build/app/test-results/testDebugUnitTest/TEST-eu.wassla.app.$suite.xml"
+            test -f "$file" || { echo "$suite did not run"; find build/app -name 'TEST-*.xml'; exit 1; }
+            echo "$suite: $(grep -o 'tests="[0-9]*"' "$file" | head -1)"
           done
 
   # ── Schema-drift gate (CLAUDE.md §G3) ───────────────────────────────────
