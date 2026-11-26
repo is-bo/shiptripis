@@ -598,6 +598,21 @@ void main() {
       expect(storage.values.keys, isNot(contains(_kSnapshot)));
     });
 
+    test(
+      'the notification request count belongs to the phone, not the account',
+      () async {
+        final tokens = TokenStore(_MemoryStorage());
+        expect(await tokens.readPushPermissionRequests(), 0);
+        expect(await tokens.recordPushPermissionRequest(), 1);
+
+        await tokens.clear();
+        expect(await tokens.readPushPermissionRequests(), 1);
+        await tokens.clearIfIdentityCurrent(tokens.identityGeneration);
+        expect(await tokens.readPushPermissionRequests(), 1);
+        expect(await tokens.recordPushPermissionRequest(), 2);
+      },
+    );
+
     test('a plain clear deletes it', () async {
       final (tokens, storage) = seeded();
       await tokens.clear();

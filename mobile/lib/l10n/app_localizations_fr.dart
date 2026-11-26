@@ -3478,7 +3478,7 @@ class LFr extends L {
 
   @override
   String get pushPermissionBody =>
-      'Recevez à temps les nouvelles concernant les offres, paiements, livraisons, messages et vérifications. Wassla ne demande l’autorisation que lorsque vous choisissez Activer.';
+      'Recevez à temps les nouvelles concernant les offres, paiements, livraisons, messages et vérifications. Wassla demande l’autorisation une seule fois, à la première ouverture de l’application, et vous pouvez activer les notifications ici à tout moment.';
 
   @override
   String get pushPermissionEnabled => 'Les notifications sont activées.';

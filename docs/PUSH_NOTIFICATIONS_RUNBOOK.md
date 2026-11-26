@@ -121,13 +121,28 @@ including unread counts and eligibility, without navigating away and back.
 
 Android has four normal-importance channels: Messages, Delivery updates,
 Account and verification, and Payments and payouts. The operating-system
-permission is requested only from the explicit action in Profile >
-Notifications; startup, sign-in and preference changes never display the
-prompt. Android 13 and newer may offer the prompt again after a requestable
-denial. A permanent denial, an older Android version whose notifications are
-disabled, or an iOS denial instead links to the app's system notification
-settings. Returning from settings refreshes the displayed permission state.
-A denial does not disable the app or its in-app inbox.
+permission is requested on the app's own, once per installation, the first time
+the app is open on a usable screen (decision of Ismail after the 2026-11-26
+phone test): after the first frame and Firebase's start, with the app in the
+foreground and the session resolved, whether or not the person has signed in.
+Sign-in, resume and preference changes never display the prompt again. The
+installation keeps a count of the requests it made, which survives logout and
+account changes, because Android 13 and newer report a permission that was never
+asked for as a plain denial; the system status and that history decide together
+whether the prompt is still unspent. iOS asks when the status is undetermined and
+respects authorized and provisional. Android below 13 has no runtime prompt. A
+missing Firebase configuration or a failed start asks nothing and spends
+nothing, so the next launch that can ask still does.
+
+Profile > Notifications is the recovery path and the only later request. Android
+13 and newer shows its dialog at most twice: after the first-open prompt the
+button offers one more request, and after the second denial the screen offers
+the app's system notification settings instead. A permanent denial, an older
+Android version whose notifications are disabled, or an iOS denial links to
+those settings. Returning from settings refreshes the displayed permission state
+and registers the phone if it was granted there. The first-open prompt, a resume
+and the Profile button share one request, so the system is never asked twice at
+once. A denial does not disable the app or its in-app inbox.
 
 The permission state and ShipTrip notification-type preferences are separate.
 Preferences control Messages and Marketplace delivery across the account;
