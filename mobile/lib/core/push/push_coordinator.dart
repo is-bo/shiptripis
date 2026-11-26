@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/route_transition_tracker.dart';
 import '../../app/router.dart';
 import '../api/api_exception.dart';
 import '../../data/repositories.dart';
@@ -85,6 +86,7 @@ class PushCoordinator extends Notifier<PushRuntimeState>
   bool _askingOnFirstOpen = false;
   bool _askedOnFirstOpen = false;
   bool _firstOpenCheckScheduled = false;
+  bool _firstOpenRetrigger = false;
   int _automaticFailures = 0;
   int? _systemRequests;
 
@@ -172,27 +174,53 @@ class PushCoordinator extends Notifier<PushRuntimeState>
   /// condition, because they are on the screen and pressed the button.
   Future<PushPermission> _askExplicitly() async {
     if (!await _messagingReady()) return PushPermission.unavailable;
-    await _recordSystemRequest();
-    return _askSystem();
+    // A count that cannot be written must not stop a person who asked.
+    final recorded = await _recordSystemRequest();
+    // The write can outlast the tap: if the app left the foreground meanwhile
+    // (the shade, the switcher, another app) the dialog would open over
+    // something else, so it is not requested and the count is taken back.
+    if (!ref.mounted || !_foreground) {
+      if (recorded) await _releaseSystemRequest();
+      return state.permission;
+    }
+    return _askSystem(recorded: recorded);
   }
 
   /// Puts the question to the system. The request count has been written
   /// already; it is taken back if the system could not be reached.
-  Future<PushPermission> _askSystem() async {
-    final PushPermission permission;
+  Future<PushPermission> _askSystem({required bool recorded}) async {
+    final PushPermission reported;
     try {
-      permission = await _messaging.requestPermission();
+      reported = await _messaging.requestPermission();
     } on Object {
-      await _releaseSystemRequest();
+      if (recorded) await _releaseSystemRequest();
       rethrow;
     }
     _askedOnFirstOpen = true;
+    final permission = await _withHistory(reported);
     await _applyPermission(permission);
     return permission;
   }
 
   Future<void> refreshPermission() async =>
-      _applyPermission(await _messaging.permission());
+      _applyPermission(await _withHistory(await _messaging.permission()));
+
+  /// Android reads a first dialog that was swiped away as a permanent denial:
+  /// nothing was denied, so no rationale is offered, and the plugin reports
+  /// "asked before, no rationale" as permanent. One request on record with that
+  /// reading is therefore still a question the person can be asked again from
+  /// Profile; a real denial reads as requestable after one request and
+  /// permanent only after two. (A second swipe-away reads as permanent: Android
+  /// gives no way to tell it from two denials.)
+  Future<PushPermission> _withHistory(PushPermission reported) async {
+    if (defaultTargetPlatform != TargetPlatform.android ||
+        reported != PushPermission.settingsRequired) {
+      return reported;
+    }
+    return await _systemRequestCount() == 1
+        ? PushPermission.deniedRequestable
+        : reported;
+  }
 
   Future<void> _applyPermission(PushPermission permission) async {
     final granted =
@@ -228,7 +256,7 @@ class PushCoordinator extends Notifier<PushRuntimeState>
     // registration gate below permanently, and the cold-start tap was lost
     // with it. Each step now fails on its own terms.
     try {
-      final permission = await _messaging.permission();
+      final permission = await _withHistory(await _messaging.permission());
       state = state.copyWith(permission: permission);
     } on Object {
       state = state.copyWith(registration: PushRegistrationState.failed);
@@ -292,21 +320,42 @@ class PushCoordinator extends Notifier<PushRuntimeState>
   /// takes the count back and leaves the prompt pending for the next trigger.
   /// A start that never became available asks nothing and spends nothing.
   Future<void> _askOnFirstOpen() async {
-    if (_askingOnFirstOpen || !_canAskOnFirstOpen) return;
+    if (_askingOnFirstOpen) {
+      // A trigger that lands while one is being decided is looked at again
+      // once that one has finished, so a screen change is never lost.
+      _firstOpenRetrigger = true;
+      return;
+    }
+    if (!_canAskOnFirstOpen()) return;
     _askingOnFirstOpen = true;
     try {
       if (await _androidAskedBefore()) return;
-      // Let the screen that made this possible reach the display first.
-      await SchedulerBinding.instance.endOfFrame;
-      if (!_canAskOnFirstOpen) return;
-      await _recordSystemRequest();
+      // Let the screen that made this possible reach the display: a screen
+      // still sliding out (sign-in after its pop) is not yet gone.
+      // The animation ending is not the screen leaving: the navigator drops the
+      // route in the frame after, so each wait is followed by a frame.
+      final transitions = ref.read(routeTransitionTrackerProvider);
+      do {
+        await transitions.settled;
+        await SchedulerBinding.instance.endOfFrame;
+      } while (!transitions.idle);
+      if (!_canAskOnFirstOpen(settled: true)) return;
+      // The prompt needs a count that is on disk before the system is asked:
+      // without one a dialog shown and swiped away would be asked again at the
+      // next launch.
+      if (!await _recordSystemRequest()) {
+        _automaticFailures++;
+        return;
+      }
       // The write above can outlast the person's stay on this screen. The
       // check and the request below follow each other with nothing between.
-      if (!_canAskOnFirstOpen) {
+      if (!_canAskOnFirstOpen(settled: true)) {
         await _releaseSystemRequest();
         return;
       }
-      await (_request = _askSystem().whenComplete(() => _request = null));
+      await (_request = _askSystem(
+        recorded: true,
+      ).whenComplete(() => _request = null));
     } on Object {
       // A failed first prompt is not worth failing anything for: the count was
       // taken back, the next trigger tries again (twice at most), and Profile
@@ -314,10 +363,17 @@ class PushCoordinator extends Notifier<PushRuntimeState>
       _automaticFailures++;
     } finally {
       _askingOnFirstOpen = false;
+      if (_firstOpenRetrigger) {
+        _firstOpenRetrigger = false;
+        _askAfterNextFrame();
+      }
     }
   }
 
-  bool get _canAskOnFirstOpen =>
+  /// Whether the prompt may go ahead. With [settled] it also requires that no
+  /// screen is still sliding in or out: the first look at a trigger does not,
+  /// because it is the one that goes on to wait for the transition.
+  bool _canAskOnFirstOpen({bool settled = false}) =>
       ref.mounted &&
       !_askedOnFirstOpen &&
       _automaticFailures < _automaticPromptFailuresAllowed &&
@@ -327,9 +383,12 @@ class PushCoordinator extends Notifier<PushRuntimeState>
       _request == null &&
       _pendingLocation == null &&
       ref.read(sessionProvider) is! SessionRestoring &&
+      (!settled || ref.read(routeTransitionTrackerProvider).idle) &&
       _onUsableScreen &&
-      (state.permission == PushPermission.notDetermined ||
-          state.permission == PushPermission.deniedRequestable);
+      // Only a question never put. A requestable denial is a person's answer,
+      // and on Android it is also what an app that asked before N1 reports
+      // after an upgrade, with no count on this installation to say so.
+      state.permission == PushPermission.notDetermined;
 
   /// Whether a screen the person can use is the one on display. The router
   /// reports the top of its stack, pushed routes included.
@@ -364,13 +423,19 @@ class PushCoordinator extends Notifier<PushRuntimeState>
     }
   }
 
-  Future<void> _recordSystemRequest() async {
+  /// Writes the request count ahead of the system call, and says whether it
+  /// reached the disk. The write is the last step before the native request, so
+  /// the window in which a dialog is counted but not yet shown is as short as it
+  /// can be; an app killed inside it counts a prompt that never appeared, which
+  /// is the safe side (Profile still asks on request).
+  Future<bool> _recordSystemRequest() async {
     try {
       _systemRequests = await ref
           .read(tokenStoreProvider)
           .recordPushPermissionRequest();
+      return true;
     } on Object {
-      // A count that cannot be written must not stop a person who asked.
+      return false;
     }
   }
 
@@ -540,20 +605,26 @@ class PushCoordinator extends Notifier<PushRuntimeState>
           ref.read(sessionProvider) is! SessionSignedIn) {
         return;
       }
+      // Only the newest attempt may settle the state or consume the pending
+      // token: an older response arriving after a refresh's registration
+      // neither hides its failure nor undoes its success.
+      if (attempt != _registrationAttempt) return;
       await store.writePendingPushToken(null);
       if (generation != _sessionGeneration ||
+          attempt != _registrationAttempt ||
           ref.read(sessionProvider) is! SessionSignedIn) {
         return;
       }
       state = state.copyWith(registration: PushRegistrationState.registered);
     } on ApiException catch (error) {
-      if (generation != _sessionGeneration) return;
+      if (generation != _sessionGeneration || attempt != _registrationAttempt) {
+        return;
+      }
       if (error.code.raw == _registrationSuperseded) {
-        // A later registration or sign-out was applied first. When another
-        // attempt of this phone is the later one, it owns the state. When this
-        // is the latest, the phone's own counter was behind the server's: it
-        // catches up and the registration goes again, with a higher number.
-        if (attempt != _registrationAttempt) return;
+        // A later registration or sign-out was applied first. This is the
+        // latest attempt of the phone, so its own counter was behind the
+        // server's: it catches up and the registration goes again, with a
+        // higher number.
         final newest = (error.extras['current_sequence'] as num?)?.toInt();
         if (newest != null && !retried) {
           await ref.read(tokenStoreProvider).raisePushBindingSequence(newest);
@@ -566,7 +637,7 @@ class PushCoordinator extends Notifier<PushRuntimeState>
       }
       state = state.copyWith(registration: PushRegistrationState.failed);
     } on Object {
-      if (generation != _sessionGeneration) {
+      if (generation != _sessionGeneration || attempt != _registrationAttempt) {
         return;
       }
       state = state.copyWith(registration: PushRegistrationState.failed);

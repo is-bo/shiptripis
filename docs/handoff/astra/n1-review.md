@@ -1,11 +1,36 @@
 You are an independent second-pass reviewer. This review is read-only: do not write, commit or push code, and do not comment on GitHub. You may read files and run read-only git commands.
 
-Review pull request #71, "N1: ask for notifications once on first open", in this repository (is-bo/shiptripis), at head `5372776350b194a7927e526f8cd5319b56dc6b56` (round 2; round 1 was `6f1b858`). Use a three-dot diff against `origin/main`, and run `git fetch origin` first if the commit is missing.
+Review pull request #71, "N1: ask for notifications once on first open", in this repository (is-bo/shiptripis), at head `HEAD_SHA_PLACEHOLDER` (round 3; round 2 was `5372776`, round 1 `6f1b858`). Use a three-dot diff against `origin/main`, and run `git fetch origin` first if the commit is missing.
 - The Flutter app is under `mobile/lib/`.
 - The rules are in `CLAUDE.md`, especially "Mobile rules" and the rule that strings must exist in EN/FR/MSA.
 - The package is section 4 "N1" of `docs/WASSLA_PHONE_TEST_2_PLAN.md`, and the finding is section 1.2.
 - The write-up is `docs/PHASE_N1_NOTIFICATION_FIRST_OPEN.md`.
 - The screenshots are in `docs/screenshots/n1/`.
+
+## Round 3
+Your round-2 result (`docs/handoff/astra/results/n1-astra-round2-result.md`, 6 blockers and 7 should-fixes)
+is answered in the phase doc ("Registration order", "What changed", "Tests"). Verify each fix is real and
+complete, and hunt for what it broke:
+1. **Blocker 1 (old app, no `binding_sequence`) is declined, on purpose**: CLAUDE.md says there are no real
+   users and nothing is spent on old clients. Registration still requires the number; sign-out accepts it
+   as optional and ends the device by session. Say if you still consider that a blocker given the rule.
+2. Blockers 2-4, 6: the server design is `session_id` on `PushDevice` (copied from the `sid` claim of the
+   access token; rotation copies it), `PushInstallationBinding` with operation, owner and token
+   fingerprint, and `PushAccountRevocation` locked with the user row (`apps/notifications/push.py`,
+   `apps/accounts/views.py`, `apps/accounts/sessions.py`). Check the lock order, the exact-repeat rule,
+   the late/low sign-out paths, the revocation by `iat`, and that no new race exists between a
+   registration and `end_all_sessions`.
+3. Blocker 5 and the phone-side should-fixes: one installation ID (`TokenStore.readOrCreateInstallationId`
+   in the phone write queue), sign-out sent without the number when it cannot be prepared, the
+   newest-attempt check in `_syncRegistration`, `RouteTransitionTracker` and the wait in
+   `_askOnFirstOpen`, the foreground recheck of the Profile button, the durable count for the automatic
+   prompt, `notDetermined`-only automatic asks (Android upgrade after a pre-N1 denial), and the
+   first-dialog dismissal read (one request + permanent = requestable).
+4. Tests: the two registration-retry tests are back to HTTP 500; the phase doc lists every rewritten
+   test and why. New tests were checked to fail when the fix is removed.
+
+Unchanged from earlier rounds: the owner decision, the platform logic and the hunting list below still
+apply; the "second denial" text under "What N1 claims" is superseded by the phase doc.
 
 ## Round 2
 Your round-1 review rejected `6f1b858` with six findings; round 2 answers them (phase doc, "Registration order" and "What changed"). Verify each fix is real and complete, and hunt for what it broke:

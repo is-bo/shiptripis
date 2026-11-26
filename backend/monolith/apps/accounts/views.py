@@ -1,4 +1,5 @@
 import logging
+from uuid import uuid4
 
 from django.db import transaction
 from django.utils import timezone
@@ -47,6 +48,10 @@ APPLE_SIGN_IN_UNAVAILABLE = "apple_sign_in_unavailable"
 def _tokens_for_user(user: User) -> dict[str, str]:
     refresh = RefreshToken.for_user(user)
     refresh["role"] = user.role
+    # One id for the whole sign-in: refresh rotation and the access tokens copy
+    # it, so a push registration can name the sign-in that made it and only that
+    # sign-in's sign-out switches it off.
+    refresh["sid"] = uuid4().hex
     return {"access": str(refresh.access_token), "refresh": str(refresh)}
 
 
@@ -103,7 +108,8 @@ class SignOutView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         try:
-            RefreshToken(token).blacklist()
+            refresh = RefreshToken(token)
+            refresh.blacklist()
         except TokenError:
             return Response(
                 {"detail": "Invalid or expired refresh token."},
@@ -111,11 +117,16 @@ class SignOutView(APIView):
             )
         # Device cleanup is best-effort and must never trap a user in an
         # account or weaken refresh-token validation: a body without a usable
-        # installation and binding number simply leaves the device alone.
+        # installation simply leaves the device alone. The sign-in that ends is
+        # the one the refresh token names, whatever number the app sent.
         device = PushDeviceUnregisterSerializer(data=request.data)
         if device.is_valid():
             try:
-                unregister_push_device(user=request.user, **device.validated_data)
+                unregister_push_device(
+                    user=request.user,
+                    session_id=refresh.get("sid", ""),
+                    **device.validated_data,
+                )
             except Exception:
                 logger.warning(
                     "push device cleanup failed during logout user_id=%s",

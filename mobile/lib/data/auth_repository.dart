@@ -164,23 +164,32 @@ class AuthRepository {
     final refresh = await _tokens.readRefresh();
     if (_tokens.identityGeneration != signOutIdentity) return;
     if (refresh != null) {
+      // Which phone and which number are optional extras: without them the
+      // server still ends the sign-in, so a keystore that refuses a write
+      // never keeps the refresh token alive on the server.
+      String? installationId;
+      int? bindingSequence;
       try {
-        final installationId = await _tokens.readOrCreateInstallationId();
+        installationId = await _tokens.readOrCreateInstallationId();
         // Numbered after every registration already started, so the server
         // ends the phone's binding in the order the app did.
-        final bindingSequence = await _tokens.nextPushBindingSequence();
-        if (_tokens.identityGeneration != signOutIdentity) return;
+        bindingSequence = await _tokens.nextPushBindingSequence();
+      } on Object {
+        // Sent without what could not be prepared.
+      }
+      if (_tokens.identityGeneration != signOutIdentity) return;
+      try {
         await _api.postVoid(
           '/api/auth/sign-out',
           body: {
             'refresh': refresh,
-            'installation_id': installationId,
-            'binding_sequence': bindingSequence,
+            'installation_id': ?installationId,
+            'binding_sequence': ?bindingSequence,
           },
         );
       } on Object {
-        // Push cleanup is best-effort. An expired session, unreachable API,
-        // or unavailable keystore must not prevent local sign-out.
+        // Push cleanup is best-effort. An expired session or unreachable API
+        // must not prevent local sign-out.
       }
     }
     await _tokens.clearIfIdentityCurrent(signOutIdentity);

@@ -53,7 +53,10 @@ class PushDeviceSerializer(serializers.ModelSerializer):
 
 class PushDeviceUnregisterSerializer(serializers.Serializer):
     installation_id = serializers.UUIDField()
-    binding_sequence = serializers.IntegerField(min_value=1, max_value=2**62)
+    # Optional: a sign-out that cannot number itself still ends its own binding.
+    binding_sequence = serializers.IntegerField(
+        min_value=1, max_value=2**62, required=False
+    )
 
 
 class NotificationPreferenceSerializer(serializers.ModelSerializer):

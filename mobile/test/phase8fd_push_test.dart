@@ -477,44 +477,43 @@ void main() {
     },
   );
 
-  testWidgets('failed device registration can be retried without re-prompting', (
-    tester,
-  ) async {
-    var attempts = 0;
-    final backend = FakeBackend()
-      ..handle('POST', '/api/notifications/devices', (_) {
-        attempts++;
-        // A refusal, not a server failure: the HTTP layer retries those on real
-        // timers, which a widget test's fake clock never fires.
-        return attempts == 1
-            ? const FakeResponse(400, {'detail': 'not accepted'})
-            : const FakeResponse(201, {'id': 3, 'active': true});
-      });
-    final messaging = _FakePushMessaging();
-    final container = await _mountedCoordinator(
-      tester,
-      backend,
-      _PushTokenStore(),
-      messaging,
-    );
+  testWidgets(
+    'failed device registration can be retried without re-prompting',
+    (tester) async {
+      var attempts = 0;
+      final backend = FakeBackend()
+        ..handle('POST', '/api/notifications/devices', (_) {
+          attempts++;
+          return attempts == 1
+              ? const FakeResponse(500, {'detail': 'server error'})
+              : const FakeResponse(201, {'id': 3, 'active': true});
+        });
+      final messaging = _FakePushMessaging();
+      final container = await _mountedCoordinator(
+        tester,
+        backend,
+        _PushTokenStore(),
+        messaging,
+      );
 
-    final coordinator = container.read(pushCoordinatorProvider.notifier);
-    await _settle(tester);
-    expect(
-      container.read(pushCoordinatorProvider).registration,
-      PushRegistrationState.failed,
-    );
-    expect(messaging.requests, 1);
+      final coordinator = container.read(pushCoordinatorProvider.notifier);
+      await _settle(tester);
+      expect(
+        container.read(pushCoordinatorProvider).registration,
+        PushRegistrationState.failed,
+      );
+      expect(messaging.requests, 1);
 
-    unawaited(coordinator.retryRegistration());
-    await _settle(tester);
-    expect(
-      container.read(pushCoordinatorProvider).registration,
-      PushRegistrationState.registered,
-    );
-    expect(messaging.requests, 1);
-    expect(backend.to('POST', '/api/notifications/devices'), hasLength(2));
-  });
+      unawaited(coordinator.retryRegistration());
+      await _settle(tester);
+      expect(
+        container.read(pushCoordinatorProvider).registration,
+        PushRegistrationState.registered,
+      );
+      expect(messaging.requests, 1);
+      expect(backend.to('POST', '/api/notifications/devices'), hasLength(2));
+    },
+  );
 
   testWidgets('Arabic preferences are RTL and essential remains fixed', (
     tester,

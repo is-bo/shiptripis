@@ -14,6 +14,7 @@ from rest_framework.views import APIView
 from .models import Notification, NotificationPreference
 from .push import (
     PushBindingSuperseded,
+    PushSessionRevoked,
     register_push_device,
     unregister_push_device,
 )
@@ -98,6 +99,18 @@ def unread_count(request: Request) -> Response:
     return Response({"unread": counts["active"], **counts})
 
 
+def _claim(request: Request, name: str, default):
+    """A claim of the access token that authenticated ``request``.
+
+    The sign-in id (``sid``) and issue time (``iat``) tie a push registration to
+    the sign-in that made it. A request authenticated without a token (a test
+    client) carries neither.
+    """
+
+    token = request.auth
+    return default if token is None else token.get(name, default)
+
+
 class PushDeviceRegistrationView(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -106,7 +119,18 @@ class PushDeviceRegistrationView(APIView):
         serializer.is_valid(raise_exception=True)
         try:
             device = register_push_device(
-                user=request.user, **serializer.validated_data
+                user=request.user,
+                session_id=_claim(request, "sid", ""),
+                token_issued_at=_claim(request, "iat", None),
+                **serializer.validated_data,
+            )
+        except PushSessionRevoked:
+            return Response(
+                {
+                    "code": "push_session_revoked",
+                    "detail": "Every sign-in of this account was ended after this one began.",
+                },
+                status=status.HTTP_409_CONFLICT,
             )
         except PushBindingSuperseded as superseded:
             return Response(
@@ -128,8 +152,8 @@ class PushDeviceUnregisterView(APIView):
         serializer.is_valid(raise_exception=True)
         unregister_push_device(
             user=request.user,
-            installation_id=serializer.validated_data["installation_id"],
-            binding_sequence=serializer.validated_data["binding_sequence"],
+            session_id=_claim(request, "sid", ""),
+            **serializer.validated_data,
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
 

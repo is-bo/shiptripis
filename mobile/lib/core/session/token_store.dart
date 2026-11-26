@@ -41,7 +41,7 @@ class TokenStore {
   final FlutterSecureStorage _storage;
   int _identityGeneration = 0;
   Future<void> _credentialWriteTail = Future<void>.value();
-  Future<void> _counterWriteTail = Future<void>.value();
+  Future<void> _phoneWriteTail = Future<void>.value();
 
   /// Changes synchronously before any credential mutation awaits platform
   /// storage. Token refresh uses it to reject a response started by an older
@@ -167,7 +167,11 @@ class TokenStore {
 
   /// Random per-installation UUID. It is deliberately retained across logout
   /// and is not a hardware, advertising, or vendor identifier.
-  Future<String> readOrCreateInstallationId() async {
+  ///
+  /// Created once: the read-then-write runs in the phone's write queue, so a
+  /// startup registration and a token-refresh registration that both find the
+  /// key empty share one UUID instead of each minting their own.
+  Future<String> readOrCreateInstallationId() => _serializePhoneWrite(() async {
     final existing = await _storage.read(key: _kInstallationId);
     if (existing != null && existing.isNotEmpty) return existing;
     final random = Random.secure();
@@ -183,7 +187,7 @@ class TokenStore {
         '${hex.substring(20)}';
     await _storage.write(key: _kInstallationId, value: generated);
     return generated;
-  }
+  });
 
   /// How many times this installation has asked the operating system for
   /// notification permission, from the app's first-open prompt or from Profile.
@@ -219,7 +223,7 @@ class TokenStore {
   /// Moves the counter up to at least [sequence], the newest number the server
   /// reported, so a phone whose counter was lost numbers its next request
   /// above everything the server has seen. Never lowers it.
-  Future<void> raisePushBindingSequence(int sequence) => _serializeCounterWrite(
+  Future<void> raisePushBindingSequence(int sequence) => _serializePhoneWrite(
     () async {
       final current =
           int.tryParse(await _storage.read(key: _kPushBindingSequence) ?? '') ??
@@ -231,17 +235,18 @@ class TokenStore {
   );
 
   Future<int> _addToCounter(String key, int delta) =>
-      _serializeCounterWrite(() async {
+      _serializePhoneWrite(() async {
         final current = int.tryParse(await _storage.read(key: key) ?? '') ?? 0;
         final next = current + delta < 0 ? 0 : current + delta;
         await _storage.write(key: key, value: '$next');
         return next;
       });
 
-  /// Counter updates read, add and write, so two at once would lose one.
-  Future<T> _serializeCounterWrite<T>(Future<T> Function() operation) {
-    final result = _counterWriteTail.then((_) => operation());
-    _counterWriteTail = result.then<void>(
+  /// The phone's own keys read, change and write, so two at once would lose one
+  /// (a counter) or disagree (the installation ID).
+  Future<T> _serializePhoneWrite<T>(Future<T> Function() operation) {
+    final result = _phoneWriteTail.then((_) => operation());
+    _phoneWriteTail = result.then<void>(
       (_) {},
       onError: (Object _, StackTrace _) {},
     );

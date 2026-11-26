@@ -131,29 +131,47 @@ never display the prompt again. The installation keeps a count of the requests
 it made, which survives logout and account changes, because Android 13 and newer
 report a permission that was never asked for as a plain denial or as
 undetermined, and the pinned plugin writes its own history only after the dialog
-is answered; on Android the prompt goes ahead only while that count is zero. iOS
-asks when the status is undetermined (its status is exact, and a reinstall resets
-it) and respects authorized and provisional. Android below 13 has no runtime
-prompt. A missing Firebase configuration or a failed start asks nothing and
-spends nothing, so the next launch that can ask still does. A request the system
-never received (the person left the app, the call failed) is taken back.
+is answered; on Android the prompt goes ahead only while the status is
+undetermined and that count is zero. A requestable denial is never asked on its
+own: after an upgrade from a build that asked from Profile, Android reports that
+one denial as requestable with no count on this installation, and that person
+must not be asked again. The count is written to disk before the system is asked
+and the prompt is skipped if it cannot be written. An app killed between that
+write and the dialog counts a prompt that never appeared (Profile still asks).
+iOS asks when the status is undetermined (its status is exact, and a reinstall
+resets it) and respects authorized and provisional. Android below 13 has no
+runtime prompt. A missing Firebase configuration or a failed start asks nothing
+and spends nothing, so the next launch that can ask still does. A request the
+system never received (the person left the app, the call failed) is taken back.
+The prompt waits until the screen that was on top has finished leaving.
 
 Profile > Notifications is the recovery path and the only later request, for a
-guest as well (guest Profile has the row). The system decides when Settings is
-the only way: Android reports a permanent denial only after a denial it will not
-show again, and keeps a dismissal requestable, so Enable stays until then. A
-permanent denial, an older Android version whose notifications are disabled, or
-an iOS denial links to the app's system notification settings. Returning from
-settings refreshes the displayed permission state and registers the phone if it
-was granted there. The first-open prompt, a resume and the Profile button share
-one request, so the system is never asked twice at once. A denial does not
-disable the app or its in-app inbox.
+guest as well (guest Profile has the row). On Android a requestable denial keeps
+Enable; Settings is offered when the system reports a permanent denial. One
+case is ambiguous: a first dialog swiped away denies nothing, so Android has no
+rationale to offer and the plugin reads it as permanent. One request on record
+with that reading therefore still offers Enable; a second swipe-away reads as
+permanent, because Android cannot tell it from two denials. A permanent denial,
+an older Android version whose notifications are disabled, or an iOS denial
+links to the app's system notification settings. Returning from settings
+refreshes the displayed permission state and registers the phone if it was
+granted there. The first-open prompt, a resume and the Profile button share one
+request, so the system is never asked twice at once; the Profile button asks
+only while the app is in the foreground. A denial does not disable the app or
+its in-app inbox.
 
 The phone registers to an account only after sign-in. The app numbers every
-registration and every sign-out of an installation, and the server applies them
-in that order (`PushInstallationBinding`): a request overtaken by a later one is
-refused (`409 push_registration_superseded`), so a slow registration can never
-rebind the phone to an account that signed out or was replaced.
+registration and every sign-out of an installation from one counter (created
+once, so one phone has one installation ID), and the server applies them in that
+order (`PushInstallationBinding`): a registration overtaken by a later one, or a
+number reused for a different request, is refused
+(`409 push_registration_superseded`); a stale sign-out still ends the device
+that belongs to its own sign-in. Every sign-in carries a session id (`sid`); a
+sign-out ends only the device registered under that sign-in, and a password
+reset (`end_all_sessions`) records a revocation time that refuses any
+registration made with an older token (`409 push_session_revoked`). A slow
+registration can therefore never rebind the phone to an account that signed out,
+was replaced or was reset.
 
 The permission state and ShipTrip notification-type preferences are separate.
 Preferences control Messages and Marketplace delivery across the account;

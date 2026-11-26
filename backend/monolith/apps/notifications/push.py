@@ -16,6 +16,7 @@ from uuid import UUID
 
 import redis
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -26,6 +27,7 @@ from apps.core.languages import normalize_communication_language
 from .models import (
     Notification,
     NotificationPreference,
+    PushAccountRevocation,
     PushDevice,
     PushInstallationBinding,
 )
@@ -586,7 +588,8 @@ _TICKET_PUSH_COPY: dict[tuple[str, str], dict[str, tuple[str, str]]] = {
 
 
 class PushBindingSuperseded(Exception):
-    """A later registration or sign-out of the installation already arrived.
+    """A later operation on the installation was already applied, or the app's
+    counter collided with one.
 
     ``current_sequence`` is the newest number the server has seen, so an app
     whose own counter was lost can catch up instead of being refused forever.
@@ -597,28 +600,75 @@ class PushBindingSuperseded(Exception):
         self.current_sequence = current_sequence
 
 
-def _claim_binding_sequence(installation_id: UUID, sequence: int) -> None:
-    """Record ``sequence`` as the installation's newest, or refuse it as stale.
+class PushSessionRevoked(Exception):
+    """The access token predates the account's last revocation of every sign-in."""
+
+
+Operation = PushInstallationBinding.Operation
+
+
+def _lock_account(user) -> None:
+    """Serialize registrations and revocations of one account.
+
+    Both take this row lock first, so a revocation that commits is always seen
+    by the registration that follows it, and a registration that commits first
+    is switched off by the revocation that follows it.
+    """
+
+    get_user_model().objects.select_for_update().only("pk").get(pk=user.pk)
+
+
+def _claim_binding_sequence(
+    installation_id: UUID,
+    sequence: int,
+    *,
+    operation: str,
+    user_id: int,
+    token_fingerprint: str = "",
+    refuse_stale: bool,
+) -> None:
+    """Record ``sequence`` as the installation's newest operation.
 
     Runs inside the caller's transaction and holds the installation's row lock
-    until it ends, so a registration and a sign-out of the same installation
-    are always applied in the order the app numbered them. The same number is
-    accepted again: a request the network repeated is idempotent.
-
-    Raises :class:`PushBindingSuperseded` when a higher number was already
-    applied.
+    until it ends, so operations on one installation are applied in the order
+    the app numbered them. Raises :class:`PushBindingSuperseded` when
+    ``refuse_stale`` and a higher number was already applied, or when the same
+    number was already used for a different operation, account or token. An
+    exact repeat of the same operation is accepted and changes nothing.
+    A sign-out passes ``refuse_stale=False``: it ends only its own sign-in's
+    binding, so it is applied however late it arrives, and it still advances
+    the number so that the registration it overtook is refused.
     """
 
     binding, created = PushInstallationBinding.objects.select_for_update().get_or_create(
-        installation_id=installation_id, defaults={"sequence": sequence}
+        installation_id=installation_id,
+        defaults={
+            "sequence": sequence,
+            "operation": operation,
+            "user_id": user_id,
+            "token_fingerprint": token_fingerprint,
+        },
     )
     if created:
         return
     if sequence < binding.sequence:
-        raise PushBindingSuperseded(binding.sequence)
-    if sequence > binding.sequence:
-        binding.sequence = sequence
-        binding.save(update_fields=["sequence", "updated_at"])
+        if refuse_stale:
+            raise PushBindingSuperseded(binding.sequence)
+        return
+    if sequence == binding.sequence:
+        same = (
+            binding.operation == operation
+            and binding.user_id == user_id
+            and binding.token_fingerprint == token_fingerprint
+        )
+        if refuse_stale and not same:
+            raise PushBindingSuperseded(binding.sequence)
+        return
+    binding.sequence = sequence
+    binding.operation = operation
+    binding.user_id = user_id
+    binding.token_fingerprint = token_fingerprint
+    binding.save()
 
 
 def register_push_device(
@@ -629,19 +679,39 @@ def register_push_device(
     platform: str,
     binding_sequence: int,
     app_version: str = "",
+    session_id: str = "",
+    token_issued_at: int | None = None,
 ) -> PushDevice:
     """Idempotently bind one installation and one current token to ``user``.
 
-    Raises :class:`PushBindingSuperseded` when a later registration or sign-out
-    of the installation was already applied: the app moved on, and this request
-    must not rebind the phone to ``user``.
+    Raises :class:`PushBindingSuperseded` when a later operation on the
+    installation was already applied (the app moved on, and this request must
+    not rebind the phone to ``user``), and :class:`PushSessionRevoked` when the
+    access token (issued at ``token_issued_at``, epoch seconds) is older than the
+    account's last revocation of every sign-in. ``session_id`` is the sign-in
+    that registers, kept so only its own sign-out ends the binding.
     """
 
     fingerprint = PushDevice.fingerprint(token)
     for attempt in range(2):
         try:
             with transaction.atomic():
-                _claim_binding_sequence(installation_id, binding_sequence)
+                _lock_account(user)
+                revocation = PushAccountRevocation.objects.filter(user=user).first()
+                if (
+                    revocation is not None
+                    and token_issued_at is not None
+                    and token_issued_at < int(revocation.revoked_at.timestamp())
+                ):
+                    raise PushSessionRevoked
+                _claim_binding_sequence(
+                    installation_id,
+                    binding_sequence,
+                    operation=Operation.REGISTER,
+                    user_id=user.pk,
+                    token_fingerprint=fingerprint,
+                    refuse_stale=True,
+                )
                 rows = list(
                     PushDevice.objects.select_for_update()
                     .filter(
@@ -677,6 +747,8 @@ def register_push_device(
                 device.token = token
                 device.token_fingerprint = fingerprint
                 device.app_version = app_version
+                device.session_id = session_id
+                device.binding_sequence = binding_sequence
                 device.active = True
                 device.last_seen_at = timezone.now()
                 if rotated_or_rebound:
@@ -691,31 +763,42 @@ def register_push_device(
 
 
 def unregister_push_device(
-    *, user, installation_id: UUID, binding_sequence: int
+    *,
+    user,
+    installation_id: UUID,
+    session_id: str,
+    binding_sequence: int | None = None,
 ) -> bool:
-    """Disable only the authenticated user's installation; idempotent.
+    """Switch off the binding that ``session_id`` made on this installation.
 
-    The sign-out is recorded even when no device exists yet, so a registration
-    still on its way when the person signed out is refused when it arrives. A
-    sign-out that a later registration already overtook changes nothing.
+    Owner-scoped and idempotent. Only the sign-in that registered a binding can
+    end it: a sign-out that arrives late, after the same person signed in again
+    or another account took the phone, finds a binding made by a later sign-in
+    and changes nothing, and a sign-out from a phone whose counter was lost still
+    ends its own binding. A token that carries no sign-in id (issued before
+    sign-ins were numbered) ends the owner's binding.
+
+    With ``binding_sequence`` the sign-out is also recorded, even when no device
+    exists yet, so a registration still on its way when the person signed out is
+    refused when it arrives.
     """
 
-    try:
-        with transaction.atomic():
-            _claim_binding_sequence(installation_id, binding_sequence)
-            return bool(
-                PushDevice.objects.filter(
-                    user=user,
-                    installation_id=installation_id,
-                    active=True,
-                ).update(
-                    active=False,
-                    last_seen_at=timezone.now(),
-                    updated_at=timezone.now(),
-                )
+    with transaction.atomic():
+        if binding_sequence is not None:
+            _claim_binding_sequence(
+                installation_id,
+                binding_sequence,
+                operation=Operation.SIGN_OUT,
+                user_id=user.pk,
+                refuse_stale=False,
             )
-    except PushBindingSuperseded:
-        return False
+        devices = PushDevice.objects.filter(
+            user=user, installation_id=installation_id, active=True
+        )
+        if session_id:
+            devices = devices.filter(session_id=session_id)
+        now = timezone.now()
+        return bool(devices.update(active=False, last_seen_at=now, updated_at=now))
 
 
 def deactivate_all_push_devices(*, user) -> int:
@@ -723,13 +806,19 @@ def deactivate_all_push_devices(*, user) -> int:
 
     Used when the account changes hands: a device left on would keep delivering
     the owner's notifications to a phone that is no longer theirs. The app
-    registers again on its next sign-in.
+    registers again on its next sign-in. Access tokens issued before now can no
+    longer register a phone (:class:`PushAccountRevocation`).
     """
 
-    now = timezone.now()
-    return PushDevice.objects.filter(user=user, active=True).update(
-        active=False, last_seen_at=now, updated_at=now
-    )
+    with transaction.atomic():
+        _lock_account(user)
+        now = timezone.now()
+        PushAccountRevocation.objects.update_or_create(
+            user=user, defaults={"revoked_at": now}
+        )
+        return PushDevice.objects.filter(user=user, active=True).update(
+            active=False, last_seen_at=now, updated_at=now
+        )
 
 
 def _preference_allows(

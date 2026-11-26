@@ -11,8 +11,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
-GoRouter pushTestRouter({String initialLocation = '/home'}) => GoRouter(
+import 'package:shiptrip/app/route_transition_tracker.dart';
+
+GoRouter pushTestRouter({
+  String initialLocation = '/home',
+  RouteTransitionTracker? tracker,
+}) => GoRouter(
   initialLocation: initialLocation,
+  observers: [?tracker],
   routes: [
     for (final path in const [
       '/home',

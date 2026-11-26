@@ -6,6 +6,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shiptrip/app/app.dart';
 import 'package:shiptrip/app/router.dart';
@@ -13,6 +14,7 @@ import 'package:shiptrip/core/push/notification_socket.dart';
 import 'package:shiptrip/core/push/push_coordinator.dart';
 import 'package:shiptrip/core/push/push_messaging.dart';
 import 'package:shiptrip/core/session/session.dart';
+import 'package:shiptrip/core/session/token_store.dart';
 import 'package:shiptrip/data/auth_repository.dart';
 import 'package:shiptrip/domain/account.dart';
 import 'package:shiptrip/features/profile/notification_settings_screen.dart';
@@ -24,18 +26,35 @@ import 'support/push_router.dart';
 class _Store extends FakeTokenStore {
   _Store({super.refresh});
 
+  /// Every change of the pending token, in order.
+  final List<String?> pendingWrites = [];
+
+  /// While set, numbering a registration or a sign-out fails.
+  bool countFails = false;
+
   @override
-  Future<String> readOrCreateInstallationId() async => 'installation';
+  Future<String> readOrCreateInstallationId() async =>
+      'ca7eedc0-1665-4bbd-bfae-45f841beb8d7';
+
+  @override
+  Future<int> nextPushBindingSequence() async {
+    if (countFails) throw StateError('keystore refused the write');
+    return super.nextPushBindingSequence();
+  }
 
   @override
   Future<String?> readPendingPushToken() async => null;
 
   @override
-  Future<void> writePendingPushToken(String? token) async {}
+  Future<void> writePendingPushToken(String? token) async =>
+      pendingWrites.add(token);
 }
 
 class _Messaging implements PushMessaging {
   _Messaging({this.currentPermission = PushPermission.notDetermined});
+
+  /// Where a test makes Firebase hand over a refreshed token.
+  final refreshes = StreamController<String>.broadcast();
 
   PushPermission currentPermission;
   PushPermission requestResult = PushPermission.authorized;
@@ -50,7 +69,7 @@ class _Messaging implements PushMessaging {
   @override
   Stream<PushMessage> get openedMessages => const Stream.empty();
   @override
-  Stream<String> get tokenRefresh => const Stream.empty();
+  Stream<String> get tokenRefresh => refreshes.stream;
   @override
   Future<PushMessage?> initialMessage() async => null;
   @override
@@ -166,8 +185,9 @@ void main() {
     Future<ProviderContainer> member(
       WidgetTester tester,
       FakeBackend backend,
-      FakeTokenStore tokens,
-    ) async {
+      FakeTokenStore tokens, {
+      _Messaging? messaging,
+    }) async {
       final router = pushTestRouter();
       final container = ProviderContainer(
         overrides: [
@@ -177,7 +197,8 @@ void main() {
           routerProvider.overrideWithValue(router),
           notificationSocketProvider.overrideWithValue(_NoopSocket()),
           pushMessagingProvider.overrideWithValue(
-            _Messaging(currentPermission: PushPermission.authorized),
+            messaging ??
+                _Messaging(currentPermission: PushPermission.authorized),
           ),
         ],
       );
@@ -273,5 +294,138 @@ void main() {
         reason: 'the Retry button is the way back',
       );
     });
+
+    testWidgets('an older request failing after a newer one registered does '
+        'not undo it', (tester) async {
+      final olderAnswer = Completer<void>();
+      var calls = 0;
+      final backend = FakeBackend()
+        ..handle('POST', '/api/notifications/devices', (_) async {
+          if (++calls == 1) {
+            await olderAnswer.future;
+            return const FakeResponse(500, {'detail': 'server error'});
+          }
+          return const FakeResponse(200, {'id': 3, 'active': true});
+        });
+      final tokens = _Store();
+      final messaging = _Messaging(
+        currentPermission: PushPermission.authorized,
+      );
+      final container = await member(
+        tester,
+        backend,
+        tokens,
+        messaging: messaging,
+      );
+      container.read(pushCoordinatorProvider);
+      await _settle(tester);
+      expect(calls, 1, reason: 'the first registration is still in flight');
+
+      messaging.refreshes.add('fcm-token-2');
+      await _settle(tester);
+      expect(calls, 2);
+      expect(
+        container.read(pushCoordinatorProvider).registration,
+        PushRegistrationState.registered,
+      );
+
+      olderAnswer.complete();
+      await _settle(tester);
+      expect(
+        container.read(pushCoordinatorProvider).registration,
+        PushRegistrationState.registered,
+        reason: 'the older failure arrives after the newer success',
+      );
+    });
+
+    testWidgets('an older success arriving after a newer failure neither '
+        'hides it nor consumes the pending token', (tester) async {
+      final olderAnswer = Completer<void>();
+      var calls = 0;
+      final backend = FakeBackend()
+        ..handle('POST', '/api/notifications/devices', (_) async {
+          if (++calls == 1) {
+            await olderAnswer.future;
+            return const FakeResponse(200, {'id': 3, 'active': true});
+          }
+          return const FakeResponse(500, {'detail': 'server error'});
+        });
+      final tokens = _Store();
+      final messaging = _Messaging(
+        currentPermission: PushPermission.authorized,
+      );
+      final container = await member(
+        tester,
+        backend,
+        tokens,
+        messaging: messaging,
+      );
+      container.read(pushCoordinatorProvider);
+      await _settle(tester);
+
+      messaging.refreshes.add('fcm-token-2');
+      await _settle(tester);
+      expect(
+        container.read(pushCoordinatorProvider).registration,
+        PushRegistrationState.failed,
+      );
+      final writesBefore = tokens.pendingWrites.length;
+
+      olderAnswer.complete();
+      await _settle(tester);
+      expect(
+        container.read(pushCoordinatorProvider).registration,
+        PushRegistrationState.failed,
+        reason: 'the current token is not registered: Retry must stay',
+      );
+      expect(
+        tokens.pendingWrites.skip(writesBefore),
+        isEmpty,
+        reason: 'the pending token is still needed',
+      );
+    });
+  });
+
+  group('signing out and the phone identity', () {
+    testWidgets('a counter that cannot be written still ends the sign-in on '
+        'the server', (tester) async {
+      final backend = FakeBackend()
+        ..on('POST', '/api/auth/sign-out', const FakeResponse(205));
+      final tokens = _Store()..countFails = true;
+
+      unawaited(
+        AuthRepository(apiClientFor(backend, tokens), tokens).signOut(),
+      );
+      await _settle(tester);
+
+      final sent = backend.lastTo('POST', '/api/auth/sign-out');
+      expect(sent, isNotNull, reason: 'the refresh token is revoked');
+      expect(sent!.body['refresh'], 'refresh-token');
+      expect(sent.body['installation_id'], isNotEmpty);
+      expect(sent.body.containsKey('binding_sequence'), isFalse);
+    });
+
+    test(
+      'two registrations starting together share one installation ID',
+      () async {
+        FlutterSecureStorage.setMockInitialValues({});
+        final store = TokenStore(const FlutterSecureStorage());
+
+        // A startup registration and a token-refresh registration, both on a
+        // phone that has never registered.
+        final both = await Future.wait([
+          for (var i = 0; i < 2; i++)
+            () async {
+              final id = await store.readOrCreateInstallationId();
+              final sequence = await store.nextPushBindingSequence();
+              return (id, sequence);
+            }(),
+        ]);
+
+        expect(both[0].$1, both[1].$1, reason: 'one phone, one identity');
+        expect({both[0].$2, both[1].$2}, {1, 2});
+        expect(await store.readOrCreateInstallationId(), both[0].$1);
+      },
+    );
   });
 }

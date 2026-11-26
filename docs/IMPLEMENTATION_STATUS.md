@@ -12,11 +12,17 @@
   after a killed dialog. No automatic retry; Profile recovers, and the system, not a count, says when
   only Settings is left. A guest can reach the same controls from guest Profile. Registering the phone
   waits for sign-in.
-- Astra round 2 required a server change: registrations and sign-outs of one installation are numbered
-  by the app and ordered by the server (`PushInstallationBinding`, migration `notifications.0009`), so a
-  registration that was slow on the network can never rebind the phone to an account that has since
-  signed out or been replaced. Spec and runbook updated. Detail, screenshots and the device checks still
-  owed on real phones: `docs/PHASE_N1_NOTIFICATION_FIRST_OPEN.md`.
+- Astra rounds 2 and 3 required a server change: registrations and sign-outs of one installation are
+  numbered by the app and ordered by the server (`PushInstallationBinding`, `PushAccountRevocation`,
+  migration `notifications.0009`), and every sign-in carries a session id (`sid`) so a sign-out ends
+  only its own device, whatever number it carries, and a registration that spans a password reset is
+  refused. A registration that was slow on the network can never rebind the phone to an account that
+  has since signed out, been replaced or been reset. Round 3 also: one installation ID per phone, the
+  prompt waits for the screen that was leaving, only the newest registration attempt may settle the
+  state, an Android upgrade after a pre-N1 denial is not asked again, a first dialog swiped away keeps
+  Enable. Spec and runbook updated; the currently installed app is not kept working (no users, by
+  CLAUDE.md). Detail, screenshots and the device checks still owed on real phones:
+  `docs/PHASE_N1_NOTIFICATION_FIRST_OPEN.md`.
 
 ## Wassla: the bell names the ticket decision (N2, 2026-11-26)
 

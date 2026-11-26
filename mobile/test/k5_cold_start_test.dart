@@ -19,6 +19,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shiptrip/app/app.dart';
+import 'package:shiptrip/app/route_transition_tracker.dart';
 import 'package:shiptrip/app/router.dart';
 import 'package:shiptrip/core/push/notification_socket.dart';
 import 'package:shiptrip/core/push/push_coordinator.dart';
@@ -41,6 +42,9 @@ class _PushTokenStore extends FakeTokenStore {
   /// While set, the write that counts a system request stays pending.
   Completer<void>? recordGate;
 
+  /// While set, the write that counts a system request fails.
+  bool recordFails = false;
+
   @override
   Future<String> readOrCreateInstallationId() async => 'installation';
 
@@ -52,6 +56,7 @@ class _PushTokenStore extends FakeTokenStore {
 
   @override
   Future<int> recordPushPermissionRequest() async {
+    if (recordFails) throw StateError('keystore refused the write');
     final count = await super.recordPushPermissionRequest();
     await recordGate?.future;
     return count;
@@ -210,10 +215,13 @@ Future<ProviderContainer> _coordinatorContainer(
   PushMessaging push, {
   SessionController Function()? session,
   GoRouter? router,
+  RouteTransitionTracker? tracker,
 }) async {
-  final screens = router ?? pushTestRouter();
+  final transitions = tracker ?? RouteTransitionTracker();
+  final screens = router ?? pushTestRouter(tracker: transitions);
   final container = ProviderContainer(
     overrides: [
+      routeTransitionTrackerProvider.overrideWithValue(transitions),
       tokenStoreProvider.overrideWithValue(tokens),
       apiClientProvider.overrideWithValue(apiClientFor(backend, tokens)),
       sessionProvider.overrideWith(session ?? _FixedSession.new),
@@ -471,7 +479,6 @@ void main() {
     testWidgets('a restart does not ask again after a denial', (tester) async {
       final tokens = _PushTokenStore();
       final first = _FakePushMessaging(
-        currentPermission: PushPermission.deniedRequestable,
         requestResult: PushPermission.deniedRequestable,
       );
       final one = await _coordinatorContainer(tester, devices(), tokens, first);
@@ -501,12 +508,10 @@ void main() {
       );
     });
 
-    testWidgets('Android 13+ asks on a fresh install that reads as denied', (
+    testWidgets('a fresh Android install reads as undetermined and is asked', (
       tester,
     ) async {
-      final push = _FakePushMessaging(
-        currentPermission: PushPermission.deniedRequestable,
-      );
+      final push = _FakePushMessaging();
       final container = await _coordinatorContainer(
         tester,
         devices(),
@@ -523,13 +528,41 @@ void main() {
       );
     });
 
-    testWidgets('a denial and a dismissal still leave Profile offering Enable', (
-      tester,
-    ) async {
+    testWidgets('an Android upgrade after a pre-N1 Profile denial is not '
+        'asked again', (tester) async {
+      // The app asked from Profile before this build counted requests. Android
+      // reports that single denial as requestable, which is exactly what it
+      // never reports for a permission that was not asked: the absent count
+      // must not read as "never asked".
+      final tokens = _PushTokenStore();
+      final push = _FakePushMessaging(
+        currentPermission: PushPermission.deniedRequestable,
+      );
+      final container = await _coordinatorContainer(
+        tester,
+        devices(),
+        tokens,
+        push,
+      );
+      container.read(pushCoordinatorProvider);
+      await _settle(tester, 3);
+      await background(tester);
+      await resume(tester);
+
+      expect(push.requests, 0);
+      expect(await tokens.readPushPermissionRequests(), 0);
+      expect(
+        container.read(pushCoordinatorProvider).permission,
+        PushPermission.deniedRequestable,
+        reason: 'Profile still offers the retry',
+      );
+    });
+
+    testWidgets('a denial followed by dismissals still leaves Profile offering '
+        'Enable', (tester) async {
       // Android keeps a permission it was dismissed on requestable: the dialog
       // can still show, so the button must not be replaced by Settings.
       final push = _FakePushMessaging(
-        currentPermission: PushPermission.deniedRequestable,
         requestResult: PushPermission.deniedRequestable,
       );
       final container = await _coordinatorContainer(
@@ -558,11 +591,8 @@ void main() {
       );
     });
 
-    testWidgets('a refusal the system calls permanent leads to Settings', (
-      tester,
-    ) async {
+    testWidgets('two denials lead to Settings', (tester) async {
       final push = _FakePushMessaging(
-        currentPermission: PushPermission.deniedRequestable,
         requestResult: PushPermission.deniedRequestable,
       );
       final container = await _coordinatorContainer(
@@ -588,6 +618,88 @@ void main() {
       await background(tester);
       await resume(tester);
       expect(push.requests, 2);
+      expect(
+        container.read(pushCoordinatorProvider).permission,
+        PushPermission.settingsRequired,
+      );
+    });
+
+    testWidgets('a first dialog swiped away still leaves Profile offering '
+        'Enable', (tester) async {
+      // Nothing was denied, so Android offers no rationale and the plugin reads
+      // "asked before, no rationale" as permanent. One request on record with
+      // that reading is a dismissal, not a refusal.
+      final tokens = _PushTokenStore();
+      final push = _FakePushMessaging(
+        requestResult: PushPermission.settingsRequired,
+      );
+      final container = await _coordinatorContainer(
+        tester,
+        devices(),
+        tokens,
+        push,
+      );
+      container.read(pushCoordinatorProvider);
+      await _settle(tester, 3);
+      expect(push.requests, 1);
+      expect(
+        container.read(pushCoordinatorProvider).permission,
+        PushPermission.deniedRequestable,
+        reason: 'Profile offers Enable, not only Settings',
+      );
+
+      await background(tester);
+      await resume(tester);
+      expect(push.requests, 1, reason: 'never asked again on its own');
+      expect(
+        container.read(pushCoordinatorProvider).permission,
+        PushPermission.deniedRequestable,
+        reason: 'a resume reads the same status and keeps the answer',
+      );
+
+      // The next launch reads the same thing and says the same.
+      final second = _FakePushMessaging(
+        currentPermission: PushPermission.settingsRequired,
+      );
+      final two = await _coordinatorContainer(
+        tester,
+        devices(),
+        tokens,
+        second,
+      );
+      two.read(pushCoordinatorProvider);
+      await _settle(tester, 3);
+      expect(second.requests, 0);
+      expect(
+        two.read(pushCoordinatorProvider).permission,
+        PushPermission.deniedRequestable,
+      );
+
+      // And the button really asks again.
+      unawaited(two.read(pushCoordinatorProvider.notifier).requestPermission());
+      await _settle(tester, 3);
+      expect(second.requests, 1);
+    });
+
+    testWidgets('a denial, then a request the system closes at once, leads '
+        'to Settings', (tester) async {
+      // Denied once (requestable), asked again from Profile and answered
+      // permanent: two requests on record, so Settings is the only way.
+      final push = _FakePushMessaging(
+        requestResult: PushPermission.deniedRequestable,
+      );
+      final container = await _coordinatorContainer(
+        tester,
+        devices(),
+        _PushTokenStore(),
+        push,
+      );
+      container.read(pushCoordinatorProvider);
+      await _settle(tester, 3);
+      push.requestResult = PushPermission.settingsRequired;
+      await container
+          .read(pushCoordinatorProvider.notifier)
+          .requestPermission();
       expect(
         container.read(pushCoordinatorProvider).permission,
         PushPermission.settingsRequired,
@@ -676,6 +788,126 @@ void main() {
       }
     });
 
+    testWidgets('the Profile button pressed as the app leaves is not asked and '
+        'not counted', (tester) async {
+      final tokens = _PushTokenStore();
+      final push = _FakePushMessaging(
+        currentPermission: PushPermission.deniedRequestable,
+      );
+      final container = await _coordinatorContainer(
+        tester,
+        devices(),
+        tokens,
+        push,
+      );
+      container.read(pushCoordinatorProvider);
+      await _settle(tester, 3);
+      expect(
+        push.requests,
+        0,
+        reason: 'a requestable denial is not auto-asked',
+      );
+
+      tokens.recordGate = Completer<void>();
+      unawaited(
+        container.read(pushCoordinatorProvider.notifier).requestPermission(),
+      );
+      await _settle(tester, 3);
+      expect(await tokens.readPushPermissionRequests(), 1);
+      expect(push.requests, 0, reason: 'the count is still being written');
+
+      // The tap landed, then the shade came down while the keystore wrote.
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tokens.recordGate!.complete();
+      await _settle(tester, 3);
+      expect(push.requests, 0, reason: 'nobody is looking at the app');
+      expect(await tokens.readPushPermissionRequests(), 0);
+
+      // Pressed again once the app is back, it asks.
+      tokens.recordGate = null;
+      await resume(tester);
+      unawaited(
+        container.read(pushCoordinatorProvider.notifier).requestPermission(),
+      );
+      await _settle(tester, 3);
+      expect(push.requests, 1);
+    });
+
+    testWidgets('an automatic prompt needs its count on disk first', (
+      tester,
+    ) async {
+      final tokens = _PushTokenStore()..recordFails = true;
+      final push = _FakePushMessaging();
+      final container = await _coordinatorContainer(
+        tester,
+        devices(),
+        tokens,
+        push,
+      );
+      container.read(pushCoordinatorProvider);
+      await _settle(tester, 3);
+      await background(tester);
+      await resume(tester);
+      await resume(tester);
+      expect(
+        push.requests,
+        0,
+        reason:
+            'a dialog that cannot be remembered would come back each launch',
+      );
+      expect(
+        container.read(pushCoordinatorProvider).permission,
+        PushPermission.notDetermined,
+      );
+
+      // The person's own press is never held back by the keystore.
+      unawaited(
+        container.read(pushCoordinatorProvider.notifier).requestPermission(),
+      );
+      await _settle(tester, 3);
+      expect(push.requests, 1);
+    });
+
+    testWidgets('a sign-in screen still leaving is waited for, frame by '
+        'frame', (tester) async {
+      final transitions = RouteTransitionTracker();
+      final router = pushTestRouter(tracker: transitions);
+      final push = _FakePushMessaging();
+      bool? signInOnDisplayAtRequest;
+      push.onRequest = () => signInOnDisplayAtRequest = screenAt(
+        '/auth/sign-in',
+      ).evaluate().isNotEmpty;
+      final container = await _coordinatorContainer(
+        tester,
+        devices(),
+        _PushTokenStore(),
+        push,
+        router: router,
+        tracker: transitions,
+      );
+      // A guest has the prompt held back by Firebase being slow elsewhere in
+      // this file; here it is the sign-in screen alone that holds it back.
+      unawaited(router.push('/auth/sign-in'));
+      await _settle(tester, 5);
+      container.read(pushCoordinatorProvider);
+      await _settle(tester, 5);
+      expect(push.requests, 0, reason: 'sign-in is on top');
+
+      router.pop();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(
+        transitions.idle,
+        isFalse,
+        reason: 'the screen is still sliding out',
+      );
+      expect(push.requests, 0, reason: 'not while it is still on display');
+      await _settle(tester, 10);
+
+      expect(push.requests, 1);
+      expect(signInOnDisplayAtRequest, isFalse);
+    });
+
     testWidgets('a call that fails is taken back and tried again, twice at '
         'most', (tester) async {
       final tokens = _PushTokenStore();
@@ -709,27 +941,32 @@ void main() {
     });
 
     testWidgets('a refusal on iPhone is not asked again', (tester) async {
-      final push = _FakePushMessaging(
-        requestResult: PushPermission.settingsRequired,
-      );
-      final container = await _coordinatorContainer(
-        tester,
-        devices(),
-        _PushTokenStore(),
-        push,
-      );
-      container.read(pushCoordinatorProvider);
-      await _settle(tester, 3);
-      expect(push.requests, 1);
-      expect(
-        container.read(pushCoordinatorProvider).permission,
-        PushPermission.settingsRequired,
-        reason: 'Profile offers Settings',
-      );
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      try {
+        final push = _FakePushMessaging(
+          requestResult: PushPermission.settingsRequired,
+        );
+        final container = await _coordinatorContainer(
+          tester,
+          devices(),
+          _PushTokenStore(),
+          push,
+        );
+        container.read(pushCoordinatorProvider);
+        await _settle(tester, 3);
+        expect(push.requests, 1);
+        expect(
+          container.read(pushCoordinatorProvider).permission,
+          PushPermission.settingsRequired,
+          reason: 'iOS statuses are exact: Profile offers Settings',
+        );
 
-      await background(tester);
-      await resume(tester);
-      expect(push.requests, 1);
+        await background(tester);
+        await resume(tester);
+        expect(push.requests, 1);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
     });
 
     testWidgets('a denial the system cannot ask about again is never asked', (
@@ -864,10 +1101,8 @@ void main() {
       final backend = FakeBackend()
         ..handle('POST', '/api/notifications/devices', (_) {
           attempts++;
-          // A refusal, not a server failure: the HTTP layer retries those on
-          // real timers, which a widget test's fake clock never fires.
           return attempts == 1
-              ? const FakeResponse(400, {'detail': 'not accepted'})
+              ? const FakeResponse(500, {'detail': 'server error'})
               : const FakeResponse(201, {'id': 3, 'active': true});
         });
       final push = _FakePushMessaging();
@@ -1054,7 +1289,15 @@ void main() {
 
       final push = _FakePushMessaging();
       String? topAtRequest;
-      push.onRequest = () => topAtRequest = _topLocation(container);
+      bool? signInOnDisplayAtRequest;
+      push.onRequest = () {
+        topAtRequest = _topLocation(container);
+        // The instant the system is asked, not ten frames later.
+        signInOnDisplayAtRequest = find
+            .byType(SignInScreen)
+            .evaluate()
+            .isNotEmpty;
+      };
       await deferred.start(() async => push);
       await _settle(tester, 10);
       expect(
@@ -1068,6 +1311,11 @@ void main() {
 
       expect(push.requests, 1, reason: 'asked once the person is back on Home');
       expect(topAtRequest, '/home', reason: 'sign-in was no longer on top');
+      expect(
+        signInOnDisplayAtRequest,
+        isFalse,
+        reason: 'the sign-in screen had finished leaving, not just been popped',
+      );
       expect(find.byType(SignInScreen), findsNothing);
 
       await _shutdown(tester);
