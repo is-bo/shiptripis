@@ -1,10 +1,10 @@
 You are an independent second-pass reviewer. This review is read-only: do not write, commit or push code, and do not comment on GitHub. You may read files and run read-only git commands. Run `git fetch origin` first. If `git fetch` cannot write `.git/FETCH_HEAD`, say so and verify the SHAs through `git ls-remote origin`.
 
-This is the **fifth review** of pull request #66, "P3B profile photos in the app", in this repository (is-bo/shiptripis). The new head is `c9c0769e7f52e3e1fe42b661d2f4680a783edd96` (branch `origin/claude/p3b-profile-photos-app`).
+This is the **fifth review** of pull request #66, "P3B profile photos in the app", in this repository (is-bo/shiptripis). The new head is `f4394f196aa8eb7ebcf5bb337f32c9f89afc032c` (branch `origin/claude/p3b-profile-photos-app`).
 
 - You rejected the previous head, `c8b4e68dc0160b061ea13974856cbe2dae243f73`, with 3 new blockers, 4 should-fixes and 8 partly-fixed round-3 findings. Your report is `docs/handoff/astra/results/p3b-astra-round4-result.md` on `main`.
 - The builder's answer to each finding is the "Round five" section of `docs/PHASE_P3B_PROFILE_PHOTOS_APP.md` at the new head.
-- Compare `c8b4e68..c9c0769` for this round, and `origin/main...c9c0769` (three dots) for the whole package.
+- Compare `c8b4e68..f4394f1` for this round, and `origin/main...f4394f1` (three dots) for the whole package.
 - The rules are in `CLAUDE.md` ("Mobile rules"). The server contract is spec section 21 of `docs/WASSLA_DISCOVERY_PRO_SPEC.md` and `backend/monolith/apps/accounts/photos.py`.
 
 ## What the builder says it did, to check against the code
