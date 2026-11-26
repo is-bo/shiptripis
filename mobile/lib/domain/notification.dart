@@ -93,6 +93,13 @@ enum NotificationChannel {
   };
 }
 
+/// The transport a reviewed ticket belongs to. A drive leg has no ticket.
+enum TicketMode { flight, ferry }
+
+/// What staff decided about a ticket. "Ask for a new upload" stores the
+/// rejected status, so it is told apart by the payload's `outcome`.
+enum TicketDecision { approved, rejected, resubmissionRequested }
+
 /// Where tapping a notification should take the user.
 sealed class NotificationDestination {
   const NotificationDestination();
@@ -252,6 +259,33 @@ class AppNotification {
   int? get requestId => readInt(payload['request_id']);
   String? get payoutReference => readString(payload['payout_reference']);
   String? get event => readString(payload['event']);
+
+  /// The ticket a `leg_proof.status_changed` row is about; null for any other
+  /// channel or a mode the app does not name.
+  TicketMode? get ticketMode => switch (channel) {
+    NotificationChannel.legProofStatusChanged => switch (readString(
+      payload['mode'],
+    )?.toUpperCase()) {
+      'FLIGHT' => TicketMode.flight,
+      'SEA' => TicketMode.ferry,
+      _ => null,
+    },
+    _ => null,
+  };
+
+  /// The decision, from `outcome` when the server sent it and from the stored
+  /// `status` otherwise. An unknown value is null, never a guess.
+  TicketDecision? get ticketDecision => switch (channel) {
+    NotificationChannel.legProofStatusChanged =>
+      switch ((readString(payload['outcome']) ?? readString(payload['status']))
+          ?.toLowerCase()) {
+        'approved' => TicketDecision.approved,
+        'rejected' => TicketDecision.rejected,
+        'resubmission_requested' => TicketDecision.resubmissionRequested,
+        _ => null,
+      },
+    _ => null,
+  };
 
   /// Resolved from the channel and the payload ids only.
   ///

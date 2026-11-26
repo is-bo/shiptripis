@@ -253,7 +253,7 @@ class _Row extends StatelessWidget {
     final when = notification.createdAt;
     final navigable = notification.destination != null;
 
-    final (title, icon) = _describe(context, notification.channel);
+    final (title, icon) = _describe(context, notification);
 
     return Semantics(
       button: navigable,
@@ -331,10 +331,10 @@ class _Row extends StatelessWidget {
   /// Copy chosen from the channel, never from the server's message text.
   (String, IconData) _describe(
     BuildContext context,
-    NotificationChannel channel,
+    AppNotification notification,
   ) {
     final l = L.of(context);
-    return switch (channel) {
+    return switch (notification.channel) {
       NotificationChannel.offerCreated ||
       NotificationChannel.offerUpdated ||
       NotificationChannel.offerEconomicsChanged ||
@@ -389,8 +389,11 @@ class _Row extends StatelessWidget {
         l.notificationArrivalDeclined,
         Icons.info_outline_rounded,
       ),
-      NotificationChannel.kycStatusChanged ||
       NotificationChannel.legProofStatusChanged => (
+        _ticketTitle(l, notification) ?? l.notificationAccount,
+        Icons.verified_user_outlined,
+      ),
+      NotificationChannel.kycStatusChanged => (
         l.notificationAccount,
         Icons.verified_user_outlined,
       ),
@@ -445,4 +448,24 @@ class _Row extends StatelessWidget {
       ),
     };
   }
+
+  /// "Flight ticket approved" and its siblings, from the mode and decision the
+  /// server published. Null when either is missing or unknown, so the row
+  /// keeps its generic label.
+  String? _ticketTitle(L l, AppNotification notification) =>
+      switch ((notification.ticketMode, notification.ticketDecision)) {
+        (TicketMode.flight, TicketDecision.approved) =>
+          l.notificationFlightTicketApproved,
+        (TicketMode.flight, TicketDecision.rejected) =>
+          l.notificationFlightTicketRejected,
+        (TicketMode.flight, TicketDecision.resubmissionRequested) =>
+          l.notificationFlightTicketResubmit,
+        (TicketMode.ferry, TicketDecision.approved) =>
+          l.notificationFerryTicketApproved,
+        (TicketMode.ferry, TicketDecision.rejected) =>
+          l.notificationFerryTicketRejected,
+        (TicketMode.ferry, TicketDecision.resubmissionRequested) =>
+          l.notificationFerryTicketResubmit,
+        _ => null,
+      };
 }
