@@ -1152,7 +1152,13 @@ admin display, or logs.
 Preferences have three product categories: essential lifecycle/security
 updates (always available), messages, and marketplace activity. Android uses
 four normal platform channels: Messages, Deliveries, Account, and Payments.
-Ask for OS permission contextually from Profile, never on the first frame.
+Ask for OS permission once per installation, on its own, the first time the
+app is open on a usable screen: after the first frame and Firebase's start,
+including for a guest who has not signed in. The owner chose this timing after
+the 2026-11-26 phone test; it replaces the earlier rule of asking only from
+Profile. It is never asked on the first frame, never again automatically after a
+dismissal or a denial, and Profile > Notifications stays the place to retry or to
+open system Settings. Registering the phone to an account waits for sign-in.
 Foreground push reconciles the inbox without showing a duplicate OS banner.
 
 Push display/data must never contain pickup or delivery codes, exact private

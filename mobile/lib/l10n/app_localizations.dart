@@ -6018,7 +6018,7 @@ abstract class L {
   /// No description provided for @pushPermissionBody.
   ///
   /// In en, this message translates to:
-  /// **'Get timely updates about offers, payments, delivery, messages and verification. Wassla asks only when you choose Enable.'**
+  /// **'Get timely updates about offers, payments, delivery, messages and verification. Wassla asks once, when you first open the app, and you can enable notifications here at any time.'**
   String get pushPermissionBody;
 
   /// No description provided for @pushPermissionEnabled.

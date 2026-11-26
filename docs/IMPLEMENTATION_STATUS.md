@@ -1,5 +1,19 @@
 # Waçla V1 Implementation Status
 
+## Wassla: ask for notifications once on first open (N1, 2026-11-26)
+
+- Phone test 2 (plan 1.2): Ismail decided the app asks for notification permission on its own, once,
+  the first time it is opened, including for a guest, instead of only from Profile > Notifications.
+  App only, no server change. Nothing deployed.
+- The app-wide push coordinator asks after the first frame and Firebase's start, once the session has
+  resolved and the app is in the foreground. Startup, resume and the Profile button share one request,
+  so the system is never asked twice at once. A per-installation request count (kept through logout)
+  decides whether Android 13+, which reports a never-asked permission as a denial, still has its first
+  prompt. No automatic retry after a dismissal or denial: Profile offers one more Android request, then
+  system Settings; iOS offers Settings after its first denial. A missing or failed Firebase asks nothing
+  and spends nothing. Registering the phone still waits for sign-in. Spec and runbook updated. Detail,
+  screenshots and the device checks still owed on real phones: `docs/PHASE_N1_NOTIFICATION_FIRST_OPEN.md`.
+
 ## Wassla: the bell names the ticket decision (N2, 2026-11-26)
 
 - Phone test 2 (plan 1.5): the owner's flight ticket was approved but the bell row only read

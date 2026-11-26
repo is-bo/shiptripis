@@ -40,6 +40,12 @@ class PushRuntimeState {
 
 enum PushRegistrationState { idle, pending, registered, failed }
 
+/// How many times Android lets an app show the notification permission dialog
+/// before it stops showing it: the second denial is final, and the status the
+/// plugin reports does not change to say so. Past this many requests a denial
+/// is sent to system Settings instead of a button that would do nothing.
+const _androidDialogsBeforeSettings = 2;
+
 final pushCoordinatorProvider =
     NotifierProvider<PushCoordinator, PushRuntimeState>(PushCoordinator.new);
 
@@ -58,6 +64,18 @@ class PushCoordinator extends Notifier<PushRuntimeState>
   int? _accountId;
   int _sessionGeneration = 0;
   bool _resumed = true;
+
+  /// The permission request in flight, shared by every caller: the first-open
+  /// prompt, a resume and the Profile button all ask through it, so the system
+  /// is never asked twice at once.
+  Future<PushPermission>? _request;
+
+  /// Set once the first permission read has settled, so the first-open prompt
+  /// never acts on a permission that has not been read yet.
+  bool _messagingRestored = false;
+  bool _askingOnFirstOpen = false;
+  bool _askedOnFirstOpen = false;
+  int? _systemRequests;
 
   @override
   PushRuntimeState build() {
@@ -98,7 +116,7 @@ class PushCoordinator extends Notifier<PushRuntimeState>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.resumed:
-        unawaited(refreshPermission());
+        unawaited(_checkOnResume());
         // Back from `inactive` alone — the notification shade, the app
         // switcher, a system dialog — the app never left the screen and its
         // sockets never closed, so nothing was missed. Tearing both down and
@@ -124,8 +142,15 @@ class PushCoordinator extends Notifier<PushRuntimeState>
     }
   }
 
-  Future<PushPermission> requestPermission() async {
-    final permission = await _messaging.requestPermission();
+  /// Asks the operating system for notification permission. A call made while
+  /// another request is in flight joins it rather than asking again.
+  Future<PushPermission> requestPermission() =>
+      _request ??= _askSystem().whenComplete(() => _request = null);
+
+  Future<PushPermission> _askSystem() async {
+    if (!await _messagingReady()) return PushPermission.unavailable;
+    await _recordSystemRequest();
+    final permission = await _withHistory(await _messaging.requestPermission());
     state = state.copyWith(
       permission: permission,
       registration:
@@ -142,7 +167,7 @@ class PushCoordinator extends Notifier<PushRuntimeState>
   }
 
   Future<void> refreshPermission() async {
-    final permission = await _messaging.permission();
+    final permission = await _withHistory(await _messaging.permission());
     state = state.copyWith(
       permission: permission,
       registration:
@@ -159,24 +184,28 @@ class PushCoordinator extends Notifier<PushRuntimeState>
 
   Future<void> retryRegistration() => _syncRegistration();
 
-  Future<void> _restoreMessagingState() async {
-    // Firebase starts after the first frame (K5). Until it settles every step
-    // below would only wait on it, and the registration gate reads
-    // `available`, so the whole restore waits here instead.
+  /// Waits for Firebase's deferred start (K5) and says whether push can run.
+  /// Until it settles every step that follows would only wait on it, and the
+  /// registration gate reads `available`.
+  Future<bool> _messagingReady() async {
     final messaging = _messaging;
     if (messaging is DeferredPushMessaging &&
         messaging.availability == PushAvailability.initializing) {
       await messaging.ready;
-      if (!ref.mounted) return;
+      if (!ref.mounted) return false;
       state = state.copyWith(availability: messaging.availability);
     }
-    if (!_messaging.available) return;
+    return _messaging.available;
+  }
+
+  Future<void> _restoreMessagingState() async {
+    if (!await _messagingReady()) return;
     // Nothing awaits this, so an escaping exception used to be invisible: the
     // permission stayed `unavailable` for the whole app run, which closes the
     // registration gate below permanently, and the cold-start tap was lost
     // with it. Each step now fails on its own terms.
     try {
-      final permission = await _messaging.permission();
+      final permission = await _withHistory(await _messaging.permission());
       state = state.copyWith(permission: permission);
     } on Object {
       state = state.copyWith(registration: PushRegistrationState.failed);
@@ -193,6 +222,11 @@ class PushCoordinator extends Notifier<PushRuntimeState>
       // inbox remains the authoritative list.
     }
 
+    // The prompt waits for neither registration nor the network: it asks as
+    // soon as the permission is known and the first screen is usable.
+    _messagingRestored = true;
+    unawaited(_askOnFirstOpen());
+
     final permission = state.permission;
     if (permission == PushPermission.authorized ||
         permission == PushPermission.provisional) {
@@ -200,7 +234,90 @@ class PushCoordinator extends Notifier<PushRuntimeState>
     }
   }
 
+  Future<void> _checkOnResume() async {
+    await refreshPermission();
+    await _askOnFirstOpen();
+  }
+
+  /// Asks for notification permission on its own, once, the first time the app
+  /// is open on a usable screen: after the first frame and Firebase's start,
+  /// once the session has resolved to a guest or a member, and with the app in
+  /// the foreground. Signing in is not required; registering the phone to an
+  /// account waits for it.
+  ///
+  /// The system is asked only when it can show a dialog, and never again on
+  /// its own: not after a dismissal or a denial, which Profile recovers from.
+  /// A start that never became available asks nothing and spends nothing, so
+  /// the next launch that can ask still does. Every trigger (the restore, a
+  /// session change, a resume) comes through here, and [requestPermission]
+  /// keeps them from asking at the same time.
+  Future<void> _askOnFirstOpen() async {
+    if (_askingOnFirstOpen || _askedOnFirstOpen || !_canAskOnFirstOpen) return;
+    _askingOnFirstOpen = true;
+    try {
+      // Android 13+ reports a permission it never asked for as a requestable
+      // denial; only the installation's history says whether it has asked.
+      if (state.permission == PushPermission.deniedRequestable &&
+          await _systemRequestCount() != 0) {
+        return;
+      }
+      // The reads above may have waited: the person may have left the app,
+      // or Profile may have asked first.
+      if (!_canAskOnFirstOpen) return;
+      _askedOnFirstOpen = true;
+      await requestPermission();
+    } on Object {
+      // A failed first prompt is not worth failing anything for: Profile
+      // offers the same request, and nothing here retries on its own.
+    } finally {
+      _askingOnFirstOpen = false;
+    }
+  }
+
+  bool get _canAskOnFirstOpen =>
+      ref.mounted &&
+      _messagingRestored &&
+      _messaging.available &&
+      _resumed &&
+      _request == null &&
+      ref.read(sessionProvider) is! SessionRestoring &&
+      (state.permission == PushPermission.notDetermined ||
+          state.permission == PushPermission.deniedRequestable);
+
+  Future<int?> _systemRequestCount() async {
+    if (_systemRequests != null) return _systemRequests;
+    try {
+      return _systemRequests = await ref
+          .read(tokenStoreProvider)
+          .readPushPermissionRequests();
+    } on Object {
+      return null;
+    }
+  }
+
+  Future<void> _recordSystemRequest() async {
+    try {
+      _systemRequests = await ref
+          .read(tokenStoreProvider)
+          .recordPushPermissionRequest();
+    } on Object {
+      // A count that cannot be written must not stop a person who asked.
+    }
+  }
+
+  /// Folds the installation's history into what the system reports. A denial
+  /// that Android would still show a dialog for becomes a denial only Settings
+  /// can undo once it has shown it [_androidDialogsBeforeSettings] times.
+  Future<PushPermission> _withHistory(PushPermission permission) async {
+    if (permission != PushPermission.deniedRequestable) return permission;
+    final requests = await _systemRequestCount();
+    return requests != null && requests >= _androidDialogsBeforeSettings
+        ? PushPermission.settingsRequired
+        : permission;
+  }
+
   void _sessionChanged(SessionState session) {
+    if (session is! SessionRestoring) unawaited(_askOnFirstOpen());
     final previousAccountId = _accountId;
     final nextAccountId = switch (session) {
       SessionSignedIn(:final account) => account.id,

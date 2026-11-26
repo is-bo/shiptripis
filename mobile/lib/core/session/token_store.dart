@@ -5,7 +5,10 @@
 /// Stored: the access token, the refresh token, the user's chosen role
 /// context, and a snapshot of the last server-confirmed profile (presentation
 /// fields only — see `Account.toSnapshotJson`). All four go in the platform
-/// keystore, and all four are wiped on sign-out.
+/// keystore, and all four are wiped on sign-out. Beside them sit a few things
+/// that belong to the phone rather than the account and so survive sign-out: a
+/// random installation ID, a pending push token and the count of notification
+/// permission requests.
 ///
 /// **Never stored, at any layer:** a pickup code, a delivery code, a guest
 /// payment token, recipient contact details, or a payment provider secret.
@@ -61,6 +64,7 @@ class TokenStore {
   static const _kLocale = 'app.locale';
   static const _kInstallationId = 'push.installation_id';
   static const _kPendingPushToken = 'push.pending_token';
+  static const _kPushPermissionRequests = 'push.permission_requests';
 
   /// The last profile the server confirmed for the stored credentials.
   ///
@@ -177,6 +181,26 @@ class TokenStore {
         '${hex.substring(20)}';
     await _storage.write(key: _kInstallationId, value: generated);
     return generated;
+  }
+
+  /// How many times this installation has asked the operating system for
+  /// notification permission, from the app's first-open prompt or from Profile.
+  ///
+  /// Android 13+ reports a permission it was never asked for as a plain denial,
+  /// so the system status alone cannot say whether the first-open prompt was
+  /// spent; this count is the installation history that settles it. Like the
+  /// installation ID it belongs to the phone, not the account: it survives
+  /// logout, so the next person to sign in is never asked again.
+  Future<int> readPushPermissionRequests() async =>
+      int.tryParse(await _storage.read(key: _kPushPermissionRequests) ?? '') ??
+      0;
+
+  /// Counts one more request, to be written *before* the system is asked: a
+  /// prompt interrupted by the app being killed still counts as spent.
+  Future<int> recordPushPermissionRequest() async {
+    final next = await readPushPermissionRequests() + 1;
+    await _storage.write(key: _kPushPermissionRequests, value: '$next');
+    return next;
   }
 
   Future<String?> readPendingPushToken() =>

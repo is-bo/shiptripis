@@ -1000,7 +1000,7 @@
   "formFixCountBeforeContinuing": "{count, plural, =1{Corrigez 1 champ avant de continuer.} other{Corrigez {count} champs avant de continuer.}}",
   "formServerRefusedOnStep": "Le serveur a refusé cette demande. Le problème est à cette étape, signalé ci-dessous.",
   "pushPermissionHeading": "Sur ce téléphone",
-  "pushPermissionBody": "Recevez à temps les nouvelles concernant les offres, paiements, livraisons, messages et vérifications. Wassla ne demande l’autorisation que lorsque vous choisissez Activer.",
+  "pushPermissionBody": "Recevez à temps les nouvelles concernant les offres, paiements, livraisons, messages et vérifications. Wassla demande l’autorisation une seule fois, à la première ouverture de l’application, et vous pouvez activer les notifications ici à tout moment.",
   "pushPermissionEnabled": "Les notifications sont activées.",
   "pushPermissionDeniedRequestable": "Les notifications sont toujours désactivées. Choisissez Activer les notifications pour les redemander à Android. La boîte de réception de l’application reste disponible dans tous les cas.",
   "pushPermissionDenied": "Les notifications sont désactivées dans le système. Vous pouvez les activer dans les réglages.",

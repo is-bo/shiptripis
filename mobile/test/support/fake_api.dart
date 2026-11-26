@@ -190,6 +190,13 @@ class FakeTokenStore extends TokenStore {
   String? accountSnapshot;
   String? _locale;
   String? _roleContext;
+  int _pushPermissionRequests = 0;
+
+  @override
+  Future<int> readPushPermissionRequests() async => _pushPermissionRequests;
+
+  @override
+  Future<int> recordPushPermissionRequest() async => ++_pushPermissionRequests;
 
   @override
   Future<void> save({required String access, required String refresh}) async {

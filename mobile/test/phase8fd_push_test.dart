@@ -98,6 +98,19 @@ class _FakePushMessaging implements PushMessaging {
   Future<String?> token() async => currentToken;
 }
 
+/// Waits, on real time, until the coordinator reaches [registration].
+Future<void> _untilRegistration(
+  ProviderContainer container,
+  PushRegistrationState registration,
+) async {
+  for (var i = 0; i < 300; i++) {
+    if (container.read(pushCoordinatorProvider).registration == registration) {
+      return;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+}
+
 class _FixedSession extends SessionController {
   @override
   SessionState build() => SessionSignedIn(Account.fromJson(meFixture()));
@@ -253,7 +266,7 @@ void main() {
     },
   );
 
-  testWidgets('permission is requested only from the contextual action', (
+  testWidgets('the Profile screen asks only when its button is pressed', (
     tester,
   ) async {
     final coordinator = _FakePushCoordinator(
@@ -401,7 +414,7 @@ void main() {
   });
 
   test(
-    'permission grant uses the existing secure device registration API',
+    'the first-open grant uses the existing secure device registration API',
     () async {
       final backend = FakeBackend()
         ..on(
@@ -431,16 +444,14 @@ void main() {
         router.dispose();
       });
 
-      final coordinator = container.read(pushCoordinatorProvider.notifier);
-      await Future<void>.delayed(Duration.zero);
-      expect(messaging.requests, 0);
-      await coordinator.requestPermission();
+      container.read(pushCoordinatorProvider);
+      await _untilRegistration(container, PushRegistrationState.registered);
       expect(
         container.read(pushCoordinatorProvider).registration,
         PushRegistrationState.registered,
       );
 
-      expect(messaging.requests, 1);
+      expect(messaging.requests, 1, reason: 'asked on its own, once');
       expect(backend.to('POST', '/api/notifications/devices'), hasLength(1));
       expect(backend.lastTo('POST', '/api/notifications/devices')?.body, {
         'token': 'fcm-token-that-never-enters-the-ui',
@@ -485,7 +496,7 @@ void main() {
       });
 
       final coordinator = container.read(pushCoordinatorProvider.notifier);
-      await coordinator.requestPermission();
+      await _untilRegistration(container, PushRegistrationState.failed);
       expect(
         container.read(pushCoordinatorProvider).registration,
         PushRegistrationState.failed,

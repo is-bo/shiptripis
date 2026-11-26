@@ -3447,7 +3447,7 @@ class LEn extends L {
 
   @override
   String get pushPermissionBody =>
-      'Get timely updates about offers, payments, delivery, messages and verification. Wassla asks only when you choose Enable.';
+      'Get timely updates about offers, payments, delivery, messages and verification. Wassla asks once, when you first open the app, and you can enable notifications here at any time.';
 
   @override
   String get pushPermissionEnabled => 'Notifications are enabled.';
