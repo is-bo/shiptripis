@@ -52,6 +52,7 @@ class Account:
             token=f"fcm-token-{uuid.uuid4().hex}",
             installation_id=uuid.uuid4(),
             platform="android",
+            binding_sequence=1,
         )
 
     def refresh_works(self) -> bool:

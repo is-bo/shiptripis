@@ -115,6 +115,7 @@ class SignOutView(APIView):
                 unregister_push_device(
                     user=request.user,
                     installation_id=UUID(str(installation_id)),
+                    binding_sequence=int(request.data.get("binding_sequence")),
                 )
             except (TypeError, ValueError):
                 # Device cleanup metadata is best-effort and must never trap a

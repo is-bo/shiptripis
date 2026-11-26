@@ -369,6 +369,7 @@ class AccountClaimTests(TestCase):
             {
                 "token": f"fcm-token-{uuid.uuid4().hex}",
                 "installation_id": str(uuid.uuid4()),
+                "binding_sequence": 1,
                 "platform": "android",
             },
             format="json",

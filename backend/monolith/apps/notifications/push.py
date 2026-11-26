@@ -23,7 +23,12 @@ from django.utils import timezone
 from apps.core import channels
 from apps.core.languages import normalize_communication_language
 
-from .models import Notification, NotificationPreference, PushDevice
+from .models import (
+    Notification,
+    NotificationPreference,
+    PushDevice,
+    PushInstallationBinding,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -580,20 +585,54 @@ _TICKET_PUSH_COPY: dict[tuple[str, str], dict[str, tuple[str, str]]] = {
 }
 
 
+class PushBindingSuperseded(Exception):
+    """A later registration or sign-out of the installation already arrived."""
+
+
+def _claim_binding_sequence(installation_id: UUID, sequence: int) -> bool:
+    """Record ``sequence`` as the installation's newest, or say it is stale.
+
+    Runs inside the caller's transaction and holds the installation's row lock
+    until it ends, so a registration and a sign-out of the same installation
+    are always applied in the order the app numbered them. The same number is
+    accepted again: a request the network repeated is idempotent.
+    """
+
+    binding, created = PushInstallationBinding.objects.select_for_update().get_or_create(
+        installation_id=installation_id, defaults={"sequence": sequence}
+    )
+    if created:
+        return True
+    if sequence < binding.sequence:
+        return False
+    if sequence > binding.sequence:
+        binding.sequence = sequence
+        binding.save(update_fields=["sequence", "updated_at"])
+    return True
+
+
 def register_push_device(
     *,
     user,
     token: str,
     installation_id: UUID,
     platform: str,
+    binding_sequence: int,
     app_version: str = "",
 ) -> PushDevice:
-    """Idempotently bind one installation and one current token to ``user``."""
+    """Idempotently bind one installation and one current token to ``user``.
+
+    Raises :class:`PushBindingSuperseded` when a later registration or sign-out
+    of the installation was already applied: the app moved on, and this request
+    must not rebind the phone to ``user``.
+    """
 
     fingerprint = PushDevice.fingerprint(token)
     for attempt in range(2):
         try:
             with transaction.atomic():
+                if not _claim_binding_sequence(installation_id, binding_sequence):
+                    raise PushBindingSuperseded
                 rows = list(
                     PushDevice.objects.select_for_update()
                     .filter(
@@ -642,16 +681,28 @@ def register_push_device(
     raise RuntimeError("Push device registration retry was exhausted.")
 
 
-def unregister_push_device(*, user, installation_id: UUID) -> bool:
-    """Disable only the authenticated user's installation; idempotent."""
+def unregister_push_device(
+    *, user, installation_id: UUID, binding_sequence: int
+) -> bool:
+    """Disable only the authenticated user's installation; idempotent.
 
-    return bool(
-        PushDevice.objects.filter(
-            user=user,
-            installation_id=installation_id,
-            active=True,
-        ).update(active=False, last_seen_at=timezone.now(), updated_at=timezone.now())
-    )
+    The sign-out is recorded even when no device exists yet, so a registration
+    still on its way when the person signed out is refused when it arrives. A
+    sign-out that a later registration already overtook changes nothing.
+    """
+
+    with transaction.atomic():
+        if not _claim_binding_sequence(installation_id, binding_sequence):
+            return False
+        return bool(
+            PushDevice.objects.filter(
+                user=user,
+                installation_id=installation_id,
+                active=True,
+            ).update(
+                active=False, last_seen_at=timezone.now(), updated_at=timezone.now()
+            )
+        )
 
 
 def deactivate_all_push_devices(*, user) -> int:

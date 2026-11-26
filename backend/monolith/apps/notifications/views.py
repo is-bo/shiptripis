@@ -12,7 +12,11 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .models import Notification, NotificationPreference
-from .push import register_push_device, unregister_push_device
+from .push import (
+    PushBindingSuperseded,
+    register_push_device,
+    unregister_push_device,
+)
 from .serializers import (
     NotificationPreferenceSerializer,
     NotificationSerializer,
@@ -100,7 +104,18 @@ class PushDeviceRegistrationView(APIView):
     def post(self, request: Request) -> Response:
         serializer = PushDeviceRegistrationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        device = register_push_device(user=request.user, **serializer.validated_data)
+        try:
+            device = register_push_device(
+                user=request.user, **serializer.validated_data
+            )
+        except PushBindingSuperseded:
+            return Response(
+                {
+                    "code": "push_registration_superseded",
+                    "detail": "A newer registration or sign-out of this phone was already applied.",
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
         return Response(PushDeviceSerializer(device).data, status=status.HTTP_200_OK)
 
 
@@ -113,6 +128,7 @@ class PushDeviceUnregisterView(APIView):
         unregister_push_device(
             user=request.user,
             installation_id=serializer.validated_data["installation_id"],
+            binding_sequence=serializer.validated_data["binding_sequence"],
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
