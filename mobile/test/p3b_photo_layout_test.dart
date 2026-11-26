@@ -18,12 +18,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shiptrip/design/components/navigation.dart';
 import 'package:shiptrip/design/components/primitives.dart';
-import 'package:shiptrip/design/layout/app_scaffold.dart';
 import 'package:shiptrip/features/profile/profile_photo_section.dart';
-import 'package:shiptrip/features/profile/profile_screen.dart';
 import 'package:shiptrip/l10n/app_localizations.dart';
 
 import 'support/fake_api.dart';
+import 'support/fake_image_picker.dart';
 import 'support/harness.dart';
 import 'support/photo_cache.dart';
 import 'support/photo_rig.dart';
@@ -272,8 +271,8 @@ List<_Scenario> _scenarios() => [
     'a photo recovered after the app was closed',
     make: () => PhotoRig(
       FakeBackend(),
-      tokens: FakeTokenStore()..pendingPhotoPick = '42',
-      lostData: () async => XFile(sourceFile()),
+      tokens: FakeTokenStore()..pendingPick = 'profilePhoto:42:abc',
+      imagePicker: FakeImagePicker(lost: XFile(sourceFile())),
     ),
     drive: (tester, rig) => untilReached(
       tester,
@@ -388,162 +387,104 @@ void main() {
     }
   });
 
-  group('inside the real Profile screen, under the bottom navigation', () {
-    // The states a member lives in most, and the two that add the most height.
-    final shellScenarios = {
-      'empty',
-      'active',
-      'removed by Wassla, with a reason',
-      'storage unavailable (503)',
-      'a failed replacement of an active photo',
-    };
+  group(
+    'inside the real app, on the Profile tab under the bottom navigation',
+    () {
+      // The states a member lives in most, and the two that add the most height.
+      final shellScenarios = {
+        'empty',
+        'active',
+        'removed by Wassla, with a reason',
+        'storage unavailable (503)',
+        'a failed replacement of an active photo',
+      };
 
-    Future<PhotoRig> pumpProfile(
-      WidgetTester tester,
-      _Scenario scenario, {
-      required DeviceProfile device,
-      required Locale locale,
-    }) async {
-      final rig = scenario.make();
-      // Home's reads: the Profile screen asks for deals, ratings and support.
-      rig.backend
-        ..on('GET', '/api/deals', FakeResponse(200, <Object>[]))
-        ..on('GET', '/api/matches', FakeResponse(200, <Object>[]))
-        ..on(
-          'GET',
-          '/api/notifications/unread-count',
-          FakeResponse(200, {'unread': 0}),
-        );
-      await rig.start(tester);
-      // Begin from nothing: a screen left from the last state would keep its
-      // scroll position.
-      await tester.pumpWidget(const SizedBox.shrink());
-      await pumpApp(
-        tester,
-        const _Shell(child: ProfileScreen()),
-        container: rig.container,
-        device: device,
-        locale: locale,
-      );
-      await tester.pumpAndSettle();
-      return rig;
-    }
-
-    for (final device in [
-      DeviceProfile.android,
-      DeviceProfile.androidGesture,
-      DeviceProfile.iphone,
-      DeviceProfile.smallAndroid,
-      DeviceProfile.landscape,
-    ]) {
-      for (final locale in const [Locale('en'), Locale('ar')]) {
-        testWidgets('${device.name} / ${locale.languageCode}', (tester) async {
-          for (final scenario in _scenarios().where(
-            (s) => shellScenarios.contains(s.name),
-          )) {
-            final rig = await pumpProfile(
-              tester,
-              scenario,
-              device: device,
-              locale: locale,
-            );
-            final l = L.of(tester.element(find.byType(ProfileScreen)));
-            final reason =
-                '${scenario.name}, ${device.name}, ${locale.languageCode}';
-            // The section is far down a lazy list: bring it into being first.
-            await tester.scrollUntilVisible(
-              find.text(l.profilePhotoTitle),
-              300,
-              scrollable: find.byType(Scrollable).first,
-            );
-            await scenario.drive(tester, rig);
-
-            // Scrolled to the very end, the last line sits above the bar.
-            final list = find.byType(Scrollable).first;
-            await tester.fling(list, const Offset(0, -4000), 3000);
-            await tester.pumpAndSettle();
-            final bar = tester.getTopLeft(find.byType(AppNavigationBar)).dy;
-            expect(
-              tester.getRect(find.text(l.profileDeleteAccount)).bottom,
-              lessThanOrEqualTo(bar + 0.5),
-              reason: 'the end of the list is above the navigation: $reason',
-            );
-
-            // Back up at the section, every action is reachable, and none sits
-            // under the bar.
-            await tester.scrollUntilVisible(
-              find.text(l.profilePhotoTitle),
-              -300,
-              scrollable: list,
-            );
-            for (final action in scenario.actions) {
-              await _expectReachable(
-                tester,
-                _action(action(l)),
-                '"${action(l)}" ($reason)',
-              );
-              final rect = tester.getRect(_action(action(l)).first);
-              expect(
-                rect.bottom,
-                lessThanOrEqualTo(bar + 0.5),
-                reason: '"${action(l)}" is above the navigation: $reason',
-              );
-            }
-            expect(tester.takeException(), isNull, reason: reason);
-          }
-          // The screen's polling timers run out once it is gone.
-          await tester.pumpWidget(const SizedBox.shrink());
-          await tester.pump(const Duration(seconds: 10));
-        });
+      Future<PhotoRig> pumpProfile(
+        WidgetTester tester,
+        _Scenario scenario, {
+        required DeviceProfile device,
+        required Locale locale,
+      }) async {
+        final rig = scenario.make();
+        await rig.pumpRealApp(tester, locale: locale, device: device);
+        return rig;
       }
-    }
-  });
-}
 
-/// A docked bar and a screen inside it, as the shell lays them out.
-class _Shell extends StatelessWidget {
-  const _Shell({required this.child});
+      for (final device in [
+        DeviceProfile.android,
+        DeviceProfile.androidGesture,
+        DeviceProfile.iphone,
+        DeviceProfile.smallAndroid,
+        DeviceProfile.landscape,
+      ]) {
+        for (final locale in const [Locale('en'), Locale('ar')]) {
+          testWidgets('${device.name} / ${locale.languageCode}', (
+            tester,
+          ) async {
+            for (final scenario in _scenarios().where(
+              (s) => shellScenarios.contains(s.name),
+            )) {
+              final rig = await pumpProfile(
+                tester,
+                scenario,
+                device: device,
+                locale: locale,
+              );
+              final l = rig.l(tester);
+              expect(
+                find.text(l.navProfile),
+                findsWidgets,
+                reason: 'the real tab bar, in the app\'s language',
+              );
+              final reason =
+                  '${scenario.name}, ${device.name}, ${locale.languageCode}';
+              // The section is far down a lazy list: bring it into being first.
+              await tester.scrollUntilVisible(
+                find.text(l.profilePhotoTitle),
+                300,
+                scrollable: find.byType(Scrollable).first,
+              );
+              await scenario.drive(tester, rig);
 
-  final Widget child;
+              // Scrolled to the very end, the last line sits above the bar.
+              final list = find.byType(Scrollable).first;
+              await tester.fling(list, const Offset(0, -4000), 3000);
+              await tester.pumpAndSettle();
+              final bar = tester.getTopLeft(find.byType(AppNavigationBar)).dy;
+              expect(
+                tester.getRect(find.text(l.profileDeleteAccount)).bottom,
+                lessThanOrEqualTo(bar + 0.5),
+                reason: 'the end of the list is above the navigation: $reason',
+              );
 
-  @override
-  Widget build(BuildContext context) {
-    final visible = MediaQuery.viewInsetsOf(context).bottom == 0;
-    return NavigationInsetScope(
-      inset: visible ? AppNavigationBar.occupiedHeight(context) : 0,
-      barIsVisible: visible,
-      child: Scaffold(
-        resizeToAvoidBottomInset: true,
-        body: child,
-        bottomNavigationBar: visible
-            ? AppNavigationBar(
-                destinations: const [
-                  NavDestination(
-                    icon: Icons.home_outlined,
-                    selectedIcon: Icons.home_rounded,
-                    label: 'Home',
-                  ),
-                  NavDestination(
-                    icon: Icons.inventory_2_outlined,
-                    selectedIcon: Icons.inventory_2_rounded,
-                    label: 'Deliveries',
-                  ),
-                  NavDestination(
-                    icon: Icons.forum_outlined,
-                    selectedIcon: Icons.forum_rounded,
-                    label: 'Chat',
-                  ),
-                  NavDestination(
-                    icon: Icons.person_outline_rounded,
-                    selectedIcon: Icons.person_rounded,
-                    label: 'Profile',
-                  ),
-                ],
-                currentIndex: 3,
-                onSelect: (_) {},
-              )
-            : null,
-      ),
-    );
-  }
+              // Back up at the section, every action is reachable, and none sits
+              // under the bar.
+              await tester.scrollUntilVisible(
+                find.text(l.profilePhotoTitle),
+                -300,
+                scrollable: list,
+              );
+              for (final action in scenario.actions) {
+                await _expectReachable(
+                  tester,
+                  _action(action(l)),
+                  '"${action(l)}" ($reason)',
+                );
+                final rect = tester.getRect(_action(action(l)).first);
+                expect(
+                  rect.bottom,
+                  lessThanOrEqualTo(bar + 0.5),
+                  reason: '"${action(l)}" is above the navigation: $reason',
+                );
+              }
+              expect(tester.takeException(), isNull, reason: reason);
+            }
+            // The screen's polling timers run out once it is gone.
+            await tester.pumpWidget(const SizedBox.shrink());
+            await tester.pump(const Duration(seconds: 10));
+          });
+        }
+      }
+    },
+  );
 }

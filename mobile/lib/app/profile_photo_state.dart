@@ -22,6 +22,7 @@ import 'package:image_picker/image_picker.dart';
 import '../core/api/api_exception.dart';
 import '../core/api/error_codes.dart';
 import '../core/media/photo_prepare.dart';
+import '../core/media/pick_guard.dart';
 import '../core/session/session.dart';
 import 'discovery_state.dart';
 
@@ -35,29 +36,19 @@ typedef ProfilePhotoPicker = Future<XFile?> Function(ImageSource source);
 /// Downscales a picked file and returns the path of the JPEG it wrote.
 typedef ProfilePhotoPreparer = Future<String> Function(String sourcePath);
 
-/// What a picker the phone closed left behind, if anything.
-typedef ProfilePhotoLostData = Future<XFile?> Function();
-
 /// The picker, behind a provider: the seam a widget test overrides, because a
-/// test runner has no camera. It asks for the original: the picker's own
-/// resize would decode the whole file before shrinking it.
-final profilePhotoPickerProvider = Provider<ProfilePhotoPicker>((ref) {
-  final picker = ImagePicker();
-  return (source) => picker.pickImage(source: source);
-});
-
-final profilePhotoPreparerProvider = Provider<ProfilePhotoPreparer>(
-  (ref) => downscaleProfilePhoto,
+/// test runner has no camera. It asks for the original: the native step that
+/// follows downscales it without decoding all of it. (Who the pick belongs to
+/// is [PickGuard]'s business, and the controller's, not this seam's.)
+final profilePhotoPickerProvider = Provider<ProfilePhotoPicker>(
+  (ref) =>
+      (source) => ref.read(imagePickerProvider).pickImage(source: source),
 );
 
-final profilePhotoLostDataProvider = Provider<ProfilePhotoLostData>((ref) {
-  final picker = ImagePicker();
-  return () async {
-    final lost = await picker.retrieveLostData();
-    if (lost.isEmpty) return null;
-    return lost.file ?? lost.files?.firstOrNull;
-  };
-});
+/// The platform's one method for preparing a photo (`wassla/photo_prepare`).
+final profilePhotoPreparerProvider = Provider<ProfilePhotoPreparer>(
+  (ref) => prepareProfilePhoto,
+);
 
 /// Why a photo did not go up, as the member needs to hear it.
 enum ProfilePhotoFailure {
@@ -129,6 +120,7 @@ class ProfilePhotoState {
     this.progress = 0,
     this.removing = false,
     this.awaitingConfirmation = false,
+    this.picking = false,
   });
 
   final ProfilePhotoPhase phase;
@@ -141,8 +133,12 @@ class ProfilePhotoState {
   /// member to confirm and is never uploaded without that.
   final bool awaitingConfirmation;
 
+  /// The camera or library is open, or about to be: reserved at the first tap,
+  /// so a second tap cannot open it again.
+  final bool picking;
+
   bool get uploading => phase == ProfilePhotoPhase.uploading;
-  bool get busy => uploading || removing;
+  bool get busy => uploading || removing || picking;
 
   ProfilePhotoState copyWith({
     ProfilePhotoPhase? phase,
@@ -153,6 +149,7 @@ class ProfilePhotoState {
     double? progress,
     bool? removing,
     bool? awaitingConfirmation,
+    bool? picking,
   }) => ProfilePhotoState(
     phase: phase ?? this.phase,
     failure: clearFailure ? null : failure ?? this.failure,
@@ -160,6 +157,7 @@ class ProfilePhotoState {
     progress: progress ?? this.progress,
     removing: removing ?? this.removing,
     awaitingConfirmation: awaitingConfirmation ?? this.awaitingConfirmation,
+    picking: picking ?? this.picking,
   );
 }
 
@@ -169,44 +167,83 @@ final profilePhotoProvider =
     );
 
 class ProfilePhotoController extends Notifier<ProfilePhotoState> {
-  /// Bumped whenever the account changes, so a slow step started for one
-  /// account never writes into the next one's state.
-  int _epoch = 0;
   bool _recoveryTried = false;
+
+  /// Every prepared file this controller made and has not yet deleted.
+  final _owned = <String>{};
+
+  /// The file an upload is reading right now: not deleted until the upload
+  /// has finished with it.
+  String? _uploadingPath;
 
   @override
   ProfilePhotoState build() {
     // Watched for its id only: a new account starts from nothing.
     ref.watch(accountProvider.select((a) => a?.id));
-    _epoch++;
+    // And listened to from the container, because a rebuild waits for the next
+    // read and a provider nobody watches pauses its own listeners: the moment
+    // the account changes (sign-out, another member signing in) any step still
+    // running for the old one stops being live, and the prepared files go,
+    // except one an upload is still reading (that upload deletes it when it
+    // lets go).
+    final accountChanges = ref.container.listen(
+      accountProvider.select((a) => a?.id),
+      (previous, next) {
+        if (previous == next) return;
+        _deleteOwned();
+        _recoveryTried = false;
+        state = const ProfilePhotoState();
+      },
+    );
+    ref.onDispose(accountChanges.close);
     _recoveryTried = false;
+    ref.onDispose(_deleteOwned);
     return const ProfilePhotoState();
   }
 
-  int? get _accountId => ref.read(accountProvider)?.id;
+  void _deleteOwned() {
+    for (final path in _owned.toList()) {
+      if (path == _uploadingPath) continue;
+      _owned.remove(path);
+      try {
+        File(path).deleteSync();
+      } on FileSystemException {
+        // Already gone.
+      }
+    }
+  }
 
-  bool _live(int epoch) => ref.mounted && epoch == _epoch;
+  /// Whose photo a step is working on: the signed-in account when it began.
+  int? get _owner => ref.read(accountProvider)?.id;
+
+  /// Still the same account, asked of the session itself at the moment of
+  /// asking: a step that began for member A never writes anything for member B,
+  /// however late its answer comes.
+  bool _live(int? owner) =>
+      ref.mounted && ref.read(accountProvider)?.id == owner;
 
   /// Opens the camera or library, prepares what comes back, and uploads it.
   /// Returns true when the photo was saved.
   Future<bool> pick(ImageSource source) async {
     if (state.busy) return false;
-    final epoch = _epoch;
-    final tokens = ref.read(tokenStoreProvider);
-    final id = _accountId;
-    // If the phone ends the app while the camera is open, this is how the
-    // next launch knows the recovered photo is this account's.
-    if (id != null) await _guard(() => tokens.writePendingPhotoPick('$id'));
+    // Reserved before the first await: a second tap finds it taken, and only
+    // this call writes and clears the pick's marker.
+    state = state.copyWith(picking: true);
+    final epoch = _owner;
+    final guard = ref.read(pickGuardProvider);
+    final ticket = await guard.begin(PickPurpose.profilePhoto);
     XFile? picked;
     try {
       picked = await ref.read(profilePhotoPickerProvider)(source);
     } on PlatformException {
-      await _guard(() => tokens.writePendingPhotoPick(null));
+      await guard.end(ticket);
       if (_live(epoch)) _fail(ProfilePhotoFailure.pickFailed);
       return false;
     }
-    await _guard(() => tokens.writePendingPhotoPick(null));
-    if (picked == null || !_live(epoch)) return false;
+    await guard.end(ticket);
+    if (!_live(epoch)) return false;
+    state = state.copyWith(picking: false);
+    if (picked == null) return false;
     final prepared = await _prepare(picked.path, epoch);
     if (prepared == null) return false;
     return upload();
@@ -214,23 +251,15 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
 
   /// After the phone ended the app while the camera or library was open:
   /// offers the photo that was being picked, for the member to confirm. It is
-  /// offered only to the account that was picking it, once.
+  /// offered only when the lost pick was a profile photo for this account,
+  /// and only once.
   Future<void> recoverLostPick() async {
     if (_recoveryTried || state.busy || state.picked != null) return;
     _recoveryTried = true;
-    final epoch = _epoch;
-    final id = _accountId;
-    final tokens = ref.read(tokenStoreProvider);
-    final pending = await _guard(tokens.readPendingPhotoPick);
-    if (pending == null) return;
-    await _guard(() => tokens.writePendingPhotoPick(null));
-    if (id == null || pending != '$id' || !_live(epoch)) return;
-    final XFile? lost;
-    try {
-      lost = await ref.read(profilePhotoLostDataProvider)();
-    } on Object {
-      return;
-    }
+    final epoch = _owner;
+    final lost = await ref
+        .read(pickGuardProvider)
+        .recoverLost(PickPurpose.profilePhoto);
     if (lost == null || !_live(epoch)) return;
     final prepared = await _prepare(lost.path, epoch);
     if (prepared == null || !_live(epoch)) return;
@@ -247,7 +276,8 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
   Future<bool> upload() async {
     final photo = state.picked;
     if (photo == null || state.busy || state.awaitingConfirmation) return false;
-    final epoch = _epoch;
+    final epoch = _owner;
+    _uploadingPath = photo.path;
     state = state.copyWith(
       phase: ProfilePhotoPhase.uploading,
       clearFailure: true,
@@ -267,28 +297,45 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
             },
           );
     } on ApiException catch (error) {
-      if (!_live(epoch)) return false;
+      _uploadingPath = null;
+      if (!_live(epoch)) {
+        await _release(photo.path);
+        return false;
+      }
       final failure = ProfilePhotoFailure.of(error);
-      if (failure.canRetry) {
-        state = state.copyWith(
-          phase: ProfilePhotoPhase.failed,
-          failure: failure,
-        );
-      } else {
+      if (!failure.canRetry) {
         // A file the server will never accept is not kept, and neither is
         // one a banned account cannot send.
         await _drop(photo);
         _fail(failure);
+      } else if (!await File(photo.path).exists()) {
+        // The phone cleared the file between the pick and the stream: a
+        // retry could only fail the same way.
+        await _drop(photo);
+        if (_live(epoch)) _fail(ProfilePhotoFailure.unreadable);
+      } else {
+        state = state.copyWith(
+          phase: ProfilePhotoPhase.failed,
+          failure: failure,
+        );
       }
       return false;
     } on FileSystemException {
       // The phone cleared the file between the pick and the upload.
-      if (!_live(epoch)) return false;
+      _uploadingPath = null;
+      if (!_live(epoch)) {
+        await _release(photo.path);
+        return false;
+      }
       await _drop(photo);
       _fail(ProfilePhotoFailure.unreadable);
       return false;
     }
-    if (!_live(epoch)) return false;
+    _uploadingPath = null;
+    if (!_live(epoch)) {
+      await _release(photo.path);
+      return false;
+    }
     await _drop(photo);
     state = const ProfilePhotoState();
     _refreshOwnPhotoReads();
@@ -306,7 +353,7 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
   /// Returns the server's refusal, or null when it worked.
   Future<ApiException?> remove() async {
     if (state.busy) return null;
-    final epoch = _epoch;
+    final epoch = _owner;
     state = state.copyWith(removing: true);
     try {
       await ref.read(sessionProvider.notifier).removePhoto();
@@ -323,8 +370,9 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
     return null;
   }
 
-  /// Prepares [sourcePath] and keeps the result as the pending photo.
-  Future<PickedPhoto?> _prepare(String sourcePath, int epoch) async {
+  /// Prepares [sourcePath] and keeps the result as the pending photo; a pick
+  /// it replaces has its file deleted.
+  Future<PickedPhoto?> _prepare(String sourcePath, int? epoch) async {
     state = state.copyWith(
       phase: ProfilePhotoPhase.uploading,
       clearFailure: true,
@@ -333,15 +381,16 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
     String? output;
     try {
       output = await ref.read(profilePhotoPreparerProvider)(sourcePath);
+      _owned.add(output);
       final type = sniffImageType(await readHead(output));
       if (type == null) throw const UnsupportedPhoto();
       if (await File(output).length() > _maxPhotoBytes) {
-        await deleteQuietly(output);
+        await _release(output);
         if (_live(epoch)) _fail(ProfilePhotoFailure.tooLarge);
         return null;
       }
       if (!_live(epoch)) {
-        await deleteQuietly(output);
+        await _release(output);
         return null;
       }
       final photo = PickedPhoto(
@@ -349,17 +398,21 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
         contentType: type,
         fileName: 'photo.${extensionFor(type)}',
       );
+      final replaced = state.picked;
       state = state.copyWith(
         phase: ProfilePhotoPhase.idle,
         picked: photo,
         clearFailure: true,
       );
+      if (replaced != null && replaced.path != photo.path) {
+        await _release(replaced.path);
+      }
       return photo;
     } on FileSystemException {
-      if (output != null) await deleteQuietly(output);
+      if (output != null) await _release(output);
       if (_live(epoch)) _fail(ProfilePhotoFailure.unreadable);
     } on UnsupportedPhoto {
-      if (output != null) await deleteQuietly(output);
+      if (output != null) await _release(output);
       if (_live(epoch)) _fail(ProfilePhotoFailure.unsupported);
     }
     return null;
@@ -373,11 +426,18 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
     );
   }
 
+  /// Deletes [photo]'s file and forgets it as the pending photo.
   Future<void> _drop(PickedPhoto photo) async {
-    await deleteQuietly(photo.path);
+    await _release(photo.path);
     if (ref.mounted && identical(state.picked, photo)) {
       state = state.copyWith(clearPicked: true);
     }
+  }
+
+  /// Deletes a prepared file this controller made.
+  Future<void> _release(String path) async {
+    _owned.remove(path);
+    await deleteQuietly(path);
   }
 
   /// Every retained read that holds the member's own photo, so none keeps
@@ -387,14 +447,5 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
     ref
       ..invalidate(ownProfileProvider)
       ..invalidate(personProvider);
-  }
-
-  Future<T?> _guard<T>(Future<T> Function() step) async {
-    try {
-      return await step();
-    } on Object {
-      // Secure storage failing must not stop a photo being picked.
-      return null;
-    }
   }
 }

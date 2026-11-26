@@ -277,7 +277,16 @@ class OwnProfileController extends AsyncNotifier<OwnProfile> {
   Future<void> _apply(
     Future<OwnProfile> Function(DiscoveryRepository repo) write,
   ) async {
+    final session = ref.read(sessionProvider.notifier);
+    final photoWrites = session.photoWrites;
     final next = await write(ref.read(discoveryRepositoryProvider));
+    if (photoWrites != session.photoWrites) {
+      // The member added, changed or removed their photo while this write was
+      // on its way, so its answer may carry the old one. Whatever the write
+      // changed is the server's now: read the profile again.
+      ref.invalidateSelf();
+      return;
+    }
     state = AsyncData(_mark(next, _readerOf(state.value)));
   }
 }

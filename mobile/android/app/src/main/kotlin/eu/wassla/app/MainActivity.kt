@@ -8,10 +8,16 @@ import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 class MainActivity : FlutterActivity() {
+    /** Photo preparation decodes a picture: off the main thread, one at a time. */
+    private val photoExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        configurePhotoPrepare(flutterEngine)
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "eu.wassla.app/notification_permission",
@@ -22,6 +28,40 @@ class MainActivity : FlutterActivity() {
                 result.notImplemented()
             }
         }
+    }
+
+    /**
+     * `wassla/photo_prepare`: `prepare(path)` answers the path of a new upright
+     * JPEG of at most 1024 px with no metadata (see [PhotoPreparer]).
+     */
+    private fun configurePhotoPrepare(flutterEngine: FlutterEngine) {
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "wassla/photo_prepare")
+            .setMethodCallHandler { call, result ->
+                if (call.method != "prepare") {
+                    result.notImplemented()
+                    return@setMethodCallHandler
+                }
+                val path = call.argument<String>("path")
+                if (path.isNullOrEmpty()) {
+                    result.error("bad_arguments", "A path is needed", null)
+                    return@setMethodCallHandler
+                }
+                photoExecutor.execute {
+                    try {
+                        val prepared = PhotoPreparer(cacheDir).prepare(path)
+                        runOnUiThread { result.success(prepared.path) }
+                    } catch (error: PhotoPrepareException) {
+                        runOnUiThread { result.error(error.code, error.message, null) }
+                    } catch (error: Throwable) {
+                        runOnUiThread { result.error("failed", error.message, null) }
+                    }
+                }
+            }
+    }
+
+    override fun onDestroy() {
+        photoExecutor.shutdown()
+        super.onDestroy()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

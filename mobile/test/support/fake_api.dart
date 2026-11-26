@@ -260,15 +260,14 @@ class FakeTokenStore extends TokenStore {
   @override
   Future<String?> readRoleContext() async => _roleContext;
 
-  /// The account that had the photo picker open, as secure storage holds it.
-  String? pendingPhotoPick;
+  /// Which pick had a picker open, as secure storage holds it.
+  String? pendingPick;
 
   @override
-  Future<String?> readPendingPhotoPick() async => pendingPhotoPick;
+  Future<String?> readPendingPick() async => pendingPick;
 
   @override
-  Future<void> writePendingPhotoPick(String? accountId) async =>
-      pendingPhotoPick = accountId;
+  Future<void> writePendingPick(String? marker) async => pendingPick = marker;
 
   @override
   Future<void> writeRoleContext(String value) async => _roleContext = value;

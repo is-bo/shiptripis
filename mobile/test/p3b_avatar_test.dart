@@ -5,6 +5,8 @@
 /// never its signed address, because the address changes on every payload.
 library;
 
+import 'dart:io' show SocketException;
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -128,7 +130,7 @@ void main() {
         );
         await settlePhotos(tester);
         expect(_picture, findsNothing);
-        expect(failing.urls, ['https://media.test/a.jpg?sig=old']);
+        expect(failing.urls.toSet(), {'https://media.test/a.jpg?sig=old'});
 
         // A refreshed payload brings a new address for the same photo, and the
         // network can be reached now. The avatar on screen is the same one.
@@ -143,6 +145,71 @@ void main() {
         expect(serving.urls, ['https://media.test/a.jpg?sig=new']);
         expect(serving.keys, ['v1'], reason: 'the bytes are cached by version');
         expect(_picture, findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'a fresh address that joined a stale load is tried when that load fails',
+      (tester) async {
+        // The old address is still loading when the fresh one arrives; to the
+        // image cache they are one image, so the fresh address joins that load.
+        final cache = installPhotoCache(
+          PhotoCacheBehavior.serve,
+          behaviorFor: (url) =>
+              url.contains('sig=old') ? PhotoCacheBehavior.stall : null,
+        );
+        final photo = ValueNotifier<PersonPhoto>(
+          const PersonPhoto(
+            url: 'https://media.test/a.jpg?sig=old',
+            version: 'v1',
+          ),
+        );
+        await pumpApp(
+          tester,
+          ValueListenableBuilder<PersonPhoto>(
+            valueListenable: photo,
+            builder: (_, value, _) => _avatar(photo: value),
+          ),
+        );
+        await settlePhotos(tester);
+        expect(cache.urls, ['https://media.test/a.jpg?sig=old']);
+
+        photo.value = const PersonPhoto(
+          url: 'https://media.test/a.jpg?sig=new',
+          version: 'v1',
+        );
+        await tester.pump();
+        await settlePhotos(tester);
+        expect(cache.urls, [
+          'https://media.test/a.jpg?sig=old',
+        ], reason: 'joined the load in flight: no second request yet');
+
+        // The old address had expired: its load fails, and the joined one with it.
+        cache.stalled['https://media.test/a.jpg?sig=old']!.addError(
+          const SocketException('expired'),
+        );
+        await settlePhotos(tester);
+        await settlePhotos(tester);
+
+        expect(cache.urls, [
+          'https://media.test/a.jpg?sig=old',
+          'https://media.test/a.jpg?sig=new',
+        ], reason: 'the fresh address is tried on a load of its own');
+        expect(_picture, findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'a photo that cannot be loaded at all costs one more try, then initials',
+      (tester) async {
+        final cache = installPhotoCache(PhotoCacheBehavior.fail);
+        await pumpApp(tester, _avatar());
+        await settlePhotos(tester);
+        await settlePhotos(tester);
+
+        expect(cache.urls, hasLength(2), reason: 'one retry, not a loop');
+        expect(_picture, findsNothing);
+        expect(find.text('SA'), findsOneWidget);
       },
     );
 

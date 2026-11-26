@@ -6,6 +6,7 @@
 /// the fake backend records.
 library;
 
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -13,7 +14,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shiptrip/app/app.dart';
 import 'package:shiptrip/app/profile_photo_state.dart';
+import 'package:shiptrip/app/router.dart';
+import 'package:shiptrip/core/auth/social_sign_in.dart';
+import 'package:shiptrip/core/push/notification_socket.dart';
+import 'package:shiptrip/core/push/push_coordinator.dart';
+import 'package:shiptrip/core/media/pick_guard.dart';
 import 'package:shiptrip/core/session/session.dart';
 import 'package:shiptrip/design/components/primitives.dart';
 import 'package:shiptrip/domain/account.dart';
@@ -21,6 +28,8 @@ import 'package:shiptrip/features/profile/profile_photo_section.dart';
 import 'package:shiptrip/l10n/app_localizations.dart';
 
 import 'fake_api.dart';
+import 'fake_image_picker.dart';
+import 'fake_social_sign_in.dart';
 import 'harness.dart';
 
 const photoPut = '/api/me/photo';
@@ -127,7 +136,7 @@ class PhotoRig {
     this.backend, {
     this.picker,
     this.preparer,
-    this.lostData,
+    this.imagePicker,
     this.tokens,
     Map<String, dynamic>? photo,
   }) : _photo = photo;
@@ -135,7 +144,10 @@ class PhotoRig {
   final FakeBackend backend;
   final ProfilePhotoPicker? picker;
   final ProfilePhotoPreparer? preparer;
-  final ProfilePhotoLostData? lostData;
+
+  /// The app's one `ImagePicker`, with what a phone that ended the app would
+  /// have kept. A fresh one when null.
+  final FakeImagePicker? imagePicker;
   final FakeTokenStore? tokens;
   final Map<String, dynamic>? _photo;
 
@@ -146,8 +158,10 @@ class PhotoRig {
   /// there even while a lazy list has not built the photo section yet.
   L l(WidgetTester tester) => L.of(tester.element(find.byType(Scaffold).first));
 
-  /// A container over the fake server; the session is signed in.
-  Future<void> start(WidgetTester tester) async {
+  /// A container over the fake server; the session is signed in. With
+  /// [restore] false the session is left to start itself (a launch whose
+  /// `/api/me` a test may hold back).
+  Future<void> start(WidgetTester tester, {bool restore = true}) async {
     backend.on('GET', '/api/me', FakeResponse(200, meFixture(photo: _photo)));
     tokenStore = tokens ?? FakeTokenStore();
     container = ProviderContainer(
@@ -159,15 +173,15 @@ class PhotoRig {
         profilePhotoPreparerProvider.overrideWithValue(
           preparer ?? preparerWriting(jpegBytes),
         ),
-        profilePhotoLostDataProvider.overrideWithValue(
-          lostData ?? () async => null,
-        ),
+        imagePickerProvider.overrideWithValue(imagePicker ?? FakeImagePicker()),
       ],
     );
     addTearDown(container.dispose);
-    await tester.runAsync(
-      () => container.read(sessionProvider.notifier).restore(),
-    );
+    if (restore) {
+      await tester.runAsync(
+        () => container.read(sessionProvider.notifier).restore(),
+      );
+    }
   }
 
   Future<void> pump(
@@ -200,4 +214,120 @@ class PhotoRig {
   }
 
   Account get account => container.read(accountProvider)!;
+
+  /// The whole app, on its real router and its real tab shell with the bottom
+  /// navigation, opened on Profile. [locale] is the language the app was last
+  /// set to; [device] sets the window, its insets and its text size.
+  Future<void> pumpRealApp(
+    WidgetTester tester, {
+    Locale locale = const Locale('en'),
+    DeviceProfile device = DeviceProfile.android,
+  }) async {
+    // A screen left from an earlier pump would keep its state: begin from
+    // nothing.
+    await tester.pumpWidget(const SizedBox.shrink());
+    backend
+      ..on('GET', '/api/me', FakeResponse(200, meFixture(photo: _photo)))
+      ..emptyDiscovery()
+      ..fallback ??= _memberRead;
+    tokenStore = tokens ?? _AppStore(locale: locale.languageCode);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = device.size;
+    tester.view.padding = FakeViewPadding(
+      top: device.viewPadding.top,
+      bottom: device.viewPadding.bottom,
+      left: device.viewPadding.left,
+      right: device.viewPadding.right,
+    );
+    tester.view.viewPadding = tester.view.padding;
+    tester.platformDispatcher.textScaleFactorTestValue = device.textScale;
+    addTearDown(() {
+      tester.view.reset();
+      tester.platformDispatcher.clearTextScaleFactorTestValue();
+    });
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          tokenStoreProvider.overrideWithValue(tokenStore),
+          apiClientProvider.overrideWithValue(
+            apiClientFor(backend, tokenStore),
+          ),
+          notificationSocketProvider.overrideWithValue(
+            NotificationSocket(connector: (_, _) async => _IdleConnection()),
+          ),
+          socialSignInProvider.overrideWithValue(FakeSocialSignIn()),
+          if (picker != null)
+            profilePhotoPickerProvider.overrideWithValue(picker!),
+          profilePhotoPreparerProvider.overrideWithValue(
+            preparer ?? preparerWriting(jpegBytes),
+          ),
+          imagePickerProvider.overrideWithValue(
+            imagePicker ?? FakeImagePicker(),
+          ),
+        ],
+        child: const ShipTripApp(),
+      ),
+    );
+    await _settle(tester);
+    container = ProviderScope.containerOf(
+      tester.element(find.byType(ShipTripApp)),
+    );
+    container.read(routerProvider).goNamed(Routes.profile);
+    await _settle(tester);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 10));
+    });
+  }
+
+  static Future<void> _settle(WidgetTester tester) async {
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+  }
+
+  static FakeResponse _memberRead(RecordedRequest r) {
+    if (r.path == '/api/notifications' || r.path == '/api/deals') {
+      return const FakeResponse(200, {
+        'count': 0,
+        'next': null,
+        'previous': null,
+        'results': <Object>[],
+      });
+    }
+    if (r.path == '/api/notifications/unread-count') {
+      return const FakeResponse(200, {'unread': 0});
+    }
+    if (r.path.contains('count')) return const FakeResponse(200, {'count': 0});
+    return const FakeResponse(200, <Object>[]);
+  }
+}
+
+/// A keystore for the whole app: what the shell asks of it at start-up.
+class _AppStore extends FakeTokenStore {
+  _AppStore({super.locale});
+
+  @override
+  Future<String?> readAccess() async => 'access-token';
+
+  @override
+  Future<String> readOrCreateInstallationId() async => 'installation';
+
+  @override
+  Future<String?> readPendingPushToken() async => null;
+
+  @override
+  Future<void> writePendingPushToken(String? token) async {}
+}
+
+class _IdleConnection implements NotificationSocketConnection {
+  final _controller = StreamController<dynamic>();
+
+  @override
+  Stream<dynamic> get stream => _controller.stream;
+
+  @override
+  Future<void> close() async {
+    if (!_controller.isClosed) await _controller.close();
+  }
 }

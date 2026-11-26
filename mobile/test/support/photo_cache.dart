@@ -79,9 +79,16 @@ enum PhotoCacheBehavior {
 }
 
 class FakePhotoCache extends Fake implements BaseCacheManager {
-  FakePhotoCache(this.behavior, {Uint8List? bytes}) : _bytes = bytes ?? tinyPng;
+  FakePhotoCache(this.behavior, {Uint8List? bytes, this.behaviorFor})
+    : _bytes = bytes ?? tinyPng;
 
   final PhotoCacheBehavior behavior;
+
+  /// What one address answers, when it differs from [behavior].
+  final PhotoCacheBehavior? Function(String url)? behaviorFor;
+
+  /// The stalled load of each address, so a test can fail or finish it later.
+  final stalled = <String, StreamController<FileResponse>>{};
   final Uint8List _bytes;
 
   /// The cache key of every image requested, in order.
@@ -105,7 +112,7 @@ class FakePhotoCache extends Fake implements BaseCacheManager {
   }) {
     urls.add(url);
     keys.add(key ?? url);
-    return switch (behavior) {
+    return switch (behaviorFor?.call(url) ?? behavior) {
       PhotoCacheBehavior.serve => Stream.value(
         FileInfo(
           const LocalFileSystem().file(_file.path),
@@ -115,7 +122,8 @@ class FakePhotoCache extends Fake implements BaseCacheManager {
         ),
       ),
       PhotoCacheBehavior.fail => Stream.error(const SocketException('offline')),
-      PhotoCacheBehavior.stall => StreamController<FileResponse>().stream,
+      PhotoCacheBehavior.stall =>
+        (stalled[url] = StreamController<FileResponse>()).stream,
     };
   }
 }
@@ -125,8 +133,13 @@ class FakePhotoCache extends Fake implements BaseCacheManager {
 FakePhotoCache installPhotoCache(
   PhotoCacheBehavior behavior, {
   Uint8List? bytes,
+  PhotoCacheBehavior? Function(String url)? behaviorFor,
 }) {
-  final cache = FakePhotoCache(behavior, bytes: bytes);
+  final cache = FakePhotoCache(
+    behavior,
+    bytes: bytes,
+    behaviorFor: behaviorFor,
+  );
   CachedNetworkImageProvider.defaultCacheManager = cache;
   return cache;
 }

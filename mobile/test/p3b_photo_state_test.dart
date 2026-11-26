@@ -25,6 +25,7 @@ import 'package:shiptrip/features/profile/profile_photo_section.dart';
 
 import 'support/discovery_harness.dart';
 import 'support/fake_api.dart';
+import 'support/fake_image_picker.dart';
 import 'support/harness.dart';
 import 'support/photo_cache.dart';
 import 'support/photo_rig.dart';
@@ -476,6 +477,10 @@ void main() {
         () => Future<void>.delayed(const Duration(milliseconds: 80)),
       );
       await scrollBack(tester);
+      await untilReached(
+        tester,
+        () => find.text(l.profilePhotoStorageUnavailable).evaluate().isNotEmpty,
+      );
 
       expect(find.text(l.profilePhotoStorageUnavailable), findsOneWidget);
       expect(find.text(l.actionRetry), findsOneWidget);
@@ -828,16 +833,20 @@ void main() {
 
   // ---------------------------------------------------------------------------
   group('14. the phone ended the app while the picker was open', () {
+    const mine = 'profilePhoto:42:abc';
+
     testWidgets(
       'the photo is offered to the same account, never sent unasked',
       (tester) async {
         final backend = FakeBackend()
           ..on('PUT', _put, FakeResponse(200, photoActive('v5')));
-        final tokens = FakeTokenStore()..pendingPhotoPick = '42';
+        final tokens = FakeTokenStore()..pendingPick = mine;
         final rig = PhotoRig(
           backend,
           tokens: tokens,
-          lostData: () async => XFile(sourceFile(name: 'lost.jpg')),
+          imagePicker: FakeImagePicker(
+            lost: XFile(sourceFile(name: 'lost.jpg')),
+          ),
         );
         await rig.pump(tester);
         final l = rig.l(tester);
@@ -850,7 +859,7 @@ void main() {
         expect(photoButton(l.profilePhotoUse), findsOneWidget);
         expect(photoButton(l.profilePhotoDiscard), findsOneWidget);
         expect(_previewPath(tester), isNotNull, reason: 'the member sees it');
-        expect(tokens.pendingPhotoPick, isNull, reason: 'the marker is spent');
+        expect(tokens.pendingPick, isNull, reason: 'the marker is spent');
 
         await tester.tap(photoButton(l.profilePhotoUse));
         await untilReached(tester, () => rig.account.photo != null);
@@ -862,11 +871,11 @@ void main() {
 
     testWidgets('the member may discard it', (tester) async {
       final backend = FakeBackend();
-      final tokens = FakeTokenStore()..pendingPhotoPick = '42';
+      final tokens = FakeTokenStore()..pendingPick = mine;
       final rig = PhotoRig(
         backend,
         tokens: tokens,
-        lostData: () async => XFile(sourceFile(name: 'lost.jpg')),
+        imagePicker: FakeImagePicker(lost: XFile(sourceFile(name: 'lost.jpg'))),
       );
       await rig.pump(tester);
       final l = rig.l(tester);
@@ -888,47 +897,33 @@ void main() {
     testWidgets('another account\'s pick is not offered to this one', (
       tester,
     ) async {
-      var asked = 0;
-      final tokens = FakeTokenStore()..pendingPhotoPick = '7';
-      final rig = PhotoRig(
-        FakeBackend(),
-        tokens: tokens,
-        lostData: () async {
-          asked++;
-          return XFile(sourceFile());
-        },
-      );
+      final picker = FakeImagePicker(lost: XFile(sourceFile()));
+      final tokens = FakeTokenStore()..pendingPick = 'profilePhoto:7:abc';
+      final rig = PhotoRig(FakeBackend(), tokens: tokens, imagePicker: picker);
       await rig.pump(tester);
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 80)),
       );
       await tester.pump();
 
-      expect(asked, 0, reason: 'the picker\'s leftovers stay unread');
       expect(find.text(rig.l(tester).profilePhotoRecovered), findsNothing);
-      expect(tokens.pendingPhotoPick, isNull);
+      expect(picker.lost, isNull, reason: 'consumed, so never offered later');
+      expect(tokens.pendingPick, isNull);
     });
 
     testWidgets('no marker, no offer', (tester) async {
-      var asked = 0;
-      final rig = PhotoRig(
-        FakeBackend(),
-        lostData: () async {
-          asked++;
-          return XFile(sourceFile());
-        },
-      );
+      final picker = FakeImagePicker(lost: XFile(sourceFile()));
+      final rig = PhotoRig(FakeBackend(), imagePicker: picker);
       await rig.pump(tester);
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 80)),
       );
 
-      expect(asked, 0);
       expect(find.text(rig.l(tester).profilePhotoRecovered), findsNothing);
     });
 
     testWidgets('a marker with nothing lost offers nothing', (tester) async {
-      final tokens = FakeTokenStore()..pendingPhotoPick = '42';
+      final tokens = FakeTokenStore()..pendingPick = mine;
       final rig = PhotoRig(FakeBackend(), tokens: tokens);
       await rig.pump(tester);
       await tester.runAsync(
@@ -937,11 +932,11 @@ void main() {
       await tester.pump();
 
       expect(find.text(rig.l(tester).profilePhotoRecovered), findsNothing);
-      expect(tokens.pendingPhotoPick, isNull);
+      expect(tokens.pendingPick, isNull);
     });
 
     testWidgets(
-      'opening the picker marks the account, and a normal answer clears it',
+      'opening the picker marks the pick, and a normal answer clears it',
       (tester) async {
         final tokens = FakeTokenStore();
         String? whileOpen;
@@ -951,7 +946,7 @@ void main() {
           backend,
           tokens: tokens,
           picker: (source) async {
-            whileOpen = tokens.pendingPhotoPick;
+            whileOpen = tokens.pendingPick;
             return XFile(sourceFile());
           },
         );
@@ -960,8 +955,8 @@ void main() {
         await tester.tap(photoButton(rig.l(tester).profilePhotoChoose));
         await untilReached(tester, () => rig.account.photo != null);
 
-        expect(whileOpen, '42');
-        expect(tokens.pendingPhotoPick, isNull);
+        expect(whileOpen, startsWith('profilePhoto:42:'));
+        expect(tokens.pendingPick, isNull);
       },
     );
 
@@ -978,7 +973,7 @@ void main() {
       await tester.tap(photoButton(rig.l(tester).profilePhotoTake));
       await _untilNotice(tester);
 
-      expect(tokens.pendingPhotoPick, isNull);
+      expect(tokens.pendingPick, isNull);
     });
   });
 }

@@ -262,16 +262,22 @@ class SessionController extends Notifier<SessionState> {
     required int attempt,
   }) async {
     final identity = _tokens.identityGeneration;
+    final photoWrites = _photoWrites;
     _markAccountRead();
     try {
-      final account = await _auth.me();
+      final answered = await _auth.me();
       if (generation != _generation) return;
-      if (cached != null && account.id != cached.id) {
+      final Account account;
+      if (cached != null && answered.id != cached.id) {
         // Only a damaged snapshot can get here. Move every account-scoped
         // read to a fresh generation rather than let one survive the swap.
+        account = answered;
         _generation++;
         state = SessionSignedIn(account, generation: _generation);
       } else {
+        // The member may have changed their photo while this answer was on
+        // its way: the newer photo is kept.
+        account = _withNewestPhoto(answered, photoWrites);
         state = SessionSignedIn(account, generation: generation);
       }
       unawaited(_remember(account, identity));
@@ -482,6 +488,11 @@ class SessionController extends Notifier<SessionState> {
       );
     }
   }
+
+  /// How many photo writes have started or finished. Another part of the app
+  /// that holds the member's own photo compares it before and after a read or
+  /// a write of its own, and re-reads when it moved.
+  int get photoWrites => _photoWrites;
 
   /// [fresh], a profile read that began when the photo-write count was
   /// [startedAt], with the photo the session holds now if a write started or

@@ -75,11 +75,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:image_picker/image_picker.dart' show ImageSource, XFile;
 
 import '../../app/app_state.dart';
 import '../../app/router.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/media/pick_guard.dart';
 import '../../core/api/error_codes.dart';
 import '../../core/format/locale_formats.dart';
 import '../../core/money/money.dart';
@@ -163,8 +164,9 @@ typedef ItemPhotoPicker = Future<XFile?> Function(ImageSource source);
 /// there is no camera in a test runner, and a required photo whose only code
 /// path is unreachable under test is a requirement nobody is checking.
 final itemPhotoPickerProvider = Provider<ItemPhotoPicker>((ref) {
-  final picker = ImagePicker();
-  return (source) => picker.pickImage(
+  final guard = ref.read(pickGuardProvider);
+  return (source) => guard.pickImage(
+    PickPurpose.itemPhoto,
     source: source,
     maxWidth: _photoMaxEdge,
     maxHeight: _photoMaxEdge,

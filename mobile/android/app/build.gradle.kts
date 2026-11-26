@@ -77,6 +77,12 @@ android {
     }
 }
 
+dependencies {
+    // Reads the EXIF orientation of a picked photo (all eight values) in
+    // PhotoPrepare.kt. Named here because it is the app's own code that uses it.
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
+}
+
 flutter {
     source = "../.."
 }

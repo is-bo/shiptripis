@@ -311,44 +311,67 @@ class ApiClient {
   /// The body is read as text and decoded here, after the status is known, so
   /// that a refusal the edge proxy wrote (an HTML 413, an empty body, broken
   /// JSON) still reaches [ApiException] with its status.
+  ///
+  /// [expectedIdentity] is the credential generation the caller captured
+  /// before it did any asynchronous work for the upload (reading the file).
+  /// If the sign-in has changed since, nothing is sent: a file picked by one
+  /// member never goes out under the next member's token.
   Future<Json> upload(
     String path, {
     required FormData form,
     String method = 'POST',
+    int? expectedIdentity,
     void Function(int sent, int total)? onProgress,
     CancelToken? cancelToken,
-  }) async => _expectObject(
-    await _write((identity) async {
-      try {
-        return _decodeAfterStatus(
-          await _dio.request<dynamic>(
-            path,
-            data: form,
-            cancelToken: cancelToken,
-            onSendProgress: onProgress,
-            options: Options(
-              method: method,
-              contentType: 'multipart/form-data',
-              responseType: ResponseType.plain,
-              extra: {
-                'st.identity_generation': identity,
-                _AuthInterceptor.noReplay: true,
-              },
-              // An upload is bounded by bandwidth, not by server think-time.
-              sendTimeout: const Duration(minutes: 5),
-              receiveTimeout: const Duration(minutes: 2),
-            ),
+  }) async {
+    if (expectedIdentity != null &&
+        expectedIdentity != _tokens.identityGeneration) {
+      throw ApiException.from(_AuthInterceptor.sessionChanged());
+    }
+    return _expectObject(
+      await _upload(path, form, method, onProgress, cancelToken),
+      path,
+    );
+  }
+
+  /// The credential generation a write started now would belong to.
+  int get identityGeneration => _tokens.identityGeneration;
+
+  Future<dynamic> _upload(
+    String path,
+    FormData form,
+    String method,
+    void Function(int sent, int total)? onProgress,
+    CancelToken? cancelToken,
+  ) => _write((identity) async {
+    try {
+      return _decodeAfterStatus(
+        await _dio.request<dynamic>(
+          path,
+          data: form,
+          cancelToken: cancelToken,
+          onSendProgress: onProgress,
+          options: Options(
+            method: method,
+            contentType: 'multipart/form-data',
+            responseType: ResponseType.plain,
+            extra: {
+              'st.identity_generation': identity,
+              _AuthInterceptor.noReplay: true,
+            },
+            // An upload is bounded by bandwidth, not by server think-time.
+            sendTimeout: const Duration(minutes: 5),
+            receiveTimeout: const Duration(minutes: 2),
           ),
-        );
-      } on DioException catch (error) {
-        // A 5xx is thrown rather than returned: its body is read the same way.
-        final response = error.response;
-        if (response != null) _decodeAfterStatus(response);
-        rethrow;
-      }
-    }),
-    path,
-  );
+        ),
+      );
+    } on DioException catch (error) {
+      // A 5xx is thrown rather than returned: its body is read the same way.
+      final response = error.response;
+      if (response != null) _decodeAfterStatus(response);
+      rethrow;
+    }
+  });
 
   /// Turns a plain-text body into JSON when it is JSON, and leaves it as the
   /// text it is when it is not. Only a success has to be JSON; a refusal is

@@ -26,9 +26,11 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:image_picker/image_picker.dart'
+    show CameraDevice, ImageSource, XFile;
 
 import '../../core/api/api_exception.dart';
+import '../../core/media/pick_guard.dart';
 import '../../core/session/session.dart';
 import '../../data/repositories.dart';
 import '../../design/components/feedback.dart';
@@ -50,8 +52,6 @@ class KycScreen extends ConsumerStatefulWidget {
 }
 
 class _KycScreenState extends ConsumerState<KycScreen> {
-  final _picker = ImagePicker();
-
   /// Generated once for the whole screen. Retrying a failed submission reuses
   /// it, which is exactly what the server's `ON CONFLICT DO NOTHING` expects.
   late final String _idempotencyKey = _newIdempotencyKey();
@@ -79,11 +79,14 @@ class _KycScreenState extends ConsumerState<KycScreen> {
 
   Future<void> _pick(void Function(XFile) assign, {bool selfie = false}) async {
     final l = L.of(context);
-    final file = await _picker.pickImage(
-      source: selfie ? ImageSource.camera : ImageSource.gallery,
-      preferredCameraDevice: CameraDevice.front,
-      imageQuality: 92,
-    );
+    final file = await ref
+        .read(pickGuardProvider)
+        .pickImage(
+          PickPurpose.identityDocument,
+          source: selfie ? ImageSource.camera : ImageSource.gallery,
+          preferredCameraDevice: CameraDevice.front,
+          imageQuality: 92,
+        );
     if (file == null || !mounted) return;
 
     // Checked locally so the user is not charged a 8 MB upload to be told no.

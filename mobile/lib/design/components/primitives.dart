@@ -687,27 +687,7 @@ class AppAvatar extends StatelessWidget {
                 ),
               ),
             ),
-            if (photo case final photo?)
-              ClipOval(
-                child: CachedNetworkImage(
-                  // Keyed by the address too: an image that failed on an
-                  // expired signed address is loaded again as soon as a fresh
-                  // address arrives for the same version. The bytes stay
-                  // cached by version, so a working photo is not fetched twice.
-                  key: ValueKey(photo.url),
-                  imageUrl: photo.url,
-                  cacheKey: photo.version,
-                  width: size,
-                  height: size,
-                  fit: BoxFit.cover,
-                  memCacheWidth: decodeWidthFor(context, size),
-                  fadeInDuration: const Duration(milliseconds: 120),
-                  // Nothing while loading and nothing on error: the initials
-                  // underneath are the fallback.
-                  placeholder: (_, _) => const SizedBox.shrink(),
-                  errorWidget: (_, _, _) => const SizedBox.shrink(),
-                ),
-              ),
+            if (photo case final photo?) _AvatarPhoto(photo: photo, size: size),
             if (isVerified)
               PositionedDirectional(
                 bottom: -1,
@@ -727,6 +707,85 @@ class AppAvatar extends StatelessWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The picture over an avatar's initials.
+///
+/// Keyed by its address: an image that failed on an expired signed address is
+/// loaded again as soon as a fresh address arrives for the same version, and
+/// the bytes stay cached by version, so a working photo is not fetched twice.
+///
+/// One case needs more. Two addresses for one version are the same image to
+/// the image cache, so a fresh address that arrives while the old address is
+/// still loading **joins** that load; if it then fails (the old address had
+/// expired) the fresh one is never tried. So a failed load is tried once more,
+/// which starts a load of its own with the address the avatar holds now. A
+/// photo that cannot be loaded at all costs one extra request, then the
+/// initials stay.
+class _AvatarPhoto extends StatefulWidget {
+  const _AvatarPhoto({required this.photo, required this.size});
+
+  final PersonPhoto photo;
+  final double size;
+
+  @override
+  State<_AvatarPhoto> createState() => _AvatarPhotoState();
+}
+
+class _AvatarPhotoState extends State<_AvatarPhoto> {
+  int _attempt = 0;
+  bool _retried = false;
+
+  @override
+  void didUpdateWidget(_AvatarPhoto oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A new address is a new chance.
+    if (oldWidget.photo.url != widget.photo.url) _retried = false;
+  }
+
+  void _retryOnce(int? memCacheWidth) {
+    if (_retried) return;
+    _retried = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // The failed load may still be remembered under this image's key, and
+      // would be joined again: forget it, so the retry starts a load of its
+      // own with the address held now.
+      PaintingBinding.instance.imageCache.evict(
+        CachedNetworkImageProvider(
+          widget.photo.url,
+          cacheKey: widget.photo.version,
+          maxWidth: memCacheWidth,
+        ),
+      );
+      setState(() => _attempt++);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final photo = widget.photo;
+    final memCacheWidth = decodeWidthFor(context, widget.size);
+    return ClipOval(
+      child: CachedNetworkImage(
+        key: ValueKey('${photo.url}#$_attempt'),
+        imageUrl: photo.url,
+        cacheKey: photo.version,
+        width: widget.size,
+        height: widget.size,
+        fit: BoxFit.cover,
+        memCacheWidth: memCacheWidth,
+        fadeInDuration: const Duration(milliseconds: 120),
+        // Nothing while loading and nothing on error: the initials
+        // underneath are the fallback.
+        placeholder: (_, _) => const SizedBox.shrink(),
+        errorWidget: (_, _, _) {
+          _retryOnce(memCacheWidth);
+          return const SizedBox.shrink();
+        },
       ),
     );
   }
