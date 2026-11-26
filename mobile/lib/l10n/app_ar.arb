@@ -1894,5 +1894,11 @@
   "deleteAccountAppleRefused": "لم تؤكد Apple. لم يُحذف شيء. حاول مجددًا.",
   "deleteAccountAppleUnavailable": "تعذّر الوصول إلى Apple. لم يُحذف شيء. حاول مجددًا بعد بضع دقائق.",
   "deleteAccountStaff": "يُغلق حساب الفريق من قِبل المشرف العام، لا من التطبيق.",
-  "deleteAccountDone": "حُذف حسابك."
+  "deleteAccountDone": "حُذف حسابك.",
+  "notificationFlightTicketApproved": "تمت الموافقة على تذكرة الطيران",
+  "notificationFlightTicketRejected": "تذكرة الطيران تتطلب إجراءً",
+  "notificationFlightTicketResubmit": "نحتاج إلى تذكرة طيران جديدة",
+  "notificationFerryTicketApproved": "تمت الموافقة على تذكرة العبّارة",
+  "notificationFerryTicketRejected": "تذكرة العبّارة تتطلب إجراءً",
+  "notificationFerryTicketResubmit": "نحتاج إلى تذكرة عبّارة جديدة"
 }

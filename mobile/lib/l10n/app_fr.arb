@@ -1894,5 +1894,11 @@
   "deleteAccountAppleRefused": "Apple n’a pas confirmé. Rien n’a été supprimé. Réessayez.",
   "deleteAccountAppleUnavailable": "Impossible de joindre Apple. Rien n’a été supprimé. Réessayez dans quelques minutes.",
   "deleteAccountStaff": "Un compte de l’équipe est fermé par un super administrateur, pas depuis l’application.",
-  "deleteAccountDone": "Votre compte est supprimé."
+  "deleteAccountDone": "Votre compte est supprimé.",
+  "notificationFlightTicketApproved": "Billet d’avion approuvé",
+  "notificationFlightTicketRejected": "Votre billet d’avion nécessite votre attention",
+  "notificationFlightTicketResubmit": "Nous avons besoin d’un nouveau billet d’avion",
+  "notificationFerryTicketApproved": "Billet de ferry approuvé",
+  "notificationFerryTicketRejected": "Votre billet de ferry nécessite votre attention",
+  "notificationFerryTicketResubmit": "Nous avons besoin d’un nouveau billet de ferry"
 }

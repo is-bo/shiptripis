@@ -1,6 +1,5 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
-
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -6679,4 +6678,26 @@ class LFr extends L {
 
   @override
   String get deleteAccountDone => 'Votre compte est supprimé.';
+
+  @override
+  String get notificationFlightTicketApproved => 'Billet d’avion approuvé';
+
+  @override
+  String get notificationFlightTicketRejected =>
+      'Votre billet d’avion nécessite votre attention';
+
+  @override
+  String get notificationFlightTicketResubmit =>
+      'Nous avons besoin d’un nouveau billet d’avion';
+
+  @override
+  String get notificationFerryTicketApproved => 'Billet de ferry approuvé';
+
+  @override
+  String get notificationFerryTicketRejected =>
+      'Votre billet de ferry nécessite votre attention';
+
+  @override
+  String get notificationFerryTicketResubmit =>
+      'Nous avons besoin d’un nouveau billet de ferry';
 }

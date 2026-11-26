@@ -11384,6 +11384,42 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Your account is deleted.'**
   String get deleteAccountDone;
+
+  /// No description provided for @notificationFlightTicketApproved.
+  ///
+  /// In en, this message translates to:
+  /// **'Flight ticket approved'**
+  String get notificationFlightTicketApproved;
+
+  /// No description provided for @notificationFlightTicketRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'Flight ticket needs attention'**
+  String get notificationFlightTicketRejected;
+
+  /// No description provided for @notificationFlightTicketResubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'We need a new flight ticket'**
+  String get notificationFlightTicketResubmit;
+
+  /// No description provided for @notificationFerryTicketApproved.
+  ///
+  /// In en, this message translates to:
+  /// **'Ferry ticket approved'**
+  String get notificationFerryTicketApproved;
+
+  /// No description provided for @notificationFerryTicketRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'Ferry ticket needs attention'**
+  String get notificationFerryTicketRejected;
+
+  /// No description provided for @notificationFerryTicketResubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'We need a new ferry ticket'**
+  String get notificationFerryTicketResubmit;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

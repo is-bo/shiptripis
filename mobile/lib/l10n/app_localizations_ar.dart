@@ -1,6 +1,5 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
-
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -6578,4 +6577,24 @@ class LAr extends L {
 
   @override
   String get deleteAccountDone => 'حُذف حسابك.';
+
+  @override
+  String get notificationFlightTicketApproved =>
+      'تمت الموافقة على تذكرة الطيران';
+
+  @override
+  String get notificationFlightTicketRejected => 'تذكرة الطيران تتطلب إجراءً';
+
+  @override
+  String get notificationFlightTicketResubmit => 'نحتاج إلى تذكرة طيران جديدة';
+
+  @override
+  String get notificationFerryTicketApproved =>
+      'تمت الموافقة على تذكرة العبّارة';
+
+  @override
+  String get notificationFerryTicketRejected => 'تذكرة العبّارة تتطلب إجراءً';
+
+  @override
+  String get notificationFerryTicketResubmit => 'نحتاج إلى تذكرة عبّارة جديدة';
 }

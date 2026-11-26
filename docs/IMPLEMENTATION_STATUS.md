@@ -11,6 +11,16 @@
   per version; the iOS sweep cutoff is taken at registration. The Kotlin arithmetic and the JPEG cleaner now
   have JUnit tests of the real code (`tools/test_android_pure.sh`, a CI step). Detail:
   `docs/PHASE_P3B_PROFILE_PHOTOS_APP.md`, "Round five".
+## Wassla: the bell names the ticket decision (N2, 2026-11-26)
+
+- Phone test 2 (plan 1.5): the owner's flight ticket was approved but the bell row only read
+  "Verification update". App only, no server, staff-decision or transport change. Nothing deployed.
+- A `leg_proof.status_changed` row now reads "Flight ticket approved", "Flight ticket needs attention"
+  or "We need a new flight ticket", and the ferry equivalents, from the payload's `mode`, `outcome` and
+  stored `status` (the same wording as the phone push). "Ask for a new upload" is stored as rejected
+  and is told apart by `outcome`. A drive, a missing field or an unknown value keeps the generic
+  label. Tap still opens the journey. Six strings in English, French and Arabic. Detail:
+  `docs/PHASE_N2_TICKET_DECISION_BELL.md`.
 
 ## Wassla: missing route stops get their own rejection reasons (M1, 2026-11-25)
 
