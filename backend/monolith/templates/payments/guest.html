@@ -22,6 +22,9 @@ opening the link again -- is told so instead of being sent back to ask for a
 new link. Only a token that hashes to a stored link reaches that branch, and
 a token cannot be guessed, so it tells a prober nothing.
 
+A payer whose checkout is still being opened, a tap ago, is told to wait and
+offered the same choices again (G1); a retry is handed that one checkout.
+
 Its look -- tokens, faces, header and language switch -- is the shared
 `payments/_shell.html`, which the provider-return page uses too (J7D).
 {% endcomment %}
@@ -93,6 +96,20 @@ Its look -- tokens, faces, header and language switch -- is the shared
     <h1 class="title">{{ t.unavailable_title }}</h1>
     <p class="lead">{{ t.unavailable_body }}</p>
     <a class="secondary" href="?lang={{ lang }}">{{ t.try_again }}</a>
+  {% elif opening %}
+    <div class="state-mark" aria-hidden="true">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5h11"/><path d="M6.5 20.5h11"/><path d="M8 3.5c0 4.5 8 4.5 8 8.5s-8 4-8 8.5"/><path d="M16 3.5c0 4.5-8 4.5-8 8.5s8 4 8 8.5"/></svg>
+    </div>
+    <div role="status">
+      <h1 class="title">{{ t.opening_title }}</h1>
+      <p class="lead">{{ t.opening_body }}</p>
+    </div>
+    <form method="post" action="{{ checkout_action }}">
+      <input type="hidden" name="lang" value="{{ lang }}">
+      <input type="hidden" name="provider" value="{{ chosen }}">
+      {% if email %}<input type="hidden" name="email" value="{{ email }}">{% endif %}
+      <button type="submit" class="secondary">{{ t.try_again }}</button>
+    </form>
   {% elif already_paid %}
     <div class="mark seal-mark" aria-hidden="true">
       <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>

@@ -1,6 +1,18 @@
 {
 	admin off
 	email {$ACME_EMAIL}
+	# No access logs, but the error logger still records the request URI of a
+	# failed request (a 502 while the app is down), and a guest payment link's
+	# path is its credential. Redact it there; infra/vps/tests/test_proxy_logs.py.
+	log {
+		format filter {
+			wrap json
+			fields {
+				request>uri regexp "/(pay|api/payments)/guest/[^/?#]+" "/${1}/guest/REDACTED"
+				request>headers>Referer regexp "/(pay|api/payments)/guest/[^/?#]+" "/${1}/guest/REDACTED"
+			}
+		}
+	}
 }
 
 {$SITE_ADDRESS} {

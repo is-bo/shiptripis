@@ -42,6 +42,7 @@ from apps.finance.models import (
 )
 from apps.finance.providers.mock import MockGateway
 from apps.finance.services import (
+    CheckoutInProgress,
     RefundExceedsCapture,
     cancel_order,
     create_guest_link,
@@ -217,7 +218,9 @@ class CheckoutRaceTests(FinanceConcurrencyTestCase):
     prefix = "conc-checkout"
 
     def test_two_simultaneous_checkouts_leave_exactly_one_open_attempt(self):
-        """The partial unique index is the arbiter, not application timing."""
+        """The order lock and the partial unique index are the arbiters, not
+        application timing. The later request reuses the first checkout or is
+        told it is still opening; the provider opens one session (G1)."""
 
         barrier = Barrier(2)
 
@@ -228,18 +231,22 @@ class CheckoutRaceTests(FinanceConcurrencyTestCase):
                 return open_mock_checkout(self.order).pk
             except IntegrityError:
                 return "conflict"
+            except CheckoutInProgress:
+                return "opening"
             finally:
                 connections.close_all()
 
         with ThreadPoolExecutor(max_workers=2) as executor:
-            list(executor.map(start, range(2)))
+            results = list(executor.map(start, range(2)))
 
-        open_attempts = PaymentAttempt.objects.filter(
+        rows = list(PaymentAttempt.objects.values_list("pk", "status"))
+        live = PaymentAttempt.objects.get(
             order=self.order, status__in=PaymentAttempt.OPEN_STATUSES
         )
-        assert open_attempts.count() == 1, list(
-            PaymentAttempt.objects.values_list("pk", "status")
-        )
+        assert len(rows) == 1, rows
+        assert live.pk in results, results
+        assert set(results) <= {live.pk, "opening", "conflict"}, results
+        assert MockGateway.checkout_session_ids() == [live.provider_session_id]
 
     def test_two_attempts_that_both_succeed_fund_the_deal_once(self):
         """The residual double-pay race, run for real."""
@@ -382,28 +389,70 @@ class GuestPageRaceTests(FinanceConcurrencyTestCase):
         with ThreadPoolExecutor(max_workers=2) as executor:
             responses = list(executor.map(tap, range(2)))
 
-        live = PaymentAttempt.objects.get(
-            order=self.order, status__in=PaymentAttempt.OPEN_STATUSES
-        )
-        # A tap that lost the race may have been superseded mid-handoff and was
-        # told to try again; any tap that was handed off went to the one live
-        # checkout.
+        # The later tap waited on the order lock, then either reused the first
+        # checkout or found it still opening and was asked to wait. Either way
+        # there is one attempt, and the provider opened one session for it.
+        attempts = list(PaymentAttempt.objects.filter(order=self.order))
+        assert len(attempts) == 1, [(row.pk, row.status) for row in attempts]
+        live = attempts[0]
+        assert live.status in PaymentAttempt.OPEN_STATUSES
+        assert live.provider_session_id and live.checkout_url
+        assert MockGateway.checkout_session_ids() == [live.provider_session_id]
         handed_off = [res for res in responses if res.status_code == 302]
         assert handed_off
         assert {res["Location"] for res in handed_off} == {live.checkout_url}
-        assert {res.status_code for res in responses} <= {302, 503}
+        for waiting in (res for res in responses if res.status_code != 302):
+            assert waiting.status_code == 409
+            assert "Your payment page is being opened" in waiting.content.decode()
 
-        for attempt in PaymentAttempt.objects.filter(order=self.order).exclude(
-            provider_session_id=""
-        ):
-            MockGateway.mark(attempt.provider_session_id, "succeeded")
-            assert (
-                deliver_mock_webhook(Client(), succeed_attempt(attempt)).status_code
-                == 200
-            )
+        MockGateway.mark(live.provider_session_id, "succeeded")
+        assert deliver_mock_webhook(Client(), succeed_attempt(live)).status_code == 200
         self.order.refresh_from_db()
         assert self.order.paid_eur_cents == due > 0
         assert LedgerTransaction.objects.filter(kind="deal_funding").count() == 1
+
+    def test_a_tap_while_the_first_is_at_the_provider_keeps_its_key(self):
+        """The first tap's provider call is held open. A second tap, on its own
+        connection, finds the attempt with no URL yet: it is asked to wait and
+        opens nothing. Released, the first tap stores its URL, and the retry
+        is handed that one checkout."""
+
+        at_provider = Event()
+        release = Event()
+        real_create = MockGateway.create_checkout
+
+        def held(gateway, request):
+            if not at_provider.is_set():
+                at_provider.set()
+                assert release.wait(timeout=10)
+            return real_create(gateway, request)
+
+        with (
+            patch.object(MockGateway, "create_checkout", new=held),
+            ThreadPoolExecutor(max_workers=2) as executor,
+        ):
+            first = executor.submit(self._tap)
+            try:
+                assert at_provider.wait(timeout=10)
+                second = executor.submit(self._tap).result(timeout=10)
+                opening = PaymentAttempt.objects.get(order=self.order)
+            finally:
+                release.set()
+            first = first.result(timeout=10)
+
+        assert second.status_code == 409
+        assert "Your payment page is being opened" in second.content.decode()
+        assert opening.status == PaymentAttempt.Status.CREATED
+        assert opening.checkout_url == ""
+
+        live = PaymentAttempt.objects.get(order=self.order)
+        assert live.pk == opening.pk
+        assert live.idempotency_key == opening.idempotency_key
+        assert first.status_code == 302 and first["Location"] == live.checkout_url
+        assert MockGateway.checkout_session_ids() == [live.provider_session_id]
+        retry = self._tap()
+        assert retry.status_code == 302 and retry["Location"] == live.checkout_url
+        assert PaymentAttempt.objects.filter(order=self.order).count() == 1
 
 
 class RefundRaceTests(FinanceConcurrencyTestCase):
