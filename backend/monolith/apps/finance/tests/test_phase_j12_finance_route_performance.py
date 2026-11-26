@@ -33,7 +33,7 @@ from apps.admin_panel.permissions import assign_admin_roles
 from apps.finance.models import PayoutProfileReview, TravelerPayoutMethod
 from apps.finance.payout_evidence import upload_evidence
 from apps.finance.payout_manual_profiles import approved_profile, review_profile
-from apps.finance.payout_mobile import dzd_method
+from apps.finance.payout_mobile import dzd_method, setup_gate
 from apps.finance.payout_profiles import (
     assign_identity_review,
     attest_identity,
@@ -397,7 +397,7 @@ def test_the_traveler_sees_a_safe_distinct_state_for_each_outcome(
         method = TravelerPayoutMethod.objects.select_related(
             "current_version__dzd_profile_revision"
         ).get(pk=profile.method_id)
-        return dzd_method(method)
+        return dzd_method(method, setup_gate(scenario.traveler))
 
     assert projected()["state"] == "pending_review"
 

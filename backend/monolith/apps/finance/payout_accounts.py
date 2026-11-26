@@ -949,14 +949,14 @@ def open_dashboard(*, actor, gateway=None) -> str:
 
 
 def stripe_setup_projection(method) -> dict:
-    """What the mobile app is allowed to know about Stripe setup.
+    """What the mobile app is allowed to know about Stripe setup readiness.
 
-    Statuses and safe reason codes, a masked account reference, and which
-    actions make sense next. No requirement payload, no bank data, no account
-    id, no link.
+    Statuses and safe reason codes only. No requirement payload, no bank data,
+    no account id, no link. Which actions the Traveler can take next is the H6A
+    read model's answer (`payout_mobile.eur_method`), read from the same gates
+    that refuse the write, and is deliberately not repeated here.
     """
 
-    enabled = bool(getattr(settings, "STRIPE_CONNECT_ENABLED", False))
     version = method.current_version if method else None
     account = version.stripe_account if version else None
     supported = list(allowed_countries())
@@ -969,7 +969,6 @@ def stripe_setup_projection(method) -> dict:
     else:
         status, reason = STATUS_SETUP_REQUIRED, "onboarding_required"
     return {
-        "available": enabled and bool(supported),
         "status": status,
         "status_reason": reason,
         "country": country,
@@ -978,10 +977,6 @@ def stripe_setup_projection(method) -> dict:
         "mode": account.provider_mode if account else None,
         "bank_present": bool(account.eur_bank_present) if account else False,
         "checked_at": account.readiness_checked_at if account else None,
-        "can_start_onboarding": bool(
-            enabled and supported and status != STATUS_UNAVAILABLE
-        ),
-        "can_manage": bool(account and account.details_submitted and enabled),
         "payouts_execution_enabled": False,
     }
 

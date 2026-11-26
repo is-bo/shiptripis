@@ -27,9 +27,28 @@ from .sensitive_data import encrypt, decrypt, account_fingerprint, normalize_dig
 POLICY_VERSION = "payout_profile_v1"
 
 
+class PayoutProfilesDisabled(PermissionDenied):
+    """This deployment has payout profiles switched off."""
+
+    code = "payout_profiles_disabled"
+
+
+class TravelerRequired(PermissionDenied):
+    """Payout setup belongs to an active traveler account."""
+
+    code = "payout_traveler_required"
+
+
 def require_profiles():
     if not settings.PAYOUT_PROFILES_ENABLED:
-        raise PermissionDenied("Payout profiles are disabled.")
+        raise PayoutProfilesDisabled("Payout profiles are disabled.")
+
+
+def holds_payout_setup(user):
+    """Whether this account may hold payout setup: an active traveler, not banned."""
+    return bool(
+        user.is_active and not user.is_banned and user.role in ("traveler", "both")
+    )
 
 
 def require_capabilities(actor, *codes):
@@ -41,8 +60,8 @@ def require_capabilities(actor, *codes):
 def _traveler(actor):
     require_profiles()
     user = User.objects.get(pk=actor.pk)
-    if not user.is_active or user.is_banned or user.role not in ("traveler", "both"):
-        raise PermissionDenied("Traveler access required.")
+    if not holds_payout_setup(user):
+        raise TravelerRequired("Traveler access required.")
     return user
 
 

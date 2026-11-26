@@ -1,5 +1,6 @@
 """Frozen mobile contract against real aggregates, with synthetic providers only."""
 
+import json
 from unittest.mock import patch
 
 import pytest
@@ -8,12 +9,17 @@ from django.test import override_settings
 from rest_framework.test import APIClient
 
 from apps.finance.models import (
+    DzdPayoutProfileRevision,
     Payout,
+    PayoutAttempt,
+    PayoutMethodVersion,
+    PayoutProviderOperation,
     StripeDisbursement,
     StripeDisbursementAllocation,
+    StripePayoutAccount,
     TravelerPayoutMethod,
 )
-from apps.finance.payout_mobile import bank_stage, payout_status, eur_method, dzd_method
+from apps.finance.payout_mobile import bank_stage, payout_status, eur_method, dzd_method, setup_gate
 from apps.finance.payout_reconciliation import notify_payout_state, reconcile_payout
 from apps.finance.payout_execution import execute_payout
 from apps.finance.payout_manual import prepare, begin, confirm
@@ -130,12 +136,12 @@ def test_eur_method_states(changes, expected):
         setattr(account, key, value)
     account.save()
     method = TravelerPayoutMethod.objects.get(traveler=s.traveler)
-    result = eur_method(method)
+    result = eur_method(method, setup_gate(s.traveler))
     assert result["state"] == expected
     assert "acct_" not in str(result) and "ba_" not in str(result)
     if changes.get("active") is False:
         assert not result["available_actions"]
-    assert eur_method(None)["state"] == "not_configured"
+    assert eur_method(None, setup_gate(s.traveler))["state"] == "not_configured"
 
 
 def test_onboarding_resume_manage_refresh_and_owner_isolation(monkeypatch):
@@ -188,8 +194,8 @@ def test_dzd_replacement_immutable_history_and_review(configured_h4):
     assert result["display_state"] == "ready"
     method = TravelerPayoutMethod.objects.get(traveler=s.traveler, currency="DZD")
     method.enabled = False
-    assert dzd_method(method)["state"] == "inactive"
-    assert dzd_method(None)["state"] == "not_configured"
+    assert dzd_method(method, setup_gate(s.traveler))["state"] == "inactive"
+    assert dzd_method(None, setup_gate(s.traveler))["state"] == "not_configured"
 
 
 @pytest.mark.parametrize("status, expected", [
@@ -452,3 +458,379 @@ def test_history_renders_a_returned_payout_and_costs_no_query_per_row():
         return len(captured)
 
     assert cost(page) == cost(page * 25)
+
+
+# ---------------------------------------------------------------------------
+# F1. Setup availability and every offered action follow the gates that refuse
+# the write. Reads stay owner-scoped and write nothing.
+# ---------------------------------------------------------------------------
+
+#: Every action a setup or history read may offer. None of them moves money.
+OFFERABLE = {"configure_eur", "resume_eur_setup", "manage_eur", "refresh",
+             "configure_dzd", "replace_dzd_profile", "view_payout"}
+OFF = {"PAYOUT_PROFILES_ENABLED": False}
+NO_CONNECT = {"STRIPE_CONNECT_ENABLED": False}
+NO_COUNTRIES = {"STRIPE_CONNECT_ALLOWED_COUNTRIES": []}
+NO_STORE = {"S3_BUCKET_PAYOUT": "", "PAYOUT_S3_ACCESS_KEY": "", "PAYOUT_S3_SECRET_KEY": ""}
+
+
+def summary(client):
+    response = client.get("/api/payouts/methods")
+    assert response.status_code == 200, response.data
+    assert "no-store" in response["Cache-Control"]
+    return response.data
+
+
+def finance_state():
+    """Every Finance row count, the audit log and the method rows."""
+    from django.apps import apps as registry
+    from apps.admin_panel.models import AdminAuditLog
+
+    state = {model._meta.label: model.objects.count()
+             for model in registry.get_app_config("finance").get_models()}
+    state["audit"] = AdminAuditLog.objects.count()
+    state["methods"] = list(TravelerPayoutMethod.objects.order_by("pk").values())
+    return state
+
+
+def dzd_body(revision, proof, **names):
+    return {"expected_revision": revision, "first_name": "QA", "last_name": "Synthetic",
+            "ccp_number": "1234567890", "ccp_key": "12", "rip": "1" * 20,
+            "proof_reference": str(proof), "consent_policy": "payout_profile_v1", **names}
+
+
+def setup_writes(client):
+    """Each member setup write, with a body that passes input validation."""
+    return {
+        "preference": client.patch("/api/payouts/methods", {
+            "preference": "dzd_only", "eur_revision": 0, "dzd_revision": 0,
+            "consent_policy": "payout_profile_v1"}, format="json"),
+        "currency": client.post("/api/payouts/methods", {
+            "currency": "DZD", "enabled": True, "expected_revision": 0,
+            "consent_policy": "payout_profile_v1"}, format="json"),
+        "proof": client.post("/api/payouts/proofs", {"image": image_upload()}, format="multipart"),
+        "dzd": client.post("/api/payouts/profiles/dzd",
+                           dzd_body(0, "00000000-0000-4000-8000-000000000000"), format="json"),
+        "onboarding": client.post("/api/payouts/methods/stripe/onboarding",
+                                  {"country": "FR"}, format="json"),
+        "refresh": client.post("/api/payouts/methods/stripe/refresh", {}, format="json"),
+        "dashboard": client.post("/api/payouts/methods/stripe/dashboard", {}, format="json"),
+    }
+
+
+def actions_in(value):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            yield from (item if key == "available_actions" else actions_in(item))
+    elif isinstance(value, list):
+        for item in value:
+            yield from actions_in(item)
+
+
+@pytest.mark.parametrize("connect", [True, False])
+def test_f1_profiles_off_is_a_stable_read_and_a_stable_refusal(connect):
+    client = client_for(make_user(f"f1off{connect}@h6a.test", is_email_verified=True))
+    with override_settings(**OFF, STRIPE_CONNECT_ENABLED=connect):
+        before = finance_state()
+        body = summary(client)
+        dzd = client.get("/api/payouts/profiles/dzd")
+        writes = setup_writes(client)
+        history = client.get("/api/payouts?page=1")
+        after = finance_state()
+    assert body["setup"] == {"available": False, "unavailable_reason": "payout_profiles_disabled",
+                             "preference_options": []}
+    # Nothing asks for a preference while funding does not need one.
+    assert body["preference"] is None and body["preference_required"] is False
+    assert body["available_actions"] == []
+    for rail in ("eur", "dzd"):
+        assert body[rail]["available_actions"] == []
+        assert body[rail]["unavailable_reason"] == "payout_profiles_disabled"
+        assert body[rail]["supported"] is False and body[rail]["selectable"] is False
+    assert dzd.status_code == 200 and dzd.data["method"] is None
+    assert dzd.data["dzd"]["unavailable_reason"] == "payout_profiles_disabled"
+    for name, response in writes.items():
+        assert response.status_code == 409, (name, response.data)
+        assert response.data["code"] == "payout_profiles_disabled", name
+    # History is its own read: an empty one is a 200, distinct from both.
+    assert history.status_code == 200 and history.data["count"] == 0
+    assert after == before
+
+
+@pytest.mark.parametrize("connect", [True, False])
+def test_f1_profiles_on_offers_each_rail_by_its_own_gate(configured_h4, connect):
+    client = client_for(make_user(f"f1on{connect}@h6a.test", is_email_verified=True))
+    with override_settings(STRIPE_CONNECT_ENABLED=connect):
+        body = summary(client)
+    assert body["setup"]["available"] is True and body["setup"]["unavailable_reason"] is None
+    assert body["preference_required"] is True
+    assert body["dzd"]["available_actions"] == ["configure_dzd"]
+    assert body["dzd"]["unavailable_reason"] is None and body["dzd"]["supported"] is True
+    eur = body["eur"]
+    assert eur["available_actions"] == (["configure_eur"] if connect else [])
+    assert eur["supported"] is connect
+    assert eur["unavailable_reason"] == (None if connect else "stripe_connect_unavailable")
+    # Saving EUR checks the account country, not Connect, so it stays a choice
+    # the server accepts; only the onboarding it leads to is closed.
+    assert eur["selectable"] is True and eur["supported_countries"] == ["FR"]
+    assert body["setup"]["preference_options"] == ["eur_only", "dzd_only", "both"]
+    if not connect:
+        with override_settings(**NO_CONNECT):
+            assert preference(client, "eur_only").status_code == 200
+            refused = client.post("/api/payouts/methods/stripe/onboarding", {}, format="json")
+        assert refused.status_code == 409 and refused.data["code"] == "stripe_connect_unavailable"
+
+
+@pytest.mark.parametrize("connect, code", [
+    (True, "stripe_connect_no_countries"), (False, "stripe_connect_unavailable"),
+])
+def test_f1_an_empty_allowlist_closes_eur_with_its_own_reason(connect, code):
+    client = client_for(make_user(f"f1empty{connect}@h6a.test", is_email_verified=True))
+    with override_settings(STRIPE_CONNECT_ENABLED=connect, **NO_COUNTRIES):
+        body = summary(client)
+        before = finance_state()
+        refused = [preference(client, value, country="FR") for value in ("eur_only", "both")]
+        after = finance_state()
+    eur = body["eur"]
+    assert eur["unavailable_reason"] == code
+    assert eur["available_actions"] == [] and eur["supported_countries"] == []
+    assert eur["supported"] is False and eur["selectable"] is False
+    assert body["setup"]["preference_options"] == ["dzd_only"]
+    for response in refused:
+        assert response.status_code == 409, response.data
+        assert response.data["code"] == code
+        assert response.data["supported_countries"] == []
+        assert response.data["alternative"] == {"currency": "DZD", "rail": "manual"}
+    assert after == before
+
+
+def test_f1_legitimate_fr_and_dz_declarations(monkeypatch, configured_h4):
+    gateway = FakeGateway(create=snapshot())
+    monkeypatch.setattr("apps.finance.payout_accounts.get_connect_gateway", lambda: gateway)
+    monkeypatch.setattr("apps.finance.payout_account_api.get_connect_gateway", lambda: gateway)
+    client = client_for(make_user("f1fr@h6a.test", is_email_verified=True))
+    assert preference(client, "eur_only", country="FR").status_code == 200
+    eur = summary(client)["eur"]
+    assert eur["country"] == "FR" and eur["available_actions"] == ["configure_eur"]
+    started = client.post("/api/payouts/methods/stripe/onboarding", {}, format="json")
+    assert started.status_code == 201, started.data
+    actions = started.data["method"]["mobile"]["available_actions"]
+    assert "refresh" in actions and "configure_eur" not in actions
+    # A DZ legal account is never steered to a Stripe residency; it gets DZD.
+    dz = make_user("f1dz@h6a.test", is_email_verified=True)
+    client = client_for(dz)
+    refused = preference(client, "eur_only", country="DZ")
+    assert refused.status_code == 400
+    assert refused.data["code"] == "payout_country_unsupported"
+    assert refused.data["supported_countries"] == ["FR"]
+    assert refused.data["alternative"] == {"currency": "DZD", "rail": "manual"}
+    assert not TravelerPayoutMethod.objects.filter(traveler=dz).exists()
+    assert preference(client, "dzd_only", country="").status_code == 200
+    body = summary(client)
+    assert body["preference"] == "dzd_only"
+    assert body["dzd"]["available_actions"] == ["configure_dzd"]
+
+
+@pytest.mark.parametrize("role, verified, banned, code", [
+    ("sender", True, False, "payout_traveler_required"),
+    ("traveler", True, True, "payout_traveler_required"),
+    ("both", False, False, "email_verification_required"),
+])
+def test_f1_accounts_that_cannot_write_get_no_actions_and_a_coded_refusal(
+    configured_h4, role, verified, banned, code
+):
+    user = make_user(f"f1-{role}-{verified}-{banned}@h6a.test", is_email_verified=verified)
+    user.role, user.is_banned = role, banned
+    user.save(update_fields=["role", "is_banned"])
+    client = client_for(user)
+    before = finance_state()
+    body = summary(client)
+    writes = setup_writes(client)
+    assert body["setup"] == {"available": False, "unavailable_reason": code, "preference_options": []}
+    assert body["available_actions"] == []
+    for rail in ("eur", "dzd"):
+        assert body[rail]["available_actions"] == [] and body[rail]["unavailable_reason"] == code
+    for name, response in writes.items():
+        assert response.status_code == 403, (name, response.data)
+        assert response.data["code"] == code, name
+    assert finance_state() == before
+
+
+def test_f1_dzd_setup_works_while_eur_is_switched_off(configured_h4):
+    user = make_user("f1dzdonly@h6a.test", is_email_verified=True)
+    client = client_for(user)
+    with override_settings(**NO_CONNECT, **NO_COUNTRIES):  # the live server's switches
+        body = summary(client)
+        chosen = preference(client, "dzd_only", country="")
+        proof = client.post("/api/payouts/proofs", {"image": image_upload()}, format="multipart")
+        submitted = client.post("/api/payouts/profiles/dzd",
+                                dzd_body(chosen.data["revisions"]["DZD"], proof.data["reference"]),
+                                format="json")
+        refused = [
+            preference(client, "both", eur=chosen.data["revisions"]["EUR"],
+                       dzd=submitted.data["revision"], country="FR"),
+            client.post("/api/payouts/methods/stripe/onboarding", {"country": "FR"}, format="json"),
+        ]
+    assert body["eur"]["unavailable_reason"] == "stripe_connect_unavailable"
+    assert body["setup"]["preference_options"] == ["dzd_only"]
+    assert body["dzd"]["available_actions"] == ["configure_dzd"]
+    assert chosen.status_code == 200 and proof.status_code == 201
+    assert submitted.status_code == 201, submitted.data
+    assert submitted.data["mobile"]["state"] == "pending_review"
+    assert submitted.data["mobile"]["available_actions"] == ["replace_dzd_profile"]
+    for response in refused:
+        assert response.status_code == 409, response.data
+        assert response.data["code"] == "stripe_connect_unavailable"
+    assert not StripePayoutAccount.objects.filter(traveler=user).exists()
+    assert not PayoutProviderOperation.objects.exists()
+
+
+def test_f1_saved_preferences_stay_visible_after_a_switch_change(configured_h4):
+    user = make_user("f1saved@h6a.test", is_email_verified=True)
+    client = client_for(user)
+    saved = preference(client, "both", country="FR")
+    assert saved.status_code == 200, saved.data
+    revisions = saved.data["revisions"]
+    rows = list(TravelerPayoutMethod.objects.filter(traveler=user).order_by("pk").values())
+    with override_settings(**NO_CONNECT):
+        body = summary(client)
+    assert body["preference"] == "both" and body["revisions"] == revisions
+    assert body["eur"]["unavailable_reason"] == "stripe_connect_unavailable"
+    assert body["eur"]["available_actions"] == [] and body["eur"]["selectable"] is True
+    assert body["setup"]["preference_options"] == ["eur_only", "dzd_only", "both"]
+    with override_settings(**NO_COUNTRIES):
+        body = summary(client)
+        kept = preference(client, "both", eur=revisions["EUR"], dzd=revisions["DZD"], country="")
+    assert body["preference"] == "both"
+    assert body["eur"]["selectable"] is False
+    assert body["eur"]["unavailable_reason"] == "stripe_connect_no_countries"
+    assert body["setup"]["preference_options"] == ["dzd_only"]
+    # The read and the write agree: keeping EUR needs an open account country.
+    assert kept.status_code == 409 and kept.data["code"] == "stripe_connect_no_countries"
+    with override_settings(**OFF):
+        body = summary(client)
+    assert body["preference"] == "both" and len(body["methods"]) == 2
+    assert body["setup"]["unavailable_reason"] == "payout_profiles_disabled"
+    assert body["available_actions"] == []
+    # No read under any switch, and no refused write, changed a stored row.
+    assert list(TravelerPayoutMethod.objects.filter(traveler=user).order_by("pk").values()) == rows
+
+
+def test_f1_stale_revisions_change_nothing(configured_h4):
+    user = make_user("f1stale@h6a.test", is_email_verified=True)
+    client = client_for(user)
+    first = preference(client, "dzd_only", country="")
+    assert first.status_code == 200
+    rows = list(TravelerPayoutMethod.objects.filter(traveler=user).order_by("pk").values())
+    stale = preference(client, "both", eur=0, dzd=0, country="FR")
+    proof = client.post("/api/payouts/proofs", {"image": image_upload()}, format="multipart")
+    stale_dzd = client.post("/api/payouts/profiles/dzd", dzd_body(0, proof.data["reference"]),
+                            format="json")
+    for response in (stale, stale_dzd):
+        assert response.status_code == 400 and response.data["code"] == "payout_profile_invalid"
+    assert list(TravelerPayoutMethod.objects.filter(traveler=user).order_by("pk").values()) == rows
+    assert not DzdPayoutProfileRevision.objects.filter(method__traveler=user).exists()
+
+
+def test_f1_another_users_references_stay_private(configured_h4):
+    s, payout, _ = build_manual(prefix="f1owner")
+    other = make_user("f1stranger@h6a.test", is_email_verified=True)
+    client = client_for(other)
+    assert client.get(f"/api/payouts/{payout.public_reference}").status_code == 404
+    assert client.get("/api/payouts?page=1").data["count"] == 0
+    assert summary(client)["methods"] == []
+    owners_proof = upload_evidence(actor=s.traveler, upload=image_upload())
+    borrowed = client.post("/api/payouts/profiles/dzd",
+                           dzd_body(0, owners_proof.public_reference), format="json")
+    assert borrowed.status_code == 400 and borrowed.data["code"] == "payout_profile_invalid"
+    assert not TravelerPayoutMethod.objects.filter(traveler=other).exists()
+
+
+def test_f1_reads_hide_private_fields_claim_no_execution_and_leave_funding_alone(configured_h4):
+    s, payout, _ = build_manual(prefix="f1funded")
+    client = client_for(s.traveler)
+    funded = Payout.objects.filter(pk=payout.pk).values().get()
+    bound = PayoutMethodVersion.objects.filter(pk=payout.method_version_id).values().get()
+    providers = (StripePayoutAccount, PayoutProviderOperation, PayoutAttempt)
+    counts = [model.objects.count() for model in providers]
+    revision = client.get("/api/payouts/profiles/dzd").data["method"]["revision"]
+    proof = client.post("/api/payouts/proofs", {"image": image_upload()}, format="multipart")
+    replaced = client.post("/api/payouts/profiles/dzd", dzd_body(
+        revision, proof.data["reference"], first_name="Privategiven", last_name="Privatefamily",
+        ccp_number="9876543210", ccp_key="34", rip="2" * 20), format="json")
+    assert replaced.status_code == 201, replaced.data
+    bodies = [replaced.data]
+    for switches in ({}, NO_CONNECT, NO_COUNTRIES, OFF):
+        with override_settings(**switches):
+            detail = client.get(f"/api/payouts/{payout.public_reference}").data
+            bodies += [summary(client), client.get("/api/payouts/profiles/dzd").data, detail,
+                       client.get("/api/payouts?page=1").data]
+        # The funded instruction reads the same whatever setup can do now.
+        assert (detail["rail"], detail["amount_eur_cents"], detail["dzd_amount"],
+                detail["fx_rate_micros"], detail["display_state"]) == (
+            "manual_dzd", 6000, 15600, 260000000, "ready")
+    text = json.dumps(bodies, default=str)
+    for private in ("Privategiven", "Privatefamily", "9876543210", "2" * 20,
+                    str(proof.data["reference"]), '"first_name"', '"last_name"',
+                    '"ccp_number"', '"ccp_key"', '"rip"', '"proof_reference"'):
+        assert private not in text, private
+    assert set(actions_in(bodies)) <= OFFERABLE
+    for body in bodies[1::4]:
+        assert body["execution_enabled"] is False
+        assert {body["eur"]["state"], body["dzd"]["state"]}.isdisjoint({"processing", "sent", "paid"})
+    assert Payout.objects.filter(pk=payout.pk).values().get() == funded
+    assert PayoutMethodVersion.objects.filter(pk=payout.method_version_id).values().get() == bound
+    assert [model.objects.count() for model in providers] == counts
+
+
+def test_f1_history_publishes_only_usable_setup_actions_of_the_funded_rail(configured_h4):
+    s, payout, _, _ = build_stripe_payout(prefix="f1rail")
+    payout.block_reason = "payout_setup_required"
+    payout.save(update_fields=["block_reason"])
+    client = client_for(s.traveler)
+    assert summary(client)["dzd"]["available_actions"] == ["configure_dzd"]
+
+    def read():
+        detail = client.get(f"/api/payouts/{payout.public_reference}")
+        listed = client.get("/api/payouts?page=1")
+        assert detail.status_code == 200 and listed.data["count"] == 1
+        assert listed.data["results"][0]["mobile"]["available_actions"] == detail.data["available_actions"]
+        return detail.data
+
+    detail = read()
+    assert detail["display_state"] == "needs_attention"
+    assert detail["blocking_reason"] == "payout_setup_required"
+    # The EUR rail's own usable action; never the DZD setup the traveler could
+    # also start, which would not touch this EUR instruction.
+    assert detail["available_actions"] == ["view_payout", "refresh", "manage_eur"]
+    for switches in (OFF, NO_CONNECT):
+        with override_settings(**switches):
+            assert read()["available_actions"] == ["view_payout", "refresh"]
+    s.traveler.is_email_verified = False
+    s.traveler.save(update_fields=["is_email_verified"])
+    assert read()["available_actions"] == ["view_payout", "refresh"]
+
+
+def test_f1_outages_are_temporary_failures_not_unavailable_setup(monkeypatch):
+    from apps.finance.providers.base import ProviderUnavailable
+
+    user = make_user("f1outage@h6a.test", is_email_verified=True)
+    client = client_for(user)
+    with override_settings(**NO_STORE):
+        body = summary(client)
+        upload = client.post("/api/payouts/proofs", {"image": image_upload()}, format="multipart")
+    # Without its private store DZD setup is not offered, and says why; picking
+    # DZD for future payouts needs no upload and stays open.
+    assert body["dzd"]["available_actions"] == []
+    assert body["dzd"]["unavailable_reason"] == "payout_evidence_unavailable"
+    assert body["dzd"]["selectable"] is True
+    assert upload.status_code == 503 and upload.data["code"] == "payout_evidence_unavailable"
+    gateway = FakeGateway(create=ProviderUnavailable("synthetic outage"))
+    monkeypatch.setattr("apps.finance.payout_accounts.get_connect_gateway", lambda: gateway)
+    monkeypatch.setattr("apps.finance.payout_account_api.get_connect_gateway", lambda: gateway)
+    assert preference(client, "eur_only").status_code == 200
+    failed = client.post("/api/payouts/methods/stripe/onboarding", {}, format="json")
+    assert failed.status_code == 502 and failed.data["code"] == "stripe_connect_provider_error"
+    # An outage changes no stored readiness, so the same setup can be retried.
+    eur = summary(client)["eur"]
+    assert eur["state"] == "setup_required" and eur["available_actions"] == ["configure_eur"]
+    assert not StripePayoutAccount.objects.filter(traveler=user).exists()

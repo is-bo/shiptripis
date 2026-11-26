@@ -1047,16 +1047,23 @@ class TestMobileContract:
         assert "individual.id_number" not in json.dumps(projection, default=str)
         assert projection["payouts_execution_enabled"] is False
 
-    def test_the_projection_offers_the_actions_the_screen_needs(
+    def test_the_methods_read_offers_the_actions_the_screen_needs(
         self, db, h2, traveler
     ):
+        # F1: the next actions have one authority, the H6A read model, which
+        # follows the gates that refuse the write. The H2 readiness projection
+        # no longer carries its own `can_start_onboarding`/`can_manage` flags.
+        from apps.finance.payout_mobile import eur_method, setup_gate
+
         method = method_of(traveler)
-        projection = stripe_setup_projection(method)
-        assert projection["can_start_onboarding"] is True
-        assert projection["can_manage"] is False
+        assert "can_start_onboarding" not in stripe_setup_projection(method)
+        assert eur_method(method, setup_gate(traveler))["available_actions"] == [
+            "configure_eur"
+        ]
         account = make_account(traveler)
         method = bind_version(traveler, account)
-        assert stripe_setup_projection(method)["can_manage"] is True
+        actions = eur_method(method, setup_gate(traveler))["available_actions"]
+        assert "manage_eur" in actions and "configure_eur" not in actions
 
     def test_the_methods_list_exposes_the_same_single_authority(
         self, db, h2, traveler
@@ -1069,10 +1076,13 @@ class TestMobileContract:
         setup = body["methods"][0]["stripe_setup"]
         assert setup["status"] == evaluate_readiness(account).status
 
-    def test_with_connect_disabled_the_projection_reports_unavailable_setup(
+    def test_with_connect_disabled_the_read_reports_unavailable_setup(
         self, db, h2, traveler
     ):
+        from apps.finance.payout_mobile import eur_method, setup_gate
+
         with override_settings(**{**H2, "STRIPE_CONNECT_ENABLED": False}):
-            projection = stripe_setup_projection(method_of(traveler))
-        assert projection["available"] is False
-        assert projection["can_start_onboarding"] is False
+            projection = eur_method(method_of(traveler), setup_gate(traveler))
+        assert projection["supported"] is False
+        assert projection["available_actions"] == []
+        assert projection["unavailable_reason"] == "stripe_connect_unavailable"
