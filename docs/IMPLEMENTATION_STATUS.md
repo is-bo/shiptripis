@@ -1,5 +1,19 @@
 # Waçla V1 Implementation Status
 
+## Wassla: payout setup says what is open, and offers only what the server accepts (F1, 2026-11-26)
+
+- Phone test 2 (plan 1.3): with payout profiles off, `GET /api/payouts/methods` was a bare 404 and the
+  owner saw the payout pages as broken; with them on, the read offered actions the server refused.
+  Server only, no migration, no switch, no new rail. Nothing deployed.
+- One gate, `payout_mobile.setup_gate`, read from the checks that refuse each write, decides every
+  action, choice and reason. The two member reads answer 200 with the stored setup and a new `setup`
+  block (`available`, `unavailable_reason`, `preference_options`); each rail adds `selectable` and
+  `unavailable_reason`. Writes refuse with stable codes: `payout_profiles_disabled` (409, was 404),
+  `payout_traveler_required` (403, now on the Stripe routes too), `stripe_connect_no_countries` (409)
+  beside the existing ones. History detail shows only its funded rail's usable setup actions. Funding,
+  revisions, review and execution untouched. Detail and the F2 shapes:
+  `docs/PHASE_F1_PAYOUT_AVAILABILITY.md`.
+
 ## Wassla: the bell names the ticket decision (N2, 2026-11-26)
 
 - Phone test 2 (plan 1.5): the owner's flight ticket was approved but the bell row only read
