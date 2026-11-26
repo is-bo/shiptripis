@@ -7,6 +7,65 @@ needs is in this repository. Nothing here depends on an earlier conversation.
 **Read `CLAUDE.md` first** (the rules), then this file, then the board
 (`docs/WASSLA_L_SERIES_PROGRESS.md`).
 
+## 0. Current status (2026-11-26) — read this before section 1
+
+Written by the lead session on 2026-11-26 so a session on another account can continue. Sections 1
+to 11 below date from 2026-11-15 and still hold for rules and background; this section overrides
+them where they differ. Server access details are never in this public repository: they live in
+Ismail's local, uncommitted `CLAUDE.local.md` on his PC.
+
+### 0.1 How work runs now (Ismail's rules, latest first)
+- **Lead session** coordinates, reviews, merges and operates; it does not write product code.
+  Builders are Claude Sonnet/Opus agents, one package per worktree, branch and pull request.
+- **Planner:** normally a Claude Opus 5.5 extra-high agent (`CLAUDE.md` "Models"). For the phone
+  test 2 plan and for package C1, Ismail chose **Astra 6.2 (OpenAI) at extra-high** instead.
+- **Reviews:** every package gets an independent second pass by **Astra 6.2 at high effort**. The
+  lead runs it itself through the Codex CLI, read-only, and verifies each finding before sending it
+  back to the builder:
+  `codex exec -m gpt-6.2-astra -s read-only -c model_reasoning_effort=high --output-last-message OUT.md - < PROMPT.md`
+  Prompt templates used so far are in `docs/handoff/astra/` (update the head SHA before reuse).
+  The Codex CLI must be recent (`npm install -g @openai/codex@latest`; 0.163 refused 6.2). Do not
+  ration Astra; if Codex hits its usage limit, tell Ismail (he holds reset credits) and rerun after.
+- **Never deploy, restart the server or build the app without Ismail's explicit OK.** The app is
+  built only after all packages below are merged (one deploy, one Android test build at the end).
+- Every Astra review result is posted as a comment on its pull request; read those comments for the
+  exact open findings.
+
+### 0.2 Live server
+Release `5ee8cd2` (deployed 2026-11-23). Nothing below is deployed. Payments in TEST mode
+(Chargily and Stripe on), Stripe Connect off, payout profiles off, FCM push off.
+
+### 0.3 Packages (phone test 2 plan `docs/WASSLA_PHONE_TEST_2_PLAN.md` + 2026-11-24 fix plan)
+Board: `docs/WASSLA_L_SERIES_PROGRESS.md`, table "Fixes after the phone tests".
+
+| Package | PR | State on 2026-11-26 | Next action |
+|---|---|---|---|
+| P1, P2, P4, P3A, P3C, M1 | #60 #62 #61 #64 #65 #68 | merged | — |
+| N2 bell names the ticket decision | #70 | merged (`ec24abc`), Astra approved | — |
+| P3B profile photos in the app | #66 | Astra rejected round 3 at `d8c3607` (4 blockers: Android picker result crossing purposes, picker marker durability, iOS UIScene launch, account switch window). Builder (Sonnet high) finishing round 4. | Astra re-review of the round-4 head, then merge. Native Kotlin/Swift never compiled: first real compile is the final app build. |
+| G1 guest checkout without CSRF dependency | #67 | Astra rejected recheck at `f1fe565` (blockers: encoded path defeats proxy log redaction; owner and guest can both hold a payable checkout). Builder (Opus xhigh) fixing round 3. | Astra re-review, then merge. |
+| F1 payout setup availability, server | #69 | Astra rejected at `317b55e` (blocker: funding vs preference-change race; 9 should-fix incl. short CCP shown whole). Builder (Opus xhigh) fixing round 2. | Astra re-review, then merge. |
+| N1 notification prompt on first open | #71 | Built, CI green at `6f1b858`; Astra review running. Must rebase on `main` after N2 (ARB files). | Read the Astra result, fix or merge. |
+| C1 pay only in the traveler's currency | — | **New, owner decision Q5 (plan section 6).** Astra extra-high writing the plan (prompt `docs/handoff/astra/c1-plan.md`). | Bring Astra's questions to Ismail, then build after F1 (both touch `payout_snapshots.py`). |
+| F2 payout pages on the phone | — | not started | After F1 and P3B (and C1's contract). |
+| M2 route/date failures on the phone | — | not started | After P3B. |
+| A1 route alert offer (after empty search and after posting) | — | not started | After P3B. |
+| M3 other departure cities, browse only | — | not started | After A1 and M2. |
+
+### 0.4 After every package is merged (each step needs Ismail's OK)
+1. Deploy the reviewed `main` SHA to the VPS (`infra/vps/README.md`), then O2 (guest checkout check).
+2. Build a `release` Android APK with the GitHub "Build Android" workflow, give it to Ismail on his
+   PC, then delete the artifact and the run from GitHub (his rule). Run the device checks listed in
+   the P3B and N1 phase docs.
+3. Operations O3 (FCM push on), O4 (private payout bucket, payout profiles on, DZD rehearsal),
+   O5 (France-only Stripe Connect test), O6 (route alerts), monitor and systemd timers.
+
+### 0.5 Before launch (not code packages)
+Remove the demo data on the live database, rotate the three Backblaze keys, real Stripe and
+Connect, Google Play and Apple accounts and the Data safety form, publish the Google consent
+screen, an uptime monitor, and the older findings (parcel photo GPS metadata, full name on journey
+detail, own-card labels).
+
 ## 1. Start here
 
 ```
