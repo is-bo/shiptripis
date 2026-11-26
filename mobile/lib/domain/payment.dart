@@ -329,10 +329,14 @@ class PaymentAttempt {
   /// money is settling.
   bool get isUnderWay => status.isInFlight && !isExpired;
 
+  /// The payment was made and its money is settling. Only its own outcome
+  /// ends it, whatever its expiry says, and no new checkout opens meanwhile.
+  bool get isSettling => status == PaymentAttemptStatus.processing;
+
   /// Whether the payer can be offered to continue this attempt: its checkout
   /// is open, not yet paid. Continuing asks the checkout endpoint again, which
   /// hands the payer's own checkout back or says a payment is under way.
-  bool get canResume => isUnderWay && status != PaymentAttemptStatus.processing;
+  bool get canResume => isUnderWay && !isSettling;
 }
 
 class PaymentRefund {

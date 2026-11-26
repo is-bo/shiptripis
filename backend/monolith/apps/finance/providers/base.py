@@ -13,6 +13,7 @@ them: unavailable means "try again", error means "this attempt failed".
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Protocol
 
 
@@ -107,6 +108,8 @@ class CheckoutResult:
     checkout_url: str
     #: Provider's own state right after creation. Never treated as success.
     provider_status: str = "pending"
+    #: When the provider stops the checkout collecting on its own, when it says.
+    expires_at: datetime | None = None
     raw: dict = field(default_factory=dict)
 
 
@@ -146,6 +149,10 @@ class ProviderEvent:
     provider_session_id: str = ""
     provider_payment_id: str = ""
     reference: str = ""
+    #: The attempt id our own create request put in the checkout's metadata,
+    #: echoed back. It binds an event that arrives before its checkout was
+    #: stored to that attempt and no other (G1).
+    attempt_reference: str = ""
     amount_minor: int | None = None
     currency: str = ""
     guest_email: str = ""

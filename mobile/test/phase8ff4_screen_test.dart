@@ -403,7 +403,10 @@ void main() {
     );
     await tester.pumpAndSettle();
     final l = L.of(tester.element(find.byType(DealPaymentScreen)));
-    expect(find.text(l.paymentChooseProvider), findsOneWidget);
+    // G1: the Sender's own payment is settling, so the screen waits for it
+    // instead of offering a rail the server would refuse.
+    expect(find.text(l.payResultStillCheckingTitle), findsOneWidget);
+    expect(find.text(l.paymentChooseProvider), findsNothing);
 
     paymentStatus = 'paid';
     attemptStatus = 'succeeded';

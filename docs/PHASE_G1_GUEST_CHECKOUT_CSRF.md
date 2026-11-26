@@ -585,6 +585,125 @@ longer sends one. The two-tap race test is stricter, not looser.
 `docs/screenshots/g1/app-owner-in-progress-{en,ar}.png` and
 `docs/screenshots/g1/app-guest-in-progress-{en,ar}.png`.
 
+## Fifth-pass review
+
+Astra 6.2 rejected `1643afc`: findings 1, 3, 4, 5, 6, 8 and 9 of the fourth pass fixed; 2, 7, B and C
+partly; two new blockers and eight should-fix findings. Each is fixed on this branch, in one commit
+on top of `1643afc`. No fix changes an amount, a fee, a currency or what funds an order.
+
+### 1. A late event from an abandoned checkout could expire the attempt opening now (blocker)
+
+An event naming a checkout that was never stored fell back to the order's newest attempt with no
+checkout stored, which could be the one opening at that moment. Applied once that one had stored and
+handed out its URL, it expired it, and the next tap opened a second checkout beside a payable one.
+
+- **Fix.** Every checkout carries its attempt id in its metadata: Stripe (session and payment
+  intent, as before), Chargily (now, beside the reference) and the mock. The event parsers return it
+  (`ProviderEvent.attempt_reference`), and `_match_attempt` binds by the checkout, then the payment,
+  then that attempt id, and only to an attempt still without a checkout and on the order the event
+  names. The order-only fallback is gone. `reconcile_attempt` takes the event's checkout id and,
+  under the lock, ignores an event about another checkout than the one stored
+  (`another_checkout`); a success of that kind raises, so the money is kept for a human.
+- **Check.** `test_a_late_event_from_an_abandoned_checkout_never_ends_the_one_opening`,
+  `test_an_event_bound_before_its_checkout_was_stored_is_read_again_under_lock`, and the adapter
+  tests `test_an_event_names_the_attempt_its_checkout_was_opened_for` (Stripe session and payment
+  intent) and `test_a_paid_event_is_a_success_and_carries_our_reference` (Chargily).
+
+### 2. Cancelling an order left its issued checkout able to charge (blocker)
+
+`cancel_order` and `close_order_to_collection` cancelled every open attempt in bulk without asking
+any provider, so a URL already handed out could still take a payment.
+
+- **Fix.** Both call `_stop_collecting_attempts`. Under the order lock, each open attempt ends at
+  once, so nothing funds the order from it. One whose checkout was stored also gets
+  `close_requested_at` and a durable `checkout_close` job (new job kind, migration `0036`), which
+  asks its provider to close the checkout after the transaction commits and is retried until the
+  provider confirms (`close_ended_checkout`). A payment already settling is not cancelled: its own
+  outcome ends it, and a success lands as unapplied and is refunded, as before.
+- **Check.** `test_cancelling_the_order_closes_the_checkout_a_payer_holds` (a refused close is
+  retried, then confirmed), `test_closing_the_order_to_collection_closes_its_checkout_too`,
+  `test_an_order_closed_while_a_checkout_opens_has_nothing_to_close`,
+  `test_a_payment_settling_outlives_its_orders_cancellation`.
+
+### 3. A failed delayed payment was polled as settling forever (should-fix)
+
+- **Fix.** `fetch_attempt` reads the session with its payment intent expanded. A completed, unpaid
+  session whose intent is `requires_payment_method` or `canceled` is failed; any other is still
+  processing.
+- **Check.** `StripeReconcileTests` (both outcomes, and the expanded request).
+
+### 4. Close work ran out after eight tries (should-fix)
+
+- **Fix.** The expiry job and the new close job get 32 runs (`CHECKOUT_CLOSE_ATTEMPTS`). With the
+  capped backoff that is about six days, longer than any rail keeps a checkout collecting on its own
+  (Stripe at most a day). An exhausted job is logged at error level, stays visible in the staff job
+  list and can be retried there; an open attempt with a close requested is also closed again by the
+  next checkout tap.
+- **Check.** Asserted on both jobs in `test_cancelling_the_order_closes_the_checkout_a_payer_holds`.
+
+### 5. With receipts off, the stored event kept the payer's address (should-fix)
+
+- **Fix.** The normalised event keeps the provider's address only for an attempt opened with a guest
+  receipt address. Stripe's payload scrubber also drops the session's `customer_email`.
+- **Check.** `test_with_receipts_off_no_surface_keeps_or_sends_an_address` now also checks the
+  stored event, raw and normalised; `test_the_stored_payload_carries_no_customer_pii` covers
+  `customer_email`.
+
+### 6. The technical admin showed the hosted URL and the frozen request (should-fix)
+
+- **Fix.** `PaymentAttemptAdmin` lists an explicit set of fields, without `checkout_url` and
+  `checkout_request`.
+- **Check.** `TechnicalRecordsTests.test_the_technical_attempt_page_shows_no_checkout_url_or_request`
+  renders the page as the owner.
+
+### 7. A recovery refused for credentials abandoned the key (should-fix)
+
+- **Fix.** A recovery that meets `ProviderUnavailable`, `ProviderNotConfigured` or
+  `ProviderConfigurationInvalid` keeps the attempt and its key, releases the claim and answers
+  `CheckoutInProgress` (`RECOVERY_RETRYABLE_ERRORS`). Only a definite refusal abandons it, and only
+  within the ten-minute recovery window.
+- **Check.** `test_a_recovery_refused_for_its_credentials_keeps_the_key`.
+
+### 8. The claim was dated before the lock wait (should-fix)
+
+- **Fix.** `_checkout_step` reads the clock once the order and attempt locks are held.
+- **Check.** `test_a_claim_runs_its_full_window_from_when_it_is_granted` (a five-minute lock wait).
+
+### 9. An attempt could outlive its provider's checkout (should-fix)
+
+- **Fix.** `CheckoutResult.expires_at` carries the provider's own expiry when it states one (Stripe's
+  `expires_at`; the mock in tests). `_store_checkout`, for the first call and for a recovery, moves
+  the attempt's `expires_at` to the earlier of the two and reschedules its expiry and reconciliation
+  jobs. Reuse is refused past it.
+- **Check.** `test_an_owner_is_never_handed_a_checkout_its_provider_expired`, and
+  `test_a_checkout_reports_when_stripe_stops_it_collecting` (adapter).
+
+### 10. A settling owner payment offered Pay (should-fix)
+
+- **Fix.** The owner's payment screen shows a payment that is settling as "We're still confirming
+  your payment" with "Check again", before any resume or rail choice (existing strings in English,
+  French and Arabic). A guest's settling payment keeps the "someone else is paying" notice, even past
+  the attempt's own expiry.
+- **Check.** App tests `the Sender paying by a delayed method is waited for, not offered Pay` and
+  `a guest paying by a delayed method is waited for, not offered Pay`.
+- **Screenshots** (360 px, from a widget test of the whole payment screen with the app's fonts):
+  `docs/screenshots/g1/app-owner-settling-{en,ar}.png`.
+
+**Each new test fails with its fix removed** (14 server mutations, one app mutation): the order-only
+event fallback put back; the lock-time checkout recheck removed; no close job on cancellation; a
+settling payment cancelled with its order; the expiry job's 32 runs removed; credential errors
+abandoning the key; the clock read before the locks; the provider's expiry ignored; the address kept
+in the normalised event; `customer_email` kept by Stripe's scrubber; every completed, unpaid Stripe
+session read as processing; the admin's full field list; and the attempt id dropped by the Chargily
+and Stripe parsers. On the app, the settling branch removed fails both delayed-method tests.
+
+**Tests rewritten to the new rule** (CLAUDE.md: a test that encoded a rule since changed): the
+Chargily create test now expects the attempt id in the checkout's metadata (finding 1). The app test
+`payment screen refreshes from captured and failed events` (phase 8ff4) opened on the Sender's own
+settling payment and expected the rail choice; it now expects the "still confirming" notice and no
+rail choice (finding 10), then goes on to the captured and failed events as before. No assertion was
+removed or loosened.
+
 ## Checks
 
 Locally, against PostgreSQL (embedded cluster, `config.settings.test_pg`):
@@ -629,13 +748,27 @@ After the fourth pass, the same way:
 - App: `dart format`, `flutter analyze --fatal-infos` clean; the whole `flutter test` suite: 1,671
   passed.
 
+After the fifth pass, on Linux against PostgreSQL 16 and Redis 7 with CI's settings:
+
+- `ruff check .`: clean. `makemigrations --check --dry-run`: no changes. `build_helper_instructions
+  --check`: up to date. The job kind added to `0036` changes choices only and emits no SQL, so the
+  schema contract is unchanged.
+- The finance files on the changed paths (guest payment, Stripe, Chargily, recovery, the three
+  concurrency files, lock order, webhooks, j7c, j7d, invariants, jobs and payouts): 389 passed, 0 failed.
+- App: `dart format` and `flutter analyze --fatal-infos` clean. The whole `flutter test` suite failed
+  only on the phase 8ff4 test rewritten above, which passes since.
+- The whole Django and app suites run in CI on the pushed commit, as the project runs long suites on
+  GitHub.
+
 ## Handoff
 
 - **Board:** G1 built, PR open. Migration `finance 0036` adds three nullable or defaulted columns
-  to the payment attempt; the schema contract is regenerated in the same commit.
+  to the payment attempt and the `checkout_close` job kind; the schema contract is regenerated in the
+  same commit.
 - **Gate, second pass (strongest-model package).** Astra 6.2 rejected `4337d9c` (five findings) and
-  `f1fe565` (six findings) and `d99c838` (three blockers, six should-fix); all are fixed (see the
-  second, third and fourth-pass sections). Astra re-reviews the fourth pass before merge.
+  `f1fe565` (six findings), `d99c838` (three blockers, six should-fix) and `1643afc` (two blockers,
+  eight should-fix); all are fixed (see the second to fifth-pass sections). Astra re-reviews the
+  fifth pass before merge.
 - **Deploy (Ismail's approval).** The proxy changes (findings 1, A and F) reach the server only with a
   release: update the `/opt/wacla` checkout to the merged commit and `vps deploy` the image built from
   it. No configuration or secret changes.

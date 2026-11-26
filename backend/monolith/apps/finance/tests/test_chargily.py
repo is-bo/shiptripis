@@ -132,7 +132,7 @@ class ChargilyCheckoutTests(TestCase):
             "failure_url": "https://shiptrip.test/no",
             "webhook_url": "https://shiptrip.test/api/payments/webhooks/chargily",
             "description": "Waçla delivery payment",
-            "metadata": {"order_reference": "ref-9"},
+            "metadata": {"order_reference": "ref-9", "attempt_id": "41"},
         }
         base.update(overrides)
         return CheckoutRequest(**base)
@@ -161,7 +161,9 @@ class ChargilyCheckoutTests(TestCase):
         assert payload["currency"] == "dzd"
         assert payload["success_url"] == "https://shiptrip.test/ok"
         assert payload["webhook_endpoint"].endswith("/webhooks/chargily")
-        assert payload["metadata"] == [{"reference": "ref-9"}]
+        # The attempt id comes back on the webhook and binds an early event to
+        # this attempt alone (G1).
+        assert payload["metadata"] == [{"reference": "ref-9", "attempt_id": "41"}]
         assert result.provider_session_id == "01checkout"
 
     def test_a_eur_checkout_is_refused_rather_than_converted_by_the_adapter(self):
@@ -198,7 +200,7 @@ class ChargilyCheckoutTests(TestCase):
                     "status": "paid",
                     "amount": 9_375,
                     "currency": "dzd",
-                    "metadata": [{"reference": "ref-9"}],
+                    "metadata": [{"reference": "ref-9", "attempt_id": "41"}],
                 },
             },
             separators=(",", ":"),
@@ -213,6 +215,9 @@ class ChargilyCheckoutTests(TestCase):
         assert event.amount_minor == 9_375
         assert event.currency == "DZD"
         assert event.reference == "ref-9"
+        # The attempt it was opened for, which binds it before its checkout
+        # was stored (G1).
+        assert event.attempt_reference == "41"
 
     def test_a_paid_label_over_an_unpaid_object_is_not_trusted(self):
         body = json.dumps(

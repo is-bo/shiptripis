@@ -163,6 +163,7 @@ FINANCE_JOB_KINDS = frozenset(
         ScheduledJob.Kind.DEPOSIT_EXPIRY_REFUND,
         ScheduledJob.Kind.PAYMENT_GRACE_RELEASE,
         ScheduledJob.Kind.ATTEMPT_EXPIRY,
+        ScheduledJob.Kind.CHECKOUT_CLOSE,
         ScheduledJob.Kind.PROVIDER_RECONCILE,
         ScheduledJob.Kind.PROVIDER_EVENT_PROCESS,
         ScheduledJob.Kind.REFUND_RECONCILE,

@@ -244,6 +244,7 @@ def mock_event_body(
     event_type: str = "checkout.updated",
     guest_email: str = "",
     failure_code: str = "",
+    attempt_id: int | str = "",
 ) -> bytes:
     return json.dumps(
         {
@@ -254,6 +255,7 @@ def mock_event_body(
                 "session_id": session_id,
                 "payment_id": payment_id,
                 "reference": reference,
+                "attempt_id": str(attempt_id),
                 "amount": amount,
                 "currency": currency,
                 "guest_email": guest_email,

@@ -18,6 +18,7 @@ import hmac
 import json
 import time
 import uuid
+from datetime import UTC, datetime
 from urllib.parse import parse_qs
 
 from django.test import TestCase, override_settings
@@ -260,6 +261,24 @@ class StripeCheckoutTests(TestCase):
         assert result.provider_session_id == "cs_test_1"
         assert result.checkout_url.startswith("https://checkout.stripe.test/")
 
+    def test_a_checkout_reports_when_stripe_stops_it_collecting(self):
+        gateway = _gateway(
+            [
+                _FakeResponse(
+                    200,
+                    {
+                        "id": "cs_test_1",
+                        "url": "https://checkout.stripe.test/cs_test_1",
+                        "expires_at": 1_800_000_000,
+                    },
+                )
+            ]
+        )
+
+        result = gateway.create_checkout(self._request())
+
+        assert result.expires_at == datetime(2027, 1, 15, 8, 0, tzinfo=UTC)
+
     def test_a_non_eur_checkout_is_refused_rather_than_converted(self):
         gateway = _gateway()
 
@@ -408,6 +427,49 @@ class StripeCloseCheckoutTests(TestCase):
         assert gateway._session.calls == []
 
 
+class StripeReconcileTests(TestCase):
+    """G1: a completed, unpaid session is settling or failed, as its intent says."""
+
+    def _snapshot(self, intent_status):
+        gateway = _gateway(
+            [
+                _FakeResponse(
+                    200,
+                    {
+                        "id": "cs_test_1",
+                        "status": "complete",
+                        "payment_status": "unpaid",
+                        "payment_intent": {"id": "pi_1", "status": intent_status},
+                        "amount_total": 6_250,
+                        "currency": "eur",
+                    },
+                )
+            ]
+        )
+        snapshot = gateway.fetch_attempt(
+            provider_session_id="cs_test_1", provider_payment_id=""
+        )
+        [call] = gateway._session.calls
+        assert call["method"] == "GET"
+        assert call["url"] == (
+            "https://api.stripe.test/v1/checkout/sessions/cs_test_1"
+            "?expand%5B%5D=payment_intent"
+        )
+        return snapshot
+
+    def test_a_delayed_payment_still_settling_is_processing(self):
+        for status in ("processing", "requires_action"):
+            with self.subTest(status):
+                assert self._snapshot(status).outcome == "processing"
+
+    def test_a_delayed_payment_that_failed_is_failed_without_its_webhook(self):
+        for status in ("requires_payment_method", "canceled"):
+            with self.subTest(status):
+                snapshot = self._snapshot(status)
+                assert snapshot.outcome == "failed"
+                assert snapshot.provider_payment_id == "pi_1"
+
+
 class StripeWebhookParsingTests(TestCase):
     def _event(self, event_type: str, obj: dict, event_id: str = "evt_1") -> bytes:
         return json.dumps(
@@ -528,6 +590,7 @@ class StripeWebhookParsingTests(TestCase):
                 "id": "cs_4",
                 "payment_status": "paid",
                 "customer_details": {"email": "guest@example.com", "name": "A Guest"},
+                "customer_email": "prefilled@example.com",
                 "billing_details": {"address": {"line1": "1 Secret Street"}},
             },
         )
@@ -538,8 +601,35 @@ class StripeWebhookParsingTests(TestCase):
         # The email is used to label the attempt but is scrubbed from storage.
         assert event.guest_email == "guest@example.com"
         assert "guest@example.com" not in stored
+        assert "prefilled@example.com" not in stored
         assert "1 Secret Street" not in stored
         assert "[redacted]" in stored
+
+    def test_an_event_names_the_attempt_its_checkout_was_opened_for(self):
+        session = self._parse(
+            self._event(
+                "checkout.session.expired",
+                {
+                    "object": "checkout.session",
+                    "id": "cs_5",
+                    "client_reference_id": "ref-5",
+                    "metadata": {"order_reference": "ref-5", "attempt_id": "41"},
+                },
+            )
+        )
+        intent = self._parse(
+            self._event(
+                "payment_intent.payment_failed",
+                {
+                    "object": "payment_intent",
+                    "id": "pi_5",
+                    "metadata": {"order_reference": "ref-5", "attempt_id": "41"},
+                },
+                event_id="evt_2",
+            )
+        )
+
+        assert session.attempt_reference == intent.attempt_reference == "41"
 
     def test_a_body_that_is_not_json_is_rejected(self):
         body = b"not json at all"

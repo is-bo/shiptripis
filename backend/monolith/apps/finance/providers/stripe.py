@@ -25,6 +25,7 @@ import hashlib
 import hmac
 import logging
 import time
+from datetime import UTC, datetime
 from urllib.parse import urlencode
 
 import requests
@@ -381,10 +382,18 @@ class StripeGateway:
         checkout_url = body.get("url", "")
         if not session_id or not checkout_url:
             raise ProviderError("Stripe did not return a usable checkout session.")
+        expires_at = body.get("expires_at")
         return CheckoutResult(
             provider_session_id=session_id,
             checkout_url=checkout_url,
             provider_status=body.get("status", "open"),
+            # A session stops collecting at its own `expires_at` (a day by
+            # default), whatever our attempt's lifetime says (G1).
+            expires_at=(
+                datetime.fromtimestamp(expires_at, tz=UTC)
+                if isinstance(expires_at, int) and not isinstance(expires_at, bool)
+                else None
+            ),
             raw=_scrub(body),
         )
 
@@ -426,22 +435,34 @@ class StripeGateway:
 
         if not provider_session_id:
             raise ProviderError("No Stripe session to reconcile.")
+        # The payment intent comes inline: a completed session that is still
+        # unpaid is either a delayed payment settling or one that failed, and
+        # only the intent tells the two apart (G1).
         body = self._request(
             "GET",
-            f"/v1/checkout/sessions/{provider_session_id}",
+            f"/v1/checkout/sessions/{provider_session_id}?expand%5B%5D=payment_intent",
             operation="checkout_fetch",
         )
         payment_status = body.get("payment_status", "")
         session_status = body.get("status", "")
         payment_intent = body.get("payment_intent") or ""
+        intent_status = ""
         if isinstance(payment_intent, dict):
+            intent_status = str(payment_intent.get("status") or "")
             payment_intent = payment_intent.get("id", "")
         if payment_status == "paid":
             outcome = "succeeded"
         elif session_status == "expired":
             outcome = "expired"
         elif session_status == "complete" and payment_status == "unpaid":
-            outcome = "processing"
+            # A failed delayed payment sends its intent back to
+            # `requires_payment_method`, and a completed session offers no
+            # second try, so that payment is over.
+            outcome = (
+                "failed"
+                if intent_status in _FAILED_INTENT_STATUSES
+                else "processing"
+            )
         elif session_status == "complete":
             outcome = "failed"
         else:
@@ -543,6 +564,12 @@ class StripeGateway:
         guest_email = ""
         if isinstance(customer_details, dict):
             guest_email = str(customer_details.get("email") or "")
+        # A session and its payment intent both carry the metadata our create
+        # request set, the attempt id included.
+        metadata = obj.get("metadata") or {}
+        attempt_reference = (
+            str(metadata.get("attempt_id") or "") if isinstance(metadata, dict) else ""
+        )
 
         return ProviderEvent(
             provider=self.name,
@@ -556,6 +583,7 @@ class StripeGateway:
             provider_session_id=str(session_id or ""),
             provider_payment_id=str(payment_intent or ""),
             reference=str(obj.get("client_reference_id") or ""),
+            attempt_reference=attempt_reference,
             amount_minor=obj.get("amount_total"),
             currency=str(obj.get("currency") or "").upper(),
             guest_email=guest_email,
@@ -603,6 +631,11 @@ class StripeGateway:
 
 
 #: Keys that must never be persisted from a provider payload.
+#: A payment intent in one of these states will not settle the session it
+#: belongs to.
+_FAILED_INTENT_STATUSES = frozenset({"requires_payment_method", "canceled"})
+
+
 _SENSITIVE_KEYS = frozenset(
     {
         "client_secret",
@@ -614,6 +647,7 @@ _SENSITIVE_KEYS = frozenset(
         "billing_details",
         "shipping_details",
         "receipt_email",
+        "customer_email",
         "email",
         "phone",
         "address",

@@ -18,8 +18,10 @@ import hashlib
 import hmac
 import json
 import secrets
+from datetime import timedelta
 
 from django.conf import settings
+from django.utils import timezone
 
 from .base import (
     CHECKOUT_CLOSED,
@@ -68,6 +70,9 @@ class MockGateway:
     _closed: set[str] = set()
     #: Session id -> exception `close_checkout` raises instead of closing it.
     _close_failures: dict[str, Exception] = {}
+    #: How long a new checkout collects before the mock provider expires it,
+    #: when a test says so; none stated otherwise.
+    _checkout_lifetime: list[timedelta] = []
 
     def __init__(self, *, webhook_secret: str = MOCK_WEBHOOK_SECRET):
         self.webhook_secret = webhook_secret
@@ -99,6 +104,12 @@ class MockGateway:
             cls._close_failures[session_id] = error
 
     @classmethod
+    def set_checkout_lifetime(cls, lifetime: timedelta | None) -> None:
+        """State an expiry on every new checkout, or stop. Test helper."""
+
+        cls._checkout_lifetime[:] = [lifetime] if lifetime is not None else []
+
+    @classmethod
     def is_payable(cls, session_id: str) -> bool:
         """Whether a payer holding this session's URL could still pay it."""
 
@@ -118,6 +129,7 @@ class MockGateway:
         cls._refund_calls.clear()
         cls._closed.clear()
         cls._close_failures.clear()
+        cls._checkout_lifetime.clear()
 
     @classmethod
     def successful_funds_minor(
@@ -185,6 +197,11 @@ class MockGateway:
             provider_session_id=session_id,
             checkout_url=f"https://mock.invalid/checkout/{session_id}",
             provider_status="pending",
+            expires_at=(
+                timezone.now() + self._checkout_lifetime[0]
+                if self._checkout_lifetime
+                else None
+            ),
             raw={"id": session_id, "amount": request.amount_minor},
         )
         self._checkouts[request.idempotency_key] = result
@@ -269,6 +286,7 @@ class MockGateway:
             provider_session_id=str(data.get("session_id") or ""),
             provider_payment_id=str(data.get("payment_id") or ""),
             reference=str(data.get("reference") or ""),
+            attempt_reference=str(data.get("attempt_id") or ""),
             amount_minor=data.get("amount"),
             currency=str(data.get("currency") or "EUR").upper(),
             guest_email=str(data.get("guest_email") or ""),

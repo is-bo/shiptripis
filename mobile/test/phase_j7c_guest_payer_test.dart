@@ -764,6 +764,65 @@ void main() {
         expect(find.text(l.paymentContinueAction), findsNothing);
       },
     );
+
+    // G1: a payment made and settling (a delayed method) is ended only by its
+    // own outcome. The server refuses every new checkout until then, so the
+    // screen opened afresh offers a way to check, never a way to pay.
+    for (final (who, guest, expiresAt) in const [
+      ('the Sender', false, '2099-01-01T00:00:00Z'),
+      ('a guest', true, '2000-01-01T00:00:00Z'),
+    ]) {
+      testWidgets(
+        '$who paying by a delayed method is waited for, not offered Pay',
+        (tester) async {
+          final order = PaymentOrder.fromJson(
+            _order(
+              attempts: [
+                {
+                  'id': 9,
+                  'provider': 'stripe',
+                  'status': 'processing',
+                  'amount_eur_cents': 4250,
+                  'payment_currency': 'EUR',
+                  'provider_amount_minor': 4250,
+                  'provider_amount_exponent': 2,
+                  'is_guest_payment': guest,
+                  // Settling outlives the attempt's own expiry.
+                  'expires_at': expiresAt,
+                },
+              ],
+              providers: [rail('stripe', guest: true)],
+            ),
+          );
+          await pumpApp(
+            tester,
+            Scaffold(
+              body: SingleChildScrollView(
+                child: CheckoutSection(
+                  orderReference: _ref,
+                  order: order,
+                  onSettled: () {},
+                ),
+              ),
+            ),
+            container: containerFor(providersBackend()),
+          );
+          await tester.pumpAndSettle();
+          final l = L.of(tester.element(find.byType(CheckoutSection)));
+
+          expect(
+            find.text(
+              guest ? l.guestPayingNowTitle : l.payResultStillCheckingTitle,
+            ),
+            findsOneWidget,
+          );
+          expect(find.text(l.paymentCheckAgain), findsOneWidget);
+          expect(find.text(l.paymentChooseProvider), findsNothing);
+          expect(find.byIcon(Icons.lock_rounded), findsNothing);
+          expect(find.text(l.paymentContinueAction), findsNothing);
+        },
+      );
+    }
   });
 
   // -------------------------------------------------------------------------

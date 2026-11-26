@@ -250,6 +250,30 @@ def handle_attempt_expiry(payload: dict) -> str:
     return result
 
 
+def handle_checkout_close(payload: dict) -> str:
+    """Close the checkout of an attempt that ended with its order (G1).
+
+    `cancel_order` and `close_order_to_collection` end the attempt at once and
+    leave this job to make its provider stop the checkout a payer may still
+    hold. Retried until the provider confirms.
+    """
+
+    from .providers import ProviderError
+    from .services import close_ended_checkout
+
+    attempt_id = payload.get("attempt_id")
+    if not isinstance(attempt_id, int):
+        raise PermanentJobError(
+            "checkout_close needs an integer attempt_id.", code="invalid_payload"
+        )
+    try:
+        return close_ended_checkout(attempt_id=attempt_id)
+    except ProviderError as exc:
+        raise RetryableJobError(
+            "The provider has not confirmed the checkout closed.", code=exc.code
+        ) from exc
+
+
 def handle_provider_reconcile(payload: dict) -> str:
     """Ask the provider what really happened, for a webhook that never came.
 
@@ -765,6 +789,7 @@ HANDLERS = {
     ScheduledJob.Kind.DEPOSIT_EXPIRY_REFUND: handle_deposit_expiry_refund,
     ScheduledJob.Kind.PAYMENT_GRACE_RELEASE: handle_payment_grace_release,
     ScheduledJob.Kind.ATTEMPT_EXPIRY: handle_attempt_expiry,
+    ScheduledJob.Kind.CHECKOUT_CLOSE: handle_checkout_close,
     ScheduledJob.Kind.PROVIDER_RECONCILE: handle_provider_reconcile,
     ScheduledJob.Kind.PROVIDER_EVENT_PROCESS: handle_provider_event_process,
     ScheduledJob.Kind.REFUND_RECONCILE: handle_refund_reconcile,
@@ -831,6 +856,7 @@ def _already_satisfied_reason(job: ScheduledJob) -> str:
     payload = dict(job.payload or {})
     if job.kind in {
         ScheduledJob.Kind.ATTEMPT_EXPIRY,
+        ScheduledJob.Kind.CHECKOUT_CLOSE,
         ScheduledJob.Kind.PROVIDER_RECONCILE,
     }:
         attempt_id = payload.get("attempt_id")
@@ -839,6 +865,9 @@ def _already_satisfied_reason(job: ScheduledJob) -> str:
         attempt = PaymentAttempt.objects.filter(pk=attempt_id).first()
         if attempt is None:
             return "attempt_missing"
+        if job.kind == ScheduledJob.Kind.CHECKOUT_CLOSE:
+            # Only the provider's answer proves its checkout closed.
+            return ""
         if job.kind == ScheduledJob.Kind.ATTEMPT_EXPIRY:
             return (
                 "attempt_already_terminal"

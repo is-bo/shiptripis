@@ -633,7 +633,7 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
     final resumable = order?.latestAttempt;
     if (order != null &&
         resumable != null &&
-        resumable.isUnderWay &&
+        (resumable.isUnderWay || resumable.isSettling) &&
         resumable.isGuestPayment) {
       // Somebody the Sender sent the link to is on the provider's page now.
       // That session is theirs: offering "continue your payment" would send
@@ -669,6 +669,30 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
                 onSettled: widget.onSettled,
               ),
             ),
+          ),
+        ],
+      );
+    }
+    if (resumable != null && resumable.isSettling) {
+      // The Sender's own payment was made and is settling. The server answers
+      // every new checkout with "a payment is under way" until it settles, so
+      // offering a rail would only offer a refusal.
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InfoNotice(
+            title: l.payResultStillCheckingTitle,
+            message: l.payResultStillCheckingBody,
+            tone: StatusTone.waiting,
+            icon: Icons.hourglass_top_rounded,
+          ),
+          const SizedBox(height: AppSpace.lg),
+          AppButton(
+            label: l.paymentCheckAgain,
+            icon: Icons.refresh_rounded,
+            variant: AppButtonVariant.secondary,
+            isLoading: _checkingManually,
+            onPressed: _checkNow,
           ),
         ],
       );

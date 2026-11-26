@@ -36,6 +36,17 @@
   A lost create keeps its key; Stripe's "key in use" is retryable. The app shows "A payment is
   already under way" on the owner and guest screens. Amounts, provider idempotency and webhook-only
   settlement unchanged. Detail: `docs/PHASE_G1_GUEST_CHECKOUT_CSRF.md`.
+- Fifth pass (Astra 6.2, two blockers and eight should-fix findings fixed). A provider event is bound
+  to the attempt its checkout was opened for (the attempt id in the checkout's metadata, on Stripe,
+  Chargily and the mock), never to an order's newest attempt, and is checked against the stored
+  checkout under the lock. Cancelling an order, or closing it to collection, ends its attempts and
+  has a new `checkout_close` job close each issued checkout at its provider; a settling payment is
+  left to its outcome. Close work retries for about six days. With receipts off no stored event
+  keeps the payer's address. The technical admin lists an explicit field set without the hosted URL
+  or the frozen request. A recovery refused for credentials keeps the key; the claim is dated after
+  the locks; an attempt ends no later than its provider's own checkout expiry; a completed, unpaid
+  Stripe session is read with its payment intent; and the owner screen shows a settling payment
+  without a Pay button. Migration `0036` also adds the new job kind.
 
 ## Wassla: the bell names the ticket decision (N2, 2026-11-26)
 

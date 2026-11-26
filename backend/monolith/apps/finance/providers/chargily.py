@@ -333,8 +333,14 @@ class ChargilyGateway:
             "webhook_endpoint": request.webhook_url,
             "description": request.description[:255],
             # Chargily echoes metadata back on the webhook, which is how an
-            # event finds its attempt even if the session id is missing.
-            "metadata": [{"reference": request.reference}],
+            # event finds its own attempt even before its checkout id was
+            # stored (G1).
+            "metadata": [
+                {
+                    "reference": request.reference,
+                    "attempt_id": str(request.metadata.get("attempt_id") or ""),
+                }
+            ],
         }
         body = self._request(
             "POST", "/checkouts", operation="checkout_create", payload=payload
@@ -446,14 +452,20 @@ class ChargilyGateway:
             outcome = "ignored"
 
         reference = ""
+        attempt_reference = ""
         metadata = data.get("metadata")
-        if isinstance(metadata, list):
-            for entry in metadata:
-                if isinstance(entry, dict) and entry.get("reference"):
-                    reference = str(entry["reference"])
-                    break
-        elif isinstance(metadata, dict):
-            reference = str(metadata.get("reference") or "")
+        entries = (
+            [metadata]
+            if isinstance(metadata, dict)
+            else metadata
+            if isinstance(metadata, list)
+            else []
+        )
+        for entry in entries:
+            if isinstance(entry, dict) and entry.get("reference"):
+                reference = str(entry["reference"])
+                attempt_reference = str(entry.get("attempt_id") or "")
+                break
 
         return ProviderEvent(
             provider=self.name,
@@ -463,6 +475,7 @@ class ChargilyGateway:
             provider_session_id=str(data.get("id") or ""),
             provider_payment_id=str(data.get("id") or ""),
             reference=reference,
+            attempt_reference=attempt_reference,
             amount_minor=data.get("amount"),
             currency=str(data.get("currency") or "").upper(),
             failure_code=str(data.get("failure_reason") or ""),

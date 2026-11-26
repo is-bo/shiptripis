@@ -1383,6 +1383,7 @@ class ScheduledJob(models.Model):
         DEPOSIT_EXPIRY_REFUND = "deposit_expiry_refund", "Deposit expiry refund"
         PAYMENT_GRACE_RELEASE = "payment_grace_release", "Payment grace release"
         ATTEMPT_EXPIRY = "attempt_expiry", "Checkout attempt expiry"
+        CHECKOUT_CLOSE = "checkout_close", "Ended checkout close"
         PROVIDER_RECONCILE = "provider_reconcile", "Provider reconciliation"
         PROVIDER_EVENT_PROCESS = "provider_event_process", "Provider event processing"
         REFUND_RECONCILE = "refund_reconcile", "Refund reconciliation"
