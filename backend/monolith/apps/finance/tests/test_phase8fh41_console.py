@@ -324,8 +324,13 @@ def test_the_queue_shows_the_settlement_amount_and_what_it_waits_on(configured_h
     assert "Manual DZD transfer" in body
     assert "€60.00" in body and "15,600 DZD" in body
     assert "Ready - claim and send" in body
-    # A queue never carries account data, masked or otherwise.
-    assert SECRET_CCP not in body and f"•••• {SECRET_CCP[-4:]}" not in body
+    # A queue never carries account data, masked or otherwise: neither the
+    # numbers nor either of the two masks this profile has.
+    assert profile.ccp_last_four and profile.rip_last_four
+    assert profile.ccp_last_four != profile.rip_last_four
+    assert SECRET_CCP not in body and SECRET_RIP not in body
+    assert f"•••• {profile.ccp_last_four}" not in body
+    assert f"•••• {profile.rip_last_four}" not in body
 
 
 @pytest.mark.django_db

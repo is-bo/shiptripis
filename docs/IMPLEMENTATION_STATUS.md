@@ -19,6 +19,12 @@
   `00799999` plus that number; masks never show more than half of it. An account of another country or
   an unresolved creation is no longer offered as a new setup; a Stripe failure after binding keeps the
   account and the retry finishes it. The DZD read carries the common contract.
+- Round 3 (Astra review of `f3f37a3`): onboarding binds only the method version it started on, so a
+  preference committed while Stripe answers is never overwritten (409 `payout_preference_changed`; an
+  account Stripe created meanwhile is kept, unbound). The read and onboarding share one account country
+  decision. An ambiguous creation is recovered with its own key and country, per platform and mode, and a
+  refused recovery search no longer opens a second Stripe account. Refresh locks the method before the
+  account, as onboarding does. The read offers `resume_eur_setup` while Stripe still needs the traveler.
 
 ## Wassla: the bell names the ticket decision (N2, 2026-11-26)
 

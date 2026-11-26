@@ -11,15 +11,16 @@ from apps.parcels import tracking
 
 from .models import FinanceHold, Payout, PayoutProfileReview, TravelerPayoutMethod
 from .payout_accounts import (
-    AccountCountryMismatch,
     AccountCreationUnresolved,
     ConnectUnavailable,
     CountryUnsupported,
     account_country,
+    account_country_refusal,
     allowed_countries,
     creation_unresolved,
     evaluate_readiness,
     expected_mode,
+    onboarding_incomplete,
     require_connect_enabled,
     standing_accounts,
 )
@@ -90,9 +91,11 @@ def eur_method(method, gate):
     # An active account this version is not bound to: onboarding binds it when
     # it was opened for the declared country and refuses otherwise.
     held = standing_accounts(method.traveler_id).first() if method and not account else None
-    held_country = account_country(account or held) if account or held else None
-    mismatch = bool(held and held_country != country)
-    unresolved = bool(method and not account and not held and creation_unresolved(method))
+    standing = account or held
+    held_country = account_country(standing) if standing else None
+    # The same country decision onboarding makes before it reuses an account.
+    refusal = account_country_refusal(country, standing) if standing else None
+    unresolved = bool(method and not standing and creation_unresolved(method))
     state, reason = "not_configured", "payout_setup_required"
     if account:
         verdict = evaluate_readiness(account)
@@ -105,8 +108,11 @@ def eur_method(method, gate):
             else "payout_setup_required" if state == "setup_required"
             else "payout_profile_needs_attention"
         )
-    elif mismatch or unresolved:
-        state, reason = "needs_attention", "payout_profile_needs_attention"
+    elif refusal is not None or unresolved:
+        state, reason = "needs_attention", (
+            "payout_country_unsupported" if isinstance(refusal, CountryUnsupported)
+            else "payout_profile_needs_attention"
+        )
     elif version:
         state = "setup_required"
     if not country_supported:
@@ -117,19 +123,17 @@ def eur_method(method, gate):
         unavailable = ConnectUnavailable.code
     elif not countries:
         unavailable = NO_COUNTRIES
-    elif held_country and held_country not in countries:
-        unavailable = CountryUnsupported.code
-    elif mismatch:
-        unavailable = AccountCountryMismatch.code
+    elif refusal is not None:
+        unavailable = type(refusal).code
     elif unresolved:
         unavailable = AccountCreationUnresolved.code
     else:
         unavailable = None
     # Each action follows the write it leads to: every Stripe call needs the
     # member gate and Connect; a resumed onboarding also needs the account
-    # country to be open, which refresh and dashboard access do not. A new
-    # setup collects the account country first, so a saved country that has
-    # closed does not stop it.
+    # country decision to pass, which refresh and dashboard access do not. A
+    # new setup collects the account country first, so a saved country that
+    # has closed does not stop it.
     connect = gate.refusal is None and gate.connect
     actions = []
     account_usable = bool(account and account.active and account.provider_mode == expected_mode()
@@ -138,7 +142,11 @@ def eur_method(method, gate):
         actions.append("refresh")
         if account.details_submitted:
             actions.append("manage_eur")
-        if state == "setup_required" and method.enabled and country in countries:
+        # The hosted link is the only way back into Stripe's onboarding, also
+        # after a call that bound the account but got no link.
+        if method.enabled and refusal is None and (
+            state == "setup_required" or onboarding_incomplete(account)
+        ):
             actions.append("resume_eur_setup")
     elif not account and unavailable is None:
         actions.append("configure_eur")

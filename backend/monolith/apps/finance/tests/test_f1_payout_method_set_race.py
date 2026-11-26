@@ -9,8 +9,10 @@ neither committed preference had. Both sides now take the traveler's method-set
 lock (`apps.core.financial_locks.lock_payout_method_set`) first.
 
 Real threads, real connections, real locks, on PostgreSQL only. Each test pauses
-one side while it holds the set, proves the other side is waiting on a lock,
-then lets both finish. Every worker exception is re-raised in the main thread.
+one side while it holds the set, proves the other side's backend is waiting for
+this traveler's set lock and that the first side's backend is the one blocking
+it, then lets both finish. Every worker exception is re-raised in the main
+thread.
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ from django.db import connection, connections
 from django.test import TransactionTestCase, override_settings
 from rest_framework.test import APIClient
 
+from apps.core.financial_locks import PAYOUT_METHOD_SET_LOCK
 from apps.core.tests.business_settings_seed import seed_business_settings
 from apps.finance import payout_snapshots
 from apps.finance.models import Payout
@@ -89,21 +92,32 @@ class PayoutMethodSetRaceTest(TransactionTestCase):
             deal_id=self.deal.pk, traveler_id=self.traveler.pk, amount_eur_cents=6_000
         )
 
-    def wait_until_another_backend_waits_on_a_lock(self):
-        """Prove the second side reached the set and is blocked, not finished."""
+    def wait_until_blocked_on_the_set(self, pids):
+        """Prove the trailing backend waits for this traveler's set, held by the leader.
+
+        Its own ungranted advisory lock on this traveler's key, and the leading
+        backend among the ones blocking it: no other waiter in the database can
+        satisfy this, and neither can a trailing side that already finished.
+        """
 
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "SELECT count(*) FROM pg_stat_activity "
-                    "WHERE datname = current_database() AND pid <> pg_backend_pid() "
-                    "AND wait_event_type = 'Lock'"
-                )
-                if cursor.fetchone()[0]:
+            if "trailing" in pids:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT %s = ANY(pg_blocking_pids(l.pid)) FROM pg_locks l "
+                        "WHERE l.pid = %s AND l.locktype = 'advisory' AND NOT l.granted "
+                        "AND l.classid::bigint = %s AND l.objid::bigint = %s "
+                        "AND l.objsubid = 2",
+                        [pids["leading"], pids["trailing"], PAYOUT_METHOD_SET_LOCK,
+                         self.traveler.pk & 0x7FFFFFFF],
+                    )
+                    row = cursor.fetchone()
+                if row is not None:
+                    self.assertTrue(row[0], "The set was held by another backend.")
                     return
             time.sleep(0.05)
-        self.fail("The second transaction never waited on a lock.")
+        self.fail("The second transaction never waited on the traveler's method set.")
 
     def race(self, first, second, *, pause):
         """Start `first`, hold it inside its transaction, then start `second`.
@@ -115,6 +129,7 @@ class PayoutMethodSetRaceTest(TransactionTestCase):
         holding, release = Event(), Event()
         target, attribute = pause
         original = getattr(target, attribute)
+        pids = {}
 
         def paused(*args, **kwargs):
             holding.set()
@@ -122,12 +137,21 @@ class PayoutMethodSetRaceTest(TransactionTestCase):
                 raise AssertionError("The race was never released.")
             return original(*args, **kwargs)
 
+        def tracked(name, fn):
+            def run():
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT pg_backend_pid()")
+                    pids[name] = cursor.fetchone()[0]
+                return fn()
+
+            return run
+
         with ThreadPoolExecutor(max_workers=2) as pool, patch.object(target, attribute, paused):
-            leading = pool.submit(in_own_connection(first))
+            leading = pool.submit(in_own_connection(tracked("leading", first)))
             try:
                 self.assertTrue(holding.wait(30), "The first side never held the set.")
-                trailing = pool.submit(in_own_connection(second))
-                self.wait_until_another_backend_waits_on_a_lock()
+                trailing = pool.submit(in_own_connection(tracked("trailing", second)))
+                self.wait_until_blocked_on_the_set(pids)
             finally:
                 release.set()
             return leading.result(timeout=60), trailing.result(timeout=60)
