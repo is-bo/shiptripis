@@ -1,11 +1,21 @@
 You are an independent second-pass reviewer. This review is read-only: do not write, commit or push code, and do not comment on GitHub. You may read files and run read-only git commands.
 
-Review pull request #71, "N1: ask for notifications once on first open", in this repository (is-bo/shiptripis), at head `6f1b858fd1c8b062a79909814a1cd808e4000dea`. Use a three-dot diff against `origin/main`, and run `git fetch origin` first if the commit is missing.
+Review pull request #71, "N1: ask for notifications once on first open", in this repository (is-bo/shiptripis), at head `HEADSHA` (round 2; round 1 was `6f1b858`). Use a three-dot diff against `origin/main`, and run `git fetch origin` first if the commit is missing.
 - The Flutter app is under `mobile/lib/`.
 - The rules are in `CLAUDE.md`, especially "Mobile rules" and the rule that strings must exist in EN/FR/MSA.
 - The package is section 4 "N1" of `docs/WASSLA_PHONE_TEST_2_PLAN.md`, and the finding is section 1.2.
 - The write-up is `docs/PHASE_N1_NOTIFICATION_FIRST_OPEN.md`.
 - The screenshots are in `docs/screenshots/n1/`.
+
+## Round 2
+Your round-1 review rejected `6f1b858` with six findings; round 2 answers them (phase doc, "Registration order" and "What changed"). Verify each fix is real and complete, and hunt for what it broke:
+1. Late registration rebinding the phone: the app numbers registrations and sign-outs per installation, and the server (`PushInstallationBinding`, migration `notifications.0009`, `apps/notifications/push.py`) refuses a lower number with 409. Check races, the row lock, sign-out before first registration, idempotent repeat, the catch-up path (`current_sequence`) and its retry bound.
+2. Prompt timing: post-frame checks on route changes, deferral over splash, `/auth/`, the guest payment screen and a pending deep link, one frame awaited before the request.
+3. Foreground: `resumed` only, count taken back when the system was never reached, two failures per run at most.
+4. Android `notDetermined` with a spent count; iOS exception kept.
+5. The count rule for Settings is removed; the system's `deniedPermanently` decides.
+6. Guest Profile Notifications row, public `/profile/notifications`, guest variant of the screen, new copy in EN/FR/MSA.
+Also check that no test was weakened (phase doc lists the four rewritten ones).
 
 ## Owner decision (treat as correct)
 The app asks for notification permission once, by itself, on the first usable foreground screen. That is after first paint and messaging initialization, and it includes a guest. Registering the device to an account needs sign-in, and only happens after a grant. A denial leaves the app usable, and there is no automatic re-prompt.
