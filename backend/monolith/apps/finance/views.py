@@ -89,9 +89,22 @@ logger = logging.getLogger(__name__)
 
 
 class GuestPaymentThrottle(AnonRateThrottle):
-    """Bound token-guessing attempts against the unauthenticated surface."""
+    """Bound token-guessing attempts against the unauthenticated surface.
+
+    One bucket per client address, signed in or not (G1). `AnonRateThrottle`
+    lets an authenticated request through unthrottled, and the guest page sits
+    behind the session middleware, so a member's cookie would otherwise lift
+    the bound. The guest surfaces take no authority from a session, so they
+    take no exemption from one either.
+    """
 
     scope = "guest_payment"
+
+    def get_cache_key(self, request, view):
+        return self.cache_format % {
+            "scope": self.scope,
+            "ident": self.get_ident(request),
+        }
 
 
 def _finance_error_response(exc: Exception) -> Response:

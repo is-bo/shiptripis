@@ -583,6 +583,7 @@ class BrowserCheckoutTests(_BalanceCase):
         )
         self.link = self.issued.link
         self.page = f"/pay/guest/{self.issued.token}"
+        MockGateway.reset()
 
     def tap(self, client=None, *, path=None, data=None, **headers):
         """Press the page's button, as the browser submits it unless told otherwise."""
@@ -744,6 +745,92 @@ class BrowserCheckoutTests(_BalanceCase):
         assert "This payment has already been completed" in after.content.decode()
         assert self.attempts().count() == 1
 
+    @override_settings(TRANSACTIONAL_EMAIL_ENABLED=True)
+    def test_a_second_holder_with_another_address_is_not_shown_the_checkout(self):
+        aunt = self.tap(data={"email": "aunt@example.com"})
+        assert aunt.status_code == 302
+        url = aunt["Location"]
+
+        stranger = self.tap(data={"email": "stranger@example.com"})
+
+        html = stranger.content.decode()
+        assert stranger.status_code == 409
+        assert "already open under another email address" in html
+        assert 'aria-invalid="true"' in html
+        assert 'value="stranger@example.com"' in html
+        assert url not in html and "Location" not in stranger
+        assert_private(stranger)
+        attempt = self.attempts().get()
+        assert attempt.guest_email == "aunt@example.com"
+        assert attempt.checkout_url == url
+
+        # The first holder still reaches their checkout.
+        assert self.tap(data={"email": "aunt@example.com"})["Location"] == url
+
+    def test_a_tap_while_the_first_is_still_opening_is_asked_to_wait(self):
+        real_create = MockGateway.create_checkout
+        during = []
+
+        def second_tap_meanwhile(gateway, request):
+            if not during:
+                during.append("entered")
+                during.append(self.tap())
+                during.append(
+                    list(self.attempts().values_list("status", "checkout_url"))
+                )
+            return real_create(gateway, request)
+
+        with mock.patch.object(
+            MockGateway, "create_checkout", new=second_tap_meanwhile
+        ):
+            first = self.tap()
+
+        waiting = during[1]
+        html = waiting.content.decode()
+        assert waiting.status_code == 409
+        assert "Your payment page is being opened" in html
+        assert "no longer active" not in html
+        assert "Payments are paused" not in html
+        assert_private(waiting)
+        assert during[2] == [("created", "")]
+        attempt = self.attempts().get()
+        assert first.status_code == 302
+        assert first["Location"] == attempt.checkout_url
+        assert MockGateway.checkout_session_ids() == [attempt.provider_session_id]
+
+        # "Try again" resends the same choice and reaches that one checkout.
+        assert '<input type="hidden" name="provider" value="mock">' in html
+        assert self.tap()["Location"] == attempt.checkout_url
+        assert self.attempts().count() == 1
+
+    def test_a_tap_replaced_while_opening_is_asked_to_wait(self):
+        """The owner pays in the app while the guest's checkout is opening:
+        the guest is told to try again, not sent to an empty or closed one."""
+
+        real_create = MockGateway.create_checkout
+        owner = []
+
+        def owner_pays_meanwhile(gateway, request):
+            if not owner:
+                owner.append("entered")
+                owner.append(
+                    open_mock_checkout(self.order, actor_id=self.scenario.sender.pk)
+                )
+            return real_create(gateway, request)
+
+        with mock.patch.object(
+            MockGateway, "create_checkout", new=owner_pays_meanwhile
+        ):
+            response = self.tap()
+
+        assert response.status_code == 409
+        assert "Your payment page is being opened" in response.content.decode()
+        guest_attempt = self.attempts().get(guest_link=self.link)
+        assert guest_attempt.status == PaymentAttempt.Status.CANCELLED
+        assert guest_attempt.checkout_url == ""
+        live = self.attempts().get(status__in=PaymentAttempt.OPEN_STATUSES)
+        assert live.pk == owner[1].pk
+
     def test_a_provider_failure_funds_nothing_and_the_link_still_works(self):
         with mock.patch.object(
             MockGateway, "create_checkout", side_effect=ProviderError("rail down")
@@ -849,6 +936,60 @@ class BrowserCheckoutTests(_BalanceCase):
         for name, response in responses.items():
             with self.subTest(name):
                 assert_private(response)
+
+    def test_a_server_error_on_the_page_is_private_too(self):
+        """Django builds the 500 for an exception in the view or in a later
+        middleware only after the view's wrappers have unwound. The headers
+        come from the first middleware, which sees that response too."""
+
+        failing = Client(raise_request_exception=False)
+        with self.assertLogs("django.request", level="ERROR"):
+            with mock.patch.object(
+                guest_web, "_throttled", side_effect=RuntimeError("cache down")
+            ):
+                from_view = failing.get(self.page)
+            with mock.patch(
+                "django.contrib.sessions.middleware.SessionMiddleware.process_request",
+                side_effect=RuntimeError("session store down"),
+            ):
+                from_middleware = failing.post(
+                    self.page, {"provider": "mock"}, **SHELL_SUBMIT
+                )
+
+        for name, response in {"view": from_view, "middleware": from_middleware}.items():
+            with self.subTest(name):
+                assert response.status_code == 500
+                assert_private(response)
+        assert not self.attempts().exists()
+
+    def test_a_session_does_not_lift_the_guest_bound(self):
+        """One bucket per client address, signed in or not, and the page shares
+        it with the app's guest endpoints."""
+
+        from apps.finance.views import GuestPaymentThrottle
+
+        member = browser()
+        member.force_login(self.scenario.outsider)
+        api = reverse("finance-guest-payment", args=[self.issued.token])
+        with mock.patch.dict(
+            GuestPaymentThrottle.THROTTLE_RATES, {"guest_payment": "2/min"}
+        ):
+            # Strangers use up an address's budget; a member's session from
+            # the same address does not reopen it.
+            spent = "203.0.113.10"
+            for _ in range(2):
+                assert browser().get(self.page, REMOTE_ADDR=spent).status_code == 200
+            assert member.get(self.page, REMOTE_ADDR=spent).status_code == 429
+            assert APIClient().get(api, REMOTE_ADDR=spent).status_code == 429
+
+            # A member's own requests count against the address like anyone's.
+            shared = "203.0.113.11"
+            for _ in range(2):
+                assert member.get(self.page, REMOTE_ADDR=shared).status_code == 200
+            assert browser().get(self.page, REMOTE_ADDR=shared).status_code == 429
+            tapped = self.tap(member, REMOTE_ADDR=shared, **SHELL_SUBMIT)
+            assert tapped.status_code == 429
+        assert not self.attempts().exists()
 
     def test_the_token_stays_out_of_the_provider_logs_and_navigation(self):
         secrets = (self.issued.token, self.link.token_hash, self.link.token_seed)

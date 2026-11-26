@@ -4,19 +4,26 @@
 
 - Phone test 2, finding 1.1: pressing "Pay" on a shared guest link answered "CSRF verification
   failed". The page's no-referrer policy makes Chromium submit with `Origin: null` and no Referer,
-  which Django's CSRF check refuses. Plan `WASSLA_PHONE_TEST_2_PLAN.md`, package G1. Server only, no
-  migration. Nothing deployed.
+  which Django's CSRF check refuses. Plan `WASSLA_PHONE_TEST_2_PLAN.md`, package G1. Server and
+  proxy configuration only, no migration. Nothing deployed.
 - `guest_payment_page` alone is exempt from Django's CSRF check and its form carries no CSRF token:
   the link token in the path is the authority, and the session is never read, so a signed-in member
-  pays as a guest. Every guest page response, redirects and errors included, sends
-  `Referrer-Policy: no-referrer` and `Cache-Control: private, no-store`. No global middleware or
-  trusted-origin change.
+  pays as a guest. Every guest page response, redirects and Django's own 500s included, sends
+  `Referrer-Policy: no-referrer` and `Cache-Control: private, no-store`, from
+  `GuestPagePrivacyMiddleware`, first in `MIDDLEWARE` and scoped to `/pay/guest/`. No CSRF or
+  trusted-origin change anywhere else.
 - `start_checkout` reads a guest link again under the order lock that revoking and replacing take
   (`_recheck_guest_link`), bound to its own order; a link stopped, expired, used or paired with another
   order since the page read it starts nothing (`guest_link_invalid`). One validity rule,
-  `_guest_link_payable`, serves both reads. Provider idempotency and retries unchanged. Tests run with
-  CSRF enforced, including a real-thread revocation race. Detail:
-  `docs/PHASE_G1_GUEST_CHECKOUT_CSRF.md`.
+  `_guest_link_payable`, serves both reads.
+- Second pass (Astra 6.2), five findings fixed: both Caddy proxies redact guest paths in the error
+  logger's URI and Referer; the guest throttle keys by client address whether or not a session is
+  signed in; an open guest checkout is handed only to the receipt address it was opened with
+  (another address gets `guest_checkout_in_progress`, never the URL, never an overwrite); a matching
+  checkout still being opened, or one superseded mid-call, answers the retryable
+  `checkout_in_progress` and keeps its provider key, so a double tap opens one provider session.
+  The page shows a translated "being opened" state with a resend button. Provider idempotency and
+  webhook-only settlement unchanged. Detail: `docs/PHASE_G1_GUEST_CHECKOUT_CSRF.md`.
 
 ## Wassla: chat photos, server side (P3C, 2026-11-24)
 

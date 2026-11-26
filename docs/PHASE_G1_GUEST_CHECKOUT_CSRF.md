@@ -1,8 +1,10 @@
 # G1: guest checkout without a browser-session dependency (2026-11-25)
 
 Phone test 2, finding 1.1, and package G1 of `docs/WASSLA_PHONE_TEST_2_PLAN.md` (section 4; builder
-Claude Opus, extra high). Server only: `apps/finance` and `templates/payments`. No migration, no Go,
-no Dart, no new string, no switch. Nothing is deployed by this change.
+Claude Opus, extra high). Server only: `apps/finance` and `templates/payments`, plus, from the second
+pass, one line of `config/settings/base.py` and the two Caddy files in `infra/vps`. No migration, no
+Go, no Dart, no switch. Three new page strings, in English, French and Arabic. Nothing is deployed
+by this change.
 
 ## The failure
 
@@ -21,11 +23,12 @@ Referer".
   `templates/payments/guest.html` no longer renders `{% csrf_token %}`. Nothing else is exempt: no
   global middleware change, no trusted origin added, `Origin: null` trusted nowhere else.
 - **Every guest page response carries `Referrer-Policy: no-referrer` and `Cache-Control: private,
-  no-store`**, through one decorator, `_private`, wrapping the view outside `require_http_methods`. So
-  the 200 page, the 302 redirect to the provider, the 400 validation page, the 404 dead-link page, the
-  409, 429 and 503 pages and the 405 all carry both. The view's header wins over
-  `SECURE_REFERRER_POLICY`, which `SecurityMiddleware` only sets when absent. The shell keeps its meta
-  tag.
+  no-store`**, from `GuestPagePrivacyMiddleware` in `guest_web.py`, first in `MIDDLEWARE` and acting
+  only on paths under `/pay/guest/`. So the 200 page, the 302 redirect to the provider, the 400
+  validation page, the 404 dead-link page, the 409, 429 and 503 pages, the 405 and Django's own 500
+  all carry both. Its header replaces the `SECURE_REFERRER_POLICY` value `SecurityMiddleware` set
+  further in. The shell keeps its meta tag. (The first round used a view decorator; see the second
+  pass, finding 2.)
 - **Checkout reads the guest link again under the order lock.** `start_checkout` calls
   `_recheck_guest_link(order=..., link_id=...)` right after `_order_for_update`, before anything else
   happens under that lock. It reads the link `FOR NO KEY UPDATE`, filtered by its id **and this order**,
@@ -88,10 +91,9 @@ still marks the attempt failed.
   which is what `resolve_guest_link` already promises for every dead link.
 - **A link stopped mid-tap answers the uniform page with status 409**, the status the page already used
   for a checkout refusal. A prober cannot use it: reaching that branch takes a token that resolved.
-- **Two taps at the same moment.** One-open-attempt-per-order still decides: the later tap may
-  supersede an attempt whose handoff had not been stored yet, and that earlier request then shows "try
-  again" (503). A browser shows only the latest navigation, which goes to the one live checkout. This
-  is existing `start_checkout` behaviour, kept as the package requires.
+- **Two taps at the same moment.** The later tap waits on the order lock, then reuses the first
+  checkout or, if its provider call is still out, is asked to wait (second pass, finding 5). It no
+  longer supersedes the first attempt, so the provider opens one session.
 - **Logs.** The guest page's own log lines name the order id only. Django's `django.request` logger
   repeats the concrete path on 4xx/5xx; production keeps it at ERROR and its formatter replaces that
   message with the route template (`test_deployment_safety`). The CSRF refusal, which also logged the
@@ -138,13 +140,15 @@ used, order closed and paired with another order are each refused with `GuestLin
 attempt; the owner's own checkout needs no link; the app's JSON guest checkout gets the same recheck
 (404 `guest_link_invalid`, no attempt).
 
-New, `apps/finance/tests/test_concurrency.py`, `GuestPageRaceTests` (2, PostgreSQL, real threads):
+New, `apps/finance/tests/test_concurrency.py`, `GuestPageRaceTests` (2 here, PostgreSQL, real threads;
+the second pass adds a third):
 
 - a revocation holds the order lock, uncommitted; the payer's tap reads the still-valid link, enters
   checkout and is observed waiting; the revocation commits; the tap answers the uniform page and no
   attempt exists;
-- two taps at once leave exactly one open attempt, every handed-off tap went to it, and delivering
-  success for every attempt the provider knows funds the order once.
+- two taps at once leave exactly one attempt, which holds the provider's only session; every
+  handed-off tap went to it, any other tap was asked to wait, and the signed success funds the order
+  once (tightened in the second pass: it counts the provider's sessions and skips no row).
 
 Rewritten to the new rule (the browser shape with CSRF on, previously a CSRF-off `APIClient`): the four
 page submissions in `ReceiptEmailTests` and `PublicPageTests` (j7c) and
@@ -171,6 +175,121 @@ No state scrolls horizontally (`scrollWidth` equals the 360 px viewport in all s
 local test rail; on the server it is the card rail. The page's look is unchanged by G1; the only markup
 change is the removed hidden token field.
 
+The second pass adds two states, captured the same way (the opening state from a real second tap
+made while the first tap's provider call was out):
+
+- `guest-opening-en.png`, `guest-opening-ar.png`: "Your payment page is being opened", with a "Try
+  again" button that resends the same rail and address;
+- `guest-conflict-en.png`, `guest-conflict-ar.png`: a second holder's tap with another receipt
+  address, the 409 with the error under the email field.
+
+Neither scrolls horizontally at 360 px.
+
+## Second-pass review
+
+Astra 6.2 rejected the pull request at `4337d9c` with five findings. The lead accepted all five, and
+each is fixed on this branch. Provider idempotency and webhook-only settlement are unchanged, and no
+fix changes what is charged or what funds an order.
+
+### 1. Guest tokens in the proxies' error logs (blocker)
+
+Neither proxy writes access logs, but Caddy's `http.log.error` logger records the request of a failed
+proxy call, URI and headers included: a guest page request answered 502 while the app was down
+wrote its token into the proxy log.
+
+- **Fix.** Both proxies, the edge (`infra/vps/Caddyfile`) and the gateway inside the app image
+  (`infra/vps/gateway.Caddyfile`), configure the default logger, which is where `http.log.error`
+  writes, with a `filter` format. It rewrites `request>uri` and `request>headers>Referer`, replacing
+  the segment after `/pay/guest/` or `/api/payments/guest/` with `REDACTED`. Everything else in the
+  entry is kept.
+- **Check.** `infra/vps/tests/test_proxy_logs.py` starts each shipped Caddyfile with its upstream
+  absent (a local `caddy` binary, or the image pinned in `compose.yml` through Docker; the CI job
+  `vps-readiness` has Docker). It sends the page path, the JSON path and the JSON checkout path with
+  a guest Referer and asserts three 502s, three `http.log.error` entries whose URI and Referer read
+  `REDACTED`, and the token nowhere in the proxy's output. Red before the fix, green after, locally
+  on Caddy 2.10.0 (the production image's version) and 2.8.4; `caddy validate` passes on both.
+- **Deploy.** Nothing to configure. The edge file is read from the `/opt/wacla` checkout when the
+  caddy container starts, and `vps deploy` stops and starts it; the gateway file is copied into the
+  app image. So the normal release procedure (`infra/vps/README.md`, "Release commands": update the
+  checkout to the merged commit, then `vps deploy` the image built from it) applies both. The admin
+  API is off, so there is no live reload: until a release, or a `vps stop` and `vps start` of the
+  updated checkout for the edge alone, the running proxies keep logging the URI of a failed request.
+
+### 2. A server error skipped the private headers
+
+The first round set the headers in a view decorator. An exception in the view, or in a middleware
+after the session one, becomes Django's 500 only after that decorator has unwound, so the 500 left
+without them.
+
+- **Fix.** `GuestPagePrivacyMiddleware`, first in `MIDDLEWARE`, sets both headers on every response
+  under `/pay/guest/`, the 500 included. The decorator is gone.
+- **Check.** `test_a_server_error_on_the_page_is_private_too`: a failure raised in the view (the
+  throttle's cache read) and one raised in `SessionMiddleware` each answer a 500 with both headers.
+
+### 3. A signed-in session lifted the guest throttle
+
+`GuestPaymentThrottle` extended DRF's `AnonRateThrottle`, which does not throttle an authenticated
+request. The page runs behind the session middleware, so a member's cookie took it out of the guest
+bound.
+
+- **Fix.** `GuestPaymentThrottle.get_cache_key` keys by client address whatever `request.user` is.
+  The page, the JSON guest endpoints and the provider-return page (which shares `_throttled`) share
+  that one bucket per address, signed in or not.
+- **Check.** `test_a_session_does_not_lift_the_guest_bound`: strangers exhaust an address's budget,
+  then a signed-in member from it gets 429 on the page and the JSON surface; a member's own requests
+  exhaust a second address for a stranger and for the member's tap.
+
+### 4. An open checkout's receipt address was overwritten
+
+A second holder of the link, with another receipt address, was handed the open hosted session (whose
+provider page carries the first holder's address) and overwrote the address stored on the attempt.
+
+- **Fix.** For a matching open guest checkout, `start_checkout` compares the address (ignoring case).
+  A different one, an empty one included, raises `GuestCheckoutInProgress`: nothing is written and
+  the session's URL is not returned. The same address is handed the same checkout. The page shows
+  the refusal under the email field (409) so the payer can correct theirs; with receipts off there is
+  no field, so it shows the opening state below. The JSON surface answers 409
+  `guest_checkout_in_progress`, the code the app already knows.
+- **Check.** `OpenCheckoutTests` (another address and an empty one refused, address and URL kept, one
+  provider session; the same address in other case reuses; the JSON answer carries no URL) and
+  `test_a_second_holder_with_another_address_is_not_shown_the_checkout` on the page.
+
+### 5. A second checkout while the first was at the provider
+
+An open attempt with no URL yet, because its provider call was still out, was superseded by the next
+matching request, which then opened a second provider session under a new key. The first request
+then found its attempt cancelled and returned a session with an empty URL (the page said "payments
+are paused"; the JSON answered 201 with an empty `checkout_url`).
+
+- **Fix.** A matching attempt with no URL created within `CHECKOUT_OPENING_WINDOW` (2 minutes) is
+  treated as still opening: the caller gets `CheckoutInProgress` (409 `checkout_in_progress`,
+  retryable), the attempt keeps its idempotency key and nothing is superseded. The window is far
+  above the provider call's bound (3.05 s to connect, 15 s to read, no retries), so an older such
+  attempt belongs to a request that died and is superseded as before. After the provider call,
+  `start_checkout` returns only an open attempt with a URL; one superseded meanwhile (another rail,
+  another payer) raises `CheckoutInProgress` instead of handing out a closed session. The page shows
+  "Your payment page is being opened" with a button that resends the same choices.
+- **Money.** A session is only ever handed out with its own attempt's URL, so no one is sent to a
+  superseded checkout. Waiting instead of superseding means one provider session per double tap,
+  where there were two. Settlement still comes only from the signed webhook or reconciliation.
+- **Check.** `OpenCheckoutTests`: a call made while the first is at the provider is refused and finds
+  the attempt `created` without a URL under the same key; afterwards one attempt, one provider
+  session, and the retry reuses it. An attempt whose request died is refused inside the window and
+  superseded after it. An owner paying while the guest's checkout opens leaves the guest a 409
+  `checkout_in_progress` with no URL. The page tests cover both waits. `GuestPageRaceTests` (real
+  threads on PostgreSQL): the first tap's provider call is held open, the second tap on its own
+  connection is asked to wait, then one attempt, the same key, one provider session, and the retry is
+  handed it. `test_two_taps_at_once_leave_one_checkout_and_fund_once` and
+  `CheckoutRaceTests.test_two_simultaneous_checkouts_leave_exactly_one_open_attempt` now assert the
+  mock provider's session count and skip no row without a handle. `MockGateway.checkout_session_ids`
+  is the provider-side count.
+
+**The tests depend on the fixes.** Against the first-round code (`4337d9c`), the five new page tests
+fail. With only the `start_checkout` changes reverted (the classes kept so the files import), the six
+`OpenCheckoutTests` and the held-provider race fail. The two barrier races pass on both: with an
+instant test provider they rarely reach the in-flight window, which is why the held-provider test
+exists.
+
 ## Checks
 
 Locally, against PostgreSQL (embedded cluster, `config.settings.test_pg`):
@@ -187,10 +306,11 @@ CI on the PR's commit: all checks green, Schema drift and the four Django shards
 
 - **Board:** G1 built, PR open. No migration, so no contract regeneration; Schema drift is expected
   green.
-- **Gate, second pass (strongest-model package).** For Astra: that a session never adds authority on
-  the guest page; that the lock order (order, link, attempt) adds no edge against revoke, replace and
-  payment success; that the race tests assert real outcomes; that a failed, repeated or superseded
-  attempt cannot fund twice; that no response or log line carries the token.
+- **Gate, second pass (strongest-model package).** Done by Astra 6.2: rejected at `4337d9c` with five
+  findings, all fixed (see "Second-pass review"). A re-review of the fixes is the lead's call.
+- **Deploy (Ismail's approval).** The proxy redaction (finding 1) reaches the server only with a
+  release: update the `/opt/wacla` checkout to the merged commit and `vps deploy` the image built from
+  it. No configuration or secret changes.
 - **After merge:** rerun the integrated finance suite once F1 is merged too (plan section 4, G1).
 - **O2 after an approved deployment** (plan section 3): a fresh synthetic link through public HTTPS in
   Android Chrome, an embedded browser if available, and once with a Wassla login open; Stripe test rail

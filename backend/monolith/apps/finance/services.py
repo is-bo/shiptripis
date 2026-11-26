@@ -98,6 +98,12 @@ GUEST_TOKEN_BYTES = 32
 #: failed ScheduledJob an operator has to think to look at.
 REFUND_MANUAL_ESCALATION_ATTEMPTS = 8
 
+#: How long an open attempt with no hosted URL yet counts as being opened by
+#: the request that wrote it. That request's provider call makes no retry and
+#: times out within seconds, so one that has stored nothing by then has died,
+#: and its attempt is superseded like a stale one (G1).
+CHECKOUT_OPENING_WINDOW = timedelta(minutes=2)
+
 
 # --- errors ------------------------------------------------------------------
 
@@ -146,6 +152,16 @@ class GuestCheckoutInProgress(FinanceError):
     """The current link already has a payer partway through a checkout."""
 
     code = "guest_checkout_in_progress"
+
+
+class CheckoutInProgress(FinanceError):
+    """This checkout is still being opened by an earlier request. Retryable.
+
+    Its attempt keeps its provider idempotency key, so the retry is handed the
+    one hosted session the provider opened instead of starting a second (G1).
+    """
+
+    code = "checkout_in_progress"
 
 
 class RefundNotPermitted(FinanceError):
@@ -1293,6 +1309,11 @@ def start_checkout(
     A guest link is read again under the order lock (`_recheck_guest_link`),
     so the attempt is bound to a link that is live at that moment and belongs
     to this order.
+
+    A session is returned only with a URL to visit. A matching checkout that is
+    still being opened, or one replaced while its provider call was out,
+    answers `CheckoutInProgress`; another receipt address on a guest link's
+    open checkout answers `GuestCheckoutInProgress` (G1).
     """
 
     policy = policy or phase3_policy()
@@ -1339,16 +1360,32 @@ def start_checkout(
             still_valid = (
                 open_attempt.expires_at is None or open_attempt.expires_at > now
             )
+            opening = (
+                not open_attempt.checkout_url
+                and open_attempt.created_at > now - CHECKOUT_OPENING_WINDOW
+            )
             if (
                 same_rail
                 and same_amount
                 and same_payer
                 and still_valid
-                and open_attempt.checkout_url
+                and (open_attempt.checkout_url or opening)
             ):
-                if guest_link is not None and open_attempt.guest_email != guest_email:
-                    open_attempt.guest_email = guest_email[:254]
-                    open_attempt.save(update_fields=["guest_email", "updated_at"])
+                if guest_link is not None and (
+                    open_attempt.guest_email.casefold()
+                    != guest_email[:254].casefold()
+                ):
+                    # The hosted session carries its first holder's receipt
+                    # address. Another address is refused, never written over
+                    # it, and never handed that session's URL (G1).
+                    raise GuestCheckoutInProgress(
+                        "A payment with this link is open under another address."
+                    )
+                if opening:
+                    # The request that wrote it is still at the provider.
+                    # Superseding it would open a second hosted session under a
+                    # new key; waiting keeps the one key (G1).
+                    raise CheckoutInProgress("This checkout is still being opened.")
                 return CheckoutSession(attempt=open_attempt, created=False)
             # Switching rail, amount or a stale session: close the old attempt
             # so the one-open-attempt-per-order invariant holds and two live
@@ -1455,6 +1492,16 @@ def start_checkout(
                     "updated_at",
                 ]
             )
+        if stored.status not in PaymentAttempt.OPEN_STATUSES or not stored.checkout_url:
+            # Superseded while the provider call was out. Its hosted session
+            # is no one's to visit, so the payer is told to try again rather
+            # than handed an empty or a closed checkout (G1).
+            logger.info(
+                "finance.checkout_superseded_in_flight order=%s attempt=%s",
+                order_id,
+                stored.pk,
+            )
+            raise CheckoutInProgress("This checkout was replaced while opening.")
         schedule_job(
             kind=ScheduledJob.Kind.ATTEMPT_EXPIRY,
             key=f"attempt_expiry:{stored.pk}",

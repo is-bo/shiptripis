@@ -33,7 +33,6 @@ from __future__ import annotations
 import logging
 import math
 from datetime import datetime
-from functools import wraps
 
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
@@ -50,7 +49,9 @@ from .models import GuestPaymentLink, PaymentOrder
 from .policy import InvalidPaymentPolicy, phase3_policy
 from .providers import ProviderError
 from .services import (
+    CheckoutInProgress,
     FinanceError,
+    GuestCheckoutInProgress,
     guest_payment_view,
     hash_guest_token,
     resolve_guest_link,
@@ -79,6 +80,10 @@ COPY: dict[str, dict[str, str]] = {
             "due. It doesn't create an account."
         ),
         "email_error": "Enter a valid email address so we can send your receipt.",
+        "email_conflict": (
+            "A payment with this link is already open under another email "
+            "address. Use that address to continue it, or try again later."
+        ),
         "pay": "Pay {amount}",
         "pay_generic": "Continue to payment",
         "handoff": (
@@ -102,6 +107,11 @@ COPY: dict[str, dict[str, str]] = {
         "unavailable_body": (
             "Your link is fine — we just can't take a payment right now. Please "
             "try again shortly; there's no need to ask for a new link."
+        ),
+        "opening_title": "Your payment page is being opened",
+        "opening_body": (
+            "A payment for this link was started a moment ago, perhaps by you. "
+            "Wait a few seconds, then try again."
         ),
         "try_again": "Try again",
         "purpose_posting_deposit": "Deposit for a delivery request",
@@ -129,6 +139,11 @@ COPY: dict[str, dict[str, str]] = {
             "remboursement vous est dû. Aucun compte n’est créé."
         ),
         "email_error": "Saisissez une adresse e-mail valide pour recevoir votre reçu.",
+        "email_conflict": (
+            "Un paiement est déjà ouvert avec ce lien sous une autre adresse "
+            "e-mail. Utilisez cette adresse pour le poursuivre, ou réessayez "
+            "plus tard."
+        ),
         "pay": "Payer {amount}",
         "pay_generic": "Continuer vers le paiement",
         "handoff": (
@@ -154,6 +169,11 @@ COPY: dict[str, dict[str, str]] = {
             "Votre lien est valable : nous ne pouvons simplement pas encaisser "
             "pour l’instant. Réessayez dans un moment ; inutile de demander un "
             "nouveau lien."
+        ),
+        "opening_title": "Votre page de paiement est en cours d’ouverture",
+        "opening_body": (
+            "Un paiement a été lancé avec ce lien il y a un instant, peut-être "
+            "par vous. Patientez quelques secondes, puis réessayez."
         ),
         "try_again": "Réessayer",
         "purpose_posting_deposit": "Acompte pour une demande de livraison",
@@ -181,6 +201,10 @@ COPY: dict[str, dict[str, str]] = {
             "لك أي حساب."
         ),
         "email_error": "أدخل بريدًا إلكترونيًا صالحًا لنرسل إليك الإيصال.",
+        "email_conflict": (
+            "توجد دفعة مفتوحة بالفعل عبر هذا الرابط ببريد إلكتروني آخر. استخدم "
+            "ذلك البريد لمتابعتها، أو أعد المحاولة لاحقًا."
+        ),
         "pay": "ادفع {amount}",
         "pay_generic": "المتابعة إلى الدفع",
         "handoff": (
@@ -204,6 +228,11 @@ COPY: dict[str, dict[str, str]] = {
         "unavailable_body": (
             "رابطك صالح، لكن لا يمكننا استلام الدفع حاليًا. أعد المحاولة بعد "
             "قليل، ولا حاجة لطلب رابط جديد."
+        ),
+        "opening_title": "جارٍ فتح صفحة الدفع",
+        "opening_body": (
+            "بدأ أحدهم الدفع عبر هذا الرابط قبل لحظات، وربما كنت أنت. انتظر بضع "
+            "ثوانٍ ثم أعد المحاولة."
         ),
         "try_again": "أعد المحاولة",
         "purpose_posting_deposit": "عربون لطلب توصيل",
@@ -354,6 +383,29 @@ def _no_rail(request: HttpRequest, lang: str) -> HttpResponse:
     )
 
 
+def _opening(
+    request: HttpRequest, lang: str, *, provider: str, email: str
+) -> HttpResponse:
+    """A checkout for this link is already being opened, likely a tap ago (G1).
+
+    Neither a dead link nor an outage. The same choices sent again in a moment
+    are handed that one checkout, so the page offers to resend them.
+    """
+
+    return _page(
+        request,
+        lang,
+        {
+            "payable": False,
+            "opening": True,
+            "chosen": provider,
+            "email": email,
+            "checkout_action": request.path,
+        },
+        status=409,
+    )
+
+
 def _completed_link(token: str):
     """The stored link behind `token` when its payment is complete (J7D).
 
@@ -376,28 +428,38 @@ def _completed_link(token: str):
     return link
 
 
-def _private(view):
-    """No referrer and no cache on every response, redirects and errors too.
+#: Where `guest_payment_page` is routed (`config/urls.py`).
+GUEST_PAGE_PREFIX = "/pay/guest/"
+
+
+class GuestPagePrivacyMiddleware:
+    """No referrer and no cache on every response under the guest page's path.
 
     The path is the capability. `Referrer-Policy` keeps it out of whatever the
     browser requests next, the provider's page after the redirect included,
     and `private, no-store` keeps every cache from holding a page or a
     redirect to a checkout under it. The shell's meta tag covers the rendered
     document; a redirect has no document, so the header says it for both.
+
+    A middleware, first in `MIDDLEWARE`, rather than a view decorator (G1): an
+    exception in the view or in a later middleware becomes Django's 500 only
+    after a decorator has unwound, and this sees that response as well. Its
+    header replaces the `SECURE_REFERRER_POLICY` value `SecurityMiddleware`
+    has already set.
     """
 
-    @wraps(view)
-    def wrapped(request: HttpRequest, *args, **kwargs) -> HttpResponse:
-        response = view(request, *args, **kwargs)
-        response.headers["Referrer-Policy"] = "no-referrer"
-        patch_cache_control(response, private=True, no_store=True)
-        return response
+    def __init__(self, get_response):
+        self.get_response = get_response
 
-    return wrapped
+    def __call__(self, request: HttpRequest) -> HttpResponse:
+        response = self.get_response(request)
+        if request.path_info.startswith(GUEST_PAGE_PREFIX):
+            response.headers["Referrer-Policy"] = "no-referrer"
+            patch_cache_control(response, private=True, no_store=True)
+        return response
 
 
 @csrf_exempt
-@_private
 @require_http_methods(["GET", "POST"])
 def guest_payment_page(request: HttpRequest, token: str) -> HttpResponse:
     """Show what is owed, or start a hosted checkout for it.
@@ -450,6 +512,7 @@ def guest_payment_page(request: HttpRequest, token: str) -> HttpResponse:
     email_required = payload["receipt_email_required"]
     email = ""
     email_error = ""
+    status = 200
     chosen = providers[0]["provider"]
 
     if request.method == "POST":
@@ -462,6 +525,7 @@ def guest_payment_page(request: HttpRequest, token: str) -> HttpResponse:
                 validate_email(email)
             except ValidationError:
                 email_error = t["email_error"]
+                status = 400
         else:
             # Never collected when nothing would be sent to it.
             email = ""
@@ -481,6 +545,16 @@ def guest_payment_page(request: HttpRequest, token: str) -> HttpResponse:
                     "finance.guest_page_checkout_unavailable order=%s", link.order_id
                 )
                 return _no_rail(request, lang)
+            except CheckoutInProgress:
+                return _opening(request, lang, provider=chosen, email=email)
+            except GuestCheckoutInProgress:
+                # The link's open checkout carries another receipt address.
+                # The payer can correct theirs; with no field to correct, it
+                # is the same wait as a checkout still opening (G1).
+                if not email_required:
+                    return _opening(request, lang, provider=chosen, email=email)
+                email_error = t["email_conflict"]
+                status = 409
             except FinanceError:
                 # Includes a link revoked, replaced or expired since it was read
                 # above: checkout reads it again under the order lock.
@@ -491,9 +565,9 @@ def guest_payment_page(request: HttpRequest, token: str) -> HttpResponse:
                     "finance.guest_page_checkout_failed order=%s", link.order_id
                 )
                 return _unavailable(request, lang, status=409)
-            if not session.attempt.checkout_url:
-                return _no_rail(request, lang)
-            return HttpResponseRedirect(session.attempt.checkout_url)
+            else:
+                # `start_checkout` returns a session only with a URL to visit.
+                return HttpResponseRedirect(session.attempt.checkout_url)
 
     amount = _amount(payload["amount_eur_cents"], lang)
     # The button states an amount only when every rail on offer charges that
@@ -525,5 +599,5 @@ def guest_payment_page(request: HttpRequest, token: str) -> HttpResponse:
             ),
             "checkout_action": request.path,
         },
-        status=400 if email_error else 200,
+        status=status,
     )

@@ -123,6 +123,12 @@ class MockGateway:
         )
 
     @classmethod
+    def checkout_session_ids(cls) -> list[str]:
+        """Every hosted checkout this rail has opened, whatever the database says."""
+
+        return list(cls._sessions)
+
+    @classmethod
     def refund_count(cls, idempotency_key: str) -> int:
         """Number of distinct external refunds for one local obligation."""
 
