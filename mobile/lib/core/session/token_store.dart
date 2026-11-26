@@ -21,21 +21,32 @@ import 'dart:math';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'pending_pick_store.dart';
+
 class TokenStore {
-  TokenStore([FlutterSecureStorage? storage])
-    : _storage =
-          storage ??
-          const FlutterSecureStorage(
-            aOptions: AndroidOptions(encryptedSharedPreferences: true),
-            iOptions: IOSOptions(
-              // Not `afterFirstUnlock`: nothing here needs to be readable
-              // while the device is locked, and `thisDeviceOnly` keeps the
-              // session out of an iCloud keychain backup.
-              accessibility: KeychainAccessibility.first_unlock_this_device,
+  TokenStore([FlutterSecureStorage? storage, PendingPickStore? pendingPicks])
+    : this._(
+        storage ??
+            const FlutterSecureStorage(
+              aOptions: AndroidOptions(encryptedSharedPreferences: true),
+              iOptions: IOSOptions(
+                // Not `afterFirstUnlock`: nothing here needs to be readable
+                // while the device is locked, and `thisDeviceOnly` keeps the
+                // session out of an iCloud keychain backup.
+                accessibility: KeychainAccessibility.first_unlock_this_device,
+              ),
             ),
-          );
+        pendingPicks,
+      );
+
+  TokenStore._(this._storage, PendingPickStore? pendingPicks)
+    : _pendingPicks = pendingPicks ?? PendingPickStore.forPlatform(_storage);
 
   final FlutterSecureStorage _storage;
+
+  /// The pending-pick marker, where a write that reports success is on the disk
+  /// (see [PendingPickStore]).
+  final PendingPickStore _pendingPicks;
   int _identityGeneration = 0;
   Future<void> _credentialWriteTail = Future<void>.value();
 
@@ -61,8 +72,6 @@ class TokenStore {
   static const _kLocale = 'app.locale';
   static const _kInstallationId = 'push.installation_id';
   static const _kPendingPushToken = 'push.pending_token';
-  static const _kPendingPick = 'media.pending_pick';
-  static const _kPickClosedBySignOut = 'signed-out';
 
   /// The last profile the server confirmed for the stored credentials.
   ///
@@ -196,7 +205,7 @@ class TokenStore {
   ///
   /// Every change goes through the same queue as the credentials, so a pick
   /// beginning, another pick ending and a sign-out never interleave.
-  Future<String?> readPendingPick() => _readCredential(_kPendingPick);
+  Future<String?> readPendingPick() => _readBehindWrites(_pendingPicks.read);
 
   /// Makes [marker] the pending pick and answers the one it replaced (null when
   /// there was none), in one step. Nothing is written, and [applied] is false,
@@ -211,19 +220,14 @@ class TokenStore {
     if (_identityGeneration != expectedIdentityGeneration) {
       return (applied: false, previous: null);
     }
-    final previous = await _storage.read(key: _kPendingPick);
-    await _storage.write(key: _kPendingPick, value: marker);
+    final previous = await _pendingPicks.exchange(marker);
     return (applied: true, previous: previous);
   });
 
   /// Clears the pending pick, but only while it is still [marker]: a pick that
   /// began since owns the new one.
   Future<void> releasePendingPick(String marker) =>
-      _serializeCredentialWrite(() async {
-        if (await _storage.read(key: _kPendingPick) == marker) {
-          await _storage.delete(key: _kPendingPick);
-        }
-      });
+      _serializeCredentialWrite(() => _pendingPicks.release(marker));
 
   /// Removes credentials and every user-scoped preference. Called on sign-out
   /// and whenever refresh fails terminally.
@@ -248,9 +252,7 @@ class TokenStore {
     // A pick still open at sign-out may yet answer, for nobody: its marker
     // becomes a bare "something was open" so the next pick still hears of it,
     // and names no account.
-    if (await _storage.read(key: _kPendingPick) != null) {
-      await _storage.write(key: _kPendingPick, value: _kPickClosedBySignOut);
-    }
+    await _pendingPicks.closeBySignOut();
     await purgeLegacyArtifacts();
   }
 
@@ -276,12 +278,16 @@ class TokenStore {
     return result;
   }
 
-  Future<String?> _readCredential(String key) async {
+  Future<String?> _readCredential(String key) =>
+      _readBehindWrites(() => _storage.read(key: key));
+
+  /// [read], started once no credential write is pending.
+  Future<T> _readBehindWrites<T>(Future<T> Function() read) async {
     while (true) {
       final pending = _credentialWriteTail;
       await pending;
       if (!identical(pending, _credentialWriteTail)) continue;
-      return _storage.read(key: key);
+      return read();
     }
   }
 }

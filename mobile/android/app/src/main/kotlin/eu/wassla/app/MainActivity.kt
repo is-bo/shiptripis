@@ -15,9 +15,13 @@ class MainActivity : FlutterActivity() {
     /** Photo preparation decodes a picture: off the main thread, one at a time. */
     private val photoExecutor: ExecutorService = Executors.newSingleThreadExecutor()
 
+    /** Marker changes wait for the disk, so they never queue behind a photo. */
+    private val markerExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         configurePhotoPrepare(flutterEngine)
+        configurePickMarker(flutterEngine)
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "eu.wassla.app/notification_permission",
@@ -61,8 +65,46 @@ class MainActivity : FlutterActivity() {
             }
     }
 
+    /**
+     * `wassla/pick_marker`: the pending-pick marker, written with `commit()` so a
+     * write that did not reach the disk is an error (see [PickMarkerStore]). Off
+     * the main thread: a commit waits for the disk.
+     */
+    private fun configurePickMarker(flutterEngine: FlutterEngine) {
+        val store = PickMarkerStore(this)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "wassla/pick_marker")
+            .setMethodCallHandler { call, result ->
+                val marker = call.argument<String>("marker")
+                markerExecutor.execute {
+                    try {
+                        val answer: Any? =
+                            when (call.method) {
+                                "exchange" -> store.exchange(requireNotNull(marker))
+                                "release" -> {
+                                    store.release(requireNotNull(marker))
+                                    null
+                                }
+                                "closeBySignOut" -> {
+                                    store.closeBySignOut()
+                                    null
+                                }
+                                "read" -> store.read()
+                                else -> {
+                                    runOnUiThread { result.notImplemented() }
+                                    return@execute
+                                }
+                            }
+                        runOnUiThread { result.success(answer) }
+                    } catch (error: Throwable) {
+                        runOnUiThread { result.error("storage", error.message, null) }
+                    }
+                }
+            }
+    }
+
     override fun onDestroy() {
         photoExecutor.shutdown()
+        markerExecutor.shutdown()
         super.onDestroy()
     }
 

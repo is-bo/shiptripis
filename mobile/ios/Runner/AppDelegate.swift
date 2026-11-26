@@ -23,7 +23,10 @@ import UIKit
   /// JPEG of at most 1024 px with no metadata (see `PhotoPrepare`).
   private func registerPhotoPrepare(_ registry: FlutterPluginRegistry) {
     guard let registrar = registry.registrar(forPlugin: "WasslaPhotoPrepare") else { return }
-    DispatchQueue.global(qos: .utility).async { PhotoPrepare.removeLeftovers() }
+    // The cutoff is taken here, now, and not when the sweep gets to run: a sweep
+    // that starts late must still leave alone a photo prepared in the meantime.
+    let sweepCutoff = Date()
+    DispatchQueue.global(qos: .utility).async { PhotoPrepare.removeLeftovers(before: sweepCutoff) }
     let channel = FlutterMethodChannel(
       name: "wassla/photo_prepare",
       binaryMessenger: registrar.messenger()
@@ -92,10 +95,10 @@ enum PhotoPrepare {
 
   /// Deletes prepared photos an earlier run left behind. Called once, when the
   /// engine starts: a new engine owns no prepared file, so every one that is
-  /// still here belongs to a run that ended. Only files older than the call
-  /// go, so one made by a photo prepared meanwhile is never taken.
-  static func removeLeftovers() {
-    let cutoff = Date()
+  /// still here belongs to a run that ended. Only files last written before
+  /// [cutoff], a moment the caller took when the engine started and not when the
+  /// sweep got to run, go: a photo prepared meanwhile is never taken.
+  static func removeLeftovers(before cutoff: Date) {
     let directory = FileManager.default.temporaryDirectory
     guard
       let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path)

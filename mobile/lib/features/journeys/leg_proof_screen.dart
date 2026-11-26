@@ -21,6 +21,7 @@ import 'package:image_picker/image_picker.dart' show ImageSource, XFile;
 import '../../app/app_state.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/media/pick_guard.dart';
+import '../../core/media/pick_blocked_message.dart';
 import '../../core/format/locale_formats.dart';
 import '../../data/repositories.dart';
 import '../../design/components/feedback.dart';
@@ -118,9 +119,9 @@ class _LegProofScreenState extends ConsumerState<LegProofScreen> {
       picked = await ref
           .read(pickGuardProvider)
           .pickImage(PickPurpose.ticketProof, source: source, imageQuality: 92);
-    } on PickBlockedException {
+    } on PickBlockedException catch (error) {
       if (mounted) {
-        AppSnack.failure(context, null, fallback: l.photoPickBlocked);
+        AppSnack.failure(context, null, fallback: l.pickBlocked(error));
       }
       return;
     }

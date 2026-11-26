@@ -433,6 +433,12 @@ jobs:
       - name: Test
         run: flutter test
 
+      # The photo arithmetic and the metadata cleaner of the Android code use no
+      # Android type, so the real Kotlin runs under JUnit here, with a downloaded
+      # kotlinc and no Gradle.
+      - name: Android photo code — Kotlin unit tests
+        run: ../tools/test_android_pure.sh
+
   # ── Schema-drift gate (CLAUDE.md §G3) ───────────────────────────────────
   # G3 requires BOTH steps: re-export schema.sql from Django AND re-run the
   # generators. Running only the generators would check Go against a stale

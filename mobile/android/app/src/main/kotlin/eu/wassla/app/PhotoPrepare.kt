@@ -13,7 +13,6 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.exifinterface.media.ExifInterface
 import java.io.File
-import java.io.FileOutputStream
 import java.security.SecureRandom
 
 /**
@@ -23,79 +22,6 @@ import java.security.SecureRandom
  */
 class PhotoPrepareException(val code: String, message: String, cause: Throwable? = null) :
     Exception(message, cause)
-
-/** A width and a height in pixels. */
-data class PhotoSize(val width: Int, val height: Int)
-
-/**
- * The numbers behind [PhotoPreparer], with no decoding and no Android type in
- * them: how far to sample while decoding, the size of the finished picture for
- * each EXIF orientation, and the next sample to try when a decode runs out of
- * memory. `test/p3b_photo_prepare_test.dart` holds the same arithmetic as an
- * executable specification, with the cases the review asked for.
- */
-object PhotoGeometry {
-    /** The longest edge of the prepared photo; the server keeps a 512 px square. */
-    const val MAX_EDGE = 1024
-
-    /**
-     * The most pixels a decode may hold: about 6 megapixels, 24 MB as ARGB_8888,
-     * whatever the picture's shape. A 48 MP photo and a 32000 x 1500 panorama
-     * both decode at about 3 MP.
-     */
-    const val MAX_DECODED_PIXELS = 6_000_000L
-
-    /** The largest sample a decode may be asked for. */
-    const val MAX_SAMPLE = 1024
-
-    /** How many times a decode that ran out of memory is tried again, larger each time. */
-    const val MAX_RETRIES = 3
-
-    /**
-     * The smallest power of two that brings the decoded pixel count within
-     * [MAX_DECODED_PIXELS]. Because it is the smallest, the long edge stays above
-     * 1200 px afterwards, so the scale to [MAX_EDGE] never has to enlarge.
-     */
-    fun sampleSize(width: Int, height: Int): Int {
-        var sample = 1
-        while (sample < MAX_SAMPLE &&
-            (width.toLong() / sample) * (height.toLong() / sample) > MAX_DECODED_PIXELS
-        ) {
-            sample *= 2
-        }
-        return sample
-    }
-
-    /** The sample to try after [sample] failed, or null when none is left. */
-    fun nextSample(sample: Int): Int? = if (sample >= MAX_SAMPLE) null else sample * 2
-
-    /** The factor (never above 1) that brings the longer side to [MAX_EDGE]. */
-    fun fitScale(width: Int, height: Int): Float {
-        val longEdge = maxOf(width, height)
-        return if (longEdge <= MAX_EDGE) 1f else MAX_EDGE.toFloat() / longEdge
-    }
-
-    /** Whether an EXIF orientation turns the picture a quarter turn (5, 6, 7 and 8). */
-    fun swapsAxes(orientation: Int): Boolean = orientation in 5..8
-
-    /** The size of a [width] x [height] picture once it is upright. */
-    fun orientedSize(width: Int, height: Int, orientation: Int): PhotoSize =
-        if (swapsAxes(orientation)) PhotoSize(height, width) else PhotoSize(width, height)
-
-    /**
-     * The size of the finished picture: upright, the longer side brought down to
-     * [MAX_EDGE], neither side below one pixel. A 4096 x 1 strip is 1024 x 1,
-     * not 1024 x 0.
-     */
-    fun outputSize(width: Int, height: Int, orientation: Int): PhotoSize {
-        val upright = orientedSize(width, height, orientation)
-        val scale = fitScale(upright.width, upright.height)
-        return PhotoSize(
-            Math.round(upright.width * scale).coerceIn(1, MAX_EDGE),
-            Math.round(upright.height * scale).coerceIn(1, MAX_EDGE),
-        )
-    }
-}
 
 /** The matrix that makes a picture upright for each of the eight EXIF orientations. */
 object PhotoOrientation {
@@ -129,11 +55,14 @@ object PhotoOrientation {
  * Makes an upright JPEG of at most [PhotoGeometry.MAX_EDGE] px, with no
  * metadata, from a picked photo, without ever decoding the whole picture: the
  * decoder is asked to sample, so the pixels in memory are bounded, and a decode
- * that fails for memory is tried again at a larger sample. Whatever the decoder
- * produced (a wide-gamut or HDR bitmap, one with a gain map or an embedded
- * profile) is only the source: the output is always drawn into a fresh sRGB
- * ARGB_8888 bitmap of the computed size, and that bitmap is what is compressed.
- * The result is written to a new file in [cacheDir].
+ * that fails for memory is tried again at a larger sample (the header's sample,
+ * then twice, four times and eight times it: see [PhotoGeometry.sampleLadder]).
+ * Whatever the decoder produced (a wide-gamut or HDR bitmap, one with a gain map
+ * or an embedded profile) is only the source: the output is always drawn into a
+ * fresh sRGB ARGB_8888 bitmap of the computed size, and that bitmap is what is
+ * compressed. The encoder's own metadata (Skia writes an ICC profile even for
+ * sRGB) is then cut out of the JPEG ([JpegMetadata]) before the result is
+ * written to a new file in [cacheDir].
  */
 class PhotoPreparer(private val cacheDir: File) {
 
@@ -184,18 +113,18 @@ class PhotoPreparer(private val cacheDir: File) {
 
     /**
      * Null when BitmapFactory cannot read the picture (no bounds, or nothing came
-     * out). A decode that runs out of memory is tried at a larger sample, up to
-     * [PhotoGeometry.MAX_RETRIES] times, then fails.
+     * out). A decode that runs out of memory is tried at each larger sample of the
+     * [PhotoGeometry.sampleLadder], then fails.
      */
     private fun decodeWithBitmapFactory(source: File): Decoded? {
         val bounds = BitmapFactory.Options()
         bounds.inJustDecodeBounds = true
         BitmapFactory.decodeFile(source.path, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-        var sample = PhotoGeometry.sampleSize(bounds.outWidth, bounds.outHeight)
-        var retries = 0
-        while (true) {
-            var outOfMemory: OutOfMemoryError? = null
+        var outOfMemory: OutOfMemoryError? = null
+        for (sample in PhotoGeometry.sampleLadder(
+            PhotoGeometry.sampleSize(bounds.outWidth, bounds.outHeight)
+        )) {
             try {
                 val options = BitmapFactory.Options()
                 options.inSampleSize = sample
@@ -205,53 +134,57 @@ class PhotoPreparer(private val cacheDir: File) {
                 }
                 val bitmap = BitmapFactory.decodeFile(source.path, options)
                 if (bitmap != null) return Decoded(bitmap, false)
+                outOfMemory = null
             } catch (error: OutOfMemoryError) {
                 outOfMemory = error
             }
-            // Nothing came out: memory is the likely reason, so a larger sample.
-            val next = PhotoGeometry.nextSample(sample)
-            if (next == null || retries >= PhotoGeometry.MAX_RETRIES) {
-                if (outOfMemory != null) {
-                    throw PhotoPrepareException("failed", "Out of memory", outOfMemory)
-                }
-                return null
-            }
-            retries += 1
-            sample = next
+            // Nothing came out: memory is the likely reason, so the next sample.
         }
+        if (outOfMemory != null) throw PhotoPrepareException("failed", "Out of memory", outOfMemory)
+        return null
     }
 
     /**
      * ImageDecoder applies the orientation itself, so [Decoded.orientationApplied]
-     * is true and no matrix is applied again. The sample is chosen in
-     * onHeaderDecoded from the picture's own size, so a large HEIF is never
-     * decoded whole, and a failure for memory is tried again at a larger sample.
+     * is true and no matrix is applied again. The picture's size is read first, in
+     * onHeaderDecoded, before any pixel: a picture over
+     * [PhotoGeometry.MAX_SOURCE_PIXELS] is refused there (a HEIF that is not tiled
+     * is decoded as one whole frame whatever sample is asked for), and the rest is
+     * decoded at the [PhotoGeometry.sampleLadder] sample for this attempt, so a
+     * decode that ran out of memory is tried at a sample that is really larger.
      */
     @RequiresApi(Build.VERSION_CODES.P)
     private fun decodeWithImageDecoder(source: File): Decoded {
-        var floor = 1
-        var retries = 0
+        var attempt = 0
         while (true) {
-            val atLeast = floor
+            var ladder = emptyList<Int>()
             try {
                 val bitmap =
                     ImageDecoder.decodeBitmap(ImageDecoder.createSource(source)) { decoder, info, _ ->
-                        decoder.setTargetSampleSize(
-                            maxOf(atLeast, PhotoGeometry.sampleSize(info.size.width, info.size.height))
-                        )
+                        val width = info.size.width
+                        val height = info.size.height
+                        if (!PhotoGeometry.withinSourceLimit(width, height)) {
+                            throw PhotoPrepareException("failed", "The photo is too large to prepare")
+                        }
+                        ladder = PhotoGeometry.sampleLadder(PhotoGeometry.sampleSize(width, height))
+                        decoder.setTargetSampleSize(ladder[minOf(attempt, ladder.lastIndex)])
                         decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
                         decoder.setTargetColorSpace(ColorSpace.get(ColorSpace.Named.SRGB))
                     }
                 return Decoded(bitmap, true)
+            } catch (error: PhotoPrepareException) {
+                throw error
             } catch (error: OutOfMemoryError) {
-                val next = PhotoGeometry.nextSample(atLeast)
-                if (next == null || retries >= PhotoGeometry.MAX_RETRIES) {
+                if (attempt + 1 >= ladder.size) {
                     throw PhotoPrepareException("failed", "Out of memory", error)
                 }
-                retries += 1
-                floor = next
-            } catch (error: Exception) {
+                attempt += 1
+            } catch (error: java.io.IOException) {
+                // The decoder could not read it, or the file went away under it.
+                if (!source.isFile) throw PhotoPrepareException("not_found", "The picked photo is gone", error)
                 throw PhotoPrepareException("unsupported", "The photo cannot be decoded", error)
+            } catch (error: Exception) {
+                throw PhotoPrepareException("failed", "The photo could not be decoded", error)
             }
         }
     }
@@ -285,17 +218,19 @@ class PhotoPreparer(private val cacheDir: File) {
     }
 
     private fun write(bitmap: Bitmap): File {
-        val target = File(cacheDir, "$PREFIX${System.nanoTime()}-${random.nextInt(Int.MAX_VALUE)}.jpg")
-        val written =
-            try {
-                FileOutputStream(target).use { bitmap.compress(Bitmap.CompressFormat.JPEG, QUALITY, it) }
-            } catch (error: java.io.IOException) {
-                target.delete()
-                throw PhotoPrepareException("failed", "The photo could not be written", error)
-            }
-        if (!written) {
-            target.delete()
+        val encoded = java.io.ByteArrayOutputStream()
+        if (!bitmap.compress(Bitmap.CompressFormat.JPEG, QUALITY, encoded)) {
             throw PhotoPrepareException("failed", "The photo could not be encoded")
+        }
+        val clean =
+            JpegMetadata.withoutMetadata(encoded.toByteArray())
+                ?: throw PhotoPrepareException("failed", "The encoded photo could not be read")
+        val target = File(cacheDir, "$PREFIX${System.nanoTime()}-${random.nextInt(Int.MAX_VALUE)}.jpg")
+        try {
+            target.writeBytes(clean)
+        } catch (error: java.io.IOException) {
+            target.delete()
+            throw PhotoPrepareException("failed", "The photo could not be written", error)
         }
         return target
     }

@@ -23,6 +23,7 @@ import 'package:image_picker/image_picker.dart' show ImageSource, XFile;
 import '../../app/app_state.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/media/pick_guard.dart';
+import '../../core/media/pick_blocked_message.dart';
 import '../../data/repositories.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/forms.dart';
@@ -83,9 +84,13 @@ class _DzdSetupScreenState extends ConsumerState<DzdSetupScreen> {
           _chequeError = null;
         });
       }
-    } on PickBlockedException {
+    } on PickBlockedException catch (error) {
       if (!mounted) return;
-      AppSnack.failure(context, null, fallback: L.of(context).photoPickBlocked);
+      AppSnack.failure(
+        context,
+        null,
+        fallback: L.of(context).pickBlocked(error),
+      );
     } on Object catch (e) {
       if (!mounted) return;
       AppSnack.failure(context, e);

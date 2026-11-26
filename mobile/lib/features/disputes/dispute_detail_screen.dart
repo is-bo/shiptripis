@@ -28,6 +28,7 @@ import '../common/contact_support.dart';
 import '../../app/app_state.dart' show cancelOnDispose;
 import '../../core/api/api_exception.dart';
 import '../../core/media/pick_guard.dart';
+import '../../core/media/pick_blocked_message.dart';
 import '../../core/format/locale_formats.dart';
 import '../../core/live/live_updates.dart';
 import '../../core/session/session.dart';
@@ -132,9 +133,9 @@ class _DisputeDetailScreenState extends ConsumerState<DisputeDetailScreen> {
               source: ImageSource.gallery,
               imageQuality: 92,
             );
-    } on PickBlockedException {
+    } on PickBlockedException catch (error) {
       if (mounted) {
-        AppSnack.failure(context, null, fallback: l.photoPickBlocked);
+        AppSnack.failure(context, null, fallback: l.pickBlocked(error));
       }
       return;
     }

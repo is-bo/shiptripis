@@ -587,27 +587,39 @@ void main() {
         },
       );
 
-      testWidgets('only the pick that wrote the marker clears it', (
+      testWidgets('a second pick while one is open does nothing at all', (
         tester,
       ) async {
+        // The first pick's picker is open. A second pick (of any purpose) finds
+        // the guard taken: it opens nothing and, above all, leaves the first
+        // pick's marker where it is.
         final tokens = FakeTokenStore();
         final picker = FakeImagePicker();
         final rig = await launch(tester, tokens, picker);
         final guard = rig.container.read(pickGuardProvider);
 
         await tester.runAsync(() async {
-          final first = await guard.begin(PickPurpose.profilePhoto);
-          // Another pick begins before the first one ends.
-          final second = await guard.begin(PickPurpose.itemPhoto);
-          final secondMarker = tokens.pendingPick;
-          await guard.end(first);
-          expect(
-            tokens.pendingPick,
-            secondMarker,
-            reason: 'the first pick must not take the second one\'s marker',
+          final open = Completer<XFile?>();
+          picker.onPick = (_) => open.future;
+          final first = guard.pickImage(
+            PickPurpose.identityDocument,
+            source: ImageSource.gallery,
           );
-          await guard.end(second);
-          expect(tokens.pendingPick, isNull);
+          await _until(() => picker.picks.isNotEmpty);
+          final firstMarker = tokens.pendingPick;
+          expect(firstMarker, startsWith('identityDocument:'));
+
+          final second = await guard.pickImage(
+            PickPurpose.itemPhoto,
+            source: ImageSource.camera,
+          );
+
+          expect(second, isNull);
+          expect(picker.picks, hasLength(1), reason: 'no second picker');
+          expect(tokens.pendingPick, firstMarker, reason: 'owner untouched');
+          open.complete(null);
+          await first;
+          expect(tokens.pendingPick, isNull, reason: 'the owner cleared it');
         });
       });
 
@@ -619,9 +631,10 @@ void main() {
 
         await tester.runAsync(() async {
           for (final purpose in PickPurpose.values) {
-            final ticket = await guard.begin(purpose);
-            seen.add(tokens.pendingPick!.split(':').first);
-            await guard.end(ticket);
+            await guard.run(purpose, () async {
+              seen.add(tokens.pendingPick!.split(':').first);
+              return null;
+            });
           }
         });
 

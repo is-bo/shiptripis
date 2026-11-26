@@ -31,6 +31,7 @@ import 'package:image_picker/image_picker.dart'
 
 import '../../core/api/api_exception.dart';
 import '../../core/media/pick_guard.dart';
+import '../../core/media/pick_blocked_message.dart';
 import '../../core/session/session.dart';
 import '../../data/repositories.dart';
 import '../../design/components/feedback.dart';
@@ -89,9 +90,9 @@ class _KycScreenState extends ConsumerState<KycScreen> {
             preferredCameraDevice: CameraDevice.front,
             imageQuality: 92,
           );
-    } on PickBlockedException {
+    } on PickBlockedException catch (error) {
       if (mounted) {
-        AppSnack.failure(context, null, fallback: l.photoPickBlocked);
+        AppSnack.failure(context, null, fallback: l.pickBlocked(error));
       }
       return;
     }

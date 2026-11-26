@@ -1,5 +1,17 @@
 # Waçla V1 Implementation Status
 
+## Wassla: P3B round five, picker ownership and native photo fixes (2026-11-26)
+
+- Astra rejected `c8b4e68` (3 new blockers, 4 should-fixes, 8 partly-fixed round-3 findings). The app
+  only; nothing deployed. One picker at a time for the whole app, reserved before its first wait; the guard
+  returns a file only when it can prove it is that pick's, for every screen; a retry is bound to the session
+  that prepared the photo; only the operation that owns the profile photo state resets it; the pick marker is
+  written with `commit()` on Android; the Android decode retries 4, 8, 16, 32 and refuses a picture over
+  64 MP before decoding it; the encoder's ICC segment is cut out of the JPEG; avatar installs are serialized
+  per version; the iOS sweep cutoff is taken at registration. The Kotlin arithmetic and the JPEG cleaner now
+  have JUnit tests of the real code (`tools/test_android_pure.sh`, a CI step). Detail:
+  `docs/PHASE_P3B_PROFILE_PHOTOS_APP.md`, "Round five".
+
 ## Wassla: missing route stops get their own rejection reasons (M1, 2026-11-25)
 
 - Phone test 2 (plan 1.6, 1.7): a Jijel → Paris request against an ALG → CDG flight was refused,

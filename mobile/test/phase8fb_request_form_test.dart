@@ -34,6 +34,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shiptrip/core/media/pick_guard.dart';
 import 'package:shiptrip/app/app_settings.dart';
 import 'package:shiptrip/app/router.dart';
 import 'package:shiptrip/core/api/api_exception.dart';
@@ -49,6 +50,7 @@ import 'package:shiptrip/features/requests/request_create_screen.dart';
 import 'package:shiptrip/l10n/app_localizations.dart';
 
 import 'support/fake_api.dart';
+import 'support/fake_image_picker.dart';
 
 const _stagePath = '/api/parcels/media';
 const _createPath = '/api/parcels/delivery/v1';
@@ -113,10 +115,15 @@ final _algiers = _place(202, 'Algiers', 'DZ');
 /// behind step one. This stands a stub in for that route which pops a canned
 /// place, which is what makes the rest of the form reachable from a test.
 class _FormHarness {
-  _FormHarness(this.backend, {this.picker});
+  _FormHarness(this.backend, {this.picker, this.tokens, this.imagePicker});
 
   final FakeBackend backend;
   final ItemPhotoPicker? picker;
+
+  /// For a test about the real picker guard: the store holding the pending-pick
+  /// marker, and the one `ImagePicker` the real [itemPhotoPickerProvider] asks.
+  final FakeTokenStore? tokens;
+  final ImagePicker? imagePicker;
 
   /// Places the stub picker route hands back, in order.
   final places = <CanonicalPlace>[_paris, _algiers];
@@ -128,12 +135,14 @@ class _FormHarness {
     Locale locale = const Locale('en'),
   }) async {
     backend.on('GET', '/api/me', FakeResponse(200, meFixture()));
-    final tokens = FakeTokenStore();
+    final tokens = this.tokens ?? FakeTokenStore();
     container = ProviderContainer(
       overrides: [
         tokenStoreProvider.overrideWithValue(tokens),
         apiClientProvider.overrideWithValue(apiClientFor(backend, tokens)),
         if (picker != null) itemPhotoPickerProvider.overrideWithValue(picker!),
+        if (imagePicker != null)
+          imagePickerProvider.overrideWithValue(imagePicker!),
       ],
     );
     addTearDown(container.dispose);
@@ -512,6 +521,41 @@ void main() {
 
   // -------------------------------------------------------------------------
   group('the item photo', () {
+    testWidgets(
+      'a restored file from another pick is never staged as the item photo',
+      (tester) async {
+        // The phone ended the app while the identity check's picker was open
+        // (its marker is still stored); its copy of the ID file finishes late
+        // and answers the parcel photo's pick. The guard throws it away before
+        // the screen sees it.
+        final idFile = _photoFile('id-document.jpg');
+        final backend = FakeBackend()
+          ..handle(
+            'POST',
+            _stagePath,
+            (_) => FakeResponse(201, _stagedMedia()),
+          );
+        final harness = _FormHarness(
+          backend,
+          tokens: FakeTokenStore()..pendingPick = 'identityDocument:abc',
+          imagePicker: FakeImagePicker()..onPick = (_) async => XFile(idFile),
+        );
+        await harness.pump(tester);
+        await _completeRouteStep(tester, harness);
+        final l = harness.l(tester);
+
+        await _tapPhotoAction(
+          tester,
+          _button(l.requestItemPhotoFromGallery),
+          until: () => _present(find.text(l.profilePhotoUncertain)),
+        );
+
+        expect(backend.to('POST', _stagePath), isEmpty, reason: 'no upload');
+        expect(find.text(l.requestItemPhotoReady), findsNothing);
+        expect(File(idFile).existsSync(), isFalse, reason: 'thrown away');
+      },
+    );
+
     testWidgets('gallery: picking uploads it and shows it as ready', (
       tester,
     ) async {

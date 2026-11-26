@@ -14,7 +14,11 @@
 ///   request, but two avatars holding different addresses for one version each
 ///   make their own, so an address that has expired can never take down the load
 ///   of a fresh one that joined it. When one succeeds the bytes are the
-///   version's and the other loads answer from them.
+///   version's and the other loads answer from them;
+/// * **installs** a version's picture one response at a time: requests run
+///   independently, but only one response at a time is written for a version,
+///   and one that finds the picture already there is dropped unwritten. Two
+///   valid addresses that answer together therefore leave one file, not two.
 library;
 
 import 'dart:convert';
@@ -96,6 +100,9 @@ class AvatarCacheManager extends CacheManager {
   /// The request in flight for each address.
   final _inFlight = <String, Future<FileInfo>>{};
 
+  /// The last install queued for each version.
+  final _installs = <String, Future<void>>{};
+
   /// The picture of version [key]: from disk when it is there, otherwise
   /// fetched from [url]. Nothing is revalidated: a version never changes.
   @override
@@ -132,23 +139,42 @@ class AvatarCacheManager extends CacheManager {
         uri: Uri.tryParse(url),
       );
     }
-    // Another address for this version may have answered first: its bytes are
-    // the same picture, so this response is dropped rather than stored twice.
-    final existing = await getFileFromCache(version);
-    if (existing != null) {
-      await response.content.listen((_) {}).cancel();
-      return existing;
-    }
-    final extension = response.fileExtension;
-    final file = await putFileStream(
-      url,
-      response.content,
-      key: version,
-      fileExtension: extension.startsWith('.')
-          ? extension.substring(1)
-          : extension,
-    );
-    return FileInfo(file, FileSource.Online, response.validTill, url);
+    return _installOnce(version, () async {
+      // Another address for this version may have answered first (and may
+      // still have been writing when this one answered): its bytes are the
+      // same picture, so this response is dropped rather than stored twice.
+      final existing = await getFileFromCache(version);
+      if (existing != null) {
+        await response.content.listen((_) {}).cancel();
+        return existing;
+      }
+      final extension = response.fileExtension;
+      final file = await putFileStream(
+        url,
+        response.content,
+        key: version,
+        fileExtension: extension.startsWith('.')
+            ? extension.substring(1)
+            : extension,
+      );
+      return FileInfo(file, FileSource.Online, response.validTill, url);
+    });
+  }
+
+  /// Runs [install] after every install queued before it for [version] has
+  /// finished, whether those succeeded or not.
+  Future<FileInfo> _installOnce(
+    String version,
+    Future<FileInfo> Function() install,
+  ) {
+    final before = _installs[version] ?? Future<void>.value();
+    final result = before.then((_) => install());
+    final tail = result.then<void>((_) {}, onError: (Object _) {});
+    _installs[version] = tail;
+    tail.whenComplete(() {
+      if (identical(_installs[version], tail)) _installs.remove(version);
+    }).ignore();
+    return result;
   }
 }
 

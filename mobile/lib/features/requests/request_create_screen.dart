@@ -81,6 +81,7 @@ import '../../app/app_state.dart';
 import '../../app/router.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/media/pick_guard.dart';
+import '../../core/media/pick_blocked_message.dart';
 import '../../core/api/error_codes.dart';
 import '../../core/format/locale_formats.dart';
 import '../../core/money/money.dart';
@@ -848,9 +849,9 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
     final XFile? picked;
     try {
       picked = await ref.read(itemPhotoPickerProvider)(source);
-    } on PickBlockedException {
+    } on PickBlockedException catch (error) {
       if (mounted) {
-        AppSnack.failure(context, null, fallback: l.photoPickBlocked);
+        AppSnack.failure(context, null, fallback: l.pickBlocked(error));
       }
       return;
     }

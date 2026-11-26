@@ -15,10 +15,16 @@
 /// preparation and its upload checks, after each wait, that the account, the
 /// credentials (`TokenStore.identityGeneration`, read at the press and carried
 /// to the moment the upload is sent) and the operation are still the ones the
-/// press began under; if not, the step stops and writes nothing. And the photo
-/// that comes back from the picker is used only when [PickGuard] can vouch for
-/// it: this flow never recovers a photo the phone lost when it ended the app,
-/// and refuses one that may have been meant for another pick.
+/// press began under; if not, the step stops and writes nothing. A prepared
+/// photo keeps the account and credentials it was made under ([PickedPhoto]), so
+/// pressing "try again" later is checked against **those**, never against
+/// whoever is signed in by then: a file prepared for one member is not sent
+/// with another's token, even in the moment between the new member's tokens
+/// being saved and their account being published. Only the operation that owns
+/// the state ever starts it over. And the photo that comes back from the picker
+/// is used only when [PickGuard] can vouch for it: this flow never recovers a
+/// photo the phone lost when it ended the app, and never receives one that may
+/// have been meant for another pick.
 library;
 
 import 'dart:io';
@@ -121,6 +127,8 @@ class PickedPhoto {
     required this.path,
     required this.contentType,
     required this.fileName,
+    required this.owner,
+    required this.identity,
   });
 
   /// A JPEG (or whatever its bytes say it is) at a path used for this pick
@@ -130,6 +138,11 @@ class PickedPhoto {
   /// Read from the file's first bytes, never from its name.
   final String contentType;
   final String fileName;
+
+  /// The account and the credential generation the photo was made for: an
+  /// upload of it is sent only while both are still current.
+  final int? owner;
+  final int identity;
 }
 
 @immutable
@@ -235,12 +248,18 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
   }
 
   /// What a press that starts now begins under, read at the press itself, before
-  /// any wait.
+  /// any wait. The press takes a new epoch of its own, so that whatever an
+  /// earlier press left waiting can no longer reset what this one is doing.
   _Launch _launch() => (
     owner: ref.read(accountProvider)?.id,
     identity: ref.read(tokenStoreProvider).identityGeneration,
-    epoch: _epoch,
+    epoch: ++_epoch,
   );
+
+  /// The launch of a retry: the account and credentials [photo] was prepared
+  /// under, in an epoch of its own.
+  _Launch _launchFor(PickedPhoto photo) =>
+      (owner: photo.owner, identity: photo.identity, epoch: ++_epoch);
 
   /// Still what [launch] began under, asked of the session and the token store
   /// themselves at the moment of asking: a step that began for member A never
@@ -253,12 +272,15 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
       ref.read(accountProvider)?.id == launch.owner &&
       ref.read(tokenStoreProvider).identityGeneration == launch.identity;
 
-  /// A step found itself no longer live. If the account is still the one it
-  /// began for (a credential change with the same member), nothing else will
-  /// start over, so the flow does; for another account the account listener
-  /// already has.
+  /// A step found itself no longer live. If it is still the operation that owns
+  /// the state and the account is still the one it began for (a credential
+  /// change with the same member), nothing else will start over, so the flow
+  /// does. Anything else already started over, or moved on to a newer press (a
+  /// discard, a sign-out and back in as the same member): the state is that
+  /// one's, and a late step leaves it alone.
   void _abandon(_Launch launch) {
-    if (!ref.mounted || ref.read(accountProvider)?.id != launch.owner) return;
+    if (!ref.mounted || launch.epoch != _epoch) return;
+    if (ref.read(accountProvider)?.id != launch.owner) return;
     _epoch++;
     _deleteOwned();
     state = const ProfilePhotoState();
@@ -273,25 +295,30 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
     // under is read here too.
     state = state.copyWith(picking: true);
     final launch = _launch();
-    final guard = ref.read(pickGuardProvider);
-    final PickTicket ticket;
+    XFile? picked;
     try {
-      ticket = await guard.begin(PickPurpose.profilePhoto);
-    } on PickBlockedException {
+      picked = await ref
+          .read(pickGuardProvider)
+          .run(
+            PickPurpose.profilePhoto,
+            () => ref.read(profilePhotoPickerProvider)(source),
+            // Asked last, just before the picker would open: a member who
+            // signed out or pressed again while the marker was being written
+            // never has a picker opened for them.
+            proceed: () => _live(launch),
+          );
+    } on PickBlockedException catch (error) {
       if (_live(launch)) {
-        _fail(ProfilePhotoFailure.pickBlocked);
+        _fail(
+          error.uncertain
+              ? ProfilePhotoFailure.pickUncertain
+              : ProfilePhotoFailure.pickBlocked,
+        );
       } else {
         _abandon(launch);
       }
       return false;
-    }
-    XFile? picked;
-    var trusted = false;
-    try {
-      picked = await ref.read(profilePhotoPickerProvider)(source);
-      trusted = guard.trusts(ticket);
     } on PlatformException {
-      await guard.end(ticket);
       if (_live(launch)) {
         _fail(ProfilePhotoFailure.pickFailed);
       } else {
@@ -299,19 +326,8 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
       }
       return false;
     }
-    await guard.end(ticket);
-    if (picked != null && !trusted) {
-      // It may be another pick's photo (an identity document, a ticket): it is
-      // never kept, shown or sent.
-      await deleteQuietly(picked.path);
-      if (_live(launch)) {
-        _fail(ProfilePhotoFailure.pickUncertain);
-      } else {
-        _abandon(launch);
-      }
-      return false;
-    }
     if (!_live(launch)) {
+      if (picked != null) await deleteQuietly(picked.path);
       _abandon(launch);
       return false;
     }
@@ -322,12 +338,23 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
     return _upload(launch);
   }
 
-  /// Sends the prepared photo. Returns true when the server saved it.
-  Future<bool> upload() => _upload(_launch());
+  /// Sends the prepared photo again (it failed before). Returns true when the
+  /// server saved it. It goes only for the account and credentials the photo was
+  /// prepared under: if either has changed it is not sent at all.
+  Future<bool> upload() {
+    final photo = state.picked;
+    if (photo == null || state.busy) return Future.value(false);
+    return _upload(_launchFor(photo));
+  }
 
   Future<bool> _upload(_Launch launch) async {
     final photo = state.picked;
     if (photo == null || state.busy) return false;
+    if (!_live(launch)) {
+      await _release(photo.path);
+      _abandon(launch);
+      return false;
+    }
     _uploadingPath = photo.path;
     state = state.copyWith(
       phase: ProfilePhotoPhase.uploading,
@@ -420,8 +447,11 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
   Future<void> discard() async {
     _epoch++;
     final photo = state.picked;
-    if (photo != null) await _drop(photo);
-    if (ref.mounted) state = const ProfilePhotoState();
+    if (!ref.mounted) return;
+    // The photo is detached at once and its file goes on its own time: a press
+    // made while it is being deleted starts from clean state and keeps it.
+    state = const ProfilePhotoState();
+    if (photo != null) await _release(photo.path);
   }
 
   /// Removes the photo, or dismisses the notice that Wassla removed it.
@@ -487,6 +517,8 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
         path: output,
         contentType: type,
         fileName: 'photo.${extensionFor(type)}',
+        owner: launch.owner,
+        identity: launch.identity,
       );
       final replaced = state.picked;
       state = state.copyWith(

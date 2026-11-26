@@ -31,13 +31,15 @@ class _Folder implements FileSystem {
 }
 
 class _Response implements FileServiceResponse {
-  _Response(this.statusCode);
+  _Response(this.statusCode, [this._body]);
 
   @override
   final int statusCode;
 
+  final Stream<List<int>>? _body;
+
   @override
-  Stream<List<int>> get content => Stream.value(tinyPng);
+  Stream<List<int>> get content => _body ?? Stream.value(tinyPng);
 
   @override
   int? get contentLength => tinyPng.length;
@@ -58,6 +60,10 @@ class _Network extends FileService {
   final requested = <String>[];
   final gates = <String, Completer<int>>{};
 
+  /// An address with a body here answers at once, but its body is still
+  /// arriving until the test closes it.
+  final bodies = <String, StreamController<List<int>>>{};
+
   @override
   Future<FileServiceResponse> get(
     String url, {
@@ -65,7 +71,10 @@ class _Network extends FileService {
   }) async {
     requested.add(url);
     final gate = gates[url];
-    return _Response(gate == null ? 200 : await gate.future);
+    return _Response(
+      gate == null ? 200 : await gate.future,
+      bodies[url]?.stream,
+    );
   }
 }
 
@@ -251,6 +260,60 @@ void main() {
           .where((f) => f.path.endsWith('.png'))
           .toList();
       expect(files, hasLength(1), reason: 'the second response was dropped');
+    });
+  });
+
+  group('installing a version', () {
+    test('two addresses whose bodies overlap still leave one file', () async {
+      final a = _photo('a');
+      final b = _photo('b');
+      final bodyA = rig.network.bodies[a.url] = StreamController<List<int>>();
+
+      final loadA = rig.load(a);
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      // A has answered and its body is streaming. B answers, in full, while A's
+      // body is still open: B must not write a second file for the version.
+      final loadB = rig.load(b);
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      expect(rig.network.requested, [a.url, b.url], reason: 'independent');
+
+      bodyA
+        ..add(tinyPng)
+        ..close().ignore();
+      final responses = await Future.wait([loadA, loadB]);
+
+      expect(responses, everyElement(isA<FileInfo>()));
+      final files = rig.directory
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.png'))
+          .toList();
+      expect(
+        files,
+        hasLength(1),
+        reason: 'the losing response was not written',
+      );
+      final stored = await rig.manager.getFileFromCache('v1');
+      expect(stored!.file.readAsBytesSync(), tinyPng);
+    });
+
+    test('a failed first install does not stop the next one', () async {
+      final a = _photo('a');
+      final b = _photo('b');
+      final bodyA = rig.network.bodies[a.url] = StreamController<List<int>>();
+
+      final loadA = rig.load(a);
+      final failedA = expectLater(loadA, throwsA(anything));
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      final loadB = rig.load(b);
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+
+      bodyA.addError(const SocketException('connection lost'));
+      await failedA;
+      final response = await loadB;
+
+      expect(response, isA<FileInfo>());
+      expect((response as FileInfo).file.readAsBytesSync(), tinyPng);
     });
   });
 

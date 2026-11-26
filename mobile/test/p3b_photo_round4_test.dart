@@ -298,7 +298,9 @@ void main() {
         addTearDown(container.dispose);
 
         await expectLater(
-          container.read(pickGuardProvider).begin(PickPurpose.profilePhoto),
+          container
+              .read(pickGuardProvider)
+              .run(PickPurpose.profilePhoto, () async => XFile('/never.jpg')),
           throwsA(isA<PickBlockedException>()),
         );
         await expectLater(
