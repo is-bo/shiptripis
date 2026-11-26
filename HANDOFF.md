@@ -9,6 +9,10 @@ needs is in this repository. Nothing here depends on an earlier conversation.
 
 ## 0. Current status (2026-11-26) — read this before section 1
 
+**A coordinator running in the cloud reads `docs/handoff/COORDINATOR.md` first**: the session setup
+(cloud coordinator, cloud builders, a local operator on Ismail's PC for the server and Astra),
+Ismail's reply format, and the two Astra runs still going.
+
 Written by the lead session on 2026-11-26 so a session on another account can continue. Sections 1
 to 11 below date from 2026-11-15 and still hold for rules and background; this section overrides
 them where they differ. Server access details are never in this public repository: they live in
@@ -87,7 +91,7 @@ results are files on that PC.
 - **The P3B round-4 review** (Astra high).
   - Output file: `D:\Code\Shiptrip\.astra-results\p3b-astra-round4-result.md`.
   - Prompt: `docs/handoff/astra/p3b-review-round4.md`.
-  - Earlier Astra results are copied in the same folder, which git ignores.
+  - Finished Astra results are committed to `docs/handoff/astra/results/`, the folder a cloud session can read.
 
 **Order after that:**
 1. Merge P3B, G1, F1 and N1 as each one passes.
