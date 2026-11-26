@@ -66,11 +66,14 @@ def _traveler(actor):
 
 
 def _method(actor, currency, expected_revision):
+    from apps.core.financial_locks import lock_payout_method_set
+
     user = _traveler(actor)
     # A fixed row exists for each preference once set. Serialize initial insert
-    # with the user witness, before method rows; funding takes existing methods
-    # only and never acquires User after Payout.
+    # with the user witness, then the method set funding also takes; funding
+    # never acquires User after Payout.
     User.objects.select_for_update(no_key=True).get(pk=user.pk)
+    lock_payout_method_set(user.pk)
     if currency not in ("EUR", "DZD"):
         raise ValidationError("Unsupported payout currency.")
     method, _ = TravelerPayoutMethod.objects.get_or_create(

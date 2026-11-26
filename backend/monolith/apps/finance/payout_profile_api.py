@@ -6,7 +6,7 @@ from django.db import transaction
 from django.utils.decorators import method_decorator
 from django.views.decorators.debug import sensitive_post_parameters
 from rest_framework import serializers
-from rest_framework.permissions import SAFE_METHODS, IsAuthenticated
+from rest_framework.permissions import SAFE_METHODS, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
@@ -14,16 +14,22 @@ from rest_framework.views import APIView
 from apps.accounts.permissions import EmailVerifiedToWrite
 from apps.admin_panel.permissions import IsVerifiedStaff
 from apps.admin_panel.staff_api import StaffSessionMixin
+from apps.core.financial_locks import lock_payout_method_set
 
-from .models import TravelerPayoutMethod, PayoutIdentityReviewAssignment
+from .models import PayoutIdentityReviewAssignment
 from .payout_accounts import (
+    AccountCountryMismatch,
+    AccountCreationUnresolved,
     ConnectUnavailable,
     CountryUnsupported,
+    account_country,
+    standing_accounts,
     stripe_setup_projection,
 )
 from .payout_profiles import (
     PayoutProfilesDisabled,
     TravelerRequired,
+    _traveler,
     set_preference,
     submit_dzd_profile,
     attest_identity,
@@ -100,13 +106,50 @@ class AttestationInput(StrictInput):
     )
 
 
+class PayoutSetupMember(BasePermission):
+    """The member payout-setup gate, ahead of the email check.
+
+    Placed between `IsAuthenticated` and `EmailVerifiedToWrite`, so a write meets
+    the refusal order the read model reports (`payout_mobile.setup_gate`):
+    payout profiles switched off, then an account that cannot hold payout
+    setup, then an unconfirmed email. A read the view keeps open while profiles
+    are off passes and reports the same refusal in its payload.
+    """
+
+    def has_permission(self, request, view):
+        if request.method not in SAFE_METHODS:
+            _traveler(request.user)
+        elif not getattr(view, "readable_when_disabled", False):
+            require_profiles()
+        return True
+
+
 def setup_refusal(exc, user):
     """The stable answer to a refused member payout-setup call, or None.
 
     Every reason the read model gives as `unavailable_reason` refuses a direct
     write with the same code, so a client that skipped the read learns the same
-    thing. Email verification is refused earlier, by `EmailVerifiedToWrite`.
+    thing. Email verification is refused by `EmailVerifiedToWrite`, after the
+    member gate.
     """
+    if isinstance(exc, AccountCountryMismatch):
+        account = standing_accounts(user.pk).first()
+        return Response(
+            {
+                "code": AccountCountryMismatch.code,
+                "detail": "Your Stripe payout account was opened for another country.",
+                "account_country": account_country(account) if account else None,
+            },
+            status=409,
+        )
+    if isinstance(exc, AccountCreationUnresolved):
+        return Response(
+            {
+                "code": AccountCreationUnresolved.code,
+                "detail": "Your Stripe payout setup is waiting for a review by our team.",
+            },
+            status=409,
+        )
     if isinstance(exc, PayoutProfilesDisabled):
         return Response(
             {"code": PayoutProfilesDisabled.code, "detail": "Payout setup is not open yet."},
@@ -188,8 +231,9 @@ def method_projection(method, gate):
 class ProfileView(APIView):
     # Writing payout setup needs a confirmed email (L18A): a stranger who
     # opened the account under someone else's address must not leave a payout
-    # method behind for the owner to inherit. Staff views set their own.
-    permission_classes = [IsAuthenticated, EmailVerifiedToWrite]
+    # method behind for the owner to inherit. The member gate refuses first, in
+    # the read model's order. Staff views set their own.
+    permission_classes = [IsAuthenticated, PayoutSetupMember, EmailVerifiedToWrite]
     throttle_classes = [ProfileThrottle]
     #: A member read that stays open with payout profiles switched off: the
     #: stored setup stays visible and the read itself says setup is closed.
@@ -253,28 +297,22 @@ class PayoutMethodsView(ProfileView):
     @transaction.atomic
     def patch(self, request):
         from apps.accounts.models import User
-        from .payout_profiles import _traveler
 
         data = MobilePreferenceInput(data=request.data)
         data.is_valid(raise_exception=True)
         values = data.validated_data
-        _traveler(request.user)
         User.objects.select_for_update(no_key=True).get(pk=request.user.pk)
-        # Match funding's method lock order before making either preference
+        # Take the method set funding takes before making either preference
         # change; rollback both when any revision/country check fails.
-        current = list(TravelerPayoutMethod.objects.select_for_update(no_key=True)
-                       .filter(traveler=request.user).order_by("pk"))
+        current = lock_payout_method_set(request.user.pk)
         by_currency = {m.currency: m for m in current}
         for currency in ("EUR", "DZD"):
             method = by_currency.get(currency)
             enabled = values["preference"] in ("both", "eur_only" if currency == "EUR" else "dzd_only")
-            # Country is the Stripe EUR legal account country and belongs only
-            # to that rail. A DZD manual instruction is Algeria-side, and
-            # stamping a European country onto its version would make the
-            # snapshot say something about the destination that is not true.
-            country = "" if currency == "DZD" else (
-                values["country"].upper()
-                or (method.current_version.country if method and method.current_version else "")
+            # No country keeps the saved one. `set_preference` validates and
+            # normalizes the EUR account country and never stores one on DZD.
+            country = values["country"] or (
+                method.current_version.country if method and method.current_version else ""
             )
             set_preference(actor=request.user, currency=currency, enabled=enabled,
                            expected_revision=values[f"{currency.lower()}_revision"],
@@ -294,16 +332,23 @@ class DzdProfileView(ProfileView):
     readable_when_disabled = True
 
     def get(self, request):
-        from .payout_mobile import methods_for, dzd_method, setup_gate
+        from .payout_mobile import methods_for, payout_summary, setup_gate
 
         gate = setup_gate(request.user)
-        method = methods_for(request.user).filter(currency="DZD").first()
-        return Response({"method": method_projection(method, gate) if method else None,
-                         "dzd": dzd_method(method, gate)})
+        methods = list(methods_for(request.user))
+        method = next((m for m in methods if m.currency == "DZD"), None)
+        summary = payout_summary(request.user, methods, gate)
+        return Response({"contract_version": summary["contract_version"],
+                         "method": method_projection(method, gate) if method else None,
+                         "dzd": summary["dzd"], "setup": summary["setup"]})
 
     def post(self, request):
+        from .payout_evidence import require_evidence_store
         from .payout_mobile import setup_gate
 
+        # The read offers no DZD submission without the private store, so a
+        # proof uploaded before it was switched off is refused the same way.
+        require_evidence_store()
         data = DzdInput(data=request.data)
         data.is_valid(raise_exception=True)
         method = submit_dzd_profile(actor=request.user, **data.validated_data)
