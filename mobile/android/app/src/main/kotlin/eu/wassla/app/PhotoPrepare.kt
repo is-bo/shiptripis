@@ -105,6 +105,8 @@ class PhotoPreparer(private val cacheDir: File) {
     /** The picture decoded at a sample that bounds its pixels. */
     private fun decode(source: File): Decoded {
         decodeWithBitmapFactory(source)?.let { return it }
+        // Nothing came out because the file went away under the decoder.
+        if (!source.isFile) throw PhotoPrepareException("not_found", "The picked photo is gone")
         // BitmapFactory could not read it (a HEIF file on some builds): the
         // platform decoder can, from API 28.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) return decodeWithImageDecoder(source)
@@ -121,6 +123,13 @@ class PhotoPreparer(private val cacheDir: File) {
         bounds.inJustDecodeBounds = true
         BitmapFactory.decodeFile(source.path, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        // A HEIF that BitmapFactory can read is decoded whole whatever the sample:
+        // too large, it is refused here, before any pixel.
+        if (PhotoGeometry.isFullFrameFormat(bounds.outMimeType) &&
+            !PhotoGeometry.withinSourceLimit(bounds.outWidth, bounds.outHeight)
+        ) {
+            throw PhotoPrepareException("failed", "The photo is too large to prepare")
+        }
         var outOfMemory: OutOfMemoryError? = null
         for (sample in PhotoGeometry.sampleLadder(
             PhotoGeometry.sampleSize(bounds.outWidth, bounds.outHeight)

@@ -27,8 +27,10 @@ classpath="$JUNIT_DIR/junit-4.13.2.jar:$JUNIT_DIR/hamcrest-core-1.3.jar"
 "$KOTLINC" -cp "$classpath" -d "$work/out" \
   "$app/main/kotlin/eu/wassla/app/PhotoGeometry.kt" \
   "$app/main/kotlin/eu/wassla/app/JpegMetadata.kt" \
+  "$app/main/kotlin/eu/wassla/app/PickLaunchGate.kt" \
   "$app/test/kotlin/eu/wassla/app/PhotoGeometryTest.kt" \
-  "$app/test/kotlin/eu/wassla/app/JpegMetadataTest.kt"
+  "$app/test/kotlin/eu/wassla/app/JpegMetadataTest.kt" \
+  "$app/test/kotlin/eu/wassla/app/PickLaunchGateTest.kt"
 stdlib="$(dirname "$KOTLINC")/../lib/kotlin-stdlib.jar"
 java -cp "$work/out:$stdlib:$classpath" org.junit.runner.JUnitCore \
-  eu.wassla.app.PhotoGeometryTest eu.wassla.app.JpegMetadataTest
+  eu.wassla.app.PhotoGeometryTest eu.wassla.app.JpegMetadataTest eu.wassla.app.PickLaunchGateTest

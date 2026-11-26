@@ -1,5 +1,16 @@
 # Waçla V1 Implementation Status
 
+## Wassla: P3B round six, a result is bound to its launch (2026-11-26)
+
+- Astra rejected `f4394f1` (2 blockers, 5 should-fixes). The app only; nothing deployed. A result the phone
+  restores after it ended the app is dropped in `MainActivity` before the image plugin copies it (the Dart
+  side announces each launch on `wassla/pick_launch`), and a result is judged the moment the picker answers;
+  the published session stores the credential generation with the account, so a press during a switch from A
+  to B is never paired with B's generation, and a removal is checked like an upload; an upload always takes
+  the exact photo it was made for; a refused tombstone commit no longer stops a sign-out; avatar bodies are
+  read independently and published whole; HEIF over 64 MP is refused at the bounds read; JUnit is declared for
+  Gradle (not run here). Detail: `docs/PHASE_P3B_PROFILE_PHOTOS_APP.md`, "Round six".
+
 ## Wassla: P3B round five, picker ownership and native photo fixes (2026-11-26)
 
 - Astra rejected `c8b4e68` (3 new blockers, 4 should-fixes, 8 partly-fixed round-3 findings). The app

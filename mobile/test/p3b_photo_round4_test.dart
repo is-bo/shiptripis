@@ -397,15 +397,30 @@ void main() {
       tester,
     ) async {
       final backend = FakeBackend()
-        ..on('PUT', _put, FakeResponse(200, photoActive('v3')));
+        ..on('PUT', _put, FakeResponse(200, photoActive('v3')))
+        ..on(
+          'POST',
+          '/api/auth/sign-in',
+          FakeResponse(200, {
+            'access': 'access-42',
+            'refresh': 'refresh-42',
+            'user': meFixture(),
+          }),
+        );
       final rig = PhotoRig(backend, picker: pickerReturning(sourceFile()));
       await rig.start(tester);
-      rig.tokenStore.invalidateIdentity();
+      final before = rig.tokenStore.identityGeneration;
 
-      final saved = await tester.runAsync(
-        () => _photo(rig).pick(ImageSource.gallery),
-      );
+      // The member signs in again, and the new login is fully published (the
+      // session stores the credential generation with the account).
+      final saved = await tester.runAsync(() async {
+        await rig.container
+            .read(sessionProvider.notifier)
+            .signIn(email: 'a@example.test', password: 'password-a');
+        return _photo(rig).pick(ImageSource.gallery);
+      });
 
+      expect(rig.tokenStore.identityGeneration, isNot(before));
       expect(saved, isTrue, reason: 'the generation is read at the press');
       expect(backend.to('PUT', _put), hasLength(1));
     });
@@ -541,7 +556,11 @@ void main() {
           final session = rig.container.read(sessionProvider.notifier);
           await _until(() => rig.container.read(accountProvider) != null);
           try {
-            await session.removePhoto();
+            await session.removePhoto(
+              expectedIdentity: rig.container
+                  .read(tokenStoreProvider)
+                  .identityGeneration,
+            );
           } on ApiException {
             // The server refused.
           }

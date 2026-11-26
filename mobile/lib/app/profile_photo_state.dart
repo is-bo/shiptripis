@@ -250,11 +250,26 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
   /// What a press that starts now begins under, read at the press itself, before
   /// any wait. The press takes a new epoch of its own, so that whatever an
   /// earlier press left waiting can no longer reset what this one is doing.
-  _Launch _launch() => (
-    owner: ref.read(accountProvider)?.id,
-    identity: ref.read(tokenStoreProvider).identityGeneration,
-    epoch: ++_epoch,
-  );
+  ///
+  /// The account and the credential generation come from the **published
+  /// session** (it stores the generation with the account), never from the
+  /// token store: a sign-in moves the store's generation when it starts, while
+  /// the previous member is still published, and pairing that member with the
+  /// new generation would let a press through under the wrong one.
+  _Launch _launch() {
+    final session = ref.read(sessionProvider);
+    return session is SessionSignedIn
+        ? (
+            owner: session.account.id,
+            identity: session.identity,
+            epoch: ++_epoch,
+          )
+        : (
+            owner: null,
+            identity: ref.read(tokenStoreProvider).identityGeneration,
+            epoch: ++_epoch,
+          );
+  }
 
   /// The launch of a retry: the account and credentials [photo] was prepared
   /// under, in an epoch of its own.
@@ -266,11 +281,14 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
   /// writes anything for member B, however late its answer comes, and a
   /// sign-in whose tokens are saved before the account is published already
   /// ends the step.
-  bool _live(_Launch launch) =>
-      ref.mounted &&
-      launch.epoch == _epoch &&
-      ref.read(accountProvider)?.id == launch.owner &&
-      ref.read(tokenStoreProvider).identityGeneration == launch.identity;
+  bool _live(_Launch launch) {
+    if (!ref.mounted || launch.epoch != _epoch) return false;
+    final session = ref.read(sessionProvider);
+    final published = session is SessionSignedIn ? session : null;
+    return published?.account.id == launch.owner &&
+        (published == null || published.identity == launch.identity) &&
+        ref.read(tokenStoreProvider).identityGeneration == launch.identity;
+  }
 
   /// A step found itself no longer live. If it is still the operation that owns
   /// the state and the account is still the one it began for (a credential
@@ -335,7 +353,7 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
     if (picked == null) return false;
     final prepared = await _prepare(picked.path, launch);
     if (prepared == null) return false;
-    return _upload(launch);
+    return _upload(launch, prepared);
   }
 
   /// Sends the prepared photo again (it failed before). Returns true when the
@@ -344,12 +362,14 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
   Future<bool> upload() {
     final photo = state.picked;
     if (photo == null || state.busy) return Future.value(false);
-    return _upload(_launchFor(photo));
+    return _upload(_launchFor(photo), photo);
   }
 
-  Future<bool> _upload(_Launch launch) async {
-    final photo = state.picked;
-    if (photo == null || state.busy) return false;
+  /// Sends [photo], the very photo the caller made or meant: if it is no longer
+  /// the pending photo (a newer press replaced it) nothing is sent and nothing
+  /// of the newer press is touched.
+  Future<bool> _upload(_Launch launch, PickedPhoto photo) async {
+    if (!identical(state.picked, photo) || state.busy) return false;
     if (!_live(launch)) {
       await _release(photo.path);
       _abandon(launch);
@@ -459,9 +479,14 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
   Future<ApiException?> remove() async {
     if (state.busy) return null;
     final launch = _launch();
+    // The same check as an upload: a press that no longer belongs to the
+    // published member, or that came during a sign-in, sends nothing.
+    if (!_live(launch)) return null;
     state = state.copyWith(removing: true);
     try {
-      await ref.read(sessionProvider.notifier).removePhoto();
+      await ref
+          .read(sessionProvider.notifier)
+          .removePhoto(expectedIdentity: launch.identity);
     } on ApiException catch (error) {
       if (_live(launch)) state = state.copyWith(removing: false);
       return error;

@@ -114,4 +114,15 @@ class PhotoGeometryTest {
     fun onlyTheQuarterTurnOrientationsSwapTheAxes() {
         assertEquals((1..8).filter { PhotoGeometry.swapsAxes(it) }, listOf(5, 6, 7, 8))
     }
+
+    @Test
+    fun onlyTheFullFrameFormatsAreHeldToTheSourceLimit() {
+        assertTrue(PhotoGeometry.isFullFrameFormat("image/heif"))
+        assertTrue(PhotoGeometry.isFullFrameFormat("image/HEIC"))
+        assertTrue(PhotoGeometry.isFullFrameFormat("image/heic-sequence"))
+        assertTrue(PhotoGeometry.isFullFrameFormat("image/avif"))
+        assertFalse(PhotoGeometry.isFullFrameFormat("image/jpeg"))
+        assertFalse(PhotoGeometry.isFullFrameFormat("image/png"))
+        assertFalse(PhotoGeometry.isFullFrameFormat(null))
+    }
 }

@@ -36,8 +36,10 @@
 ///   else's, in the same serialized queue as the credentials and the sign-out.
 library;
 
+import 'dart:io' show Platform;
 import 'dart:math';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -59,7 +61,9 @@ enum PickPurpose {
 /// (a test runner has no camera and no lost-result store).
 final imagePickerProvider = Provider<ImagePicker>((ref) => ImagePicker());
 
-final pickGuardProvider = Provider<PickGuard>((ref) => PickGuard(ref));
+final pickGuardProvider = Provider<PickGuard>(
+  (ref) => PickGuard(ref, nativeLaunchGate: Platform.isAndroid),
+);
 
 /// A pick was not allowed to go on, and why.
 ///
@@ -88,12 +92,23 @@ class _Ticket {
 }
 
 class PickGuard {
-  PickGuard(this._ref, {DateTime Function()? now}) : _now = now ?? DateTime.now;
+  PickGuard(
+    this._ref, {
+    DateTime Function()? now,
+    bool nativeLaunchGate = false,
+  }) : _now = now ?? DateTime.now,
+       _nativeLaunchGate = nativeLaunchGate;
 
   final Ref _ref;
   final DateTime Function() _now;
 
+  /// Whether the platform has the launch gate of `wassla/pick_launch` (Android:
+  /// see [_announce]).
+  final bool _nativeLaunchGate;
+
   static final _random = Random.secure();
+
+  static const _launchChannel = MethodChannel('wassla/pick_launch');
 
   /// How long after a stale marker or a lost result was found a result is still
   /// not trusted. A copy that outlived its app finishes within seconds of the
@@ -136,10 +151,19 @@ class PickGuard {
       final identity = tokens.identityGeneration;
       final ticket = await _begin(purpose, identity);
       XFile? picked;
+      bool trusted = false;
       try {
         if (tokens.identityGeneration != identity) return null;
         if (proceed != null && !proceed()) return null;
-        picked = await open();
+        await _announce('opened');
+        try {
+          picked = await open();
+          // Judged the moment the picker answers: a long wait for the marker's
+          // release must not carry the suspect window past its end.
+          trusted = _trusts(ticket);
+        } finally {
+          await _announce('closed', strict: false);
+        }
       } finally {
         await _end(ticket);
       }
@@ -148,7 +172,7 @@ class PickGuard {
         await deleteQuietly(picked.path);
         return null;
       }
-      if (!_trusts(ticket)) {
+      if (!trusted) {
         // It may be another pick's file (an identity document, a ticket): it is
         // never kept, shown or sent.
         await deleteQuietly(picked.path);
@@ -211,6 +235,25 @@ class PickGuard {
     final tainted = exchange.previous != null || lost.found;
     if (tainted) _suspectUntil = _now().add(suspectWindow);
     return _Ticket(marker, tainted: tainted);
+  }
+
+  /// Tells the Android side that this pick has opened its picker (or that it
+  /// has answered), so a result the picker restores after the phone ended the
+  /// app, with no pick of this run waiting for it, is dropped before the plugin
+  /// copies it: a copy still being made cannot then answer a later pick. Only
+  /// Android has the gate (the picker's other platforms keep no lost result for
+  /// another process to answer), so elsewhere there is nothing to tell. A refusal of the
+  /// opening ([strict]) stops the pick, because a launch the native side does
+  /// not know would have its own answer dropped.
+  Future<void> _announce(String event, {bool strict = true}) async {
+    if (!_nativeLaunchGate) return;
+    try {
+      await _launchChannel.invokeMethod<void>(event);
+    } on MissingPluginException {
+      // No native side.
+    } on Object {
+      if (strict) throw const PickBlockedException();
+    }
   }
 
   /// Whether a result that arrives for [ticket] can be believed to answer this

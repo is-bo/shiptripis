@@ -370,7 +370,11 @@ void main() {
         final session = rig.container.read(sessionProvider.notifier);
         final refresh = session.refreshAccount();
         await Future<void>.delayed(const Duration(milliseconds: 30));
-        await session.removePhoto();
+        await session.removePhoto(
+          expectedIdentity: rig.container
+              .read(tokenStoreProvider)
+              .identityGeneration,
+        );
         gate.complete(FakeResponse(200, meFixture(photo: photoActive('v1'))));
         await refresh;
       });
@@ -386,7 +390,11 @@ void main() {
         final session = rig.container.read(sessionProvider.notifier);
         final refresh = session.refreshAccount();
         await Future<void>.delayed(const Duration(milliseconds: 30));
-        await session.removePhoto();
+        await session.removePhoto(
+          expectedIdentity: rig.container
+              .read(tokenStoreProvider)
+              .identityGeneration,
+        );
         gate.complete(
           FakeResponse(200, {
             ...meFixture(photo: photoActive('v1')),
@@ -411,7 +419,11 @@ void main() {
 
       await tester.runAsync(() async {
         final session = rig.container.read(sessionProvider.notifier);
-        await session.removePhoto();
+        await session.removePhoto(
+          expectedIdentity: rig.container
+              .read(tokenStoreProvider)
+              .identityGeneration,
+        );
         await session.refreshAccount();
       });
 

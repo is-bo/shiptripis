@@ -251,8 +251,15 @@ class TokenStore {
     await _storage.delete(key: _kRoleContext);
     // A pick still open at sign-out may yet answer, for nobody: its marker
     // becomes a bare "something was open" so the next pick still hears of it,
-    // and names no account.
-    await _pendingPicks.closeBySignOut();
+    // and names no account. A refusal of storage leaves the marker as it was
+    // (it names a purpose and a nonce, nothing of the account) and must not
+    // stop the sign-out: the credentials are already gone, and the next pick
+    // finds the marker and is careful.
+    try {
+      await _pendingPicks.closeBySignOut();
+    } on Object {
+      // The marker stays; the sign-out goes on.
+    }
     await purgeLegacyArtifacts();
   }
 

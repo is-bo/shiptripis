@@ -297,6 +297,47 @@ void main() {
       expect(stored!.file.readAsBytesSync(), tinyPng);
     });
 
+    test('a body that never finishes holds up no other address', () async {
+      final a = _photo('a');
+      final b = _photo('b');
+      rig.network.bodies[a.url] = StreamController<List<int>>();
+
+      final loadA = rig.load(a);
+      loadA.ignore();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      final loadB = rig.load(b);
+
+      final response = await loadB.timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => throw StateError('B waited for A\'s open body'),
+      );
+
+      expect(response, isA<FileInfo>());
+      expect((response as FileInfo).file.readAsBytesSync(), tinyPng);
+    });
+
+    test('a body that fails halfway leaves no file at all', () async {
+      final a = _photo('a');
+      final bodyA = rig.network.bodies[a.url] = StreamController<List<int>>();
+
+      final loadA = rig.load(a);
+      final failed = expectLater(loadA, throwsA(anything));
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      bodyA
+        ..add(tinyPng.sublist(0, 10))
+        ..addError(const SocketException('connection lost'));
+      await failed;
+
+      expect(
+        rig.directory.listSync().whereType<File>().where(
+          (f) => f.path.endsWith('.png'),
+        ),
+        isEmpty,
+        reason: 'no partial picture',
+      );
+      expect(await rig.manager.getFileFromCache('v1'), isNull);
+    });
+
     test('a failed first install does not stop the next one', () async {
       final a = _photo('a');
       final b = _photo('b');

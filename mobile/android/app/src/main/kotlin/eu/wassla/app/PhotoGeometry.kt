@@ -65,6 +65,18 @@ object PhotoGeometry {
         return ladder
     }
 
+    /**
+     * Whether a picture of this MIME type is decoded as one whole frame whatever
+     * sample is asked for (HEIF, HEIC and AVIF are not tiled in general), so that
+     * [MAX_SOURCE_PIXELS] applies before any pixel is decoded, by whichever
+     * decoder reads it. A JPEG or PNG samples as it decodes and is not limited.
+     */
+    fun isFullFrameFormat(mimeType: String?): Boolean {
+        val type = mimeType?.lowercase() ?: return false
+        return type.startsWith("image/heif") || type.startsWith("image/heic") ||
+            type.startsWith("image/avif")
+    }
+
     /** Whether a picture of [width] x [height] may be handed to the platform decoder. */
     fun withinSourceLimit(width: Int, height: Int): Boolean =
         width.toLong() * height.toLong() <= MAX_SOURCE_PIXELS

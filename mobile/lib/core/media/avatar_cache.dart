@@ -16,12 +16,16 @@
 ///   of a fresh one that joined it. When one succeeds the bytes are the
 ///   version's and the other loads answer from them;
 /// * **installs** a version's picture one response at a time: requests run
-///   independently, but only one response at a time is written for a version,
-///   and one that finds the picture already there is dropped unwritten. Two
-///   valid addresses that answer together therefore leave one file, not two.
+///   independently and each reads its whole body first (so a slow one holds up
+///   nobody and a body that fails halfway leaves no file), and only the
+///   publication of the bytes is queued for a version; one that finds the
+///   picture already there is dropped unwritten. Two valid addresses that
+///   answer together therefore leave one file, not two.
 library;
 
 import 'dart:convert';
+import 'dart:io' show HttpException;
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
@@ -139,19 +143,20 @@ class AvatarCacheManager extends CacheManager {
         uri: Uri.tryParse(url),
       );
     }
+    // The body is read first, on its own, and only then does the install queue
+    // take a turn: a response that is slow or never finishes cannot hold up
+    // another address's, and a body that fails halfway leaves no file at all.
+    final bytes = await _readBody(response.content);
+    final extension = response.fileExtension;
     return _installOnce(version, () async {
       // Another address for this version may have answered first (and may
       // still have been writing when this one answered): its bytes are the
       // same picture, so this response is dropped rather than stored twice.
       final existing = await getFileFromCache(version);
-      if (existing != null) {
-        await response.content.listen((_) {}).cancel();
-        return existing;
-      }
-      final extension = response.fileExtension;
-      final file = await putFileStream(
+      if (existing != null) return existing;
+      final file = await putFile(
         url,
-        response.content,
+        bytes,
         key: version,
         fileExtension: extension.startsWith('.')
             ? extension.substring(1)
@@ -160,6 +165,21 @@ class AvatarCacheManager extends CacheManager {
       return FileInfo(file, FileSource.Online, response.validTill, url);
     });
   }
+
+  /// The whole body, or an error: a picture is a few tens of kilobytes, and one
+  /// larger than [_maxBytes] is not a profile photo.
+  static Future<Uint8List> _readBody(Stream<List<int>> content) async {
+    final builder = BytesBuilder(copy: false);
+    await for (final chunk in content) {
+      builder.add(chunk);
+      if (builder.length > _maxBytes) {
+        throw const HttpException('The photo is larger than a profile photo.');
+      }
+    }
+    return builder.takeBytes();
+  }
+
+  static const _maxBytes = 4 * 1024 * 1024;
 
   /// Runs [install] after every install queued before it for [version] has
   /// finished, whether those succeeded or not.

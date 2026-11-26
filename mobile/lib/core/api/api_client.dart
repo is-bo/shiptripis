@@ -254,7 +254,18 @@ class ApiClient {
   }
 
   /// For `DELETE` endpoints, whose success is a 204.
-  Future<void> deleteVoid(String path, {CancelToken? cancelToken}) async {
+  ///
+  /// [expectedIdentity] is the credential generation the caller captured at
+  /// its press: if a sign-in or sign-out has happened since, nothing is sent.
+  Future<void> deleteVoid(
+    String path, {
+    int? expectedIdentity,
+    CancelToken? cancelToken,
+  }) async {
+    if (expectedIdentity != null &&
+        expectedIdentity != _tokens.identityGeneration) {
+      throw ApiException.from(_AuthInterceptor.sessionChanged());
+    }
     await _write(
       (identity) => _dio.delete<dynamic>(
         path,

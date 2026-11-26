@@ -55,11 +55,18 @@ class SessionSignedOut extends SessionState {
 }
 
 class SessionSignedIn extends SessionState {
-  const SessionSignedIn(this.account, {this.generation = 0});
+  const SessionSignedIn(this.account, {this.generation = 0, this.identity = 0});
   final Account account;
 
   /// Changes at each authentication, including a return to the same account.
   final int generation;
+
+  /// The credential generation (`TokenStore.identityGeneration`) this account
+  /// was published under. A sign-in moves the store's generation the moment it
+  /// starts, while the previous account stays published until the new one
+  /// answers; a press that must belong to the published account reads this, not
+  /// the store, so it can never pair one account with another's generation.
+  final int identity;
 }
 
 /// Which side of the marketplace the UI is presenting.
@@ -226,6 +233,7 @@ class SessionController extends Notifier<SessionState> {
   Future<void> restore() async {
     _revalidation?.cancel();
     final generation = ++_generation;
+    final identity = _tokens.identityGeneration;
     final String? refresh;
     try {
       // Deletes handover-code plaintext left by the retired build, before
@@ -251,7 +259,11 @@ class SessionController extends Notifier<SessionState> {
     final cached = await _readSnapshot();
     if (generation != _generation) return;
     if (cached != null) {
-      state = SessionSignedIn(cached, generation: generation);
+      state = SessionSignedIn(
+        cached,
+        generation: generation,
+        identity: identity,
+      );
     }
     await _confirm(generation: generation, cached: cached, attempt: 0);
   }
@@ -274,12 +286,20 @@ class SessionController extends Notifier<SessionState> {
         // read to a fresh generation rather than let one survive the swap.
         account = answered;
         _generation++;
-        state = SessionSignedIn(account, generation: _generation);
+        state = SessionSignedIn(
+          account,
+          generation: _generation,
+          identity: identity,
+        );
       } else {
         // The member may have changed their photo while this answer was on
         // its way: the newer photo is kept.
         account = _withNewestPhoto(answered, photoWrites);
-        state = SessionSignedIn(account, generation: generation);
+        state = SessionSignedIn(
+          account,
+          generation: generation,
+          identity: identity,
+        );
       }
       unawaited(_remember(account, identity));
     } on ApiException catch (error) {
@@ -414,7 +434,11 @@ class SessionController extends Notifier<SessionState> {
     if (generation != _generation) return;
     await _adoptRoleContextFor(account);
     if (generation != _generation) return;
-    state = SessionSignedIn(account, generation: generation);
+    state = SessionSignedIn(
+      account,
+      generation: generation,
+      identity: identity,
+    );
     _markAccountRead();
     unawaited(_remember(account, identity));
   }
@@ -469,10 +493,14 @@ class SessionController extends Notifier<SessionState> {
   );
 
   /// Removes the photo, or dismisses the notice that Wassla removed it.
-  Future<void> removePhoto() => _updatePhoto(() async {
-    await _auth.removePhoto();
-    return null;
-  });
+  ///
+  /// [expectedIdentity] is as for [uploadPhoto]: nothing is sent when the
+  /// credentials changed since the press.
+  Future<void> removePhoto({required int expectedIdentity}) =>
+      _updatePhoto(() async {
+        await _auth.removePhoto(expectedIdentity: expectedIdentity);
+        return null;
+      });
 
   Future<void> _updatePhoto(Future<OwnPhoto?> Function() change) async {
     final current = state;
@@ -487,6 +515,7 @@ class SessionController extends Notifier<SessionState> {
       state = SessionSignedIn(
         now.account.withPhoto(photo),
         generation: now.generation,
+        identity: now.identity,
       );
     }
   }
@@ -522,7 +551,11 @@ class SessionController extends Notifier<SessionState> {
         (state as SessionSignedIn).account.id == current.account.id &&
         answered.id == current.account.id) {
       final account = _withNewestPhoto(answered, photoWrites);
-      state = SessionSignedIn(account, generation: current.generation);
+      state = SessionSignedIn(
+        account,
+        generation: current.generation,
+        identity: current.identity,
+      );
       unawaited(_remember(account, identity));
     }
   }
@@ -550,7 +583,11 @@ class SessionController extends Notifier<SessionState> {
           (state as SessionSignedIn).account.id == current.account.id &&
           answered.id == current.account.id) {
         final account = _withNewestPhoto(answered, photoWrites);
-        state = SessionSignedIn(account, generation: current.generation);
+        state = SessionSignedIn(
+          account,
+          generation: current.generation,
+          identity: current.identity,
+        );
         unawaited(_remember(account, identity));
       }
     } on ApiException {

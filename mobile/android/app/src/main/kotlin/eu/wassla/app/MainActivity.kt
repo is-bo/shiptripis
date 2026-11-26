@@ -3,6 +3,7 @@ package eu.wassla.app
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
@@ -22,6 +23,7 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         configurePhotoPrepare(flutterEngine)
         configurePickMarker(flutterEngine)
+        configurePickLaunch(flutterEngine)
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "eu.wassla.app/notification_permission",
@@ -100,6 +102,38 @@ class MainActivity : FlutterActivity() {
                     }
                 }
             }
+    }
+
+    /**
+     * `wassla/pick_launch`: the Dart side says when a pick opens its picker and
+     * when it has answered (see [PickLaunchGate]). A new engine starts with no
+     * pick open.
+     */
+    private fun configurePickLaunch(flutterEngine: FlutterEngine) {
+        PickLaunchGate.reset()
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "wassla/pick_launch")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "opened" -> PickLaunchGate.opened()
+                    "closed" -> PickLaunchGate.closed()
+                    else -> {
+                        result.notImplemented()
+                        return@setMethodCallHandler
+                    }
+                }
+                result.success(null)
+            }
+    }
+
+    /**
+     * A picker result is handed to the plugin only if a pick opened by this
+     * process is waiting for it; one restored after the phone ended the app is
+     * dropped before the plugin can copy its file (see [PickLaunchGate]).
+     */
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (!PickLaunchGate.shouldForward(requestCode)) return
+        @Suppress("DEPRECATION") super.onActivityResult(requestCode, resultCode, data)
     }
 
     override fun onDestroy() {

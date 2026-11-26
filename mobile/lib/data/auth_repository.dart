@@ -180,7 +180,8 @@ class AuthRepository {
 
   /// Removes the photo, or dismisses the notice that Wassla removed it. The
   /// server answers 204 either way, and also when there was nothing.
-  Future<void> removePhoto() => _api.deleteVoid('/api/me/photo');
+  Future<void> removePhoto({required int expectedIdentity}) =>
+      _api.deleteVoid('/api/me/photo', expectedIdentity: expectedIdentity);
 
   /// What stands before deleting the account.
   Future<AccountDeletionCheck> deletionCheck() async =>
