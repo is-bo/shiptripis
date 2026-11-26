@@ -23,9 +23,7 @@ from __future__ import annotations
 
 import logging
 
-from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError as DomainError
-from django.http import Http404
 from django.shortcuts import render
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -41,9 +39,6 @@ from rest_framework.views import APIView
 from apps.accounts.permissions import EmailVerifiedToWrite
 
 from .payout_accounts import (
-    ConnectUnavailable,
-    CountryUnsupported,
-    allowed_countries,
     open_dashboard,
     read_onboarding_state,
     refresh_account,
@@ -51,7 +46,9 @@ from .payout_accounts import (
     resolve_state_account,
     start_onboarding,
 )
-from .payout_profile_api import StrictInput, method_projection
+from .payout_mobile import setup_gate
+from .payout_profile_api import StrictInput, method_projection, setup_refusal
+from .payout_profiles import _traveler
 from .providers.base import ProviderError
 from .providers.stripe_connect import get_connect_gateway
 from .models import TravelerPayoutMethod
@@ -86,8 +83,10 @@ class ConnectView(APIView):
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
-        if not settings.PAYOUT_PROFILES_ENABLED:
-            raise Http404
+        # The member setup gate, before the body is read: switched-off profiles
+        # and an account that cannot hold payout setup each refuse with their
+        # own stable code, as every profile write already does.
+        _traveler(request.user)
 
     def _method(self, request):
         method = TravelerPayoutMethod.objects.filter(
@@ -113,28 +112,9 @@ class ConnectView(APIView):
         return method, account
 
     def handle_exception(self, exc):
-        if isinstance(exc, CountryUnsupported):
-            # A distinct, actionable contract: the client can name the
-            # supported countries and offer the DZD manual rail instead of
-            # showing a generic validation failure.
-            return Response(
-                {
-                    "code": "payout_country_unsupported",
-                    "detail": "Stripe EUR payouts are not available for this "
-                    "account country.",
-                    "supported_countries": list(allowed_countries()),
-                    "alternative": {"currency": "DZD", "rail": "manual"},
-                },
-                status=400,
-            )
-        if isinstance(exc, ConnectUnavailable):
-            return Response(
-                {
-                    "code": "stripe_connect_unavailable",
-                    "detail": "Stripe payout setup is not available yet.",
-                },
-                status=409,
-            )
+        refusal = setup_refusal(exc, self.request.user)
+        if refusal is not None:
+            return refusal
         if isinstance(exc, ProviderError):
             # Provider prose never reaches the client; a stable machine code
             # does. An outage leaves the stored readiness exactly as it was.
@@ -174,7 +154,7 @@ class StripeOnboardingView(ConnectView):
                 # audited, not logged, not pushed.
                 "onboarding_url": result["url"],
                 "expires_at": result["expires_at"],
-                "method": method_projection(method),
+                "method": method_projection(method, setup_gate(request.user)),
             },
             status=201,
         )
@@ -189,7 +169,9 @@ class StripeReadinessRefreshView(ConnectView):
         require_connect_enabled()
         _, account = self._account(request)
         refresh_account(account, gateway=get_connect_gateway())
-        return Response({"method": method_projection(self._method(request))})
+        return Response(
+            {"method": method_projection(self._method(request), setup_gate(request.user))}
+        )
 
 
 class StripeDashboardView(ConnectView):

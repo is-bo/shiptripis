@@ -1,14 +1,12 @@
 """Flagged, owner-scoped profile API. Sensitive fields are write-only."""
 
-from django.conf import settings
 from django.core.exceptions import ValidationError as DomainError, PermissionDenied
 from django.core.exceptions import ObjectDoesNotExist
-from django.http import Http404
 from django.db import transaction
 from django.utils.decorators import method_decorator
 from django.views.decorators.debug import sensitive_post_parameters
 from rest_framework import serializers
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import SAFE_METHODS, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
@@ -19,15 +17,18 @@ from apps.admin_panel.staff_api import StaffSessionMixin
 
 from .models import TravelerPayoutMethod, PayoutIdentityReviewAssignment
 from .payout_accounts import (
+    ConnectUnavailable,
     CountryUnsupported,
-    allowed_countries,
     stripe_setup_projection,
 )
 from .payout_profiles import (
+    PayoutProfilesDisabled,
+    TravelerRequired,
     set_preference,
     submit_dzd_profile,
     attest_identity,
     require_capabilities,
+    require_profiles,
 )
 
 
@@ -99,7 +100,58 @@ class AttestationInput(StrictInput):
     )
 
 
-def method_projection(method):
+def setup_refusal(exc, user):
+    """The stable answer to a refused member payout-setup call, or None.
+
+    Every reason the read model gives as `unavailable_reason` refuses a direct
+    write with the same code, so a client that skipped the read learns the same
+    thing. Email verification is refused earlier, by `EmailVerifiedToWrite`.
+    """
+    if isinstance(exc, PayoutProfilesDisabled):
+        return Response(
+            {"code": PayoutProfilesDisabled.code, "detail": "Payout setup is not open yet."},
+            status=409,
+        )
+    if isinstance(exc, TravelerRequired):
+        return Response(
+            {"code": TravelerRequired.code, "detail": "Payout setup needs a traveler account."},
+            status=403,
+        )
+    if isinstance(exc, ConnectUnavailable):
+        return Response(
+            {
+                "code": ConnectUnavailable.code,
+                "detail": "Stripe payout setup is not available yet.",
+            },
+            status=409,
+        )
+    if isinstance(exc, CountryUnsupported):
+        from .payout_mobile import eur_refusal, setup_gate
+
+        # H2: an unsupported payout-account country is a distinct product
+        # state, not a generic validation failure. With no country open at all
+        # the account country is not the reason, so the code says what is. The
+        # client can name what is supported and offer the DZD manual rail
+        # instead of asking the Traveler to guess. Nothing here suggests a
+        # residency they do not have.
+        gate = setup_gate(user)
+        code = eur_refusal(gate)
+        country_refused = code == CountryUnsupported.code
+        return Response(
+            {
+                "code": code,
+                "detail": "Stripe EUR payouts are not available for this account country."
+                if country_refused
+                else "Stripe EUR payouts are not available yet.",
+                "supported_countries": list(gate.countries),
+                "alternative": {"currency": "DZD", "rail": "manual"},
+            },
+            status=400 if country_refused else 409,
+        )
+    return None
+
+
+def method_projection(method, gate):
     from .payout_mobile import eur_method, dzd_method
     version = method.current_version
     profile = version.dzd_profile_revision if version else None
@@ -128,7 +180,7 @@ def method_projection(method):
         "stripe_setup": stripe_setup_projection(method)
         if method.currency == "EUR"
         else None,
-        "mobile": eur_method(method) if method.currency == "EUR" else dzd_method(method),
+        "mobile": eur_method(method, gate) if method.currency == "EUR" else dzd_method(method, gate),
     }
 
 
@@ -139,6 +191,9 @@ class ProfileView(APIView):
     # method behind for the owner to inherit. Staff views set their own.
     permission_classes = [IsAuthenticated, EmailVerifiedToWrite]
     throttle_classes = [ProfileThrottle]
+    #: A member read that stays open with payout profiles switched off: the
+    #: stored setup stays visible and the read itself says setup is closed.
+    readable_when_disabled = False
 
     def finalize_response(self, request, response, *args, **kwargs):
         response = super().finalize_response(request, response, *args, **kwargs)
@@ -147,8 +202,8 @@ class ProfileView(APIView):
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
-        if not settings.PAYOUT_PROFILES_ENABLED:
-            raise Http404
+        if request.method not in SAFE_METHODS or not self.readable_when_disabled:
+            require_profiles()
 
     def handle_exception(self, exc):
         from apps.core.storage import StorageNotConfigured
@@ -164,22 +219,9 @@ class ProfileView(APIView):
             )
         if isinstance(exc, ObjectDoesNotExist):
             return Response({"detail": "Payout resource not found."}, status=404)
-        if isinstance(exc, CountryUnsupported):
-            # H2: an unsupported payout-account country is a distinct product
-            # state, not a generic validation failure. The client can name what
-            # is supported and offer the DZD manual rail instead of asking the
-            # Traveler to guess. Nothing here suggests a residency they do not
-            # have.
-            return Response(
-                {
-                    "code": "payout_country_unsupported",
-                    "detail": "Stripe EUR payouts are not available for this "
-                    "account country.",
-                    "supported_countries": list(allowed_countries()),
-                    "alternative": {"currency": "DZD", "rail": "manual"},
-                },
-                status=400,
-            )
+        refusal = setup_refusal(exc, self.request.user)
+        if refusal is not None:
+            return refusal
         if isinstance(exc, DomainError):
             return Response(
                 {
@@ -192,16 +234,19 @@ class ProfileView(APIView):
 
 
 class PayoutMethodsView(ProfileView):
-    def get(self, request):
-        from .payout_mobile import methods_for, payout_summary
+    readable_when_disabled = True
 
+    def get(self, request):
+        from .payout_mobile import methods_for, payout_summary, setup_gate
+
+        gate = setup_gate(request.user)
         methods = list(methods_for(request.user))
         return Response(
             {
-                "methods": [method_projection(m) for m in methods],
+                "methods": [method_projection(m, gate) for m in methods],
                 "policy_version": "payout_profile_v1",
                 "execution_enabled": False,
-                **payout_summary(request.user, methods),
+                **payout_summary(request.user, methods, gate),
             }
         )
 
@@ -237,30 +282,32 @@ class PayoutMethodsView(ProfileView):
         return self.get(request)
 
     def post(self, request):
+        from .payout_mobile import setup_gate
+
         data = PreferenceInput(data=request.data)
         data.is_valid(raise_exception=True)
-        return Response(
-            method_projection(set_preference(actor=request.user, **data.validated_data))
-        )
+        method = set_preference(actor=request.user, **data.validated_data)
+        return Response(method_projection(method, setup_gate(request.user)))
 
 
 class DzdProfileView(ProfileView):
-    def get(self, request):
-        from .payout_mobile import methods_for, dzd_method
+    readable_when_disabled = True
 
+    def get(self, request):
+        from .payout_mobile import methods_for, dzd_method, setup_gate
+
+        gate = setup_gate(request.user)
         method = methods_for(request.user).filter(currency="DZD").first()
-        return Response({"method": method_projection(method) if method else None,
-                         "dzd": dzd_method(method)})
+        return Response({"method": method_projection(method, gate) if method else None,
+                         "dzd": dzd_method(method, gate)})
 
     def post(self, request):
+        from .payout_mobile import setup_gate
+
         data = DzdInput(data=request.data)
         data.is_valid(raise_exception=True)
-        return Response(
-            method_projection(
-                submit_dzd_profile(actor=request.user, **data.validated_data)
-            ),
-            status=201,
-        )
+        method = submit_dzd_profile(actor=request.user, **data.validated_data)
+        return Response(method_projection(method, setup_gate(request.user)), status=201)
 
 
 class PayoutIdentityReviewView(StaffSessionMixin, ProfileView):

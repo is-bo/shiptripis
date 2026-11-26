@@ -1,14 +1,73 @@
 """H6A read model. No routing, eligibility, settlement or FX writes here."""
 
+from dataclasses import dataclass
+
 from django.conf import settings
 from django.db.models import Prefetch, Q
 from django.utils import timezone
 
+from apps.accounts.permissions import EMAIL_VERIFICATION_REQUIRED
 from apps.parcels import tracking
 
 from .models import FinanceHold, Payout, PayoutProfileReview, TravelerPayoutMethod
-from .payout_accounts import allowed_countries, evaluate_readiness, expected_mode
+from .payout_accounts import (
+    ConnectUnavailable,
+    CountryUnsupported,
+    allowed_countries,
+    evaluate_readiness,
+    expected_mode,
+    require_connect_enabled,
+)
+from .payout_evidence import evidence_store_configured
 from .payout_manual_profiles import approved_profile
+from .payout_profiles import PayoutProfilesDisabled, TravelerRequired, holds_payout_setup
+
+#: Stripe Connect is switched on and configured, but no account country is open.
+NO_COUNTRIES = "stripe_connect_no_countries"
+EVIDENCE_UNAVAILABLE = "payout_evidence_unavailable"
+
+
+@dataclass(frozen=True, slots=True)
+class SetupGate:
+    """What a member payout-setup write meets right now.
+
+    Read from the checks that refuse the write, so every action the read model
+    offers is one the server accepts. `refusal` stops every setup write; the
+    other fields are the rail gates behind it.
+    """
+
+    profiles: bool
+    refusal: str | None
+    connect: bool
+    countries: tuple
+    evidence_store: bool
+
+
+def setup_gate(user):
+    if not settings.PAYOUT_PROFILES_ENABLED:
+        refusal = PayoutProfilesDisabled.code
+    elif not holds_payout_setup(user):
+        refusal = TravelerRequired.code
+    elif not user.is_email_verified:
+        # `EmailVerifiedToWrite` refuses every unsafe setup method on this flag.
+        refusal = EMAIL_VERIFICATION_REQUIRED
+    else:
+        refusal = None
+    try:
+        require_connect_enabled()
+        connect = True
+    except ConnectUnavailable:
+        connect = False
+    return SetupGate(profiles=settings.PAYOUT_PROFILES_ENABLED, refusal=refusal,
+                     connect=connect, countries=allowed_countries(),
+                     evidence_store=evidence_store_configured())
+
+
+def eur_refusal(gate):
+    """Why a new EUR account country cannot be accepted, past the member gate."""
+    if gate.countries:
+        return CountryUnsupported.code
+    return NO_COUNTRIES if gate.connect else ConnectUnavailable.code
 
 
 def methods_for(user):
@@ -17,12 +76,12 @@ def methods_for(user):
     ).order_by("currency")
 
 
-def eur_method(method):
+def eur_method(method, gate):
     version = method.current_version if method else None
     account = version.stripe_account if version else None
-    countries = list(allowed_countries())
+    countries = list(gate.countries)
     country = version.country if version else ""
-    available = bool(settings.STRIPE_CONNECT_ENABLED and countries)
+    country_supported = not country or country in countries
     state, reason = "not_configured", "payout_setup_required"
     if account:
         verdict = evaluate_readiness(account)
@@ -37,28 +96,45 @@ def eur_method(method):
         )
     elif version:
         state = "setup_required"
-    if country and country not in countries:
+    if not country_supported:
         reason = "payout_country_unsupported"
-        available = False
+    if gate.refusal:
+        unavailable = gate.refusal
+    elif not gate.connect:
+        unavailable = ConnectUnavailable.code
+    elif not countries:
+        unavailable = NO_COUNTRIES
+    elif not country_supported:
+        unavailable = CountryUnsupported.code
+    else:
+        unavailable = None
+    # Each action follows the write it leads to: every Stripe call needs the
+    # member gate and Connect; a new or resumed onboarding also needs the
+    # account country to be open, which refresh and dashboard access do not.
+    connect = gate.refusal is None and gate.connect
     actions = []
     account_usable = bool(account and account.active and account.provider_mode == expected_mode()
                           and account.platform_id == settings.STRIPE_CONNECT_PLATFORM_ACCOUNT_ID)
-    if available:
-        if account_usable:
-            actions.append("refresh")
-            if account.details_submitted:
-                actions.append("manage_eur")
-            if state == "setup_required" and method.enabled:
-                actions.append("resume_eur_setup")
-        elif not account:
-            actions.append("configure_eur")
+    if connect and account_usable:
+        actions.append("refresh")
+        if account.details_submitted:
+            actions.append("manage_eur")
+        if state == "setup_required" and method.enabled and country in countries:
+            actions.append("resume_eur_setup")
+    elif connect and not account and countries and country_supported:
+        actions.append("configure_eur")
     return {"state": state, "ready": state == "ready", "blocking_reason": reason or None,
             "available_actions": actions, "country": country or None,
-            "supported_countries": countries, "supported": available,
+            "supported_countries": countries,
+            "supported": bool(gate.connect and countries and country_supported),
+            # The preference PATCH accepts EUR on a supported account country;
+            # it does not need Connect, which only onboarding calls.
+            "selectable": bool(gate.refusal is None and countries and country_supported),
+            "unavailable_reason": unavailable,
             "checked_at": account.readiness_checked_at if account else None}
 
 
-def dzd_method(method):
+def dzd_method(method, gate):
     version = method.current_version if method else None
     profile = version.dzd_profile_revision if version else None
     review = profile.reviews.order_by("-pk").first() if profile else None
@@ -73,9 +149,14 @@ def dzd_method(method):
     reason = {"not_configured": "payout_setup_required", "setup_required": "payout_setup_required",
               "pending_review": "payout_profile_under_review",
               "needs_attention": "payout_profile_needs_attention"}.get(state)
+    # Submitting or replacing a profile starts with the cheque upload, so it
+    # needs the private evidence store as well as the member gate.
+    unavailable = gate.refusal or (None if gate.evidence_store else EVIDENCE_UNAVAILABLE)
     return {"state": state, "ready": state == "ready", "blocking_reason": reason,
-            "available_actions": ["replace_dzd_profile" if profile else "configure_dzd"],
-            "country": "DZ", "supported": True,
+            "available_actions": [] if unavailable else [
+                "replace_dzd_profile" if profile else "configure_dzd"],
+            "country": "DZ", "supported": gate.profiles,
+            "selectable": gate.refusal is None, "unavailable_reason": unavailable,
             "profile": {"reference": str(profile.public_reference),
                         "review_state": review.status if review else "pending_review",
                         "ccp_last_four": profile.ccp_last_four, "rip_last_four": profile.rip_last_four,
@@ -83,18 +164,32 @@ def dzd_method(method):
             "replacement_scope": "future_payouts_only"}
 
 
-def payout_summary(user, methods=None):
+def payout_summary(user, methods=None, gate=None):
+    gate = gate or setup_gate(user)
     methods = list(methods if methods is not None else methods_for(user))
     by_currency = {m.currency: m for m in methods}
     enabled = {m.currency for m in methods if m.enabled}
     preference = "both" if len(enabled) == 2 else "eur_only" if "EUR" in enabled else "dzd_only" if enabled else None
-    eur, dzd = eur_method(by_currency.get("EUR")), dzd_method(by_currency.get("DZD"))
-    return {"contract_version": "h6a.v1", "preference": preference,
-            "preference_required": preference is None,
+    eur, dzd = eur_method(by_currency.get("EUR"), gate), dzd_method(by_currency.get("DZD"), gate)
+    options = (("eur_only", eur["selectable"]), ("dzd_only", dzd["selectable"]),
+               ("both", eur["selectable"] and dzd["selectable"]))
+    return {"contract_version": "f1.v1", "preference": preference,
+            # Funding asks for a preference only while payout profiles are on.
+            "preference_required": preference is None and gate.profiles,
             "revisions": {c: by_currency[c].revision if c in by_currency else 0 for c in ("EUR", "DZD")},
+            # The stored preference above stays readable whatever this says;
+            # this is only whether a new setup write would be accepted now.
+            "setup": {"available": gate.refusal is None, "unavailable_reason": gate.refusal,
+                      "preference_options": [value for value, usable in options if usable]},
             "eur": eur, "dzd": dzd,
             "available_actions": list(dict.fromkeys(eur["available_actions"] + dzd["available_actions"])),
             "preference_scope": "future_payouts_only"}
+
+
+def setup_actions(user):
+    """The setup actions this traveler can use now, by payout currency."""
+    summary = payout_summary(user)
+    return {"EUR": summary["eur"]["available_actions"], "DZD": summary["dzd"]["available_actions"]}
 
 
 def payouts_for(user):
@@ -167,7 +262,7 @@ def page_context(payouts, *, user=None, include_actions=True):
     payouts = list(payouts)
     if not payouts:
         return {"disputed": set(), "held": set(), "account_holds": set(),
-                "actions": [], "profiles": {}}
+                "actions": {}, "profiles": {}}
     accounts, attempts = set(), set()
     for payout in payouts:
         version = payout.active_instruction_version
@@ -219,7 +314,7 @@ def page_context(payouts, *, user=None, include_actions=True):
                        for deal in (direct, credited) if deal}
     disputed.update(p.deal_id for p in payouts if (p.provider_mode, p.deal_id) in provider_scopes)
     return {"disputed": disputed, "held": held, "account_holds": scopes["account_id"],
-            "actions": payout_summary(user or payouts[0].traveler)["available_actions"] if include_actions else [],
+            "actions": setup_actions(user or payouts[0].traveler) if include_actions else {},
             # Approval depends on both the profile and the funding instant.
             "profiles": {}}
 
@@ -351,13 +446,19 @@ def payout_status(payout, *, at=None, context=None):
         # Finance can describe a normal provider wait without asking for action.
         # Older mobile clients render unknown blockers as "needs attention".
         reason = attention["block_reason"] if attention["needs_attention"] else None
+    rail = ("stripe_eur" if payout.method == "stripe_transfer" else "manual_dzd"
+            if payout.method == "manual" and payout.payout_currency == "DZD" else "unavailable")
     if state == "needs_attention" and reason in ("payout_setup_required", "payout_profile_needs_attention"):
         # Current setup can differ from this funded destination. Do not promise
         # that editing the current method will repair a historical instruction.
-        actions += context["actions"] if context else payout_summary(payout.traveler)["available_actions"]
+        # Only the funded rail's own actions, and only those usable now; an
+        # obligation without a rail may use either.
+        rails = context["actions"] if context else setup_actions(payout.traveler)
+        actions += {"stripe_eur": rails.get("EUR", []), "manual_dzd": rails.get("DZD", [])}.get(
+            rail, rails.get("EUR", []) + rails.get("DZD", []))
     return {"reference": str(payout.public_reference), "deal_id": deal.pk,
             "tracking_number": tracking.for_deal(deal),
-            "rail": "stripe_eur" if payout.method == "stripe_transfer" else "manual_dzd" if payout.method == "manual" and payout.payout_currency == "DZD" else "unavailable",
+            "rail": rail,
             "settlement_currency": payout.payout_currency or None,
             "amount_eur_cents": int(payout.amount_eur_cents),
             "dzd_amount": payout.payout_amount_minor if payout.payout_currency == "DZD" else None,

@@ -22,6 +22,7 @@ from apps.finance.sensitive_data import (
 )
 from apps.finance.payout_identity import compare_names
 from apps.finance.payout_profiles import set_preference, submit_dzd_profile
+from apps.finance.payout_mobile import setup_gate
 from apps.finance.payout_profile_api import method_projection
 from apps.finance.payout_domain import revise_amount_locked, validate_transition
 from apps.finance.payout_snapshots import create_snapshot
@@ -135,7 +136,7 @@ def test_profile_version_and_safe_projection(configured):
     )
     profile = method.current_version.dzd_profile_revision
     assert old != method.current_version_id
-    text = json.dumps(method_projection(method), default=str) + str(profile)
+    text = json.dumps(method_projection(method, setup_gate(user)), default=str) + str(profile)
     for secret in (
         "PrivateGiven",
         "PrivateFamily",
@@ -362,8 +363,15 @@ def test_profile_endpoints_disabled_and_owner_only(configured):
     response = client.get("/api/payouts/methods")
     assert response.status_code == 200
     assert response.data["methods"] == []
+    # F1: switched-off profiles are a stable authenticated state, not a 404.
+    # The read stays open and says so; a write is refused with the same code.
     with override_settings(PAYOUT_PROFILES_ENABLED=False):
-        assert client.get("/api/payouts/methods").status_code == 404
+        disabled = client.get("/api/payouts/methods")
+        assert disabled.status_code == 200
+        assert disabled.data["setup"]["unavailable_reason"] == "payout_profiles_disabled"
+        refused = client.post("/api/payouts/methods", {}, format="json")
+        assert refused.status_code == 409
+        assert refused.data["code"] == "payout_profiles_disabled"
     assert (
         client.post(
             "/api/payouts/methods",

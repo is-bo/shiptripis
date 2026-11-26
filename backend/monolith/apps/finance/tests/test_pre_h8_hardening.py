@@ -19,7 +19,7 @@ from apps.finance.payout_domain import open_hold
 from apps.finance.payout_evidence import upload_evidence
 from apps.finance.payout_manual import prepare, begin
 from apps.finance.payout_manual_profiles import approved_profile, review_profile
-from apps.finance.payout_mobile import dzd_method, payout_status, payouts_for
+from apps.finance.payout_mobile import dzd_method, payout_status, payouts_for, setup_gate
 from apps.finance.payout_profiles import (
     assign_identity_review, attest_identity, revoke_identity, submit_dzd_profile,
 )
@@ -162,7 +162,7 @@ def test_h7_frozen_approval_survives_reattestation_and_replacement(configured_h4
     assert approved_profile(profile, funded_payout=payout)
     method = replacement(s, profile)
     current = method.current_version.dzd_profile_revision
-    assert dzd_method(method)["state"] == "pending_review"
+    assert dzd_method(method, setup_gate(s.traveler))["state"] == "pending_review"
     assert not approved_profile(current)
     with pytest.raises(PermissionDenied):
         review_profile(actor=s.traveler, reference=current.public_reference, approve=True)

@@ -47,6 +47,9 @@ def configured_h4():
     objects = {}
 
     class Store:
+        def require_bucket(self):
+            return "payout-test"
+
         def put(self, key, body, mime):
             assert key not in objects and mime == "application/octet-stream"
             objects[key] = body
@@ -321,6 +324,7 @@ def test_required_profile_fields(configured_h4, field):
 def test_console_and_profile_replacement(configured_h4):
     from django.test import Client
     from django.urls import reverse
+    from apps.finance.payout_mobile import setup_gate
     from apps.finance.payout_profile_api import method_projection
     from apps.finance.models import DzdPayoutProfileRevision
 
@@ -367,7 +371,7 @@ def test_console_and_profile_replacement(configured_h4):
         expected_revision=replacement.revision,
     )
     assert DzdPayoutProfileRevision.objects.filter(pk=profile.pk).exists()
-    assert "rip_encrypted" not in str(method_projection(replacement))
+    assert "rip_encrypted" not in str(method_projection(replacement, setup_gate(s.traveler)))
     assert (
         client.post(
             url, {"action": "prepare", "state_version": payout.state_version}
