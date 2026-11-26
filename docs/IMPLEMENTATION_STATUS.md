@@ -16,13 +16,16 @@
   (`_recheck_guest_link`), bound to its own order; a link stopped, expired, used or paired with another
   order since the page read it starts nothing (`guest_link_invalid`). One validity rule,
   `_guest_link_payable`, serves both reads.
-- Second pass (Astra 6.2), five findings fixed: both Caddy proxies redact guest paths in the error
-  logger's URI and Referer; the guest throttle keys by client address whether or not a session is
-  signed in; an open guest checkout is handed only to the receipt address it was opened with
-  (another address gets `guest_checkout_in_progress`, never the URL, never an overwrite); a matching
-  checkout still being opened, or one superseded mid-call, answers the retryable
-  `checkout_in_progress` and keeps its provider key, so a double tap opens one provider session.
-  The page shows a translated "being opened" state with a resend button. Provider idempotency and
+- Second and third passes (Astra 6.2, eleven findings fixed). Neither Caddy proxy logs a request URI
+  or Referer, in any encoding, and both send `no-referrer` and `private, no-store` on every error
+  they answer themselves. The guest throttle keys by client address whether or not a session is
+  signed in. An order has at most one checkout that can collect: an open checkout is replaced only
+  after its provider (Stripe or Chargily expire) confirms it closed, never while a payment settles,
+  and otherwise the caller gets the retryable `checkout_in_progress` (on the page, a translated "A
+  payment is already under way"). Only the signed-in member who opened a checkout is handed it
+  again; a guest never is, so the address a link holder sends tells them nothing. A checkout whose
+  request died is recovered under its own key with identical parameters, one request at a time.
+  With receipts off no surface keeps or sends an address. Amounts, provider idempotency and
   webhook-only settlement unchanged. Detail: `docs/PHASE_G1_GUEST_CHECKOUT_CSRF.md`.
 
 ## Wassla: missing route stops get their own rejection reasons (M1, 2026-11-25)

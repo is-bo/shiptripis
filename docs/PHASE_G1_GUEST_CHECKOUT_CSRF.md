@@ -91,9 +91,10 @@ still marks the attempt failed.
   which is what `resolve_guest_link` already promises for every dead link.
 - **A link stopped mid-tap answers the uniform page with status 409**, the status the page already used
   for a checkout refusal. A prober cannot use it: reaching that branch takes a token that resolved.
-- **Two taps at the same moment.** The later tap waits on the order lock, then reuses the first
-  checkout or, if its provider call is still out, is asked to wait (second pass, finding 5). It no
-  longer supersedes the first attempt, so the provider opens one session.
+- **Two taps at the same moment.** The later tap waits on the order lock. If the first tap's
+  provider call is still out, it is asked to wait (second pass, finding 5). Once the first checkout
+  is open, a guest's later tap closes it at the provider and opens its own (third pass, B and D).
+  Either way the order has one checkout that can collect.
 - **Logs.** The guest page's own log lines name the order id only. Django's `django.request` logger
   repeats the concrete path on 4xx/5xx; production keeps it at ERROR and its formatter replaces that
   message with the route template (`test_deployment_safety`). The CSRF refusal, which also logged the
@@ -117,8 +118,9 @@ New, `apps/finance/tests/test_j7c_guest_link_ux.py`, `BrowserCheckoutTests` (13)
 - a link revoked, replaced or expired between the page's read and checkout (resolve patched to stop the
   link after reading it): uniform page, no attempt;
 - the other ordering: once the payer is at the provider, revocation is refused and the link stays live;
-- two taps: the same checkout URL, one attempt; the signed event delivered twice funds once (one
-  `deal_funding`); a tap after payment shows the already-paid page and starts nothing;
+- two taps: the second closes the first checkout and opens its own (third pass; before it, the
+  same URL); the signed event delivered twice funds once (one `deal_funding`); a tap after payment
+  shows the already-paid page and starts nothing;
 - provider failure through the real service (gateway raises): "Payments are paused", attempt failed,
   nothing funded, the link still renders and the retry hands off to a new attempt that funds once;
 - forbidden fields (amount, currency, provider amount, order, order id, another order's reference and
@@ -175,17 +177,19 @@ No state scrolls horizontally (`scrollWidth` equals the 360 px viewport in all s
 local test rail; on the server it is the card rail. The page's look is unchanged by G1; the only markup
 change is the removed hidden token field.
 
-The second pass adds two states, captured the same way (the opening state from a real second tap
-made while the first tap's provider call was out):
+The second pass added an "opening" state and an address-conflict state. The third pass replaces
+both with one state, so their screenshots are removed:
 
-- `guest-opening-en.png`, `guest-opening-ar.png`: "Your payment page is being opened", with a "Try
-  again" button that resends the same rail and address;
-- `guest-conflict-en.png`, `guest-conflict-ar.png`: a second holder's tap with another receipt
-  address, the 409 with the error under the email field.
-
-Neither scrolls horizontally at 360 px.
+- `guest-in-progress-en.png`, `guest-in-progress-ar.png`: "A payment is already under way", with a
+  "Try again" button that resends the same rail and address. Captured from a real second tap (with
+  another receipt address) while the open checkout could not be closed at the provider, rendered by
+  the real view through Django's test client and photographed by Playwright's Chromium at 360 px
+  (2x, mobile). Neither scrolls horizontally (`scrollWidth` 360); the Arabic page is right to left.
 
 ## Second-pass review
+
+Findings 4 and 5 below were reworked in the third pass (next section): the address check of
+finding 4 is gone, and the opening wait of finding 5 now covers recovery too.
 
 Astra 6.2 rejected the pull request at `4337d9c` with five findings. The lead accepted all five, and
 each is fixed on this branch. Provider idempotency and webhook-only settlement are unchanged, and no
@@ -290,6 +294,160 @@ fail. With only the `start_checkout` changes reverted (the classes kept so the f
 instant test provider they rarely reach the in-flight window, which is why the held-provider test
 exists.
 
+## Third-pass review
+
+Astra 6.2 rejected the re-review at `f1fe565`: two blockers and four should-fix findings. The lead
+accepted all six (A to F below) and added binding instructions to B and C. Each is fixed on this
+branch, in one commit on top of `f1fe565`. No fix changes an amount, a fee, a currency or what funds
+an order: settlement still comes only from the signed webhook or provider reconciliation. What
+changes is which checkout may still collect.
+
+**The rule now.** An order has at most one checkout that can collect. `start_checkout` takes up to
+three short looks at the order's open attempt under the order lock (`_checkout_step`), and makes
+each provider call between them with no lock held:
+
+| The open attempt | What the caller gets |
+| --- | --- |
+| Settling (`processing`: a delayed method was authorised) | `CheckoutInProgress`, nothing touched |
+| No hosted URL yet, last written under 2 minutes ago | `CheckoutInProgress`: its request is still at the provider |
+| No hosted URL, older, on a rail whose create is idempotent (Stripe, mock) | claimed, then recovered under its own key with the same parameters, then looked at again |
+| No hosted URL, older, recovery refused for good, or a rail with nothing to recover by (Chargily) | replaced: its URL, if a checkout was opened at all, never left the server |
+| Opened by this signed-in member, same rail, same amount, not lapsed | handed back to that member (`created=False`) |
+| Anything else (a guest, another payer, another rail or amount, lapsed) | closed at its provider; replaced only once the provider confirms it closed, else `CheckoutInProgress` |
+
+`CheckoutInProgress` is 409 `checkout_in_progress` on the JSON surfaces and the translated "A payment
+is already under way" page on the guest page, the same for every holder whatever they sent.
+
+### A. Proxy error logs still carried an encoded token (blocker)
+
+Caddy logs the URI as the client sent it. `/pay%2Fguest/<token>` defeated the round-2 regex, while
+Gunicorn still decoded it to the guest page.
+
+- **Fix.** As the lead asked, no regex: both Caddyfiles drop `request>uri` and
+  `request>headers>Referer` from every log entry. `handle_errors` (finding F) makes Caddy record a
+  handled error at debug level, so each file keeps those entries in a second logger,
+  `proxy_errors`, limited to `http.log.error` at DEBUG, with the same two fields dropped. The
+  default logger excludes `http.log.error`, so nothing is logged twice. Neither proxy has access
+  logs.
+- **Check.** `test_proxy_logs.py` sends eight paths (plain, `%2F` and `%2f` separators, an encoded
+  letter, an encoded slash before the token) times two Referers (plain and encoded) to each shipped
+  Caddyfile with its upstream absent. It asserts sixteen 502s, sixteen `http.log.error` entries,
+  none with a URI or a Referer, and no run of eight characters of the token anywhere in the
+  proxy's output. Passes on Caddy 2.10.0 (the production image's version) and 2.8.4 with the real
+  binaries; fails on the round-2 files (they keep the URI); `caddy validate` passes on both files
+  and both versions.
+
+### B. A superseded checkout stayed payable (blocker)
+
+The owner paying while the guest's checkout opened left the guest a "Try again" that superseded the
+owner's attempt locally and opened a new one, while the owner's hosted URL could still be paid.
+
+- **Fix.** The lead's instruction: never leave a superseded attempt payable. Each rail's gateway
+  gained `close_checkout`: Stripe `POST /v1/checkout/sessions/{id}/expire`, Chargily
+  `POST /checkouts/{id}/expire`, and the mock. A refused expiry is answered by reading the checkout:
+  expired, failed or cancelled is closed; paid, complete or processing has collected; anything else
+  raises. `start_checkout` supersedes an attempt whose checkout was handed out only after its
+  provider confirmed it closed (`CHECKOUT_CLOSED`). An error, a timeout, a checkout still open, or one
+  that has taken or is taking a payment answers `CheckoutInProgress`, and the attempt stays open
+  for its payment, if any, to settle it. The same rule applies when the same payer switches rail or
+  amount. The provider call runs after the order lock is released, so a slow provider holds no lock
+  and the lock order is unchanged.
+- **Stripe** expires only an `open` session, atomically: a payer cannot complete it afterwards.
+  **Chargily** expires only a `pending` checkout and answers success only once it has (400 when
+  already expired, 403 for any other status, per its API reference), so a successful expire is the
+  confirmation.
+- **Check.** `test_another_holder_replaces_the_checkout_once_it_is_closed`,
+  `test_a_checkout_its_provider_cannot_close_is_not_replaced` (an outage and a refusal, for a guest
+  and the owner, on both surfaces), `test_a_checkout_that_took_a_payment_is_not_replaced` (paid at
+  the provider, webhook not yet in: refused, then the webhook funds once),
+  `test_the_owner_on_another_amount_or_a_lapsed_checkout_closes_it_first`, and the extended
+  owner/guest race on both surfaces: the guest is asked to wait, then the guest's retry closes the
+  owner's checkout before opening its own. Every one asserts that exactly one checkout is payable at
+  the provider (`MockGateway.is_payable`). `GuestPageRaceTests.test_no_lock_is_held_while_a_provider_closes_a_checkout`
+  (real threads, PostgreSQL) holds the provider's close open and takes the order row from another
+  connection with a 2 s lock timeout meanwhile. Adapter tests for Stripe and Chargily cover the
+  expire call, each refusal answered by a read, a checkout still open, and an outage.
+
+### C. A checkout whose worker died was opened twice (should-fix)
+
+Stripe created a session, the worker died before storing it, and a retry after two minutes opened a
+second session under a fresh key.
+
+- **Fix.** `_checkout_request(attempt)` builds the provider request from the attempt alone; the
+  first call and every recovery use it, so the key and the parameters are identical (the lead's
+  instruction). An attempt with no URL past the opening window, on Stripe or the mock, is recovered
+  with `recover_checkout_attempt` before anything else: the member who opened it is handed it, anyone
+  else gets it closed and replaced. A recovery the provider cannot answer now leaves the caller
+  waiting; one refused for good, or a rail without an idempotent create (Chargily), is abandoned and
+  replaced, because its URL never left the server. The provider reconcile job reads the same
+  `RECOVERABLE_CHECKOUT_PROVIDERS`.
+- **Check.** `test_a_checkout_whose_worker_died_is_recovered_not_opened_twice` (the provider opens
+  it, the process dies, a retry inside the window waits, one past it is handed the same checkout;
+  two creates with the same request, one provider session),
+  `test_a_guest_checkout_whose_worker_died_is_recovered_then_closed`,
+  `test_a_lost_checkout_that_cannot_be_recovered` (unreachable, refused, and a rail without
+  recovery).
+
+### D. The address check told a link holder whose address opened the checkout (should-fix)
+
+- **Fix.** A guest is never handed an open checkout: nothing a link holder sends tells the one who
+  opened it from another. Each guest tap closes the open checkout (B) and opens one of its own, so
+  every holder gets the same kind of answer whatever address they send. The address refusal
+  (`GuestCheckoutInProgress` at checkout) and its page copy are removed. The code stays in use where
+  it already was: revoking or replacing a link while a guest pays.
+- **Check.** `test_the_address_a_holder_sends_changes_nothing_they_are_told` (JSON: the same, another
+  case and another address each get a new checkout with the same fields),
+  `test_a_second_holder_gets_their_own_checkout_whatever_the_address` (page), and
+  `test_a_checkout_that_cannot_be_closed_shows_everyone_the_same_wait` (four holders, receipts on and
+  off, one identical page apart from the echoed address field).
+
+### E. With receipts off, the JSON surface kept an address (should-fix)
+
+- **Fix.** `start_checkout` drops the address when `guest_receipt_email_required()` is false, for
+  every surface: nothing kept on the attempt, nothing sent to the provider.
+- **Check.** `test_with_receipts_off_no_surface_keeps_or_sends_an_address`. The guest email tests in
+  `test_phase6c_email_events.py` now run with transactional email on, the state they test.
+
+### F. Proxy 502s lacked the private headers (should-fix)
+
+- **Fix.** Both Caddyfiles answer every error they generate through `handle_errors`, which sets
+  `Referrer-Policy: no-referrer` and `Cache-Control: private, no-store`. It is not limited by a path
+  match an encoded URL could slip past. Responses from Django are untouched (they are not proxy
+  errors), and the gateway's default `?Referrer-Policy` stays as it was.
+- **Check.** The proxy test asserts both headers on all sixteen 502s; `test_email.py` pins the
+  gateway's two Referrer-Policy lines.
+
+### Lead's review of the saved work
+
+The round's work was saved unfinished when Ismail paused all Claude work. Finishing it, three
+cases were tightened, each with a test that fails without it:
+
+- **A payment settling is never replaced.** An open attempt in `processing` answers
+  `CheckoutInProgress` on every surface before any provider call
+  (`test_a_payment_settling_is_never_replaced`).
+- **A checkout closed in this request is never handed out.** An attempt this request closed is
+  replaced even if it matches the caller by the next look
+  (`test_a_checkout_closed_in_this_request_is_never_handed_out`).
+- **One request at a time recovers a lost checkout.** The request that starts a recovery claims the
+  attempt (its `updated_at`) for the opening window, which now runs from an attempt's last write.
+  Another request meanwhile waits and calls no provider, so Stripe never sees the key twice at once
+  (`test_one_request_at_a_time_recovers_a_lost_checkout`).
+
+**Tests rewritten to the new rule** (CLAUDE.md: a test that encoded a rule since changed): the
+second-tap and second-holder page tests, `test_two_taps_at_once_leave_one_payable_checkout_and_fund_once`,
+`test_a_tap_while_the_first_is_at_the_provider_keeps_its_key` (the retry now replaces), the owner tap
+in `test_a_signed_in_member_pays_as_a_guest_and_gains_nothing`, and the two "opening" page tests (new copy). They
+expected the reuse of an open guest checkout or the address refusal, which D removes. The three
+address tests and the dead-opening test of the second pass are replaced by the D and C tests above.
+
+**What G1 does not change.** An attempt that reaches its own expiry (one hour by default) is
+expired locally without asking the provider, as before G1. A Stripe session lives 24 hours unless
+closed, and Chargily expires its checkouts after 30 minutes. A payer who completes such an old page
+after another checkout funded the order is charged, and the existing late-success path records that
+payment as unapplied and refunds it. Closing at expiry too is a possible follow-up; it is outside
+this package. The app has no dedicated copy for `checkout_in_progress` and shows its generic failure
+message; the guest page has its own.
+
 ## Checks
 
 Locally, against PostgreSQL (embedded cluster, `config.settings.test_pg`):
@@ -315,13 +473,25 @@ After the second pass, the same way:
   except four that need Unix (`fcntl`, `os.getloadavg`) and cannot run on Windows; CI runs them on
   Linux, together with the Docker path of the proxy test.
 
+After the third pass, on Linux against PostgreSQL 16 and Redis 7 with CI's settings:
+
+- `ruff check .`: clean. `makemigrations --check --dry-run`: no changes.
+- The guest, race and provider files (j7c, guest payment, concurrency, 6c email events, j2 guest
+  deposit, Stripe, Chargily): 215 passed. The three tests added for the lead's review, and the
+  extended lost-checkout test, fail against the saved work and pass with it.
+- `infra/vps/tests`: 38 passed, with the real Caddy 2.10.0 binary; `test_proxy_logs.py` also on
+  2.8.4.
+- The whole Django suite runs in CI on the pushed commit (four shards), as the project runs long
+  suites on GitHub.
+
 ## Handoff
 
 - **Board:** G1 built, PR open. No migration, so no contract regeneration; Schema drift is expected
   green.
-- **Gate, second pass (strongest-model package).** Done by Astra 6.2: rejected at `4337d9c` with five
-  findings, all fixed (see "Second-pass review"). A re-review of the fixes is the lead's call.
-- **Deploy (Ismail's approval).** The proxy redaction (finding 1) reaches the server only with a
+- **Gate, second pass (strongest-model package).** Astra 6.2 rejected `4337d9c` (five findings) and
+  `f1fe565` (six findings); all are fixed (see "Second-pass review" and "Third-pass review"). Astra
+  re-reviews the third pass before merge.
+- **Deploy (Ismail's approval).** The proxy changes (findings 1, A and F) reach the server only with a
   release: update the `/opt/wacla` checkout to the merged commit and `vps deploy` the image built from
   it. No configuration or secret changes.
 - **After merge:** rerun the integrated finance suite once F1 is merged too (plan section 4, G1).

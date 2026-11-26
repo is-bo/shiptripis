@@ -76,6 +76,7 @@ from .models import (
 )
 from .policy import Phase3Policy, phase3_policy
 from .providers import (
+    CHECKOUT_CLOSED,
     CheckoutRequest,
     ProviderError,
     ProviderEvent,
@@ -99,10 +100,19 @@ GUEST_TOKEN_BYTES = 32
 REFUND_MANUAL_ESCALATION_ATTEMPTS = 8
 
 #: How long an open attempt with no hosted URL yet counts as being opened by
-#: the request that wrote it. That request's provider call makes no retry and
-#: times out within seconds, so one that has stored nothing by then has died,
-#: and its attempt is superseded like a stale one (G1).
+#: the request that last wrote it: the one that created it, or the one that
+#: began recovering it. That request's provider call makes no retry and times
+#: out within seconds, so one that has stored nothing by then has died (G1).
 CHECKOUT_OPENING_WINDOW = timedelta(minutes=2)
+
+#: Rails whose checkout create is idempotent on our key: repeating it with an
+#: attempt's key and parameters returns the checkout a request that died
+#: before storing it had opened, not a second one (G1).
+RECOVERABLE_CHECKOUT_PROVIDERS = frozenset({"mock", "stripe"})
+
+#: Locked looks `start_checkout` may take at the order's open attempt, with a
+#: provider call between two of them: recover it, close it, replace it (G1).
+CHECKOUT_ROUNDS = 3
 
 
 # --- errors ------------------------------------------------------------------
@@ -155,10 +165,11 @@ class GuestCheckoutInProgress(FinanceError):
 
 
 class CheckoutInProgress(FinanceError):
-    """This checkout is still being opened by an earlier request. Retryable.
+    """A payment for this order is already under way. Retryable (G1).
 
-    Its attempt keeps its provider idempotency key, so the retry is handed the
-    one hosted session the provider opened instead of starting a second (G1).
+    Either a checkout is still being opened, or the open one could not be
+    confirmed closed at its provider. A second checkout is never opened
+    beside one that may still collect.
     """
 
     code = "checkout_in_progress"
@@ -1310,147 +1321,61 @@ def start_checkout(
     so the attempt is bound to a link that is live at that moment and belongs
     to this order.
 
-    A session is returned only with a URL to visit. A matching checkout that is
-    still being opened, or one replaced while its provider call was out,
-    answers `CheckoutInProgress`; another receipt address on a guest link's
-    open checkout answers `GuestCheckoutInProgress` (G1).
+    One order has at most one checkout that can collect (G1). Only the member
+    who opened it is handed it again. Anyone else, and that member on another
+    rail or amount, replaces it, and an open attempt whose checkout is out is
+    replaced only once its provider confirms it closed (`_close_checkout`).
+    Every case that cannot be settled now answers `CheckoutInProgress`, and a
+    session is returned only with a URL to visit.
     """
 
     policy = policy or phase3_policy()
     gateway = resolve_gateway_for_checkout(
         policy, provider, guest=guest_link is not None
     )
-    now = timezone.now()
+    if not guest_receipt_email_required():
+        # Never kept, nor sent to the provider, when no receipt is sent to it,
+        # whichever surface supplied it.
+        guest_email = ""
+    guest_email = guest_email[:254]
 
-    with transaction.atomic():
-        order = _order_for_update(order_id)
-        if guest_link is not None:
-            guest_link = _recheck_guest_link(order=order, link_id=guest_link.pk)
-        from .mode_safety import require_order_mode
-
-        require_order_mode(order)
-        if not order.is_collectable:
-            raise OrderNotCollectable(
-                "This obligation is no longer collecting payment.",
-                order_status=order.status,
-            )
-        if order.outstanding_eur_cents <= 0:
-            raise NothingOutstanding("This order has nothing left to collect.")
-
-        amounts = _resolve_amounts(order=order, gateway=gateway, policy=policy)
-        from .payout_snapshots import preflight
-
-        preflight(order=order, provider=provider, policy=policy)
-
-        open_attempt = (
-            PaymentAttempt.objects.select_for_update(no_key=True)
-            .filter(order=order, status__in=PaymentAttempt.OPEN_STATUSES)
-            .first()
-        )
-        if open_attempt is not None:
-            same_rail = open_attempt.provider == provider
-            same_amount = (
-                int(open_attempt.amount_eur_cents) == amounts["amount_eur_cents"]
-            )
-            same_payer = (
-                open_attempt.payer_id == actor_id
-                and open_attempt.guest_link_id
-                == (guest_link.pk if guest_link is not None else None)
-            )
-            still_valid = (
-                open_attempt.expires_at is None or open_attempt.expires_at > now
-            )
-            opening = (
-                not open_attempt.checkout_url
-                and open_attempt.created_at > now - CHECKOUT_OPENING_WINDOW
-            )
-            if (
-                same_rail
-                and same_amount
-                and same_payer
-                and still_valid
-                and (open_attempt.checkout_url or opening)
-            ):
-                if guest_link is not None and (
-                    open_attempt.guest_email.casefold()
-                    != guest_email[:254].casefold()
-                ):
-                    # The hosted session carries its first holder's receipt
-                    # address. Another address is refused, never written over
-                    # it, and never handed that session's URL (G1).
-                    raise GuestCheckoutInProgress(
-                        "A payment with this link is open under another address."
-                    )
-                if opening:
-                    # The request that wrote it is still at the provider.
-                    # Superseding it would open a second hosted session under a
-                    # new key; waiting keeps the one key (G1).
-                    raise CheckoutInProgress("This checkout is still being opened.")
-                return CheckoutSession(attempt=open_attempt, created=False)
-            # Switching rail, amount or a stale session: close the old attempt
-            # so the one-open-attempt-per-order invariant holds and two live
-            # checkouts can never race to fund the same obligation.
-            open_attempt.status = PaymentAttempt.Status.CANCELLED
-            open_attempt.failure_code = "superseded"
-            open_attempt.save(update_fields=["status", "failure_code", "updated_at"])
-
-        attempt = PaymentAttempt.objects.create(
-            order=order,
+    closed: set[int] = set()
+    unrecoverable: set[int] = set()
+    for _ in range(CHECKOUT_ROUNDS):
+        action, attempt = _checkout_step(
+            order_id=order_id,
             provider=provider,
-            provider_mode=gateway.credential_mode()
-            if gateway.credential_mode() in ("test", "live")
-            else "legacy_unknown",
-            mode_evidence="checkout_credential_mode",
-            payer_id=actor_id,
+            actor_id=actor_id,
             guest_link=guest_link,
-            guest_email=guest_email[:254],
-            amount_eur_cents=amounts["amount_eur_cents"],
-            payment_currency=amounts["payment_currency"],
-            provider_amount_minor=amounts["provider_amount_minor"],
-            provider_amount_exponent=amounts["provider_amount_exponent"],
-            fx_rate_micros=amounts["fx_rate_micros"],
-            fx_source=amounts["fx_source"],
-            fx_settings_version=amounts["fx_settings_version"],
-            fx_snapshot_at=now if amounts["fx_rate_micros"] else None,
-            idempotency_key=f"shiptrip-order-{order.pk}-{secrets.token_hex(8)}",
-            status=PaymentAttempt.Status.CREATED,
-            expires_at=now + timedelta(seconds=policy.attempt_ttl_seconds),
+            policy=policy,
+            gateway=gateway,
+            guest_email=guest_email,
+            closed=closed,
+            unrecoverable=unrecoverable,
         )
-        schedule_job(
-            kind=ScheduledJob.Kind.ATTEMPT_EXPIRY,
-            key=f"attempt_expiry:{attempt.pk}",
-            run_at=attempt.expires_at or (timezone.now() + timedelta(hours=1)),
-            payload={"attempt_id": attempt.pk},
-        )
-        schedule_job(
-            kind=ScheduledJob.Kind.PROVIDER_RECONCILE,
-            key=f"provider_reconcile:{attempt.pk}",
-            run_at=(attempt.expires_at or timezone.now()) + timedelta(minutes=5),
-            payload={"attempt_id": attempt.pk},
-            max_attempts=32,
-        )
+        if action == "reuse":
+            return CheckoutSession(attempt=attempt, created=False)
+        if action == "open":
+            break
+        # The order lock is released: the provider call below never holds it.
+        if action == "close":
+            _close_checkout(attempt)
+            closed.add(attempt.pk)
+        else:
+            try:
+                recover_checkout_attempt(attempt_id=attempt.pk)
+            except ProviderUnavailable as exc:
+                raise CheckoutInProgress(
+                    "The open checkout could not be recovered yet."
+                ) from exc
+            except ProviderError:
+                unrecoverable.add(attempt.pk)
+    else:
+        raise CheckoutInProgress("The open checkout changed while it was replaced.")
 
-    success_url, failure_url, webhook_url = _checkout_urls(order, provider)
-    checkout_request = CheckoutRequest(
-        reference=str(order.public_reference),
-        amount_minor=attempt.provider_amount_minor,
-        currency=attempt.payment_currency,
-        amount_exponent=attempt.provider_amount_exponent,
-        idempotency_key=attempt.idempotency_key,
-        success_url=success_url,
-        failure_url=failure_url,
-        webhook_url=webhook_url,
-        description=_checkout_description(order),
-        metadata={
-            "order_reference": str(order.public_reference),
-            "attempt_id": str(attempt.pk),
-            "purpose": order.purpose,
-        },
-        customer_email=guest_email,
-    )
-
+    order = attempt.order
     try:
-        result = gateway.create_checkout(checkout_request)
+        result = gateway.create_checkout(_checkout_request(attempt))
     except ProviderError as exc:
         with transaction.atomic():
             failed = PaymentAttempt.objects.select_for_update(no_key=True).get(
@@ -1493,9 +1418,9 @@ def start_checkout(
                 ]
             )
         if stored.status not in PaymentAttempt.OPEN_STATUSES or not stored.checkout_url:
-            # Superseded while the provider call was out. Its hosted session
-            # is no one's to visit, so the payer is told to try again rather
-            # than handed an empty or a closed checkout (G1).
+            # Replaced while the provider call was out. Its hosted URL never
+            # leaves the server, so the checkout is no one's to pay, and the
+            # payer is told to try again rather than handed it (G1).
             logger.info(
                 "finance.checkout_superseded_in_flight order=%s attempt=%s",
                 order_id,
@@ -1520,6 +1445,195 @@ def start_checkout(
     return CheckoutSession(attempt=stored, created=True)
 
 
+def _checkout_step(
+    *,
+    order_id: int,
+    provider: str,
+    actor_id: int | None,
+    guest_link: GuestPaymentLink | None,
+    policy: Phase3Policy,
+    gateway,
+    guest_email: str,
+    closed: set[int],
+    unrecoverable: set[int],
+) -> tuple[str, PaymentAttempt]:
+    """One look at the order's open attempt under the order lock (G1).
+
+    Answers what `start_checkout` does next: "reuse" that attempt, "open" the
+    new one written here, or "close" or "recover" that attempt at its provider
+    once the lock is released. An open attempt is replaced only when its
+    checkout cannot collect: closed by its provider in this request
+    (`closed`), or never handed out. A URL leaves the server only after it is
+    stored on an open attempt, so one with none stored, past the opening
+    window, has a checkout no one holds; on a rail that can return it, it is
+    recovered first so the provider keeps one checkout, unless that was
+    refused (`unrecoverable`). A payment already settling is never replaced.
+    """
+
+    now = timezone.now()
+    with transaction.atomic():
+        order = _order_for_update(order_id)
+        if guest_link is not None:
+            guest_link = _recheck_guest_link(order=order, link_id=guest_link.pk)
+        from .mode_safety import require_order_mode
+
+        require_order_mode(order)
+        if not order.is_collectable:
+            raise OrderNotCollectable(
+                "This obligation is no longer collecting payment.",
+                order_status=order.status,
+            )
+        if order.outstanding_eur_cents <= 0:
+            raise NothingOutstanding("This order has nothing left to collect.")
+
+        amounts = _resolve_amounts(order=order, gateway=gateway, policy=policy)
+        from .payout_snapshots import preflight
+
+        preflight(order=order, provider=provider, policy=policy)
+
+        open_attempt = (
+            PaymentAttempt.objects.select_for_update(no_key=True)
+            .filter(order=order, status__in=PaymentAttempt.OPEN_STATUSES)
+            .first()
+        )
+        if open_attempt is not None:
+            if open_attempt.status == PaymentAttempt.Status.PROCESSING:
+                # The payer's money is authorised and settling: only its own
+                # outcome ends this attempt.
+                raise CheckoutInProgress("A payment for this order is settling.")
+            if open_attempt.pk in closed or open_attempt.pk in unrecoverable:
+                # Confirmed closed by its provider in this request, or never
+                # opened a checkout anyone was handed: replaced below.
+                pass
+            elif not open_attempt.provider_session_id:
+                if open_attempt.updated_at > now - CHECKOUT_OPENING_WINDOW:
+                    # The request that last wrote it is still at the provider.
+                    raise CheckoutInProgress("This checkout is still being opened.")
+                if open_attempt.provider in RECOVERABLE_CHECKOUT_PROVIDERS:
+                    # Claimed for the window, so that one request at a time
+                    # repeats its create.
+                    open_attempt.save(update_fields=["updated_at"])
+                    return "recover", open_attempt
+            elif (
+                guest_link is None
+                and actor_id is not None
+                and open_attempt.payer_id == actor_id
+                and open_attempt.guest_link_id is None
+                and open_attempt.provider == provider
+                and int(open_attempt.amount_eur_cents)
+                == amounts["amount_eur_cents"]
+                and (open_attempt.expires_at is None or open_attempt.expires_at > now)
+                and open_attempt.checkout_url
+            ):
+                # A guest is never handed an open checkout: nothing a link
+                # holder sends tells the one who opened it from another.
+                return "reuse", open_attempt
+            else:
+                return "close", open_attempt
+            open_attempt.status = PaymentAttempt.Status.CANCELLED
+            open_attempt.failure_code = "superseded"
+            open_attempt.save(update_fields=["status", "failure_code", "updated_at"])
+
+        attempt = PaymentAttempt.objects.create(
+            order=order,
+            provider=provider,
+            provider_mode=gateway.credential_mode()
+            if gateway.credential_mode() in ("test", "live")
+            else "legacy_unknown",
+            mode_evidence="checkout_credential_mode",
+            payer_id=actor_id,
+            guest_link=guest_link,
+            guest_email=guest_email,
+            amount_eur_cents=amounts["amount_eur_cents"],
+            payment_currency=amounts["payment_currency"],
+            provider_amount_minor=amounts["provider_amount_minor"],
+            provider_amount_exponent=amounts["provider_amount_exponent"],
+            fx_rate_micros=amounts["fx_rate_micros"],
+            fx_source=amounts["fx_source"],
+            fx_settings_version=amounts["fx_settings_version"],
+            fx_snapshot_at=now if amounts["fx_rate_micros"] else None,
+            idempotency_key=f"shiptrip-order-{order.pk}-{secrets.token_hex(8)}",
+            status=PaymentAttempt.Status.CREATED,
+            expires_at=now + timedelta(seconds=policy.attempt_ttl_seconds),
+        )
+        schedule_job(
+            kind=ScheduledJob.Kind.ATTEMPT_EXPIRY,
+            key=f"attempt_expiry:{attempt.pk}",
+            run_at=attempt.expires_at or (timezone.now() + timedelta(hours=1)),
+            payload={"attempt_id": attempt.pk},
+        )
+        schedule_job(
+            kind=ScheduledJob.Kind.PROVIDER_RECONCILE,
+            key=f"provider_reconcile:{attempt.pk}",
+            run_at=(attempt.expires_at or timezone.now()) + timedelta(minutes=5),
+            payload={"attempt_id": attempt.pk},
+            max_attempts=32,
+        )
+    return "open", attempt
+
+
+def _close_checkout(attempt: PaymentAttempt) -> None:
+    """Make the provider stop `attempt`'s checkout from collecting (G1).
+
+    Returns only once the provider confirmed the checkout can no longer take a
+    payment. Anything else (an error, a timeout, a checkout that has taken or
+    is taking a payment) answers `CheckoutInProgress`, and the attempt stays
+    open: the payment, if any, settles it.
+    """
+
+    from .mode_safety import require_object_mode
+
+    try:
+        require_object_mode(attempt.provider_mode)
+        outcome = get_gateway(attempt.provider).close_checkout(
+            provider_session_id=attempt.provider_session_id
+        )
+    except ProviderError as exc:
+        logger.warning(
+            "finance.checkout_close_unconfirmed order=%s attempt=%s code=%s",
+            attempt.order_id,
+            attempt.pk,
+            exc.code,
+        )
+        raise CheckoutInProgress("The open checkout could not be closed.") from exc
+    if outcome != CHECKOUT_CLOSED:
+        logger.info(
+            "finance.checkout_close_collecting order=%s attempt=%s",
+            attempt.order_id,
+            attempt.pk,
+        )
+        raise CheckoutInProgress("The open checkout is taking a payment.")
+
+
+def _checkout_request(attempt: PaymentAttempt) -> CheckoutRequest:
+    """The provider request for an attempt, rebuilt identically every time.
+
+    Recovery repeats create under the attempt's key, and a provider replays
+    its first answer only for the same parameters, so the first call and a
+    recovery both build it here, from the attempt alone (G1).
+    """
+
+    order = attempt.order
+    success_url, failure_url, webhook_url = _checkout_urls(order, attempt.provider)
+    return CheckoutRequest(
+        reference=str(order.public_reference),
+        amount_minor=attempt.provider_amount_minor,
+        currency=attempt.payment_currency,
+        amount_exponent=attempt.provider_amount_exponent,
+        idempotency_key=attempt.idempotency_key,
+        success_url=success_url,
+        failure_url=failure_url,
+        webhook_url=webhook_url,
+        description=_checkout_description(order),
+        metadata={
+            "order_reference": str(order.public_reference),
+            "attempt_id": str(attempt.pk),
+            "purpose": order.purpose,
+        },
+        customer_email=attempt.guest_email,
+    )
+
+
 def recover_checkout_attempt(*, attempt_id: int) -> str:
     """Recover a checkout created remotely before its handle committed locally.
 
@@ -1531,31 +1645,11 @@ def recover_checkout_attempt(*, attempt_id: int) -> str:
     attempt = PaymentAttempt.objects.select_related("order").get(pk=attempt_id)
     if attempt.provider_session_id:
         return "checkout_handle_present"
-    order = attempt.order
-    success_url, failure_url, webhook_url = _checkout_urls(order, attempt.provider)
     gateway = get_gateway(attempt.provider)
     from .mode_safety import require_object_mode
 
     require_object_mode(attempt.provider_mode)
-    result = gateway.create_checkout(
-        CheckoutRequest(
-            reference=str(order.public_reference),
-            amount_minor=attempt.provider_amount_minor,
-            currency=attempt.payment_currency,
-            amount_exponent=attempt.provider_amount_exponent,
-            idempotency_key=attempt.idempotency_key,
-            success_url=success_url,
-            failure_url=failure_url,
-            webhook_url=webhook_url,
-            description=_checkout_description(order),
-            metadata={
-                "order_reference": str(order.public_reference),
-                "attempt_id": str(attempt.pk),
-                "purpose": order.purpose,
-            },
-            customer_email=attempt.guest_email,
-        )
-    )
+    result = gateway.create_checkout(_checkout_request(attempt))
     with transaction.atomic():
         row = PaymentAttempt.objects.select_for_update(no_key=True).get(pk=attempt_id)
         if not row.provider_session_id:

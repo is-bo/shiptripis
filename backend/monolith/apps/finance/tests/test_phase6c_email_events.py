@@ -19,6 +19,7 @@ from ..services import (
     request_refund,
     start_checkout,
 )
+from ..providers.mock import MockGateway
 from .factories import build_scenario, open_mock_checkout, pay_order_with_mock
 
 
@@ -149,6 +150,9 @@ class RefundStatusEmailTests(TestCase):
         )
 
 
+# A guest's address is kept only while Wassla sends email (G1), and these
+# tests are about the messages sent to it.
+@override_settings(TRANSACTIONAL_EMAIL_ENABLED=True)
 class GuestPaymentEmailTests(TestCase):
     def setUp(self):
         enable_mock_rail()
@@ -236,6 +240,7 @@ class GuestPaymentEmailTests(TestCase):
         owner_attempt.refresh_from_db()
         self.assertNotEqual(guest_attempt.pk, owner_attempt.pk)
         self.assertEqual(owner_attempt.status, PaymentAttempt.Status.CANCELLED)
+        self.assertFalse(MockGateway.is_payable(owner_attempt.provider_session_id))
         self.assertEqual(guest_attempt.guest_link_id, self.issued.link.pk)
         self.assertEqual(guest_attempt.guest_email, "guest-payer@example.test")
 

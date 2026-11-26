@@ -7,15 +7,30 @@
 	servers {
 		trusted_proxies static private_ranges
 	}
-	# No access logs, but the error logger still records the request URI of a
-	# failed request (a 502 while Django is down), and a guest payment link's
-	# path is its credential. Redact it there; infra/vps/tests/test_proxy_logs.py.
+	# No access logs, but the error logger still records the request of a
+	# failed one (a 502 while Django is down), and a guest payment link's path
+	# is its credential, in whatever encoding the client sent. So the URI and
+	# the Referer are not logged at all; infra/vps/tests/test_proxy_logs.py.
 	log {
+		exclude http.log.error
 		format filter {
 			wrap json
 			fields {
-				request>uri regexp "/(pay|api/payments)/guest/[^/?#]+" "/${1}/guest/REDACTED"
-				request>headers>Referer regexp "/(pay|api/payments)/guest/[^/?#]+" "/${1}/guest/REDACTED"
+				request>uri delete
+				request>headers>Referer delete
+			}
+		}
+	}
+	# `handle_errors` below answers every proxy error, and Caddy then records
+	# the error at debug level; this log keeps those lines, and only those.
+	log proxy_errors {
+		include http.log.error
+		level DEBUG
+		format filter {
+			wrap json
+			fields {
+				request>uri delete
+				request>headers>Referer delete
 			}
 		}
 	}
@@ -96,5 +111,13 @@
 	# Django REST, admin, and static files.
 	reverse_proxy 127.0.0.1:8000 {
 		header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+	}
+
+	# An error answered here (Django down: 502) never reaches Django, which
+	# sets the guest page's private headers. Set them on every such error, not
+	# by a path match an encoded URL could slip past.
+	handle_errors {
+		header Referrer-Policy no-referrer
+		header Cache-Control "private, no-store"
 	}
 }

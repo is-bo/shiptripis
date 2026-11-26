@@ -35,6 +35,8 @@ import requests
 from django.conf import settings
 
 from .base import (
+    CHECKOUT_CLOSED,
+    CHECKOUT_COLLECTED,
     MODE_LIVE,
     MODE_NOT_CONFIGURED,
     MODE_TEST,
@@ -346,6 +348,37 @@ class ChargilyGateway:
             checkout_url=checkout_url,
             provider_status=str(body.get("status") or "pending"),
             raw=_scrub(body),
+        )
+
+    def close_checkout(self, *, provider_session_id: str) -> str:
+        """Expire a pending checkout, or learn why it cannot be expired.
+
+        Chargily expires only a `pending` checkout (`POST
+        /checkouts/{id}/expire`) and answers success only once it has. It
+        refuses an expired one with 400 and any other status with 403, which
+        `_request` cannot tell from a credential refusal, so every refusal is
+        answered by reading the checkout.
+        """
+
+        if not provider_session_id:
+            raise ProviderError("No Chargily checkout to close.")
+        path = f"/checkouts/{provider_session_id}"
+        try:
+            self._request("POST", f"{path}/expire", operation="checkout_expire")
+        except ProviderUnavailable:
+            raise
+        except ProviderError:
+            body = self._request("GET", path, operation="checkout_fetch")
+        else:
+            return CHECKOUT_CLOSED
+        status = str(body.get("status") or "").lower()
+        if status in {"expired", "failed", "canceled", "cancelled"}:
+            return CHECKOUT_CLOSED
+        if status in {"paid", "processing"}:
+            return CHECKOUT_COLLECTED
+        raise ProviderError(
+            "Chargily did not confirm the checkout closed.",
+            provider_code="checkout_open",
         )
 
     def fetch_attempt(

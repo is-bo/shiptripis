@@ -30,8 +30,11 @@ from apps.finance.providers import (
     resolve_gateway_for_checkout,
 )
 from apps.finance.providers.base import (
+    CHECKOUT_CLOSED,
+    CHECKOUT_COLLECTED,
     CheckoutRequest,
     ProviderError,
+    ProviderUnavailable,
     ProviderNotConfigured,
     ProviderSignatureError,
     RefundRequest,
@@ -243,6 +246,65 @@ class ChargilyCheckoutTests(TestCase):
             )
 
             assert event.outcome == expected, event_type
+
+
+class ChargilyCloseCheckoutTests(TestCase):
+    """G1: a checkout is reported closed only once Chargily says it is."""
+
+    URL = "https://pay.chargily.test/test/api/v2/checkouts/01checkout"
+
+    def test_a_pending_checkout_is_expired(self):
+        # Chargily answers success only once it expired the checkout.
+        gateway = _gateway([_FakeResponse(200, {"id": "01checkout", "status": "pending"})])
+
+        assert gateway.close_checkout(provider_session_id="01checkout") == CHECKOUT_CLOSED
+
+        [call] = gateway._session.calls
+        assert (call["method"], call["url"]) == ("POST", f"{self.URL}/expire")
+        assert call["headers"]["Authorization"] == f"Bearer {SECRET}"
+
+    def test_a_refused_expiry_is_answered_by_reading_the_checkout(self):
+        cases = (
+            (400, "expired", CHECKOUT_CLOSED),
+            (403, "failed", CHECKOUT_CLOSED),
+            (403, "canceled", CHECKOUT_CLOSED),
+            (403, "paid", CHECKOUT_COLLECTED),
+            (403, "processing", CHECKOUT_COLLECTED),
+        )
+        for refusal, status, outcome in cases:
+            with self.subTest(status):
+                gateway = _gateway(
+                    [
+                        _FakeResponse(refusal, {"message": "refused"}),
+                        _FakeResponse(200, {"id": "01checkout", "status": status}),
+                    ]
+                )
+
+                assert gateway.close_checkout(provider_session_id="01checkout") == outcome
+
+                read = gateway._session.calls[1]
+                assert (read["method"], read["url"]) == ("GET", self.URL)
+
+    def test_a_checkout_still_pending_is_not_reported_closed(self):
+        gateway = _gateway(
+            [
+                _FakeResponse(403, {"message": "refused"}),
+                _FakeResponse(200, {"id": "01checkout", "status": "pending"}),
+            ]
+        )
+
+        with self.assertRaises(ProviderError) as caught:
+            gateway.close_checkout(provider_session_id="01checkout")
+
+        assert not isinstance(caught.exception, ProviderUnavailable)
+
+    def test_an_outage_is_retryable_and_reads_nothing(self):
+        gateway = _gateway([_FakeResponse(503, {"message": "down"})])
+
+        with self.assertRaises(ProviderUnavailable):
+            gateway.close_checkout(provider_session_id="01checkout")
+
+        assert len(gateway._session.calls) == 1
 
 
 class ChargilyFxSnapshotTests(TestCase):

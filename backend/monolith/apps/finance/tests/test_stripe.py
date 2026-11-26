@@ -27,6 +27,8 @@ from apps.finance.models import PaymentProviderEvent
 from apps.finance.services import _reference_uuid
 
 from apps.finance.providers.base import (
+    CHECKOUT_CLOSED,
+    CHECKOUT_COLLECTED,
     CheckoutRequest,
     ProviderError,
     ProviderNotConfigured,
@@ -332,6 +334,65 @@ class StripeCheckoutTests(TestCase):
         )
 
         assert result.succeeded is False
+
+
+class StripeCloseCheckoutTests(TestCase):
+    """G1: a session is reported closed only once Stripe says it is."""
+
+    URL = "https://api.stripe.test/v1/checkout/sessions/cs_test_1"
+
+    def test_an_open_session_is_expired(self):
+        gateway = _gateway([_FakeResponse(200, {"id": "cs_test_1", "status": "expired"})])
+
+        assert gateway.close_checkout(provider_session_id="cs_test_1") == CHECKOUT_CLOSED
+
+        [call] = gateway._session.calls
+        assert (call["method"], call["url"]) == ("POST", f"{self.URL}/expire")
+        assert call["headers"]["Authorization"] == "Bearer sk_test_key"
+
+    def test_a_refused_expiry_is_answered_by_reading_the_session(self):
+        refused = _FakeResponse(
+            400, {"error": {"message": "not open", "code": "checkout_session_not_open"}}
+        )
+        for status, outcome in (("expired", CHECKOUT_CLOSED), ("complete", CHECKOUT_COLLECTED)):
+            with self.subTest(status):
+                gateway = _gateway(
+                    [refused, _FakeResponse(200, {"id": "cs_test_1", "status": status})]
+                )
+
+                assert gateway.close_checkout(provider_session_id="cs_test_1") == outcome
+
+                read = gateway._session.calls[1]
+                assert (read["method"], read["url"]) == ("GET", self.URL)
+
+    def test_a_session_still_open_is_not_reported_closed(self):
+        gateway = _gateway(
+            [
+                _FakeResponse(400, {"error": {"message": "busy"}}),
+                _FakeResponse(200, {"id": "cs_test_1", "status": "open"}),
+            ]
+        )
+
+        with self.assertRaises(ProviderError) as caught:
+            gateway.close_checkout(provider_session_id="cs_test_1")
+
+        assert not isinstance(caught.exception, ProviderUnavailable)
+
+    def test_an_outage_is_retryable_and_reads_nothing(self):
+        gateway = _gateway([_FakeResponse(503, {"error": {"message": "down"}})])
+
+        with self.assertRaises(ProviderUnavailable):
+            gateway.close_checkout(provider_session_id="cs_test_1")
+
+        assert len(gateway._session.calls) == 1
+
+    def test_no_session_calls_nothing(self):
+        gateway = _gateway()
+
+        with self.assertRaises(ProviderError):
+            gateway.close_checkout(provider_session_id="")
+
+        assert gateway._session.calls == []
 
 
 class StripeWebhookParsingTests(TestCase):

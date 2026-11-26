@@ -241,7 +241,11 @@ def handle_provider_reconcile(payload: dict) -> str:
     """
 
     from .providers import ProviderError, ProviderUnavailable, get_gateway
-    from .services import reconcile_attempt, recover_checkout_attempt
+    from .services import (
+        RECOVERABLE_CHECKOUT_PROVIDERS,
+        reconcile_attempt,
+        recover_checkout_attempt,
+    )
 
     attempt_id = payload.get("attempt_id")
     if not isinstance(attempt_id, int):
@@ -254,7 +258,7 @@ def handle_provider_reconcile(payload: dict) -> str:
     if attempt.status == PaymentAttempt.Status.SUCCEEDED:
         return "already_succeeded"
     if not attempt.provider_session_id:
-        if attempt.provider in {"mock", "stripe"}:
+        if attempt.provider in RECOVERABLE_CHECKOUT_PROVIDERS:
             try:
                 recover_checkout_attempt(attempt_id=attempt.pk)
             except ProviderUnavailable as exc:
