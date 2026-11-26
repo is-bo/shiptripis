@@ -302,6 +302,19 @@ Locally, against PostgreSQL (embedded cluster, `config.settings.test_pg`):
 
 CI on the PR's commit: all checks green, Schema drift and the four Django shards included.
 
+After the second pass, the same way:
+
+- `ruff check .`: clean. `makemigrations --check --dry-run`: no changes.
+- The guest and race files (j7c, guest payment, j2 guest payer, 6c email events, concurrency): 138
+  passed.
+- Whole `apps/finance` suite: 1,031 passed, and no test failed outside nine files. That run lost its
+  embedded database partway, with the same Windows `0xC0000142` crash as before: every failure was a
+  lost connection or a child process that could not start. The nine files were rerun on a fresh
+  cluster: 231 passed.
+- `infra/vps/tests`: `test_proxy_logs.py` passes on Caddy 2.10.0 and 2.8.4. The other unit tests pass
+  except four that need Unix (`fcntl`, `os.getloadavg`) and cannot run on Windows; CI runs them on
+  Linux, together with the Docker path of the proxy test.
+
 ## Handoff
 
 - **Board:** G1 built, PR open. No migration, so no contract regeneration; Schema drift is expected
