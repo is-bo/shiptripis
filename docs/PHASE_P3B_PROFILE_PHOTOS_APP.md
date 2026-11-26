@@ -470,7 +470,7 @@ All were accepted. The builder's answers (the new findings are named by what the
 | **Should-fix: a refused tombstone commit stopped the expiry** | `TokenStore._clearCredentials` runs the credentials' deletion first and treats a refused `closeBySignOut` as no reason to stop: the marker stays as it was (a purpose and a nonce) and the next pick finds it and is careful; the generation-checked expiry callback then runs | group 4 (a real `TokenStore` whose marker store refuses the tombstone: `clearIfIdentityCurrent` and `clear` both finish and the credentials are gone) |
 | **Should-fix: a stalled body held the per-version install queue** | `AvatarCacheManager._fetch` reads each response's body **on its own** (capped at 4 MiB) and only the publication of the bytes (`putFile`) is queued for the version | `p3b_avatar_cache_test.dart`: a first body that never finishes holds up no other address |
 | **Should-fix: a body that failed halfway left a partial file** | Because the body is read into memory first, nothing is written until it is complete: a failed body leaves no file and no record | the same file: a body that fails halfway leaves no file at all |
-| **Should-fix: JUnit not declared for Gradle** | `testImplementation("junit:junit:4.13.2")` in `android/app/build.gradle.kts`, the version the shell harness runs | **Gradle task not run here** (no Android SDK): `:app:testDebugUnitTest` is a device/build check |
+| **Should-fix: JUnit not declared for Gradle** | `testImplementation("junit:junit:4.13.2")` in `android/app/build.gradle.kts`, the version the shell harness runs | CI job "Android — compile and Gradle unit tests" runs `:app:testDebugUnitTest` (passed: 12 + 5 + 6 tests) |
 | **Finding 8: the 64 MP limit only existed in the `ImageDecoder` fallback** | `PhotoPrepare` refuses a HEIF, HEIC or AVIF over the limit at the **successful bounds read** (`PhotoGeometry.isFullFrameFormat`, `withinSourceLimit`), before any decoder is asked for pixels; a JPEG or PNG samples as it decodes and is not limited | `PhotoGeometryTest.kt` (`onlyTheFullFrameFormatsAreHeldToTheSourceLimit`) |
 | **Finding 11: a file gone after the `isFile` check was `unsupported`** | When `BitmapFactory` answers null, the file is checked again before the picture is called unsupported: gone is `not_found` | read in review; **device check** |
 | **Finding 13: no native fixture preparing a photo twice** | Not done: it needs a device or an emulator. The pure Kotlin (`PhotoGeometry`, `JpegMetadata`, `PickLaunchGate`) is run by 23 JUnit tests | **Device check owed** |
@@ -482,7 +482,12 @@ test signs in for real (same member) and then picks. `p3b_photo_round4_test.dart
 `p3b_photo_state_test.dart` pass `expectedIdentity` to `removePhoto` (the signature gained it). No test was
 skipped or weakened.
 
-**Could not do here.** Compile the Android app (`MainActivity.kt`, `PhotoPrepare.kt`, `PickMarkerStore.kt`) or
-the Swift, run Gradle, or run a native decoder. New device checks: with a build, kill the app while the
-camera or library is open, come back, and confirm the restored result is dropped (the log shows no copy) and
-that a Profile pick afterwards works; pick a 48 MP HEIC and one over 64 MP; run the Gradle unit-test task.
+**Compiled in CI since round 6.** The new CI job "Android — compile and Gradle unit tests" runs
+`flutter build apk --debug` (a debug APK, never uploaded or released) and `./gradlew :app:testDebugUnitTest`, and
+checks that the three photo test classes produced results. It passed, so `MainActivity.kt`, `PhotoPrepare.kt`,
+`PickMarkerStore.kt` and `PickLaunchGate.kt` compile and the 23 JUnit tests run under Gradle. The Swift
+(`AppDelegate.swift`) has still never been compiled, and no native decoder or device ran anything.
+
+**Device checks owed.** With a build, kill the app while the camera or library is open, come back, and confirm
+the restored result is dropped (the log shows no copy) and that a Profile pick afterwards works; pick a 48 MP
+HEIC and one over 64 MP.

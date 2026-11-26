@@ -9,7 +9,7 @@
   to B is never paired with B's generation, and a removal is checked like an upload; an upload always takes
   the exact photo it was made for; a refused tombstone commit no longer stops a sign-out; avatar bodies are
   read independently and published whole; HEIF over 64 MP is refused at the bounds read; JUnit is declared for
-  Gradle (not run here). Detail: `docs/PHASE_P3B_PROFILE_PHOTOS_APP.md`, "Round six".
+  Gradle, and a new CI job compiles the debug app and runs the Gradle unit tests. Detail: `docs/PHASE_P3B_PROFILE_PHOTOS_APP.md`, "Round six".
 
 ## Wassla: P3B round five, picker ownership and native photo fixes (2026-11-26)
 
