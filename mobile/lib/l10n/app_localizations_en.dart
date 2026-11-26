@@ -1,6 +1,5 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
-
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -6496,4 +6495,23 @@ class LEn extends L {
 
   @override
   String get deleteAccountDone => 'Your account is deleted.';
+
+  @override
+  String get notificationFlightTicketApproved => 'Flight ticket approved';
+
+  @override
+  String get notificationFlightTicketRejected =>
+      'Flight ticket needs attention';
+
+  @override
+  String get notificationFlightTicketResubmit => 'We need a new flight ticket';
+
+  @override
+  String get notificationFerryTicketApproved => 'Ferry ticket approved';
+
+  @override
+  String get notificationFerryTicketRejected => 'Ferry ticket needs attention';
+
+  @override
+  String get notificationFerryTicketResubmit => 'We need a new ferry ticket';
 }
