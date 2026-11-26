@@ -4,8 +4,8 @@
 
 - Phone test 2, finding 1.1: pressing "Pay" on a shared guest link answered "CSRF verification
   failed". The page's no-referrer policy makes Chromium submit with `Origin: null` and no Referer,
-  which Django's CSRF check refuses. Plan `WASSLA_PHONE_TEST_2_PLAN.md`, package G1. Server and
-  proxy configuration only, no migration. Nothing deployed.
+  which Django's CSRF check refuses. Plan `WASSLA_PHONE_TEST_2_PLAN.md`, package G1. Server, proxy
+  configuration and the app's payment screens; migration `finance 0036`. Nothing deployed.
 - `guest_payment_page` alone is exempt from Django's CSRF check and its form carries no CSRF token:
   the link token in the path is the authority, and the session is never read, so a signed-in member
   pays as a guest. Every guest page response, redirects and Django's own 500s included, sends
@@ -25,8 +25,17 @@
   payment is already under way"). Only the signed-in member who opened a checkout is handed it
   again; a guest never is, so the address a link holder sends tells them nothing. A checkout whose
   request died is recovered under its own key with identical parameters, one request at a time.
-  With receipts off no surface keeps or sends an address. Amounts, provider idempotency and
-  webhook-only settlement unchanged. Detail: `docs/PHASE_G1_GUEST_CHECKOUT_CSRF.md`.
+  With receipts off no surface keeps or sends an address.
+- Fourth pass (Astra 6.2, three blockers and six should-fix findings fixed). The expiry job ends an
+  attempt only once its provider confirms its checkout closed, and leaves a payment that is settling
+  or being taken to its own outcome. The attempt carries its frozen create request
+  (`checkout_request`), its claim (`opening_until`) and a recorded close (`close_requested_at`): a
+  recovery repeats exactly the first request, an attempt is abandoned only by the claim that owns
+  it, and a checkout being closed is never handed out. Neither the reconcile job nor staff repeat a
+  create; order history carries no checkout URL, and the app's "Continue" asks the checkout endpoint.
+  A lost create keeps its key; Stripe's "key in use" is retryable. The app shows "A payment is
+  already under way" on the owner and guest screens. Amounts, provider idempotency and webhook-only
+  settlement unchanged. Detail: `docs/PHASE_G1_GUEST_CHECKOUT_CSRF.md`.
 
 ## Wassla: the bell names the ticket decision (N2, 2026-11-26)
 

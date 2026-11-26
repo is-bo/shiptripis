@@ -209,9 +209,15 @@ def handle_payment_grace_release(payload: dict) -> str:
 
 
 def handle_attempt_expiry(payload: dict) -> str:
-    """Close a hosted checkout the customer never completed."""
+    """Close a hosted checkout the customer never completed.
 
-    from .services import reconcile_attempt
+    The attempt ends only once its provider confirms its checkout closed
+    (`expire_checkout_attempt`), so the order never opens a second checkout
+    beside one that can still collect (G1).
+    """
+
+    from .providers import ProviderError
+    from .services import CHECKOUT_OPENING_WINDOW, expire_checkout_attempt
 
     attempt_id = payload.get("attempt_id")
     if not isinstance(attempt_id, int):
@@ -229,7 +235,19 @@ def handle_attempt_expiry(payload: dict) -> str:
             code="attempt_not_expired",
             delay=attempt.expires_at - timezone.now(),
         )
-    return reconcile_attempt(attempt_id=attempt_id, outcome="expired")
+    try:
+        result = expire_checkout_attempt(attempt_id=attempt_id)
+    except ProviderError as exc:
+        raise RetryableJobError(
+            "The provider has not confirmed the checkout closed.", code=exc.code
+        ) from exc
+    if result == "attempt_opening":
+        raise JobDeferred(
+            "A request is still opening this checkout.",
+            code="attempt_opening",
+            delay=CHECKOUT_OPENING_WINDOW,
+        )
+    return result
 
 
 def handle_provider_reconcile(payload: dict) -> str:
@@ -241,11 +259,7 @@ def handle_provider_reconcile(payload: dict) -> str:
     """
 
     from .providers import ProviderError, ProviderUnavailable, get_gateway
-    from .services import (
-        RECOVERABLE_CHECKOUT_PROVIDERS,
-        reconcile_attempt,
-        recover_checkout_attempt,
-    )
+    from .services import CHECKOUT_OPENING_WINDOW, reconcile_attempt
 
     attempt_id = payload.get("attempt_id")
     if not isinstance(attempt_id, int):
@@ -258,27 +272,17 @@ def handle_provider_reconcile(payload: dict) -> str:
     if attempt.status == PaymentAttempt.Status.SUCCEEDED:
         return "already_succeeded"
     if not attempt.provider_session_id:
-        if attempt.provider in RECOVERABLE_CHECKOUT_PROVIDERS:
-            try:
-                recover_checkout_attempt(attempt_id=attempt.pk)
-            except ProviderUnavailable as exc:
-                raise RetryableJobError(
-                    "Checkout recovery provider is temporarily unavailable.",
-                    code=exc.code,
-                ) from exc
-            except ProviderError as exc:
-                raise PermanentJobError(
-                    "Checkout recovery was permanently refused.", code=exc.code
-                ) from exc
-            attempt.refresh_from_db()
-        if not attempt.provider_session_id:
-            # Chargily does not expose a documented idempotent checkout-create
-            # contract. Re-creating blindly could charge twice, so keep this
-            # visible for operator reconciliation instead.
-            raise PermanentJobError(
-                "Provider session is unknown; operator review is required.",
-                code="provider_session_unknown",
+        # No checkout was ever stored for it, so its URL never left the server
+        # and nobody could pay it: there is nothing at the provider to learn.
+        # This job never repeats a create, so it never brings back a checkout
+        # nobody may hold (G1).
+        if attempt.status in PaymentAttempt.OPEN_STATUSES:
+            raise JobDeferred(
+                "The attempt's checkout is still being opened.",
+                code="checkout_not_stored",
+                delay=CHECKOUT_OPENING_WINDOW,
             )
+        return "checkout_never_handed_out"
     try:
         gateway = get_gateway(attempt.provider)
         from .mode_safety import require_object_mode

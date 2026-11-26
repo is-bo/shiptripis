@@ -1201,6 +1201,8 @@
   "guestPurposeOther": "دفعة عبر Wassla",
   "guestPayingNowTitle": "شخص آخر يدفع هذا المبلغ الآن",
   "guestPayingNowBody": "فتح هذا الشخص رابط الدفع الخاص بك. ستتحدّث الصفحة فور إتمام الدفع.",
+  "paymentInProgressTitle": "هناك دفعة جارية بالفعل",
+  "paymentInProgressBody": "يقوم أحدهم بالدفع الآن، وربما كنت أنت. أعد المحاولة بعد بضع دقائق.",
   "guestPayPurposeDeposit": "عربون لطلب توصيل",
   "guestPayPurposeDelivery": "دفع مقابل توصيل",
   "guestPayPurposeBoost": "مكافأة إضافية لتوصيل",

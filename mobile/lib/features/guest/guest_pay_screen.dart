@@ -34,6 +34,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api/api_exception.dart';
+import '../../core/api/error_codes.dart';
 import '../../core/format/locale_formats.dart';
 import '../../data/repositories.dart';
 import '../../design/components/feedback.dart';
@@ -70,6 +71,9 @@ class _GuestPayScreenState extends ConsumerState<GuestPayScreen> {
   bool _busy = false;
   bool _handedOff = false;
 
+  /// The last tap was told a payment is already under way (G1).
+  bool _inProgress = false;
+
   @override
   void dispose() {
     _email.dispose();
@@ -82,7 +86,10 @@ class _GuestPayScreenState extends ConsumerState<GuestPayScreen> {
     if (provider == null) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _inProgress = false;
+    });
     final l = L.of(context);
     // Only an address that will be used is sent. With receipts off the field
     // is not shown, and nothing typed into it earlier is collected.
@@ -119,6 +126,12 @@ class _GuestPayScreenState extends ConsumerState<GuestPayScreen> {
       setState(() => _handedOff = true);
     } on ApiException catch (error) {
       if (!mounted) return;
+      if (error.code == ApiErrorCode.checkoutInProgress) {
+        // Someone, perhaps this payer a tap ago, is already paying: the
+        // server opens no second checkout. Waiting is the whole answer.
+        setState(() => _inProgress = true);
+        return;
+      }
       AppSnack.failure(context, error);
     } on StateError {
       if (!mounted) return;
@@ -162,6 +175,7 @@ class _GuestPayScreenState extends ConsumerState<GuestPayScreen> {
             email: _email,
             view: data,
             selected: _selected,
+            inProgress: _inProgress,
             onSelect: (provider) => setState(() => _selected = provider),
           );
         },
@@ -214,6 +228,7 @@ class _PayForm extends StatelessWidget {
     required this.email,
     required this.view,
     required this.selected,
+    required this.inProgress,
     required this.onSelect,
   });
 
@@ -221,6 +236,7 @@ class _PayForm extends StatelessWidget {
   final TextEditingController email;
   final GuestPaymentView view;
   final PaymentProviderId? selected;
+  final bool inProgress;
   final ValueChanged<PaymentProviderId> onSelect;
 
   @override
@@ -259,6 +275,15 @@ class _PayForm extends StatelessWidget {
       child: ListView(
         padding: AppScrollPadding.pageWithFooter(context),
         children: [
+          if (inProgress) ...[
+            InfoNotice(
+              title: l.paymentInProgressTitle,
+              message: l.paymentInProgressBody,
+              tone: StatusTone.waiting,
+              icon: Icons.hourglass_top_rounded,
+            ),
+            const SizedBox(height: AppSpace.lg),
+          ],
           if (amount != null)
             AppCard(
               child: MoneyHero(

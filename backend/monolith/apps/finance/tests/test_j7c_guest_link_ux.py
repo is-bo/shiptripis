@@ -54,7 +54,6 @@ from apps.finance.models import (
 from apps.finance.providers import ProviderError
 from apps.finance.providers.mock import MockGateway
 from apps.finance.services import (
-    CHECKOUT_OPENING_WINDOW,
     GuestCheckoutInProgress,
     cancel_order,
     create_guest_link,
@@ -859,9 +858,9 @@ class BrowserCheckoutTests(_BalanceCase):
         def owner_pays_meanwhile(gateway, request):
             if not owner:
                 owner.append("entered")
-                then = timezone.now() - CHECKOUT_OPENING_WINDOW - timedelta(seconds=1)
+                # The guest's request is past its window: its claim lapsed.
                 PaymentAttempt.objects.filter(guest_link=self.link).update(
-                    created_at=then, updated_at=then
+                    opening_until=timezone.now() - timedelta(seconds=1)
                 )
                 owner.append(
                     open_mock_checkout(self.order, actor_id=self.scenario.sender.pk)

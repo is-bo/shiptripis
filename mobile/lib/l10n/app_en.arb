@@ -2120,6 +2120,8 @@
   "guestPurposeOther": "Wassla payment",
   "guestPayingNowTitle": "Someone else is paying this now",
   "guestPayingNowBody": "They opened your payment link. This updates as soon as their payment goes through.",
+  "paymentInProgressTitle": "A payment is already under way",
+  "paymentInProgressBody": "Someone, perhaps you, is already paying this. Try again in a few minutes.",
   "guestPayPurposeDeposit": "Deposit for a delivery request",
   "guestPayPurposeDelivery": "Payment for a delivery",
   "guestPayPurposeBoost": "Extra reward for a delivery",

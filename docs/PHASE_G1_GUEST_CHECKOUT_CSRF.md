@@ -440,13 +440,150 @@ in `test_a_signed_in_member_pays_as_a_guest_and_gains_nothing`, and the two "ope
 expected the reuse of an open guest checkout or the address refusal, which D removes. The three
 address tests and the dead-opening test of the second pass are replaced by the D and C tests above.
 
-**What G1 does not change.** An attempt that reaches its own expiry (one hour by default) is
-expired locally without asking the provider, as before G1. A Stripe session lives 24 hours unless
-closed, and Chargily expires its checkouts after 30 minutes. A payer who completes such an old page
-after another checkout funded the order is charged, and the existing late-success path records that
-payment as unapplied and refunds it. Closing at expiry too is a possible follow-up; it is outside
-this package. The app has no dedicated copy for `checkout_in_progress` and shows its generic failure
-message; the guest page has its own.
+At this pass, an attempt reaching its own expiry was still expired locally without asking the
+provider, and the app showed its generic failure for `checkout_in_progress`. The fourth pass fixes
+both (findings 1 and 8 below).
+
+## Fourth-pass review
+
+Astra 6.2 rejected `d99c838`: A, D, E and F fixed, B and C partly, three new blockers and six
+should-fix findings, all leaving a second checkout that could collect or a gap in the lead's B and C
+instructions. Each is fixed on this branch in one commit on top of `d99c838`. As before, no fix
+changes an amount, a fee, a currency or what funds an order.
+
+**The rule now.** Three columns on the attempt carry what the third pass kept in memory or read from
+`updated_at` (migration `0036`, schema contract regenerated):
+
+- `checkout_request`: the create request, frozen when the attempt is written. The first call and
+  every recovery send exactly it.
+- `opening_until`: the claim. The request that creates an attempt owns it for two minutes; a request
+  that recovers it claims it the same way. No other write moves it.
+- `close_requested_at`: set under the order lock before a provider is asked to close the checkout.
+  From then on it is handed to no one, its own payer included, and any request may finish the close.
+
+| The open attempt | What the caller gets |
+| --- | --- |
+| Settling (`processing`) | `CheckoutInProgress`, nothing touched |
+| A checkout stored, closed by its provider in this request | replaced |
+| A checkout stored, opened by this member, same rail and amount, not lapsed, no close requested | handed back (`created=False`) |
+| A checkout stored, anything else | close requested and recorded, then closed at its provider; replaced only once it confirms, else `CheckoutInProgress` |
+| No checkout stored, its claim live | `CheckoutInProgress` |
+| No checkout stored, claim lapsed, Stripe or mock, under 10 minutes old | claimed, recovered with its frozen request, looked at again |
+| No checkout stored, recovery refused while this claim still owns it, too old, or Chargily | replaced: its URL never left the server |
+
+A checkout's URL leaves the server only in the answer of a checkout call (the owner's, the guest
+app's or the guest page's redirect), and only after it is stored on an open attempt. So an attempt with no checkout stored was never handed out and nobody can have paid it.
+
+### 1. The expiry job ended an attempt its provider could still collect (blocker)
+
+`handle_attempt_expiry` marked any open attempt expired on the local clock (one hour), while a Stripe
+session stays payable for 24 hours, and even marked a `processing` one expired.
+
+- **Fix.** The job calls `expire_checkout_attempt`. Under the order lock: a `processing` attempt is
+  left to its own outcome (`attempt_settling`); one with no checkout stored ends now, unless its
+  claim is live (the job waits); one with a checkout gets `close_requested_at`. Then, with no lock
+  held, its provider is asked to close it. Only a confirmed close expires the attempt. A checkout
+  that took or is taking a payment is left to that payment (`attempt_collecting`), and anything
+  else is retried by the job, the order staying reserved meanwhile. Webhooks and the provider
+  reconcile job end it as before.
+- **Check.** `test_expiry_closes_the_checkout_before_the_order_takes_another`,
+  `test_expiry_keeps_a_checkout_its_provider_has_not_closed` (both surfaces then wait; the job's
+  next run finishes), `test_a_payment_taken_before_its_webhook_holds_off_expiry_and_replacement`,
+  `test_expiry_waits_for_the_request_still_opening_a_checkout`, the expiry step added to
+  `test_a_payment_settling_is_never_replaced`, and
+  `test_expiry_closes_its_checkout_outside_any_transaction` (real transactions).
+
+### 2. Reconciliation replayed a create, and order history showed every URL (blocker)
+
+The reconcile job repeated create for an attempt with no checkout stored, whatever its status;
+recovery stored the URL even on an ended attempt; and the owner's order history serialized every
+attempt's URL, a guest's included.
+
+- **Fix.** The reconcile job never repeats a create: an attempt with no checkout stored was never
+  handed out, so there is nothing to learn (it waits while the attempt is open, then answers
+  `checkout_never_handed_out`). The staff "reconcile" action refuses such an attempt with the same
+  code, on every rail. `recover_checkout_attempt` stores a checkout only on an attempt still
+  `created` with none stored; one that ended meanwhile has the recovered checkout closed, never
+  stored. Order history (`PaymentAttemptSerializer`) carries no `checkout_url`; only the checkout
+  endpoint's answer (`CheckoutAttemptSerializer`) does. The app's "Continue your payment" now asks
+  the checkout endpoint again instead of opening a URL from history.
+- **Check.** `test_no_order_history_carries_a_checkout_url`,
+  `test_the_reconciliation_job_never_reopens_a_lost_checkout` (no create, no URL, staff refused),
+  `test_a_recovery_that_finds_its_attempt_ended_stores_and_shows_nothing`, and the app tests
+  `continuing asks the server, which hands the checkout back` and `going back to the payment resumes
+  the same session` (history without a URL).
+
+### 3. A refused recovery could drop a checkout stored meanwhile (blocker)
+
+The third pass kept refused recoveries in a set checked before the attempt's stored checkout, the
+job bypassed the claim, and Stripe's "key in use" conflict was read as a refusal.
+
+- **Fix.** The set is gone. A stored checkout is always looked at first, so one stored meanwhile goes
+  through a confirmed close. An attempt is abandoned after a refusal only if it still has no
+  checkout and the same claim (`opening_until`) still owns it. The job no longer recovers (2).
+  Stripe's 409, and any `idempotency_key_in_use`, is now `ProviderUnavailable`: the caller waits.
+- **Check.** `test_a_checkout_stored_after_its_recovery_was_refused_is_closed_first`, and
+  `test_a_key_still_in_use_is_retryable_not_a_refusal` (Stripe adapter, 409 and 400).
+
+### 4. A create whose answer was lost failed the attempt (should-fix)
+
+- **Fix.** On Stripe and the mock, `ProviderUnavailable` from create keeps the attempt `created` with
+  its key and releases the claim, so the next tap recovers that checkout. A failed create marks the
+  attempt failed only while it still has no checkout stored. Recovery is tried for ten minutes
+  (`CHECKOUT_RECOVERY_LIMIT`), because Stripe replays a failed first answer for the same key; after
+  that the attempt is abandoned, which is safe since its URL never left the server.
+- **Check.** `test_a_create_whose_answer_was_lost_is_recovered_not_opened_twice`.
+
+### 5. A recovery rebuilt the request from current settings (should-fix)
+
+- **Fix.** `_checkout_request` returns the request frozen in `checkout_request` (callback URLs,
+  description, metadata, receipt address). The mock now refuses a key reused with other parameters,
+  as Stripe does.
+- **Check.** `test_a_lost_checkout_is_recovered_after_the_public_address_changed`.
+
+### 6. A close confirmed by a request that then died was forgotten (should-fix)
+
+- **Fix.** `close_requested_at` is written before the provider call, and an attempt carrying it is
+  never handed out, by reuse or by its creating request. Any later request closes it again (closing
+  a closed checkout confirms it closed) and replaces it.
+- **Check.** `test_a_close_whose_request_died_is_finished_never_handed_out`.
+
+### 7. With receipts off, the webhook put an address back (should-fix)
+
+- **Fix.** Reconciliation replaces only an address the guest gave at checkout. An attempt opened with
+  receipts off has none, is given none, and no receipt is owed for it.
+- **Check.** `test_with_receipts_off_no_surface_keeps_or_sends_an_address` now runs through a signed
+  completion that carries an address: none is kept and no guest message is queued.
+
+### 8. The app showed a generic failure for `checkout_in_progress` (should-fix)
+
+- **Fix.** The owner's payment screen and the guest pay screen show "A payment is already under way"
+  with "Someone, perhaps you, is already paying this. Try again in a few minutes." (French and Arabic
+  as on the guest page). The owner's screen also rereads the order, so a guest paying is shown as
+  such. A settling payment no longer offers "Continue".
+- **Check.** App tests `a payment already under way is waited for, not opened` (owner) and `a
+  payment already under way is waited for, in words` (guest). Screenshots below.
+
+### 9. The two-tap test accepted any second redirect, and the mock closed a processing checkout (should-fix)
+
+- **Fix.** The race test now requires each redirect to be a distinct attempt opened by those taps, and
+  each replaced attempt to be closed at the provider. The mock answers "collected" for a checkout
+  processing at the provider, so it is never replaced before its webhook.
+- **Check.** The race test (three runs), and the processing test in finding 1.
+
+**Each new test fails with its fix removed** (checked by reverting each fix in turn: 10 server
+mutations, 2 app mutations).
+
+**Tests rewritten to the new rule:** `age_past_the_opening_window` and the j7c owner race now lapse
+the claim (`opening_until`) instead of ageing `updated_at`. In
+`test_a_lost_checkout_that_cannot_be_recovered`, an unreachable provider now releases the claim, so
+the next tap tries the same key at once (finding 4) instead of waiting out the window. The j7d
+"return from the provider" fixture no longer carries a URL in the order history, as the server no
+longer sends one. The two-tap race test is stricter, not looser.
+
+**Screenshots** (360 px, from widget tests with the app's fonts):
+`docs/screenshots/g1/app-owner-in-progress-{en,ar}.png` and
+`docs/screenshots/g1/app-guest-in-progress-{en,ar}.png`.
 
 ## Checks
 
@@ -484,13 +621,21 @@ After the third pass, on Linux against PostgreSQL 16 and Redis 7 with CI's setti
 - The whole Django suite runs in CI on the pushed commit (four shards), as the project runs long
   suites on GitHub.
 
+After the fourth pass, the same way:
+
+- `ruff check .`: clean. `makemigrations --check --dry-run`: no changes. Schema contract regenerated
+  from a fresh migrate with `pg_dump` 16: three new columns, nothing else.
+- The guest, race, recovery, provider, email and job files (guest payment, j7c, recovery, Stripe,
+  Chargily, 6c email events, jobs and payouts, concurrency): all pass.
+- App: `dart format`, `flutter analyze --fatal-infos` clean; the whole `flutter test` suite passes.
+
 ## Handoff
 
-- **Board:** G1 built, PR open. No migration, so no contract regeneration; Schema drift is expected
-  green.
+- **Board:** G1 built, PR open. Migration `finance 0036` adds three nullable or defaulted columns
+  to the payment attempt; the schema contract is regenerated in the same commit.
 - **Gate, second pass (strongest-model package).** Astra 6.2 rejected `4337d9c` (five findings) and
-  `f1fe565` (six findings); all are fixed (see "Second-pass review" and "Third-pass review"). Astra
-  re-reviews the third pass before merge.
+  `f1fe565` (six findings) and `d99c838` (three blockers, six should-fix); all are fixed (see the
+  second, third and fourth-pass sections). Astra re-reviews the fourth pass before merge.
 - **Deploy (Ismail's approval).** The proxy changes (findings 1, A and F) reach the server only with a
   release: update the `/opt/wacla` checkout to the merged commit and `vps deploy` the image built from
   it. No configuration or secret changes.

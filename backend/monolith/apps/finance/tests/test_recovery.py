@@ -551,6 +551,33 @@ class CheckoutRecoveryTests(TransactionTestCase):
         assert observed == [False]
 
 
+    def test_expiry_closes_its_checkout_outside_any_transaction(self):
+        """The expiry job asks the provider to close a checkout with no lock
+        held, so a slow provider never holds the order up (G1)."""
+
+        scenario = build_scenario(prefix="expiry-io", open_request=False)
+        order = ensure_posting_deposit_order(
+            delivery_request=scenario.delivery_request,
+            policy=scenario.policy,
+        )
+        attempt = open_mock_checkout(order)
+        PaymentAttempt.objects.filter(pk=attempt.pk).update(
+            expires_at=timezone.now() - timedelta(seconds=1)
+        )
+        observed: list[bool] = []
+        original = MockGateway.close_checkout
+
+        def observe_atomic(gateway, *, provider_session_id):
+            observed.append(connection.in_atomic_block)
+            return original(gateway, provider_session_id=provider_session_id)
+
+        with patch.object(MockGateway, "close_checkout", observe_atomic):
+            result = jobs.handle_attempt_expiry({"attempt_id": attempt.pk})
+
+        assert result == "attempt_expired"
+        assert observed == [False]
+
+
 class ChargilyLateSuccessTests(TransactionTestCase):
     reset_sequences = True
 

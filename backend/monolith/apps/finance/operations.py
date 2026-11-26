@@ -253,12 +253,12 @@ def queue_payment_reconciliation(*, attempt_id: int) -> tuple[ScheduledJob, str]
         raise FinanceOperationsError(
             "This payment is already applied.", code="payment_already_applied"
         )
-    if not attempt.provider_session_id and attempt.provider == "chargily":
-        # Chargily has no documented checkout-create idempotency contract.  A
-        # blind recreation could charge twice, so this case stays manual.
+    if not attempt.provider_session_id:
+        # No checkout was ever stored, so none was handed out and nothing was
+        # paid through it: the provider has nothing to report (G1).
         raise FinanceOperationsError(
-            "Chargily did not return a checkout reference; it cannot be retried safely.",
-            code="provider_session_unknown",
+            "No checkout was handed out for this attempt; there is nothing to reconcile.",
+            code="checkout_never_handed_out",
         )
     job = schedule_job(
         kind=ScheduledJob.Kind.PROVIDER_RECONCILE,

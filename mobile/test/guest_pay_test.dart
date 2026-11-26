@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shiptrip/data/repositories.dart';
 import 'package:shiptrip/domain/payment.dart';
 import 'package:shiptrip/features/guest/guest_pay_screen.dart';
+import 'package:shiptrip/l10n/app_localizations.dart';
 
 import 'support/fake_api.dart';
 import 'support/harness.dart';
@@ -96,6 +97,35 @@ void main() {
         .onPressed!();
     await tester.pumpAndSettle();
     expect(calls, 2);
+  });
+
+  testWidgets('a payment already under way is waited for, in words', (
+    tester,
+  ) async {
+    final backend = _guestBackend(
+      checkout: (_) async => const FakeResponse(409, {
+        'code': 'checkout_in_progress',
+        'detail': 'A payment for this order is already under way.',
+      }),
+    );
+    final l = lookupL(const Locale('en'));
+    await pumpApp(
+      tester,
+      const GuestPayScreen(token: 'opaque'),
+      container: containerFor(backend),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField), 'payer@example.eu');
+    await tester.tap(find.text('Stripe'));
+    await tester.pump();
+
+    await tester.tap(find.text('Pay €42.00'));
+    await tester.pumpAndSettle();
+
+    expect(find.text(l.paymentInProgressTitle), findsOneWidget);
+    expect(find.text(l.paymentInProgressBody), findsOneWidget);
+    // Trying again later is the same button.
+    expect(find.text('Pay €42.00'), findsOneWidget);
   });
 
   group('guest checkout email contract', () {

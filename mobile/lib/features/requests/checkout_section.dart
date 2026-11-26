@@ -411,15 +411,9 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
     }
   }
 
-  Future<void> _resume(PaymentAttempt attempt) async {
-    if (_busyProvider != null) return;
-    setState(() {
-      _busyProvider = attempt.provider;
-      _notice = null;
-    });
-    await _open(attempt.checkoutUrl);
-    if (mounted) setState(() => _busyProvider = null);
-  }
+  /// The server, not the order's history, decides whether a checkout may be
+  /// handed out again, so continuing asks it on the same rail (G1).
+  Future<void> _resume(PaymentAttempt attempt) => _checkout(attempt.provider);
 
   Future<void> _open(String? checkoutUrl) async {
     final uri = checkoutUrl == null ? null : Uri.tryParse(checkoutUrl);
@@ -499,6 +493,13 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
         body: l.paymentNothingOutstandingBody,
         tone: StatusTone.good,
       ),
+      // Someone, perhaps this payer, is already paying. Waiting is the whole
+      // answer: the server never opens a second checkout beside theirs.
+      ApiErrorCode.checkoutInProgress => _CheckoutNotice(
+        title: l.paymentInProgressTitle,
+        body: l.paymentInProgressBody,
+        tone: StatusTone.waiting,
+      ),
       _ => null,
     };
 
@@ -513,7 +514,8 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
     // looking at an order that has moved. Re-read it so the surrounding screen
     // stops offering a payment that cannot happen.
     if (error.code == ApiErrorCode.nothingOutstanding ||
-        error.code == ApiErrorCode.orderNotCollectable) {
+        error.code == ApiErrorCode.orderNotCollectable ||
+        error.code == ApiErrorCode.checkoutInProgress) {
       unawaited(_readOrder());
     }
     if (error.code.isProviderUnavailable) {
@@ -631,7 +633,7 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
     final resumable = order?.latestAttempt;
     if (order != null &&
         resumable != null &&
-        resumable.canResume &&
+        resumable.isUnderWay &&
         resumable.isGuestPayment) {
       // Somebody the Sender sent the link to is on the provider's page now.
       // That session is theirs: offering "continue your payment" would send

@@ -7221,6 +7221,18 @@ abstract class L {
   /// **'They opened your payment link. This updates as soon as their payment goes through.'**
   String get guestPayingNowBody;
 
+  /// No description provided for @paymentInProgressTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'A payment is already under way'**
+  String get paymentInProgressTitle;
+
+  /// No description provided for @paymentInProgressBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Someone, perhaps you, is already paying this. Try again in a few minutes.'**
+  String get paymentInProgressBody;
+
   /// No description provided for @guestPayPurposeDeposit.
   ///
   /// In en, this message translates to:

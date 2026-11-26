@@ -53,12 +53,12 @@ from .models import (
 from .policy import InvalidPaymentPolicy, phase3_policy
 from .providers import ProviderError, available_providers
 from .serializers import (
+    CheckoutAttemptSerializer,
     CheckoutCreateSerializer,
     GuestCheckoutCreateSerializer,
     GuestLinkCreateSerializer,
     ManualPayoutCompleteSerializer,
     ManualRefundSettleSerializer,
-    PaymentAttemptSerializer,
     PaymentOrderSerializer,
     PaymentOrderSummarySerializer,
     PostingDepositCreateSerializer,
@@ -282,7 +282,7 @@ class PaymentCheckoutView(APIView):
         ) as exc:
             return _finance_error_response(exc)
         return Response(
-            PaymentAttemptSerializer(session.attempt).data,
+            CheckoutAttemptSerializer(session.attempt).data,
             status=http.HTTP_201_CREATED if session.created else http.HTTP_200_OK,
         )
 

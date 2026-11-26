@@ -299,6 +299,12 @@ class ApiErrorCode {
   static const guestCheckoutInProgress = ApiErrorCode(
     'guest_checkout_in_progress',
   );
+
+  /// A payment for this order is already under way: a checkout is still
+  /// being opened, or one cannot be confirmed closed, or a payment is
+  /// settling. The server never opens a second checkout beside it; the payer
+  /// waits a few minutes and tries again (G1).
+  static const checkoutInProgress = ApiErrorCode('checkout_in_progress');
   static const v1DealPaymentNotAvailable = ApiErrorCode(
     'v1_deal_payment_not_available',
   );

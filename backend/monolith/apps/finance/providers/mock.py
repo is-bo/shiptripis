@@ -28,6 +28,7 @@ from .base import (
     AttemptSnapshot,
     CheckoutRequest,
     CheckoutResult,
+    ProviderCheckoutRejected,
     ProviderError,
     ProviderEvent,
     ProviderSignatureError,
@@ -58,6 +59,8 @@ class MockGateway:
     #: provider's knowledge that it created a checkout, captured money or
     #: issued a refund.
     _checkouts: dict[str, CheckoutResult] = {}
+    #: Idempotency key -> the request first sent with it.
+    _requests: dict[str, CheckoutRequest] = {}
     _sessions: dict[str, dict[str, int | str]] = {}
     _refunds: dict[str, RefundResult] = {}
     _refund_calls: dict[str, int] = {}
@@ -87,10 +90,13 @@ class MockGateway:
         cls._outcomes[session_id] = outcome
 
     @classmethod
-    def fail_close(cls, session_id: str, error: Exception) -> None:
-        """Make `close_checkout` raise `error` for one session. Test helper."""
+    def fail_close(cls, session_id: str, error: Exception | None) -> None:
+        """Make `close_checkout` raise `error` for one session, or stop. Test helper."""
 
-        cls._close_failures[session_id] = error
+        if error is None:
+            cls._close_failures.pop(session_id, None)
+        else:
+            cls._close_failures[session_id] = error
 
     @classmethod
     def is_payable(cls, session_id: str) -> bool:
@@ -106,6 +112,7 @@ class MockGateway:
     def reset(cls) -> None:
         cls._outcomes.clear()
         cls._checkouts.clear()
+        cls._requests.clear()
         cls._sessions.clear()
         cls._refunds.clear()
         cls._refund_calls.clear()
@@ -165,6 +172,13 @@ class MockGateway:
     def create_checkout(self, request: CheckoutRequest) -> CheckoutResult:
         existing = self._checkouts.get(request.idempotency_key)
         if existing is not None:
+            # Like Stripe: a key replays its first answer only for the same
+            # parameters, and refuses anything else.
+            if self._requests[request.idempotency_key] != request:
+                raise ProviderCheckoutRejected(
+                    "Keys for idempotent requests can only be used with the "
+                    "same parameters they were first used with."
+                )
             return existing
         session_id = f"mock_cs_{secrets.token_hex(8)}"
         result = CheckoutResult(
@@ -174,6 +188,7 @@ class MockGateway:
             raw={"id": session_id, "amount": request.amount_minor},
         )
         self._checkouts[request.idempotency_key] = result
+        self._requests[request.idempotency_key] = request
         self._sessions[session_id] = {
             "amount_minor": request.amount_minor,
             "currency": request.currency,
@@ -186,7 +201,7 @@ class MockGateway:
             raise failure
         if provider_session_id not in self._sessions:
             raise ProviderError("No mock checkout to close.")
-        if self._outcomes.get(provider_session_id) == "succeeded":
+        if self._outcomes.get(provider_session_id) in ("succeeded", "processing"):
             return CHECKOUT_COLLECTED
         self._closed.add(provider_session_id)
         return CHECKOUT_CLOSED

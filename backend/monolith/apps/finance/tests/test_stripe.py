@@ -290,6 +290,19 @@ class StripeCheckoutTests(TestCase):
         assert caught.exception.provider_code == "card_declined"
         assert not isinstance(caught.exception, ProviderUnavailable)
 
+    def test_a_key_still_in_use_is_retryable_not_a_refusal(self):
+        """Stripe answers 409 while another request with the same key is
+        processed, and saves no answer for it: the same request can succeed
+        later, so a recovery waits instead of abandoning the attempt (G1)."""
+
+        in_use = {"error": {"code": "idempotency_key_in_use", "message": "busy"}}
+        for status in (409, 400):
+            with self.subTest(status):
+                gateway = _gateway([_FakeResponse(status, in_use)])
+
+                with self.assertRaises(ProviderUnavailable):
+                    gateway.create_checkout(self._request())
+
     def test_a_transport_timeout_is_retryable_not_a_failure(self):
         import requests as requests_module
 

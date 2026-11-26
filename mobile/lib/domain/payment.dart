@@ -308,8 +308,10 @@ class PaymentAttempt {
   /// Pre-formatted `150.000000`.
   final String? eurDzdRate;
 
-  /// Hosted checkout page. There is no client secret and no embedded form;
-  /// this URL is the whole redirect contract.
+  /// Hosted checkout page, present only on the attempt the checkout endpoint
+  /// just answered with. An order's history never carries one: the server
+  /// hands a checkout out only from that endpoint (G1). There is no client
+  /// secret and no embedded form; this URL is the whole redirect contract.
   final String? checkoutUrl;
 
   final String failureCode;
@@ -323,7 +325,14 @@ class PaymentAttempt {
     return at != null && at.isBefore(DateTime.now());
   }
 
-  bool get canResume => status.isInFlight && checkoutUrl != null && !isExpired;
+  /// Someone is partway through this payment: its checkout is open, or its
+  /// money is settling.
+  bool get isUnderWay => status.isInFlight && !isExpired;
+
+  /// Whether the payer can be offered to continue this attempt: its checkout
+  /// is open, not yet paid. Continuing asks the checkout endpoint again, which
+  /// hands the payer's own checkout back or says a payment is under way.
+  bool get canResume => isUnderWay && status != PaymentAttemptStatus.processing;
 }
 
 class PaymentRefund {

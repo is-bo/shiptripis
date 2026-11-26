@@ -4156,6 +4156,13 @@ class LFr extends L {
       'Cette personne a ouvert votre lien de paiement. Cet écran se met à jour dès que le paiement aboutit.';
 
   @override
+  String get paymentInProgressTitle => 'Un paiement est déjà en cours';
+
+  @override
+  String get paymentInProgressBody =>
+      'Quelqu’un, peut-être vous, est déjà en train de payer. Réessayez dans quelques minutes.';
+
+  @override
   String get guestPayPurposeDeposit => 'Acompte pour une demande de livraison';
 
   @override

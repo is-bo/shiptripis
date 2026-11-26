@@ -288,6 +288,19 @@ class StripeGateway:
                     "Stripe rate limited the request.", provider_code="429"
                 )
             error = body.get("error", {}) if isinstance(body, dict) else {}
+            if (
+                response.status_code == 409
+                or error.get("code") == "idempotency_key_in_use"
+            ):
+                # Another request with the same idempotency key is still being
+                # processed. Stripe saves no answer for this one, so the same
+                # request succeeds once that one finishes: retry, never a
+                # refusal (G1).
+                outcome = "conflict"
+                raise ProviderUnavailable(
+                    "Stripe is still processing a request with this key.",
+                    provider_code="idempotency_key_in_use",
+                )
             if response.status_code in (401, 403):
                 outcome = "auth_rejected"
                 logger.error(

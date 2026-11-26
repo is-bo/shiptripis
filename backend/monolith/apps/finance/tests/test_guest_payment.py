@@ -24,12 +24,17 @@ from rest_framework.test import APIClient
 from apps.core.business_settings import get_active_business_settings
 from apps.core.models import BusinessSettingsVersion
 from apps.deals.models import Deal
+from apps.finance import jobs
 from apps.finance.models import (
     GuestPaymentLink,
     PaymentAttempt,
     PaymentOrder,
 )
 from apps.finance import views as finance_views
+from apps.finance.operations import (
+    FinanceOperationsError,
+    queue_payment_reconciliation,
+)
 from apps.finance.providers import (
     ProviderCheckoutRejected,
     ProviderError,
@@ -37,7 +42,6 @@ from apps.finance.providers import (
 )
 from apps.finance.providers.mock import MockGateway
 from apps.finance.services import (
-    CHECKOUT_OPENING_WINDOW,
     CheckoutInProgress,
     GuestLinkInvalid,
     NotAuthorized,
@@ -45,14 +49,17 @@ from apps.finance.services import (
     create_guest_link,
     hash_guest_token,
     reconcile_attempt,
+    recover_checkout_attempt,
     resolve_guest_link,
     revoke_guest_link,
     start_checkout,
 )
+from apps.notifications.models import OutboundMessage
 
 from .factories import (
     build_scenario,
     deliver_mock_webhook,
+    mock_event_body,
     open_mock_checkout,
     succeed_attempt,
 )
@@ -531,12 +538,29 @@ class OpenCheckoutTests(GuestPaymentTestCase):
         assert payable == [live.provider_session_id]
 
     def age_past_the_opening_window(self, attempt):
-        """As if the request that last wrote `attempt` died that long ago."""
+        """As if the request that owns `attempt` died: its claim has lapsed."""
 
-        then = timezone.now() - CHECKOUT_OPENING_WINDOW - timedelta(seconds=1)
         PaymentAttempt.objects.filter(pk=attempt.pk).update(
-            created_at=then, updated_at=then
+            opening_until=timezone.now() - timedelta(seconds=1)
         )
+
+    def expire(self, attempt):
+        """Run `attempt`'s own expiry job, as the worker does once it is due."""
+
+        PaymentAttempt.objects.filter(pk=attempt.pk).update(
+            expires_at=timezone.now() - timedelta(seconds=1)
+        )
+        return jobs.handle_attempt_expiry({"attempt_id": attempt.pk})
+
+    def lose_a_checkout(self, who):
+        """`who` taps and its request dies at the provider, storing nothing."""
+
+        with (
+            mock.patch.object(MockGateway, "create_checkout", side_effect=WorkerLost),
+            self.assertRaises(WorkerLost),
+        ):
+            who()
+        return self.attempts().get(status=PaymentAttempt.Status.CREATED)
 
     @override_settings(TRANSACTIONAL_EMAIL_ENABLED=True)
     def test_another_holder_replaces_the_checkout_once_it_is_closed(self):
@@ -623,6 +647,8 @@ class OpenCheckoutTests(GuestPaymentTestCase):
             with self.subTest(who.__name__), self.assertRaises(CheckoutInProgress):
                 who()
 
+        # Its expiry leaves it to that outcome as well.
+        assert self.expire(first) == "attempt_settling"
         kept = self.attempts().get()
         assert kept.status == PaymentAttempt.Status.PROCESSING
         assert MockGateway.is_payable(kept.provider_session_id)
@@ -839,15 +865,21 @@ class OpenCheckoutTests(GuestPaymentTestCase):
         ):
             self.owner_starts()
         assert self.attempts().get().status == PaymentAttempt.Status.CREATED
-        # That try holds the claim for the window: the next caller waits and
-        # asks the provider nothing.
+        # An unreachable provider releases the claim: the next tap tries the
+        # same key again at once instead of waiting out the window.
         with (
-            mock.patch.object(MockGateway, "create_checkout") as create,
+            mock.patch.object(
+                MockGateway,
+                "create_checkout",
+                side_effect=ProviderUnavailable("timed out"),
+            ) as create,
             self.assertRaises(CheckoutInProgress),
         ):
             self.owner_starts()
-        create.assert_not_called()
-        self.age_past_the_opening_window(lost)
+        assert [call.args[0].idempotency_key for call in create.call_args_list] == [
+            lost.idempotency_key
+        ]
+        assert self.attempts().get().status == PaymentAttempt.Status.CREATED
 
         real_create = MockGateway.create_checkout
 
@@ -934,6 +966,278 @@ class OpenCheckoutTests(GuestPaymentTestCase):
         assert retry.data["checkout_url"] == live.checkout_url
         self.assert_only_payable(live)
 
+    # --- fourth pass: expiry, history, recovery claims -----------------------
+
+    def test_expiry_closes_the_checkout_before_the_order_takes_another(self):
+        """Our expiry is not the provider's: a checkout handed out stays
+        payable at its provider until it is closed there. The expiry job
+        closes it first, so the next payer never opens one beside it."""
+
+        first = self.owner_starts().attempt
+
+        assert self.expire(first) == "attempt_expired"
+
+        first.refresh_from_db()
+        assert first.status == PaymentAttempt.Status.EXPIRED
+        assert not MockGateway.is_payable(first.provider_session_id)
+        second = self.start()
+        assert second.created is True
+        self.assert_only_payable(second.attempt)
+
+    def test_expiry_keeps_a_checkout_its_provider_has_not_closed(self):
+        first = self.owner_starts().attempt
+        MockGateway.fail_close(first.provider_session_id, ProviderUnavailable("down"))
+
+        with self.assertRaises(jobs.RetryableJobError):
+            self.expire(first)
+
+        kept = self.attempts().get()
+        assert kept.pk == first.pk
+        assert kept.status == PaymentAttempt.Status.CHECKOUT_PENDING
+        assert kept.close_requested_at is not None
+        # Being closed, it is handed to no one, its own payer included, and
+        # nothing replaces it.
+        for who in (self.start, self.owner_starts):
+            with self.subTest(who.__name__), self.assertRaises(CheckoutInProgress):
+                who()
+        self.assert_only_payable(kept)
+
+        # The job's next run, once the provider answers, finishes the close.
+        MockGateway.fail_close(first.provider_session_id, None)
+        assert self.expire(kept) == "attempt_expired"
+        second = self.start()
+        assert second.created is True
+        self.assert_only_payable(second.attempt)
+
+    def test_a_payment_taken_before_its_webhook_holds_off_expiry_and_replacement(self):
+        """Authorised and settling at the provider, its webhook not here yet:
+        the provider refuses to close it, so nothing ends or replaces it."""
+
+        first = self.start().attempt
+        MockGateway.mark(first.provider_session_id, "processing")
+
+        for who in (self.start, self.owner_starts):
+            with self.subTest(who.__name__), self.assertRaises(CheckoutInProgress):
+                who()
+        assert self.expire(first) == "attempt_collecting"
+
+        kept = self.attempts().get()
+        assert kept.pk == first.pk
+        assert kept.status == PaymentAttempt.Status.CHECKOUT_PENDING
+        self.assert_only_payable(kept)
+        MockGateway.mark(kept.provider_session_id, "succeeded")
+        assert deliver_mock_webhook(self.client, succeed_attempt(kept)).status_code == 200
+        self.order.refresh_from_db()
+        assert self.order.status == PaymentOrder.Status.PAID
+
+    def test_expiry_waits_for_the_request_still_opening_a_checkout(self):
+        lost = self.lose_a_checkout(self.owner_starts)
+
+        with self.assertRaises(jobs.JobDeferred):
+            self.expire(lost)
+        assert self.attempts().get().status == PaymentAttempt.Status.CREATED
+
+        self.age_past_the_opening_window(lost)
+        assert self.expire(lost) == "attempt_expired"
+
+    def test_no_order_history_carries_a_checkout_url(self):
+        """Only the checkout endpoint hands a checkout out, because only it
+        decides who may have it. The owner's history shows neither their own
+        open checkout's URL nor a guest's, with its receipt address."""
+
+        owner = self.client_for(self.scenario.sender)
+        reference = str(self.order.public_reference)
+        own = owner.post(
+            reverse("finance-order-checkout", args=[reference]),
+            {"provider": "mock"},
+            format="json",
+        )
+        assert own.status_code == 201 and own.data["checkout_url"]
+        theirs = self.guest.post(self.endpoint, {"provider": "mock"}, format="json")
+        assert theirs.status_code == 201
+
+        detail = owner.get(reverse("finance-order-detail", args=[reference]))
+
+        assert detail.status_code == 200
+        assert len(detail.data["attempts"]) == 2
+        assert all("checkout_url" not in row for row in detail.data["attempts"])
+        body = json.dumps(detail.data, default=str)
+        assert own.data["checkout_url"] not in body
+        assert theirs.data["checkout_url"] not in body
+
+    def test_the_reconciliation_job_never_reopens_a_lost_checkout(self):
+        """A checkout no one stored was never handed out, so no one paid it:
+        the job asks the provider nothing and brings back no URL."""
+
+        lost = self.lose_a_checkout(self.owner_starts)
+
+        with mock.patch.object(MockGateway, "create_checkout") as create:
+            with self.assertRaises(jobs.JobDeferred):
+                jobs.handle_provider_reconcile({"attempt_id": lost.pk})
+            self.age_past_the_opening_window(lost)
+            assert self.expire(lost) == "attempt_expired"
+            assert (
+                jobs.handle_provider_reconcile({"attempt_id": lost.pk})
+                == "checkout_never_handed_out"
+            )
+
+        create.assert_not_called()
+        lost.refresh_from_db()
+        assert (lost.provider_session_id, lost.checkout_url) == ("", "")
+        # Nor can staff queue one for it: there is nothing to learn.
+        with self.assertRaises(FinanceOperationsError) as refused:
+            queue_payment_reconciliation(attempt_id=lost.pk)
+        assert refused.exception.code == "checkout_never_handed_out"
+
+    def test_a_recovery_that_finds_its_attempt_ended_stores_and_shows_nothing(self):
+        lost = self.lose_a_checkout(self.owner_starts)
+        real_create = MockGateway.create_checkout
+
+        def order_cancelled_meanwhile(gateway, request):
+            result = real_create(gateway, request)
+            cancel_order(order_id=self.order.pk, reason="deal_cancelled")
+            return result
+
+        with mock.patch.object(
+            MockGateway, "create_checkout", new=order_cancelled_meanwhile
+        ):
+            assert recover_checkout_attempt(attempt_id=lost.pk) == "checkout_abandoned"
+
+        lost.refresh_from_db()
+        assert lost.status == PaymentAttempt.Status.CANCELLED
+        assert (lost.provider_session_id, lost.checkout_url) == ("", "")
+        sessions = MockGateway.checkout_session_ids()
+        assert len(sessions) == 1
+        assert not MockGateway.is_payable(sessions[0])
+
+    def test_a_checkout_stored_after_its_recovery_was_refused_is_closed_first(self):
+        """The owner's slow request stores its checkout just after a guest's
+        recovery of it was refused. The guest closes it at the provider before
+        opening its own: it never drops a checkout that can still be paid."""
+
+        real_create = MockGateway.create_checkout
+        keys = []
+        guest = []
+
+        def slow_owner(gateway, request):
+            keys.append(request.idempotency_key)
+            if len(keys) == 1:
+                # The owner's create is out past its window; a guest taps.
+                self.age_past_the_opening_window(self.attempts().get())
+                guest.append(self.start())
+            elif len(keys) == 2:
+                # The guest's recovery under the owner's key. The owner's
+                # answer arrives and is stored before this refusal does.
+                result = real_create(gateway, request)
+                PaymentAttempt.objects.filter(
+                    idempotency_key=request.idempotency_key
+                ).update(
+                    provider_session_id=result.provider_session_id,
+                    checkout_url=result.checkout_url,
+                    status=PaymentAttempt.Status.CHECKOUT_PENDING,
+                )
+                raise ProviderCheckoutRejected("refused")
+            return real_create(gateway, request)
+
+        with (
+            mock.patch.object(MockGateway, "create_checkout", new=slow_owner),
+            self.assertRaises(CheckoutInProgress),
+        ):
+            self.owner_starts()
+
+        assert keys[1] == keys[0]
+        owners = PaymentAttempt.objects.get(idempotency_key=keys[0])
+        assert owners.status == PaymentAttempt.Status.CANCELLED
+        assert not MockGateway.is_payable(owners.provider_session_id)
+        assert guest[0].created is True
+        assert guest[0].attempt.guest_link_id == self.issued.link.pk
+        self.assert_only_payable(guest[0].attempt)
+
+    def test_a_create_whose_answer_was_lost_is_recovered_not_opened_twice(self):
+        """The provider opened the checkout and its answer timed out: the
+        attempt keeps its key, and the next tap gets that checkout back."""
+
+        real_create = MockGateway.create_checkout
+
+        def opens_then_times_out(gateway, request):
+            real_create(gateway, request)
+            raise ProviderUnavailable("read timed out")
+
+        with (
+            mock.patch.object(
+                MockGateway, "create_checkout", new=opens_then_times_out
+            ),
+            self.assertRaises(ProviderUnavailable),
+        ):
+            self.owner_starts()
+        kept = self.attempts().get()
+        assert kept.status == PaymentAttempt.Status.CREATED
+        assert kept.checkout_url == ""
+
+        session = self.owner_starts()
+
+        assert session.created is False
+        assert session.attempt.pk == kept.pk
+        assert MockGateway.checkout_session_ids() == [
+            session.attempt.provider_session_id
+        ]
+        self.assert_only_payable(session.attempt)
+
+    def test_a_lost_checkout_is_recovered_after_the_public_address_changed(self):
+        """The request is frozen on the attempt, so a recovery after a restart
+        with other settings still sends the provider exactly the first one."""
+
+        real_create = MockGateway.create_checkout
+        sent = []
+
+        def opens_then_dies(gateway, request):
+            sent.append(request)
+            result = real_create(gateway, request)
+            if len(sent) == 1:
+                raise WorkerLost
+            return result
+
+        with mock.patch.object(MockGateway, "create_checkout", new=opens_then_dies):
+            with self.assertRaises(WorkerLost):
+                self.owner_starts()
+            lost = self.attempts().get()
+            self.age_past_the_opening_window(lost)
+            with override_settings(PAYMENTS_PUBLIC_BASE_URL="https://moved.invalid"):
+                session = self.owner_starts()
+
+        assert "moved.invalid" not in sent[0].success_url
+        assert sent[1] == sent[0]
+        assert session.created is False and session.attempt.pk == lost.pk
+        assert MockGateway.checkout_session_ids() == [
+            session.attempt.provider_session_id
+        ]
+
+    def test_a_close_whose_request_died_is_finished_never_handed_out(self):
+        """The guest's request dies just after the provider closed the owner's
+        checkout. The owner's next tap is not handed that closed checkout: it
+        finishes the close and opens a new one."""
+
+        first = self.owner_starts().attempt
+        real_close = MockGateway.close_checkout
+
+        def closes_then_dies(gateway, *, provider_session_id):
+            real_close(gateway, provider_session_id=provider_session_id)
+            raise WorkerLost
+
+        with (
+            mock.patch.object(MockGateway, "close_checkout", new=closes_then_dies),
+            self.assertRaises(WorkerLost),
+        ):
+            self.start()
+        assert not MockGateway.is_payable(first.provider_session_id)
+        assert self.attempts().get().close_requested_at is not None
+
+        again = self.owner_starts()
+
+        assert again.created is True
+        assert again.attempt.checkout_url != first.checkout_url
+        self.assert_only_payable(again.attempt)
+
     @override_settings(TRANSACTIONAL_EMAIL_ENABLED=False)
     def test_with_receipts_off_no_surface_keeps_or_sends_an_address(self):
         real_create = MockGateway.create_checkout
@@ -954,3 +1258,25 @@ class OpenCheckoutTests(GuestPaymentTestCase):
         assert api.status_code == 201
         assert sent == ["", ""]
         assert set(self.attempts().values_list("guest_email", flat=True)) == {""}
+
+        # Nor does the provider's completion, which carries the address the
+        # payer typed on its page: no address is kept and no receipt is owed.
+        live = self.attempts().get(status__in=PaymentAttempt.OPEN_STATUSES)
+        completion = mock_event_body(
+            event_id=f"evt_{live.pk}_paid",
+            outcome="succeeded",
+            session_id=live.provider_session_id,
+            payment_id=f"{live.provider_session_id}_pi",
+            reference=str(self.order.public_reference),
+            amount=int(live.provider_amount_minor),
+            currency=live.payment_currency,
+            event_type="checkout.paid",
+            guest_email="someone@example.com",
+        )
+        assert deliver_mock_webhook(self.client, completion).status_code == 200
+        live.refresh_from_db()
+        assert live.status == PaymentAttempt.Status.SUCCEEDED
+        assert live.guest_email == ""
+        assert not OutboundMessage.objects.filter(
+            kind=OutboundMessage.Kind.GUEST_PAYMENT
+        ).exists()

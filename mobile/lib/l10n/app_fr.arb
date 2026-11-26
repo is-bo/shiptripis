@@ -1201,6 +1201,8 @@
   "guestPurposeOther": "Paiement Wassla",
   "guestPayingNowTitle": "Quelqu’un d’autre est en train de payer",
   "guestPayingNowBody": "Cette personne a ouvert votre lien de paiement. Cet écran se met à jour dès que le paiement aboutit.",
+  "paymentInProgressTitle": "Un paiement est déjà en cours",
+  "paymentInProgressBody": "Quelqu’un, peut-être vous, est déjà en train de payer. Réessayez dans quelques minutes.",
   "guestPayPurposeDeposit": "Acompte pour une demande de livraison",
   "guestPayPurposeDelivery": "Paiement d’une livraison",
   "guestPayPurposeBoost": "Bonus pour une livraison",

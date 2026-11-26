@@ -424,6 +424,18 @@ class PaymentAttempt(models.Model):
         help_text="What we sent the provider. Stable across our own retries.",
     )
     checkout_url = models.URLField(max_length=1024, blank=True, default="")
+    #: The create request sent to the provider, frozen when the attempt is
+    #: written. A recovery repeats it exactly: a provider replays its first
+    #: answer for a key only when the parameters are the same (G1).
+    checkout_request = models.JSONField(default=dict, blank=True)
+    #: Until when the request that created this attempt, or the one that last
+    #: claimed it to recover it, may still store its checkout. Before then no
+    #: other request recovers or abandons it (G1).
+    opening_until = models.DateTimeField(null=True, blank=True)
+    #: Set, before the provider is asked, when this checkout is to be closed.
+    #: From then on it is never handed out again; any request may finish the
+    #: close (G1).
+    close_requested_at = models.DateTimeField(null=True, blank=True)
 
     status = models.CharField(
         max_length=20,

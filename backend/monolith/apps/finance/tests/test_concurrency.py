@@ -412,9 +412,18 @@ class GuestPageRaceTests(FinanceConcurrencyTestCase):
         )
         assert live.provider_session_id and live.checkout_url
         self.assert_only_payable(live)
-        assert live.checkout_url in {
-            res["Location"] for res in responses if res.status_code == 302
-        }
+        attempts = list(PaymentAttempt.objects.filter(order=self.order))
+        redirects = [res["Location"] for res in responses if res.status_code == 302]
+        # Each redirect is a checkout of its own, opened by one of these taps:
+        # no two taps are ever sent to the same one.
+        assert len(redirects) == len(set(redirects)) == len(attempts) >= 1
+        assert set(redirects) == {attempt.checkout_url for attempt in attempts}
+        assert live.checkout_url in redirects
+        # And each checkout the later tap replaced was closed at its provider.
+        for replaced in (attempt for attempt in attempts if attempt.pk != live.pk):
+            assert replaced.status == PaymentAttempt.Status.CANCELLED
+            assert replaced.failure_code == "superseded"
+            assert not MockGateway.is_payable(replaced.provider_session_id)
         for waiting in (res for res in responses if res.status_code != 302):
             assert waiting.status_code == 409
             assert "A payment is already under way" in waiting.content.decode()
