@@ -11,6 +11,7 @@
   per version; the iOS sweep cutoff is taken at registration. The Kotlin arithmetic and the JPEG cleaner now
   have JUnit tests of the real code (`tools/test_android_pure.sh`, a CI step). Detail:
   `docs/PHASE_P3B_PROFILE_PHOTOS_APP.md`, "Round five".
+
 ## Wassla: the bell names the ticket decision (N2, 2026-11-26)
 
 - Phone test 2 (plan 1.5): the owner's flight ticket was approved but the bell row only read
