@@ -99,6 +99,17 @@ results are files on that PC.
 3. Update the board and this section after every merge.
 4. Then section 0.4, with Ismail's OK at each step.
 
+### 0.7 Astra results after the Codex reset (local operator log, 2026-11-26)
+The local operator on Ismail's PC runs Astra 6.2 at high effort, read-only, and pushes each result here.
+
+| Package | Head reviewed | Verdict | Result file |
+|---|---|---|---|
+| C1 plan (extra high) | — | Plan complete, with questions for Ismail | `docs/handoff/astra/results/c1-plan.md` |
+| P3B round 4 | `c8b4e68` | **Reject**: 5 of 13 fixed, 8 partly fixed; 3 new blockers (KYC picker ownership, uncertain tickets returned to the parcel picker, retry during an account switch) | `docs/handoff/astra/results/p3b-astra-round4-result.md` |
+| G1 round 3 | `d99c838` | **Reject**: A, D, E and F fixed, B and C partly fixed; 3 new blockers (an expiry job leaves a Stripe URL payable, recovery republishes a URL on a terminal attempt, a recovery race supersedes without closing) | `docs/handoff/astra/results/g1-astra-round3-result.md` |
+| N1 round 2 | `49ae6d8` | running | `docs/handoff/astra/results/n1-astra-round2-result.md` |
+| F1 round 2 | PR #69 head | queued after N1 | `docs/handoff/astra/results/f1-astra-round2-result.md` |
+
 ### 0.4 After every package is merged (each step needs Ismail's OK)
 1. Deploy the reviewed `main` SHA to the VPS (`infra/vps/README.md`), then O2 (guest checkout check).
 2. Build a `release` Android APK with the GitHub "Build Android" workflow, give it to Ismail on his
