@@ -625,9 +625,9 @@ After the fourth pass, the same way:
 
 - `ruff check .`: clean. `makemigrations --check --dry-run`: no changes. Schema contract regenerated
   from a fresh migrate with `pg_dump` 16: three new columns, nothing else.
-- The guest, race, recovery, provider, email and job files (guest payment, j7c, recovery, Stripe,
-  Chargily, 6c email events, jobs and payouts, concurrency): all pass.
-- App: `dart format`, `flutter analyze --fatal-infos` clean; the whole `flutter test` suite passes.
+- The whole `apps/finance` and `apps/admin_panel` suites: 1,425 passed, 0 failed.
+- App: `dart format`, `flutter analyze --fatal-infos` clean; the whole `flutter test` suite: 1,671
+  passed.
 
 ## Handoff
 
