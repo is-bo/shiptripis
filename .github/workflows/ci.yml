@@ -446,6 +446,44 @@ jobs:
       - name: Android photo code — Kotlin unit tests
         run: ../tools/test_android_pure.sh
 
+  # ── Android ─────────────────────────────────────────────────────────────
+  # The Android code (PhotoPrepare, PickMarkerStore, PickLaunchGate, MainActivity)
+  # is compiled by a debug build, and the JUnit tests under android/app/src/test
+  # run through Gradle's own unit-test task. A debug APK only: nothing here is
+  # signed, uploaded or released.
+  android:
+    name: Android — compile and Gradle unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Writes android/gradlew (git-ignored) and compiles every Kotlin file of
+      # the app and the plugins.
+      - name: Compile the debug app
+        run: flutter build apk --debug
+
+      - name: Gradle unit tests
+        working-directory: mobile/android
+        run: ./gradlew :app:testDebugUnitTest --no-daemon
+
   # ── Schema-drift gate (CLAUDE.md §G3) ───────────────────────────────────
   # G3 requires BOTH steps: re-export schema.sql from Django AND re-run the
   # generators. Running only the generators would check Go against a stale
