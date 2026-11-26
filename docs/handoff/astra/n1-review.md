@@ -1,6 +1,6 @@
 You are an independent second-pass reviewer. This review is read-only: do not write, commit or push code, and do not comment on GitHub. You may read files and run read-only git commands.
 
-Review pull request #71, "N1: ask for notifications once on first open", in this repository (is-bo/shiptripis), at head `HEAD_SHA_PLACEHOLDER` (round 3; round 2 was `5372776`, round 1 `6f1b858`). Use a three-dot diff against `origin/main`, and run `git fetch origin` first if the commit is missing.
+Review pull request #71, "N1: ask for notifications once on first open", in this repository (is-bo/shiptripis), at head `b200577afa53b0c5021cb7bc0f759b37723deba8` (round 3; round 2 was `5372776`, round 1 `6f1b858`). Use a three-dot diff against `origin/main`, and run `git fetch origin` first if the commit is missing.
 - The Flutter app is under `mobile/lib/`.
 - The rules are in `CLAUDE.md`, especially "Mobile rules" and the rule that strings must exist in EN/FR/MSA.
 - The package is section 4 "N1" of `docs/WASSLA_PHONE_TEST_2_PLAN.md`, and the finding is section 1.2.
