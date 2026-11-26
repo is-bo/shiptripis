@@ -105,9 +105,9 @@ The local operator on Ismail's PC runs Astra 6.2 at high effort, read-only, and 
 | Package | Head reviewed | Verdict | Result file |
 |---|---|---|---|
 | C1 plan (extra high) | — | Plan complete, with questions for Ismail | `docs/handoff/astra/results/c1-plan.md` |
-| P3B round 5 | `f4394f1` | Prompt ready (`docs/handoff/astra/p3b-review-round5.md`); not run yet | `docs/handoff/astra/results/p3b-astra-round5-result.md` |
+| P3B round 5 | `f4394f1` | **Reject** (run by Ismail): 2 blockers (a restored KYC image can still reach a Profile pick, and a fresh pick during an A-to-B switch pairs A with B's generation), 5 should-fixes | `docs/handoff/astra/results/p3b-astra-round5-result.md` |
 | P3B round 4 | `c8b4e68` | **Reject**: 5 of 13 fixed, 8 partly fixed; 3 new blockers (KYC picker ownership, uncertain tickets returned to the parcel picker, retry during an account switch) | `docs/handoff/astra/results/p3b-astra-round4-result.md` |
-| G1 round 4 | `1643afc` | Prompt ready (`docs/handoff/astra/g1-review.md`); not run yet | `docs/handoff/astra/results/g1-astra-round4-result.md` |
+| G1 round 4 | `1643afc` | **Reject** (run by Ismail): 2 blockers (a delayed expired webhook is bound to the newest handleless attempt, and order cancellation leaves an issued checkout payable), 8 should-fixes | `docs/handoff/astra/results/g1-astra-round4-result.md` |
 | G1 round 3 | `d99c838` | **Reject**: A, D, E and F fixed, B and C partly fixed; 3 new blockers (an expiry job leaves a Stripe URL payable, recovery republishes a URL on a terminal attempt, a recovery race supersedes without closing) | `docs/handoff/astra/results/g1-astra-round3-result.md` |
 | N1 round 2 | `49ae6d8` | **Reject** (run by Ismail on a second Codex account): 6 blockers. Logout can leave the old account receiving pushes (old-app compatibility, out-of-order logout and registration, stale logout after a counter reset, equal sequence numbers, a racing installation ID, password reset) | `docs/handoff/astra/results/n1-astra-round2-result.md` |
 | F1 round 2 | `8d1a1cd` | **Reject** (run by Ismail): 8 of 10 fixed, 2 partly fixed; 1 blocker (a stale Stripe onboarding overwrites a newer payout-country declaration) | `docs/handoff/astra/results/f1-astra-round2-result.md` |
