@@ -109,8 +109,8 @@ The local operator on Ismail's PC runs Astra 6.2 at high effort, read-only, and 
 | P3B round 4 | `c8b4e68` | **Reject**: 5 of 13 fixed, 8 partly fixed; 3 new blockers (KYC picker ownership, uncertain tickets returned to the parcel picker, retry during an account switch) | `docs/handoff/astra/results/p3b-astra-round4-result.md` |
 | G1 round 4 | `1643afc` | Prompt ready (`docs/handoff/astra/g1-review.md`); not run yet | `docs/handoff/astra/results/g1-astra-round4-result.md` |
 | G1 round 3 | `d99c838` | **Reject**: A, D, E and F fixed, B and C partly fixed; 3 new blockers (an expiry job leaves a Stripe URL payable, recovery republishes a URL on a terminal attempt, a recovery race supersedes without closing) | `docs/handoff/astra/results/g1-astra-round3-result.md` |
-| N1 round 2 | `49ae6d8` | Codex usage limit hit mid-run (no result); rerun after 19:51 Lagos | `docs/handoff/astra/results/n1-astra-round2-result.md` |
-| F1 round 2 | `8d1a1cd` | Codex usage limit; rerun after N1, after 19:51 Lagos | `docs/handoff/astra/results/f1-astra-round2-result.md` |
+| N1 round 2 | `49ae6d8` | **Reject** (run by Ismail on a second Codex account): 6 blockers. Logout can leave the old account receiving pushes (old-app compatibility, out-of-order logout and registration, stale logout after a counter reset, equal sequence numbers, a racing installation ID, password reset) | `docs/handoff/astra/results/n1-astra-round2-result.md` |
+| F1 round 2 | `8d1a1cd` | **Reject** (run by Ismail): 8 of 10 fixed, 2 partly fixed; 1 blocker (a stale Stripe onboarding overwrites a newer payout-country declaration) | `docs/handoff/astra/results/f1-astra-round2-result.md` |
 
 ### 0.4 After every package is merged (each step needs Ismail's OK)
 1. Deploy the reviewed `main` SHA to the VPS (`infra/vps/README.md`), then O2 (guest checkout check).
