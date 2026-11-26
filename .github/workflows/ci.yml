@@ -436,6 +436,13 @@ jobs:
       # The photo arithmetic and the metadata cleaner of the Android code use no
       # Android type, so the real Kotlin runs under JUnit here, with a downloaded
       # kotlinc and no Gradle.
+      # kotlinc 2.1 cannot read the version string of the runner's default JDK
+      # (25), so the step runs on JDK 17, the one the Android build uses.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - name: Android photo code — Kotlin unit tests
         run: ../tools/test_android_pure.sh
 
