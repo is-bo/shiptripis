@@ -3336,5 +3336,11 @@
   "deleteAccountAppleRefused": "Apple didn’t confirm. Nothing was deleted. Try again.",
   "deleteAccountAppleUnavailable": "We couldn’t reach Apple. Nothing was deleted. Try again in a few minutes.",
   "deleteAccountStaff": "A staff account is closed by a Super Admin, not from the app.",
-  "deleteAccountDone": "Your account is deleted."
+  "deleteAccountDone": "Your account is deleted.",
+  "notificationFlightTicketApproved": "Flight ticket approved",
+  "notificationFlightTicketRejected": "Flight ticket needs attention",
+  "notificationFlightTicketResubmit": "We need a new flight ticket",
+  "notificationFerryTicketApproved": "Ferry ticket approved",
+  "notificationFerryTicketRejected": "Ferry ticket needs attention",
+  "notificationFerryTicketResubmit": "We need a new ferry ticket"
 }
