@@ -1,10 +1,10 @@
 You are an independent second-pass reviewer. This review is read-only: do not write, commit or push code, and do not comment on GitHub. You may read files and run read-only git commands. Run `git fetch origin` first. If `git fetch` cannot write `.git/FETCH_HEAD`, say so and verify the SHAs through `git ls-remote origin`.
 
-This is the **sixth review** of pull request #66, "P3B profile photos in the app", in this repository (is-bo/shiptripis). The new head is `0d4a22006ea4c08dcad2e3386935e60e519cedb6` (branch `origin/claude/p3b-profile-photos-app`).
+This is the **sixth review** of pull request #66, "P3B profile photos in the app", in this repository (is-bo/shiptripis). The new head is `ead30e206ad702cf2ea91cedb95cf9704c778a7b` (branch `origin/claude/p3b-profile-photos-app`).
 
 - You rejected the previous head, `f4394f196aa8eb7ebcf5bb337f32c9f89afc032c`, with 2 blockers, 5 should-fixes and 6 partly-fixed round-3 findings (and round-4 finding 2). Your report is `docs/handoff/astra/results/p3b-astra-round5-result.md` on `main`.
 - The builder's answer to each finding is the "Round six" section of `docs/PHASE_P3B_PROFILE_PHOTOS_APP.md` at the new head.
-- Compare `f4394f1..0d4a220` for this round (the last commit on the branch is a merge of `main`, which only brought documents), and `origin/main...0d4a220` (three dots) for the whole package.
+- Compare `f4394f1..ead30e2` for this round (the branch also has a merge of `main`, which only brought documents, and commits that add a CI job and correct documents), and `origin/main...ead30e2` (three dots) for the whole package.
 - The rules are in `CLAUDE.md` ("Mobile rules"). The server contract is spec section 21 of `docs/WASSLA_DISCOVERY_PRO_SPEC.md` and `backend/monolith/apps/accounts/photos.py`.
 
 ## What the builder says it did, to check against the code
@@ -17,18 +17,18 @@ This is the **sixth review** of pull request #66, "P3B profile photos in the app
 4. `TokenStore._clearCredentials` swallows a refused `closeBySignOut` (the marker stays) so `clearIfIdentityCurrent` finishes and the expiry callback runs.
 5. `AvatarCacheManager._fetch` reads each body independently (4 MiB cap) and only the publication (`putFile`) is queued per version.
 6. A body that fails halfway therefore leaves no file and no record.
-7. `testImplementation("junit:junit:4.13.2")` is in `mobile/android/app/build.gradle.kts` (the Gradle task was not run).
+7. `testImplementation("junit:junit:4.13.2")` is in `mobile/android/app/build.gradle.kts`; the Gradle unit-test task now runs in CI and passes (12 + 5 + 6 tests).
 
 **Your partly-fixed round-3 findings**
 - **#8:** the 64 MP limit for HEIF, HEIC and AVIF is applied at the successful `BitmapFactory` bounds read (`PhotoGeometry.isFullFrameFormat`, `withinSourceLimit`) before any pixel decode, as well as in the `ImageDecoder` header.
 - **#11:** when `BitmapFactory` answers null, `PhotoPrepare.decode` rechecks the file and answers `not_found` when it is gone.
-- **#13:** still no native fixture that prepares a photo twice (needs a device). The pure Kotlin has 23 JUnit tests (`PhotoGeometry`, `JpegMetadata`, `PickLaunchGate`).
+- **#13:** still no native fixture that prepares a photo twice (needs a device). The pure Kotlin has 23 JUnit tests (`PhotoGeometry`, `JpegMetadata`, `PickLaunchGate`), now also run by Gradle in CI.
 - **#1, #4, #5** are said to be closed by blockers 1 and 2 and should-fix 3.
 
 ## What to do
 1. Mark each of your 13 round-3 findings and each of your 7 round-4 findings **fixed**, **partly fixed** (say what is missing) or **not fixed**. Also mark the two blockers and five should-fixes of your round-5 report.
 2. Hunt for **new**, real, reachable problems in this round. In particular:
-   - **The launch gate.** `MainActivity.kt`, `PickLaunchGate.kt` and the `wassla/pick_launch` channel have never been compiled. Can a legitimate result be dropped (a result arriving after `closed`, a launch opened while the Dart side is not yet announcing, an activity recreated while the picker is open but the process lives, a camera pick that goes through a permission request, the picker answering while the engine is detached)? Can a restored result still reach the plugin (a second engine, a hot restart, `opened` left set by a pick that never closed)? Are all of the plugin's launch request codes listed?
+   - **The launch gate.** `MainActivity.kt`, `PickLaunchGate.kt` and the `wassla/pick_launch` channel now compile: a new CI job "Android — compile and Gradle unit tests" (`.github/workflows/ci.yml`) builds a debug APK and runs `:app:testDebugUnitTest` (green). They have never run on a device. Can a legitimate result be dropped (a result arriving after `closed`, a launch opened while the Dart side is not yet announcing, an activity recreated while the picker is open but the process lives, a camera pick that goes through a permission request, the picker answering while the engine is detached)? Can a restored result still reach the plugin (a second engine, a hot restart, `opened` left set by a pick that never closed)? Are all of the plugin's launch request codes listed?
    - Whether `PickGuard.run` can leave the gate open (an exception between `opened` and the `finally`) or the guard taken.
    - **The session identity.** Every place a `SessionSignedIn` is built (`session.dart`): can the published `identity` ever differ from the store's generation while the same member is legitimately signed in (restore, `_confirm`, refresh, token refresh, profile update), which would make every photo action silently refuse? Can it still be equal for two different logins?
    - The avatar cache: memory use of reading a body whole, and the error paths.
