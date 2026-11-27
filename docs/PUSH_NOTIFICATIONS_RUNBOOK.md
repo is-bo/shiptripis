@@ -36,8 +36,9 @@ old token cannot disable a newly rotated token on the same row.
   installation. The client cannot provide a user ID and the response omits the
   token and fingerprint.
 - `POST /api/notifications/devices/unregister` disables only the caller's
-  installation. Logout attempts this before clearing credentials, but logout
-  succeeds offline; a later login safely rebinds the installation.
+  installation (the app does not call it). A sign-out switches off every device
+  its sign-in registered; on the phone it succeeds offline, and a later login
+  safely rebinds the installation.
 - `GET/PATCH /api/notifications/preferences` controls `messages` and
   `marketplace` across all devices. Essential payment, delivery, dispute,
   verification, and account-security pushes have no fake off switch.
@@ -161,33 +162,39 @@ only while the app is in the foreground. A denial does not disable the app or
 its in-app inbox.
 
 The phone registers to an account only after sign-in. The app numbers every
-registration and every sign-out of an installation from one counter (created
-once, so one phone has one installation ID), and the server applies them in that
-order (`PushInstallationBinding`): a registration overtaken by a later one, or a
-number reused for a different request, is refused
-(`409 push_registration_superseded`); a stale sign-out still ends the device
-that belongs to its own sign-in. Every sign-in is a server row
-(`SignInSession`) named by the `sid` claim of each of its tokens, rotations
-included. A sign-out ends its sign-in and switches off every device that sign-in
-registered; a password reset (`end_all_sessions`) ends every sign-in of the
-account. A registration, and a refresh, from a sign-in that has ended is refused
-(`409 push_session_ended`, checked under the account row lock that ending a
-sign-in also takes). A slow registration can therefore never rebind the phone to
-an account that signed out, was replaced or was reset. A sign-in is itself
-issued under that lock, and only if no reset, claim or deletion ended the
-account's sign-ins after its credentials were checked (`User.session_epoch`).
+registration of an installation from one counter (created once, so one phone
+has one installation ID), and the server applies them in that order
+(`PushInstallationBinding`, which records registrations and unregisters): a
+registration overtaken by a later one, or a number reused for a different
+request, is refused (`409 push_registration_superseded`). A sign-out records
+nothing there; the number the app still sends with it is not read. Every sign-in
+is a server row (`SignInSession`) named by the `sid` claim of each of its
+tokens, rotations included. A sign-out ends its sign-in and switches off every
+device that sign-in registered, so a late sign-out never touches what a later
+sign-in registered. Every password change (`write_password`: a reset, the staff
+technical admin's form, an account closed or claimed) ends every sign-in of the
+account through `end_all_sessions`. A registration, and a refresh, from a
+sign-in that has ended is refused (`409 push_session_ended`, checked under the
+account row lock that ending a sign-in also takes). A slow registration can
+therefore never rebind the phone to an account that signed out, was replaced or
+was reset. A sign-in is itself issued under that lock, and only if no reset,
+claim or deletion ended the account's sign-ins after its credentials were
+checked (`User.session_epoch`).
 
-A sign-out is proved by a valid access token, or, once that has expired, by a
-refresh token of the sign-in that this server signed, even one a concurrent
-refresh already rotated or one that has expired (ending the sign-in is all it can
-do); with neither it is refused (401). The app sends it from the Sign-out button
-and also when it lets a session go because renewing it failed (the refresh token
-expired, or a rotation's answer was lost), with that refresh token alone. A queued push is sent only to
-the devices still switched on for its recipient with the same token, checked
-against the database right before each send or retry (`DeviceRegistry`); when the
-database cannot answer, the entry stays pending for the sweeper. A notification
-WebSocket closes when the access token that opened it stops being valid (its
-expiry plus the 30 s leeway), and the app reconnects with a fresh token.
+`POST /api/auth/sign-out` answers 205 when it is proved by a valid access token,
+or by a refresh token this server signed, whatever else is true of it: its
+sign-in live or already ended, the token rotated meanwhile or expired, the
+account deleted (ending the sign-in is all it can do). A repeat answers 205 and
+writes nothing. A proof this server cannot verify, or none, answers 400
+`sign_out_proof_invalid`. The app sends it from the Sign-out button and also
+when it lets a session go because renewing it failed, with that refresh token
+alone. A queued push carries, for each device, the sign-in that registered it,
+and is sent only to the devices still switched on for its recipient with the
+same token and the same sign-in, checked against the database right before each
+send or retry (`DeviceRegistry`); when the database cannot answer, the entry
+stays pending for the sweeper. A notification WebSocket closes when the access
+token that opened it stops being valid (its expiry plus the 30 s leeway), and
+the app reconnects with a fresh token.
 
 Sign-out cleanup stays best-effort: a sign-out made offline (from the button or
 after a session the app let go of) never reaches the server, so that phone keeps
