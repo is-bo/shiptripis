@@ -33,6 +33,13 @@
   the hosted link are checked under the method lock. The read decides from the configured platform and
   mode only, and `account_country` names only an account's own closed country. The unused
   `resume_account` path is removed.
+- Round 5 (Astra review of `c559318`): a preference change could still commit between onboarding's
+  account-creation intent and its POST. One per-traveler advisory lock now keeps an onboarding call and
+  EUR preference changes from overlapping: onboarding holds it from reading the declaration to handing
+  out the link, the preference write takes it before User, and nothing else takes it. Onboarding
+  refuses a closed rail first, as the read does; a replayed creation is dated by its first request;
+  refresh and dashboard refuse an account from another platform or mode before Stripe. Real-thread
+  PostgreSQL tests for each overlap.
 
 ## Wassla: the bell names the ticket decision (N2, 2026-11-26)
 

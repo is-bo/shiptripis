@@ -40,6 +40,7 @@ from apps.accounts.permissions import EmailVerifiedToWrite
 
 from .payout_accounts import (
     AccountKeptProviderError,
+    destination_account,
     open_dashboard,
     read_onboarding_state,
     refresh_account,
@@ -96,15 +97,12 @@ class ConnectView(APIView):
 
         Ownership is derived server-side from the authenticated user every
         time. There is no request field naming an account, so there is nothing
-        for one Traveler to point at another's setup with.
+        for one Traveler to point at another's setup with. An account from
+        another platform or mode is refused here, as the read stops offering
+        it, before any Stripe call.
         """
 
-        method = self._method(request)
-        version = method.current_version
-        account = version.stripe_account if version else None
-        if not account or account.traveler_id != request.user.pk or not account.active:
-            raise DomainError("No Stripe payout account is set up for this Traveler.")
-        return method, account
+        return destination_account(request.user)
 
     def handle_exception(self, exc):
         refusal = setup_refusal(exc, self.request.user)

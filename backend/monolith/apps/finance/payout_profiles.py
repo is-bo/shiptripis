@@ -72,9 +72,14 @@ def _traveler(actor):
 
 
 def _method(actor, currency, expected_revision):
-    from apps.core.financial_locks import lock_payout_method_set
+    from apps.core.financial_locks import lock_payout_account_setup, lock_payout_method_set
 
     user = _traveler(actor)
+    if currency == "EUR":
+        # Before User: an EUR change waits for an onboarding call in flight,
+        # which holds this lock from reading the declaration to its answer,
+        # so it never commits between an account-creation intent and its POST.
+        lock_payout_account_setup(user.pk)
     # A fixed row exists for each preference once set. Serialize initial insert
     # with the user witness, then the method set funding also takes; funding
     # never acquires User after Payout.

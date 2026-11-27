@@ -15,9 +15,12 @@ What this module deliberately does not do:
 * persist a raw Stripe Account, a bank object, an IBAN, a legal name or an
   Account Link. Only masks, codes, booleans and opaque provider ids survive.
 
-Lock order (see `apps.core.financial_locks`): User -> TravelerPayoutMethod ->
-StripePayoutAccount. Never a Deal. Provider I/O always happens *outside* the
-transaction, and the result is applied under a short guarded write.
+Lock order (see `apps.core.financial_locks`): the Traveler's account setup ->
+User -> TravelerPayoutMethod -> StripePayoutAccount. Never a Deal. Provider I/O
+always happens *outside* every transaction, and the result is applied under a
+short guarded write. The one lock an onboarding call holds across its Stripe
+calls is the account-setup advisory lock, which only onboarding and EUR
+preference writes take; no row is locked while Stripe answers.
 """
 
 from __future__ import annotations
@@ -36,6 +39,7 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.admin_panel.services import record_admin_action
+from apps.core.financial_locks import hold_payout_account_setup
 from .models import (
     FinanceHold,
     PayoutMethodVersion,
@@ -756,8 +760,8 @@ def _sync_method_status(method, account: StripePayoutAccount, verdict: Readiness
 def refresh_account(account: StripePayoutAccount, *, gateway=None):
     """Retrieve authoritative state from Stripe and re-evaluate readiness.
 
-    The provider call happens outside every business transaction and outside
-    every lock. A provider outage leaves the last known readiness in place —
+    The provider call happens outside every business transaction and every
+    row lock. A provider outage leaves the last known readiness in place —
     it never changes a payout currency and never invents a ready account.
     """
 
@@ -854,10 +858,10 @@ def _bind(locked, account, country, *, operation=None) -> None:
 def _ask_stripe(method, plan: _Onboarding, gateway):
     """Make the one Stripe call the plan names, and record a failure safely.
 
-    Outside every lock. A failure is written only onto an operation that is
-    still outstanding with no known account, so a late answer from one call
-    never overwrites what another call already learnt: a timeout cannot turn
-    a recorded refusal back into an unknown, and nothing turns an accepted
+    Outside every transaction and row lock. A failure is written only onto
+    an operation that is still outstanding with no known account, so a late
+    answer never overwrites what is already known: a timeout cannot turn a
+    recorded refusal back into an unknown, and nothing turns an accepted
     creation into a failed one.
 
     Only Stripe refusing the creation request itself marks it `failed`, the
@@ -922,9 +926,10 @@ def _record_account(*, method, plan: _Onboarding, snapshot, observed_at):
     and never created twice. It becomes the destination only while the method
     is enabled on the very declaration this call serves and the account was
     opened for that declaration's country. If the method's destination is
-    already this account (a concurrent call for the same declaration bound
-    it), the call has nothing left to do. Anything else keeps it unbound and
-    the newer choice stays the destination.
+    already this account, the call has nothing left to do. Anything else keeps
+    it unbound and the newer choice stays the destination. Under the
+    account-setup lock no other call or preference change for this Traveler
+    runs meanwhile, so these checks are the binding's own guard.
     """
 
     platform = str(getattr(settings, "STRIPE_CONNECT_PLATFORM_ACCOUNT_ID", "") or "")
@@ -957,6 +962,7 @@ def _record_account(*, method, plan: _Onboarding, snapshot, observed_at):
         ).update(
             status="accepted",
             provider_object_id=snapshot.account_id,
+            provider_object_status="",
             provider_request_id=snapshot.request_id[:255],
             last_request_at=timezone.now(),
         )
@@ -1001,46 +1007,57 @@ def ensure_account(*, actor, country="", gateway=None):
     Idempotent by construction: one active account per traveler/platform/mode is
     a database constraint, the creation identity is stable, and an ambiguous
     outcome is recovered rather than retried. The call serves one declaration,
-    the method's current version, from the first check to the binding: a call
-    naming another country, or a preference change committed while Stripe is
-    being called, binds nothing (`PreferenceChanged`).
+    the method's current version, and holds the Traveler's account-setup lock
+    from reading it to recording Stripe's answer. A preference change waits for
+    the call, so no request is sent for a declaration the Traveler has left; a
+    second onboarding call waits too, and then finds this call's account. A
+    call naming another country than the saved one binds nothing
+    (`PreferenceChanged`).
     """
 
     require_connect_enabled()
+    if not allowed_countries():
+        # A closed rail comes before the Traveler's own setup, as on the read:
+        # with no country open, nothing about one account changes the answer.
+        raise CountryUnsupported("No payout-account country is open.")
     gateway = gateway or get_connect_gateway()
-    method = _method_for(actor)
-    declaration = _declaration_of(method, country)
-    # Refused before any Stripe call; `_plan_onboarding` decides again under
-    # the lock.
-    refusal = onboarding_refusal(
-        declaration.country,
-        standing=standing_accounts(actor.pk).first(),
-        creation=current_creation(method),
-    )
-    if refusal is not None:
-        raise refusal
-    # Assert who this credential is before creating anything under it.
-    gateway.platform_identity()
+    with hold_payout_account_setup(actor.pk):
+        method = _method_for(actor)
+        declaration = _declaration_of(method, country)
+        # Refused before any Stripe call; `_plan_onboarding` decides again
+        # under the row locks.
+        refusal = onboarding_refusal(
+            declaration.country,
+            standing=standing_accounts(actor.pk).first(),
+            creation=current_creation(method),
+        )
+        if refusal is not None:
+            raise refusal
+        # Assert who this credential is before creating anything under it.
+        gateway.platform_identity()
 
-    plan = _plan_onboarding(user=actor, method_id=method.pk, declaration_id=declaration.pk)
-    account = plan.account
-    if account is None:
-        # Taken before the call, so a slower answer can never look newer
-        # than it is.
-        observed_at = timezone.now()
-        snapshot = _ask_stripe(method, plan, gateway)
-        account = _record_account(method=method, plan=plan, snapshot=snapshot,
-                                  observed_at=observed_at)
-    # On every route to the account, so a call that reuses it after a failed
-    # provisioning finishes the schedule instead of skipping it.
-    if account.payout_schedule_interval != REQUIRED_PAYOUT_SCHEDULE:
-        try:
-            account = _provision_schedule(account, gateway=gateway, actor=actor)
-        except ProviderError as exc:
-            raise AccountKeptProviderError(
-                "Stripe did not confirm the payout schedule.",
-                provider_code=exc.provider_code,
-            ) from exc
+        plan = _plan_onboarding(user=actor, method_id=method.pk, declaration_id=declaration.pk)
+        account = plan.account
+        if account is None:
+            # Dated before the call, so a slower answer can never look newer
+            # than it is. A creation is dated by its first request: Stripe
+            # answers a replay with the body it stored then.
+            observed_at = (
+                plan.operation.first_request_at if plan.call == "create" else timezone.now()
+            )
+            snapshot = _ask_stripe(method, plan, gateway)
+            account = _record_account(method=method, plan=plan, snapshot=snapshot,
+                                      observed_at=observed_at)
+        # On every route to the account, so a call that reuses it after a
+        # failed provisioning finishes the schedule instead of skipping it.
+        if account.payout_schedule_interval != REQUIRED_PAYOUT_SCHEDULE:
+            try:
+                account = _provision_schedule(account, gateway=gateway, actor=actor)
+            except ProviderError as exc:
+                raise AccountKeptProviderError(
+                    "Stripe did not confirm the payout schedule.",
+                    provider_code=exc.provider_code,
+                ) from exc
     return account
 
 
@@ -1141,46 +1158,54 @@ def start_onboarding(*, actor, country="", gateway=None) -> dict:
     """Create/reuse the account and hand back one short-lived hosted URL.
 
     The URL is returned to the authenticated owner and nowhere else: not to the
-    audit log, not to a notification, not to this process's own logs.
+    audit log, not to a notification, not to this process's own logs. The
+    account-setup lock is held until the link is checked, so the response
+    describes the declaration the call served and a preference change waits
+    for it.
     """
 
     gateway = gateway or get_connect_gateway()
-    account = ensure_account(actor=actor, country=country, gateway=gateway)
-    method = _method_for(actor)
-    state = sign_onboarding_state(user=actor, method=method, account=account)
-    return_url = _state_url(
-        getattr(settings, "STRIPE_CONNECT_ONBOARDING_RETURN_URL", ""), state
-    )
-    refresh_url = _state_url(
-        getattr(settings, "STRIPE_CONNECT_ONBOARDING_REFRESH_URL", ""), state
-    )
-    try:
-        link = gateway.create_account_link(
-            account_id=account.provider_account_id,
-            return_url=return_url,
-            refresh_url=refresh_url,
+    with hold_payout_account_setup(actor.pk):
+        account = ensure_account(actor=actor, country=country, gateway=gateway)
+        method = _method_for(actor)
+        served = method.current_version_id
+        state = sign_onboarding_state(user=actor, method=method, account=account)
+        return_url = _state_url(
+            getattr(settings, "STRIPE_CONNECT_ONBOARDING_RETURN_URL", ""), state
         )
-    except ProviderError as exc:
-        # The account and its binding are committed by now; only the link is
-        # missing, and the next call reuses the account.
-        raise AccountKeptProviderError(
-            "Stripe did not return an onboarding link.", provider_code=exc.provider_code
-        ) from exc
-    with transaction.atomic():
-        # The link is handed out only while this account is still the
-        # destination of the method the caller chose. A preference change
-        # committed while Stripe minted it wins, and the link is dropped. The
-        # method returned is this locked copy, so the response describes the
-        # same state the link was checked against.
-        locked = TravelerPayoutMethod.objects.select_for_update(no_key=True).get(pk=method.pk)
-        if not locked.enabled or not _destination_of(locked, account):
-            raise PreferenceChanged("The payout preference changed while the link was issued.")
-        record_admin_action(
-            actor=actor,
-            action="payout_account.onboarding_link_issued",
-            target=account,
-            after={"expires_at": link.expires_at, "mode": account.provider_mode},
+        refresh_url = _state_url(
+            getattr(settings, "STRIPE_CONNECT_ONBOARDING_REFRESH_URL", ""), state
         )
+        try:
+            link = gateway.create_account_link(
+                account_id=account.provider_account_id,
+                return_url=return_url,
+                refresh_url=refresh_url,
+            )
+        except ProviderError as exc:
+            # The account and its binding are committed by now; only the link
+            # is missing, and the next call reuses the account.
+            raise AccountKeptProviderError(
+                "Stripe did not return an onboarding link.", provider_code=exc.provider_code
+            ) from exc
+        with transaction.atomic():
+            # The link is handed out only for the very version the account
+            # was resolved on, still this account's destination. The method
+            # returned is this locked copy, so the response describes the same
+            # state the link was checked against.
+            locked = TravelerPayoutMethod.objects.select_for_update(no_key=True).get(pk=method.pk)
+            if (
+                not locked.enabled
+                or locked.current_version_id != served
+                or not _destination_of(locked, account)
+            ):
+                raise PreferenceChanged("The payout preference changed while the link was issued.")
+            record_admin_action(
+                actor=actor,
+                action="payout_account.onboarding_link_issued",
+                target=account,
+                after={"expires_at": link.expires_at, "mode": account.provider_mode},
+            )
     return {"account": account, "method": locked, "url": link.url,
             "expires_at": link.expires_at}
 
@@ -1192,6 +1217,29 @@ def _state_url(base: str, state: str) -> str:
     return f"{base}{separator}state={state}"
 
 
+def destination_account(actor):
+    """The Traveler's own account their EUR method is bound to, usable here.
+
+    What refresh and dashboard access act on at Stripe, under the read's
+    condition for offering them: bound, active, the Traveler's, and opened
+    under the configured platform and mode. An account from another platform
+    or mode is history, and its id means nothing to this platform's
+    credential, so it is refused before any Stripe call.
+    """
+
+    method = _method_for(actor)
+    version = method.current_version if method else None
+    account = version.stripe_account if version else None
+    if (
+        not account
+        or not account.active
+        or account.traveler_id != actor.pk
+        or not in_this_environment(account)
+    ):
+        raise ValidationError("No Stripe payout account is set up for this Traveler.")
+    return method, account
+
+
 def open_dashboard(*, actor, gateway=None) -> str:
     """A single-use Express Dashboard URL for the account's own owner.
 
@@ -1201,12 +1249,7 @@ def open_dashboard(*, actor, gateway=None) -> str:
 
     require_connect_enabled()
     gateway = gateway or get_connect_gateway()
-    method = _method_for(actor)
-    account = None
-    if method and method.current_version and method.current_version.stripe_account_id:
-        account = method.current_version.stripe_account
-    if not account or not account.active or account.traveler_id != actor.pk:
-        raise ValidationError("No Stripe payout account is set up for this Traveler.")
+    _, account = destination_account(actor)
     if not account.details_submitted:
         # Stripe's Express Dashboard is for an onboarded account. Sending a
         # Traveler there mid-setup is a dead end; the onboarding link is the

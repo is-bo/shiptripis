@@ -9,6 +9,9 @@ Round 2 (same day) answers the Astra review of `317b55e` (ten findings, section 
 Round 3 answers the Astra review of `f3f37a3`: one blocker, four should-fix items, two nits and two
 pre-existing faults (section "Round 3" below). Round 4 answers the Astra review of `ee1e477`: three
 blockers, six should-fix items and a nit, fixed at their one root cause (section "Round 4" below).
+Round 5 answers the Astra review of `c559318`: one blocker, six should-fix items and a nit, fixed by one
+lock that keeps a traveler's onboarding call and EUR preference changes from overlapping (section
+"Round 5" below).
 
 ## The defect
 
@@ -337,10 +340,59 @@ when the traveler has declared the same country again. If the search finds nothi
 That needs a lost answer and a declaration change together, and it is the only way to be sure a request
 made for an older choice is never sent.
 
+## Round 5: the Astra review of `c559318`
+
+Result: `docs/handoff/astra/results/f1-astra-round4-result.md`. Triage (the lead's rules for this
+round): every finding is about payout setup, so all are fixed here; none concerns historical or legacy
+rows, so none is marked not applicable; nothing goes to a follow-up note.
+
+**The root cause.** Round 4 tied every Stripe call to one declaration, but checked it only while each
+of the call's short transactions held the method lock. Between them the call talks to Stripe with no lock
+held, by design, and a preference change could commit there: after the creation intent and before its
+POST (the blocker), while a second call checked the platform (two calls for one declaration), or while
+the link was minted. Each later check then had to guess what had happened in between. Now the two
+writers of an EUR declaration never overlap for one traveler.
+
+- **One lock for the traveler's Stripe account setup** (`apps.core.financial_locks`):
+  `hold_payout_account_setup` is held by an onboarding call from reading the declaration to handing out
+  the link, across its transactions and its Stripe calls; `lock_payout_account_setup` is taken by every
+  EUR preference write (the PATCH and the single-currency POST), before User. A change waits for an
+  onboarding call in flight; an onboarding call waits for a change and then serves it. A second
+  onboarding call waits for the first and finds its account. Nothing else takes the lock: funding,
+  refresh, webhooks and jobs never wait on Stripe, and no row is locked while Stripe answers.
+- It is a session-level advisory lock, so the account-creation intent still commits before its POST,
+  as recovery needs, and a process that dies drops the lock with its connection. It sits first in the
+  canonical order for the two paths that take it, and neither takes it while holding anything else.
+- A preference change sent while an onboarding call runs answers when the call has: normally well
+  under a second, at worst one onboarding call's Stripe timeouts. If the call bound an account, the
+  change carries a stale revision and is refused (400 `payout_profile_invalid`, as any stale revision);
+  read again, the traveler sees the account, and a change made then is told at once if the account was
+  opened for another country.
+- The checks under the method lock stay as the binding's own guard: the version in `_plan_onboarding`,
+  the declaration in `_record_account`, an account that already is the destination, and the link check,
+  which now compares the exact version the account was resolved on. A real second session can no longer
+  reach them; the tests that commit a change on onboarding's own connection say so.
+
+| Finding | Fix | Test |
+| --- | --- | --- |
+| Blocker: a PATCH committed after the FR plan and before its POST; the FR account then held the traveler's only slot | The setup lock: the change waits for the call, or the call waits and serves the change | `test_f1_payout_account_setup_race.py`: `test_a_preference_change_waits_for_the_creation_it_would_supersede`, `test_onboarding_waits_for_a_preference_change_and_serves_it` |
+| Should-fix: of two calls for one declaration, the second called the first's binding a preference change while it checked the platform | The second call waits and reads the declaration after the first answered | `test_two_calls_for_one_declaration_create_once_and_both_succeed` (real threads) |
+| Should-fix: during a link mint, DE, FR again and a rebind of the same account passed the final check under another version | The link is handed out under the setup lock; the guard compares the version the account was resolved on | `test_a_preference_change_waits_until_the_link_is_handed_out`; `test_f1_a_link_minted_while_the_preference_changed_is_never_handed_out[away_and_back]` |
+| Should-fix: an unresolved creation with no country open: GET `stripe_connect_no_countries`, onboarding `stripe_account_unresolved` | Onboarding refuses a closed rail first, as the read does | `test_f1_an_unresolved_creation_outranks_a_closed_declared_country`, extended with an empty list |
+| Should-fix: a search's "not found" and an accepted answer for the same creation could cross | No longer reachable: each runs inside one onboarding call, and a traveler's calls no longer overlap. An accepted answer also clears the search marker now | the two-call race test |
+| Should-fix: a replay's stored body was dated when the replay was sent and could outrank a newer refresh | A creation's answer is dated by its first request, the moment Stripe's stored body describes | `test_f1_a_current_creation_is_replayed_exactly_as_it_was_sent` asserts the date |
+| Should-fix: refresh and dashboard sent another platform's account to this platform's credential | `destination_account` refuses an account outside this platform and mode before any Stripe call, for both | `test_f1_an_account_from_another_platform_is_history_not_the_setup`, extended |
+| Nit: the readiness test refreshed before onboarding read the account; the supersession test changed the country | The refresh lands during the platform check, after the standing account was read; a new test declares FR, DE, then FR inside the window | `test_f1_binding_reads_the_accounts_readiness_as_it_stands` (rewritten), `test_f1_an_intent_for_an_earlier_declaration_of_the_same_country_is_only_looked_for` |
+
+One boundary Astra noted is deliberate: turning EUR off and on again with the same country keeps the same
+version, so an ambiguous creation for it stays replayable. The traveler chose that declaration again,
+and no new version means nothing about it changed.
+
 ## Tests
 
-`apps/finance/tests/test_phase8fh6a_mobile.py`, F1 sections (rounds 1 to 4), and
-`apps/finance/tests/test_f1_payout_method_set_race.py` (PostgreSQL threads):
+`apps/finance/tests/test_phase8fh6a_mobile.py`, F1 sections (rounds 1 to 5),
+`apps/finance/tests/test_f1_payout_method_set_race.py` and
+`apps/finance/tests/test_f1_payout_account_setup_race.py` (PostgreSQL threads):
 
 - profiles off, with Connect on and off: stable read (both reads, same contract), 409 on all seven
   writes, empty history 200, no row or audit written;
@@ -377,7 +429,13 @@ made for an older choice is never sent.
   superseded creation inside and past the window, found or not; the exact replay; readiness projected on
   binding; a bound account from another platform; an unresolved creation against a closed declared
   country; a link minted during a preference change; two calls for one declaration; a refused DZ
-  declaration beside a usable account.
+  declaration beside a usable account;
+- round 5, real threads: a preference change while the creation is on its way to Stripe and while the
+  link is minted, onboarding while a change is committing, and two onboarding calls, each proving the
+  waiting side waits on this traveler's setup lock held by the other; in-thread: the link guard after a
+  change away and back, the empty list with an unresolved creation, a replay dated by its first
+  request, refresh and dashboard refused for another platform's account, a refresh between the
+  standing read and the binding, and FR, DE, FR inside the window.
 
 Each round-3 test was checked against the code without its fix: binding regardless of the started
 version, moving the early return back before the country decision (with the pre-Stripe check also
@@ -420,6 +478,16 @@ cases in `test_phase8fh2_accounts.py` called the removed `resume_account`; they 
 the one entry point, with the same assertions (the expired-window case also sees the platform check
 first). `test_phase8fh26_business_profile.py` builds the creation identity from the declaration.
 
+Round 5 rewrote `test_f1_binding_reads_the_accounts_readiness_as_it_stands`, because a change can no
+longer commit during onboarding: the account stops being the destination through two declarations
+first, and the refresh now lands after onboarding read it. Five tests that commit a change or a second
+call on onboarding's own connection keep their assertions and now say that they check the guard under
+the method lock, which a second session can no longer reach. Each round-5 test was checked against the
+code without its fix (no setup lock in the preference write; none in onboarding; the link guard without
+the version; a replay dated now; refresh and dashboard without the environment check; the Traveler's
+state before the closed rail; a fingerprint without the declaration version; binding the copy read
+before the platform check): each makes its named test fail.
+
 ## Checks
 
 See the pull request for the exact local runs and CI. No migration, so no contract regeneration.
@@ -456,3 +524,8 @@ See the pull request for the exact local runs and CI. No migration, so no contra
   `account_country` on `payout_country_unsupported` is null when the refused country is a declaration
   (for example a DZ choice), so say only that this country is not supported. A 409
   `payout_preference_changed` can also come instead of an onboarding link: refetch, and open no URL.
+- Round 5: a preference change sent while onboarding runs answers when onboarding has. If it then says
+  the revision is stale (400 `payout_profile_invalid`), refetch and show what the read says before
+  asking again. Onboarding with no country open answers 409 `stripe_connect_no_countries`, as the read
+  does. Refresh and dashboard calls the read does not offer answer 400 `payout_setup_invalid`: offer
+  only `eur.available_actions`.

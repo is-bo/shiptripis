@@ -14,7 +14,7 @@ from rest_framework.views import APIView
 from apps.accounts.permissions import EmailVerifiedToWrite
 from apps.admin_panel.permissions import IsVerifiedStaff
 from apps.admin_panel.staff_api import StaffSessionMixin
-from apps.core.financial_locks import lock_payout_method_set
+from apps.core.financial_locks import lock_payout_account_setup, lock_payout_method_set
 
 from .models import PayoutIdentityReviewAssignment
 from .payout_accounts import (
@@ -310,6 +310,9 @@ class PayoutMethodsView(ProfileView):
         data = MobilePreferenceInput(data=request.data)
         data.is_valid(raise_exception=True)
         values = data.validated_data
+        # The EUR half changes the declaration onboarding serves, so this
+        # waits for an onboarding call in flight, before User as it does.
+        lock_payout_account_setup(request.user.pk)
         User.objects.select_for_update(no_key=True).get(pk=request.user.pk)
         # Take the method set funding takes before making either preference
         # change; rollback both when any revision/country check fails.
