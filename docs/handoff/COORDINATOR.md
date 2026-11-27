@@ -75,20 +75,54 @@ it. The loop is:
 
 If Codex hits its weekly limit, tell Ismail; he holds the reset credits and uses them himself.
 
-**Optional: the local operator.** A Claude Code session on Ismail's PC (folder `D:\Code\Shiptrip`,
-Remote Control on) can run Astra with the Codex CLI logged in there:
-`codex exec -m gpt-6.2-astra -s read-only -c model_reasoning_effort=high --output-last-message OUT.md - < PROMPT.md`
-and does all VPS work over SSH (access details only in his uncommitted `CLAUDE.local.md`). It
-writes no product code. Reach it with `ListAgents` / `SendMessage`; if it does not answer, ask
-Ismail. To start one, Ismail opens a new local session in that folder and pastes:
+The local operator on Ismail's PC (VPS work, builds, Astra) is described in section 2b.
+
+## 2b. The local operator, the VPS and Astra on the PC
+
+**What it is.** A Claude Code session running on **Ismail's PC**, in folder `D:\Code\Shiptrip`,
+reached from the cloud through **Remote Control**. **The coordinator opens it itself**: in its own
+project thread, call `list_devices`, then `start_remote_control` with folder `D:\Code\Shiptrip` and
+instructions that give it full context (the first message below, plus the task). Ismail does not
+open it; he only approves the Remote Control prompt if one appears. Send it further tasks with
+`message_thread` (or `ListAgents` / `SendMessage`).
+
+**What it does.** It writes no product code. It has **full (not read-only) access to the VPS** over
+SSH and handles all VPS work:
+- health checks and logs;
+- deploys of a reviewed `main` SHA (procedure in `infra/vps/README.md`, environment in
+  `infra/vps/ENVIRONMENT.md`, email in `infra/vps/EMAIL.md`, backups in `infra/vps/backup/`);
+- restarts, and operations steps such as O2 (guest checkout check), O3 (FCM push on), O4 (private
+  payout bucket, payouts switched on), O5 and O6 (`HANDOFF.md` section 0.6);
+- Android test builds: it triggers the GitHub "Build Android" workflow (`release`), downloads the APK
+  to `D:\Downloads\wassla-test-app\`, then deletes the artifact and the run from GitHub;
+- **Astra** through the Codex CLI logged in on that PC, when Codex usage allows:
+  `codex exec -m gpt-6.2-astra -s read-only -c model_reasoning_effort=high --output-last-message OUT.md - < PROMPT.md`
+  (keep the CLI current: `npm install -g @openai/codex@latest`), committing each result to
+  `docs/handoff/astra/results/` on the package's branch.
+
+**Every deploy, restart, server change or build needs Ismail's explicit OK for that step.** Ask him
+in plain words, wait for his yes, then tell the operator to do exactly that step.
+
+**How to reach the VPS.** Never from the cloud, and never through this public repository. The
+address, user, key path and the command that unlocks the key are only in `CLAUDE.local.md`, an
+uncommitted file on Ismail's PC that the operator reads. The SSH key needs Ismail's passphrase,
+typed by him in a popup on his PC that the operator opens; it stays unlocked for 12 hours. Never ask
+for the passphrase or any secret in chat. Server layout and commands: `infra/vps/README.md`.
+
+**Fallback when the PC is off or asleep.** Ismail runs Astra in the cloud himself: the coordinator
+drops each prompt file into the project files (`/mnt/project-files/`) and tells him which one, he
+pastes the result back, and the package's builder commits it. VPS work waits until the PC is back.
+
+**Long test runs** (whole suites) go to GitHub CI from the pushed branch, never to the PC.
+
+**First message for the operator** (pass it as the Remote Control instructions):
 
 > You are the Wassla local operator. Read CLAUDE.md, CLAUDE.local.md and docs/handoff/COORDINATOR.md.
-> You take tasks only from the cloud coordinator or from me: run Astra reviews and plans with the
-> Codex CLI, operate the VPS over SSH as CLAUDE.local.md describes, download test builds to my PC,
-> and commit Astra results to docs/handoff/astra/results/. You write no product code. Never deploy,
-> restart or change the server without my explicit OK for that step.
-
-The SSH key needs Ismail's passphrase in a popup on his PC (12 hours). Never ask for it in chat.
+> You take tasks only from the cloud coordinator or from Ismail: run Astra reviews and plans with
+> the Codex CLI, operate the VPS over SSH as CLAUDE.local.md describes (health checks, deploys,
+> restarts, operations steps, Android test builds), download test builds to the PC, and commit
+> Astra results to docs/handoff/astra/results/. You write no product code. Never deploy, restart,
+> change the server or build without Ismail's explicit OK for that step.
 
 ## 3. Anti-loop triage rule (new, 2026-11-27)
 
