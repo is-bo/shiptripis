@@ -16,6 +16,14 @@ Ismail's reply format. Sections 1 to 11 below date from 2026-11-15 and still hol
 background; this section overrides them where they differ. Server access details are never in this
 public repository: they live in Ismail's uncommitted `CLAUDE.local.md` on his PC.
 
+### 0.0 Plan revision 3 is approved (2026-11-27)
+- Ismail approved `docs/handoff/LOOP_END_PLAN.md` revision 3 (`aee12fd`) on 2026-11-27, with
+  decisions D1 to D5 as recommended (plan section 2).
+- **The package queue is plan section 9**, with one builder brief each in `docs/handoff/builders/`.
+  It replaces the order in 0.4.
+- **Reviews (D1, plan 3.4):** only a Blocker stops a merge. One Astra pass for F1, F1b, G1, N1, S1
+  and S2; a Blocker is fixed and re-checked once, the fix only.
+
 ### 0.1 Where everything stopped (2026-11-27)
 Ismail ran out of usage on his account and **stopped all four builders at about 11:20 UTC**. Each
 builder was told to push its work in progress to its PR branch and write a status file
@@ -61,6 +69,7 @@ EGS #53, STORE fixes #54.
 Ponytail working rules #72 (`d44345a`, 2026-11-27): documents and skill files only, no code. Every agent now works under the "Working style: ponytail" section of `CLAUDE.md`.
 
 ### 0.4 Next packages, in order (each planned in `docs/WASSLA_PHONE_TEST_2_PLAN.md`, each reviewed by Astra)
+Replaced by plan section 9 (see 0.0); kept for the package descriptions.
 1. **C1, pay only in the traveler's currency** (server). Starts **after G1 and F1 merge** (shared
    code in `payout_snapshots.py`). Builder: Claude Opus, extra high. The plan is
    `docs/handoff/astra/results/c1-plan.md`; Ismail's answers are recorded in its section 3 and in

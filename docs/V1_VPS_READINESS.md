@@ -221,7 +221,7 @@ runtime source, provider adapter or production data.
 * [infra/vps/postgresql.conf](../infra/vps/postgresql.conf)
 * [infra/vps/redis-start.sh](../infra/vps/redis-start.sh)
 * [infra/vps/redis.conf](../infra/vps/redis.conf)
-* [infra/vps/render_internal_caddy.py](../infra/vps/render_internal_caddy.py)
+* `infra/vps/render_internal_caddy.py` (since removed)
 * [infra/vps/requirements.lock](../infra/vps/requirements.lock)
 * [infra/vps/restore.yml](../infra/vps/restore.yml)
 * [infra/vps/runtime.py](../infra/vps/runtime.py)
@@ -245,7 +245,7 @@ runtime source, provider adapter or production data.
 * [.dockerignore](../.dockerignore)
 * [.gitignore](../.gitignore)
 * [backend/monolith/apps/finance/tests/test_deployment_safety.py](../backend/monolith/apps/finance/tests/test_deployment_safety.py)
-* [backend/railway/start.py](../backend/railway/start.py)
+* `backend/railway/start.py` (since removed)
 * [docs/IMPLEMENTATION_STATUS.md](../docs/IMPLEMENTATION_STATUS.md)
 * [mobile/test/phase_j62_boost_copy_offer_refresh_test.dart](../mobile/test/phase_j62_boost_copy_offer_refresh_test.dart)
 
