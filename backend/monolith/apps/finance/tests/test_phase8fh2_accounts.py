@@ -647,7 +647,7 @@ class TestOwnershipAndMode:
         operation = PayoutProviderOperation.objects.get(kind="account_create")
         assert operation.status == "unknown"
         recovering = FakeGateway()
-        accounts.resume_account(actor=traveler, gateway=recovering)
+        ensure_account(actor=traveler, gateway=recovering)
         replay = [kw for name, kw in recovering.calls if name == "create_account"]
         assert replay[0]["idempotency_key"] == operation.idempotency_key
         assert PayoutProviderOperation.objects.count() == 1
@@ -661,7 +661,7 @@ class TestOwnershipAndMode:
         key = PayoutProviderOperation.objects.get(kind="account_create").idempotency_key
 
         recovering = FakeGateway(create=snapshot())
-        account = accounts.resume_account(actor=traveler, gateway=recovering)
+        account = ensure_account(actor=traveler, gateway=recovering)
         replay = [kw for name, kw in recovering.calls if name == "create_account"]
         assert replay and replay[0]["idempotency_key"] == key
         assert account.provider_account_id == "acct_1TESTconnected"
@@ -680,8 +680,9 @@ class TestOwnershipAndMode:
         recovering = FakeGateway()
         recovering._found = None
         with pytest.raises(AccountCreationUnresolved):
-            accounts.resume_account(actor=traveler, gateway=recovering)
-        assert [name for name, _ in recovering.calls] == ["find_account_by_metadata"]
+            ensure_account(actor=traveler, gateway=recovering)
+        assert [name for name, _ in recovering.calls] == [
+            "platform_identity", "find_account_by_metadata"]
         assert StripePayoutAccount.objects.count() == 0
 
     def test_normal_onboarding_also_refuses_to_repost_an_expired_unknown_creation(

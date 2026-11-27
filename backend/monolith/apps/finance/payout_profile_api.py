@@ -186,9 +186,8 @@ def setup_refusal(exc, user):
         gate = setup_gate(user)
         code = eur_refusal(gate)
         country_refused = code == CountryUnsupported.code
-        # Set when the refused country is the one the Traveler's standing
-        # Stripe account was opened for, as on the read.
-        account = standing_accounts(user.pk).first()
+        # Set only when the refused country is the one the Traveler's Stripe
+        # account was opened for, which no new declaration can change.
         return Response(
             {
                 "code": code,
@@ -196,7 +195,7 @@ def setup_refusal(exc, user):
                 if country_refused
                 else "Stripe EUR payouts are not available yet.",
                 "supported_countries": list(gate.countries),
-                "account_country": account_country(account) if account else None,
+                "account_country": exc.country if exc.of_account else None,
                 "alternative": {"currency": "DZD", "rail": "manual"},
             },
             status=400 if country_refused else 409,

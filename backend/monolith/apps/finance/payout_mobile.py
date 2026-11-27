@@ -11,16 +11,15 @@ from apps.parcels import tracking
 
 from .models import FinanceHold, Payout, PayoutProfileReview, TravelerPayoutMethod
 from .payout_accounts import (
-    AccountCreationUnresolved,
     ConnectUnavailable,
     CountryUnsupported,
     account_country,
-    account_country_refusal,
     allowed_countries,
-    creation_unresolved,
+    current_creation,
     evaluate_readiness,
-    expected_mode,
+    in_this_environment,
     onboarding_incomplete,
+    onboarding_refusal,
     require_connect_enabled,
     standing_accounts,
 )
@@ -84,7 +83,11 @@ def methods_for(user):
 
 def eur_method(method, gate):
     version = method.current_version if method else None
-    account = version.stripe_account if version else None
+    bound = version.stripe_account if version else None
+    # Setup is decided in the configured platform and mode only. A method still
+    # bound to an account from another one keeps it as history (the method
+    # projection shows it), and onboarding here binds this environment's.
+    account = bound if bound is not None and in_this_environment(bound) else None
     countries = list(gate.countries)
     country = version.country if version else ""
     country_supported = not country or country in countries
@@ -93,9 +96,15 @@ def eur_method(method, gate):
     held = standing_accounts(method.traveler_id).first() if method and not account else None
     standing = account or held
     held_country = account_country(standing) if standing else None
-    # The same country decision onboarding makes before it reuses an account.
-    refusal = account_country_refusal(country, standing) if standing else None
-    unresolved = bool(method and not standing and creation_unresolved(method))
+    # The decision onboarding makes, from the same facts. A closed declared
+    # country is no obstacle to a new setup: it starts with the preference
+    # change, which names an open country.
+    refusal = (
+        onboarding_refusal(country, standing=standing, creation=current_creation(method))
+        if method else None
+    )
+    if isinstance(refusal, CountryUnsupported) and not refusal.of_account:
+        refusal = None
     state, reason = "not_configured", "payout_setup_required"
     if account:
         verdict = evaluate_readiness(account)
@@ -108,7 +117,7 @@ def eur_method(method, gate):
             else "payout_setup_required" if state == "setup_required"
             else "payout_profile_needs_attention"
         )
-    elif refusal is not None or unresolved:
+    elif refusal is not None:
         state, reason = "needs_attention", (
             "payout_country_unsupported" if isinstance(refusal, CountryUnsupported)
             else "payout_profile_needs_attention"
@@ -124,21 +133,19 @@ def eur_method(method, gate):
     elif not countries:
         unavailable = NO_COUNTRIES
     elif refusal is not None:
+        # The class's code: Django's ValidationError sets `code` on each
+        # instance, to None here.
         unavailable = type(refusal).code
-    elif unresolved:
-        unavailable = AccountCreationUnresolved.code
     else:
         unavailable = None
     # Each action follows the write it leads to: every Stripe call needs the
-    # member gate and Connect; a resumed onboarding also needs the account
-    # country decision to pass, which refresh and dashboard access do not. A
-    # new setup collects the account country first, so a saved country that
-    # has closed does not stop it.
+    # member gate and Connect; a resumed onboarding also needs the onboarding
+    # decision to pass, which refresh and dashboard access do not. A new setup
+    # collects the account country first, so a saved country that has closed
+    # does not stop it.
     connect = gate.refusal is None and gate.connect
     actions = []
-    account_usable = bool(account and account.active and account.provider_mode == expected_mode()
-                          and account.platform_id == settings.STRIPE_CONNECT_PLATFORM_ACCOUNT_ID)
-    if connect and account_usable:
+    if connect and account and account.active:
         actions.append("refresh")
         if account.details_submitted:
             actions.append("manage_eur")

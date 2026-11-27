@@ -64,8 +64,9 @@ class ConnectThrottle(UserRateThrottle):
 
 
 class OnboardingInput(StrictInput):
-    #: Only meaningful on the first call, and only ever an account country the
-    #: deployment has actually validated.
+    #: Optional. When present it must be the saved EUR declaration's country:
+    #: the call checks that the caller saw the same declaration. A country
+    #: change is the preference PATCH's.
     country = serializers.CharField(
         max_length=2, required=False, default="", allow_blank=True
     )
@@ -145,14 +146,14 @@ class StripeOnboardingView(ConnectView):
         result = start_onboarding(
             actor=request.user, country=data.validated_data["country"].upper()
         )
-        method = self._method(request)
         return Response(
             {
                 # The only place this URL ever appears. Not persisted, not
                 # audited, not logged, not pushed.
                 "onboarding_url": result["url"],
                 "expires_at": result["expires_at"],
-                "method": method_projection(method, setup_gate(request.user)),
+                # The method as the link was checked against it.
+                "method": method_projection(result["method"], setup_gate(request.user)),
             },
             status=201,
         )

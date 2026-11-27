@@ -7,7 +7,8 @@ F2 (the app) consumes the shapes below.
 
 Round 2 (same day) answers the Astra review of `317b55e` (ten findings, section "Round 2" below).
 Round 3 answers the Astra review of `f3f37a3`: one blocker, four should-fix items, two nits and two
-pre-existing faults (section "Round 3" below).
+pre-existing faults (section "Round 3" below). Round 4 answers the Astra review of `ee1e477`: three
+blockers, six should-fix items and a nit, fixed at their one root cause (section "Round 4" below).
 
 ## The defect
 
@@ -39,10 +40,10 @@ writes nothing.
 | Email not confirmed | `email_verification_required` (existing) | 200, same, with this reason | 403 (`EmailVerifiedToWrite`) |
 | Stripe Connect off or not configured | `stripe_connect_unavailable` (existing) | `eur.unavailable_reason`, no EUR action, `eur.supported=false` | 409 |
 | Connect on, no account country open | `stripe_connect_no_countries` (new) | `eur.unavailable_reason`, EUR not selectable | 409, with `supported_countries: []` and the DZD alternative |
-| Declared account country not open (for example DZ) | `payout_country_unsupported` (existing) | `eur.country_supported=false`; `eur.unavailable_reason` when the country of the traveler's Stripe account left the list | 400, with `supported_countries`, `account_country` and the DZD alternative |
+| Declared account country not open (for example DZ) | `payout_country_unsupported` (existing) | `eur.country_supported=false`; `eur.unavailable_reason` when the country of the traveler's Stripe account left the list | 400, with `supported_countries` and the DZD alternative; `account_country` is set only when the refused country is the one the Stripe account was opened for, and is null for a refused declaration |
 | The Stripe account was opened for another country than the declaration | `stripe_account_country_mismatch` (new) | `eur.state=needs_attention`, `eur.account_country`, no EUR setup action | 409 on onboarding, with `account_country` |
-| The EUR preference changed while an onboarding call was waiting for Stripe | `payout_preference_changed` (new, round 3) | nothing (the read shows the newer preference) | 409 on onboarding; nothing is bound over the newer preference |
-| An account creation is unresolved and waits for Finance | `stripe_account_unresolved` (existing code) | `eur.state=needs_attention`, no EUR setup action | 409 (was 400) |
+| The onboarding call names another country than the saved preference, or the preference changed while the call waited for Stripe or for the hosted link | `payout_preference_changed` (new, rounds 3 and 4) | nothing (the read shows the newer preference) | 409 on onboarding; nothing is bound over the newer preference and no link is returned |
+| An account creation is unresolved and waits for Finance | `stripe_account_unresolved` (existing code) | `eur.state=needs_attention`, no EUR setup action, also when the declared country has closed | 409 (was 400), before a closed declared country |
 | Private cheque store not configured | `payout_evidence_unavailable` (existing) | `dzd.unavailable_reason`, no DZD form action; choosing DZD stays open | 503 on the upload and on the profile submission |
 | Stripe outage | `stripe_connect_provider_error` (existing) | nothing (the read calls no provider) | 502; see "Stripe failures" |
 | Cheque store outage | `payout_evidence_unavailable` (existing) | nothing | 503 |
@@ -66,7 +67,7 @@ account, finishes the schedule and mints the link. It never creates a second acc
 
 | Action | Offered when (all of) | The write it leads to |
 | --- | --- | --- |
-| `configure_eur` | member gate open; Connect on and configured; a country open; no account bound to the current version; no account of another country, no account whose country closed, no unresolved creation | PATCH preference (with a country from `supported_countries` when `country_supported` is false), then `POST .../stripe/onboarding` |
+| `configure_eur` | member gate open; Connect on and configured; a country open; no account of this platform and mode bound to the current version (one from another platform or mode is history); no account of another country, no account whose country closed, no unresolved creation | PATCH preference (with a country from `supported_countries` when `country_supported` is false), then `POST .../stripe/onboarding` |
 | `resume_eur_setup` | member gate open; Connect on; usable account; EUR enabled; the account country decision passes (below); state `setup_required`, or Stripe still needs the traveler (details not submitted, an outstanding or past-due requirement, or the payout schedule not finished) and the account is not closed for good | `POST .../stripe/onboarding` |
 | `refresh` (EUR card) | member gate open; Connect on; usable account | `POST .../stripe/refresh` |
 | `manage_eur` | as `refresh`, and Stripe details submitted | `POST .../stripe/dashboard` |
@@ -80,11 +81,18 @@ accepts both regardless of country, and the readiness then says `payout_country_
 setup collects the account country first, so a saved declaration whose country has closed does not stop
 `configure_eur`.
 
-**The account country decision** (round 3, `payout_accounts.account_country_refusal`, used by the read
-and by onboarding). A connected account never changes country, and a traveler has one active account per
-platform and mode, so once one exists only it can serve EUR. With such an account: its own country must
-be open (otherwise `payout_country_unsupported`), and the declaration must name it (otherwise
-`stripe_account_country_mismatch`). Without one: the declared country must be open.
+**The onboarding decision** (rounds 3 and 4, `payout_accounts.onboarding_refusal`, made by the read and,
+before any Stripe call and again under the method lock, by onboarding). In this order:
+
+1. The traveler's active account in this platform and mode, if there is one. A connected account never
+   changes country, and a traveler has one such account, so once it exists only it can serve EUR: its
+   own country must be open (otherwise `payout_country_unsupported`, with `account_country`), and the
+   declaration must name it (otherwise `stripe_account_country_mismatch`).
+2. Otherwise, an account creation that a search at Stripe found nothing for: `stripe_account_unresolved`,
+   whatever the declared country.
+3. Otherwise, the declared country must be open (`payout_country_unsupported`). The read does not count
+   this one against `configure_eur`, because that setup starts with the preference change, which names an
+   open country.
 
 ## Response shapes for F2
 
@@ -267,7 +275,7 @@ caller, and `test_preference_contract_and_future_route[dzd_only]` covers it.
 | --- | --- | --- |
 | Blocker: an onboarding that read DE could bind DE over an FR declaration committed while Stripe was being called, and a bound DE account answered an explicit `country="FR"` with its DE link | Onboarding records the method version it started on. Every locked step checks the method is still enabled and on that version (`PreferenceChanged`, 409 `payout_preference_changed`). An account Stripe returns after the change is kept as the traveler's active account with its operation `accepted`, and is not bound. The country decision runs before an account already bound is reused, both before any Stripe call and again under the method lock | `test_f1_a_declaration_committed_before_stripe_answers_is_never_overwritten`, `test_f1_an_account_created_while_the_declaration_changed_is_kept_unbound`, `test_f1_a_call_naming_another_country_never_gets_the_bound_accounts_link` |
 | Should-fix: the read said `payout_country_unsupported` and onboarding said `stripe_account_country_mismatch` for one state | The account country decision above, one function for both | `test_f1_the_read_and_onboarding_make_one_country_decision` (the account's country closed; the declaration's country differs) |
-| Should-fix: an ambiguous FR creation followed by a DE declaration failed with a generic 400; an unresolved operation under another platform or mode blocked setup here | The applicable creation is found by method, platform and mode (the key carries all three). Its original country is read back from its stored request, so a replay inside Stripe's window sends the same key and the same request, and the search past it looks for the same account. The account found is then judged by the country decision. The read uses the same lookup | `test_f1_an_ambiguous_creation_is_resolved_as_it_was_sent` (inside and past the window), `test_f1_an_unresolved_creation_belongs_to_its_own_platform` |
+| Should-fix: an ambiguous FR creation followed by a DE declaration failed with a generic 400; an unresolved operation under another platform or mode blocked setup here | The applicable creation is found by method, platform and mode (the key carries all three). Its original country is read back from its stored request, so a replay inside Stripe's window sends the same key and the same request, and the search past it looks for the same account. The account found is then judged by the country decision. The read uses the same lookup | `test_f1_an_unresolved_creation_belongs_to_its_own_platform`; the ambiguous-creation test was replaced in round 4, which tightened this rule |
 | Should-fix: after a link failure the read offered only `refresh`, which cannot mint a link | `resume_eur_setup` while Stripe still needs the traveler (`onboarding_incomplete`) | `test_f1_a_failure_after_binding_keeps_the_account_and_the_retry_reuses_it` now goes 502, then the read, then the advertised action |
 | Should-fix: the race test's wait accepted any waiter in the database | It records both workers' backend ids and waits until the trailing worker's advisory lock on this traveler's method set is ungranted and blocked by the leading worker | `test_f1_payout_method_set_race.py` |
 | Nit: the replacement test searched for twenty `1` digits; the queue test checked only the CCP mask | The replacement test looks for the submitted CCP number and RIP; the queue test for both numbers and both of the profile's masks | `test_dzd_replacement_immutable_history_and_review`, `test_phase8fh41_console.py::test_the_queue_shows_the_settlement_amount_and_what_it_waits_on` |
@@ -280,9 +288,58 @@ again binds it without a second Stripe call. And an ambiguous creation that only
 `configure_eur` on the read; that call is the one that settles it (replay or search), and its answer is
 then what the read shows.
 
+## Round 4: the Astra review of `ee1e477`
+
+**One root cause.** Onboarding took its inputs from different moments and different places: the country
+from the request body or from the saved version, the version from when the call started, the creation
+to recover from a method-wide search, and the account's readiness from a copy read before the lock. Each
+round-3 finding was two of these disagreeing. Now every onboarding call serves **one declaration**: the
+method's current version and that version's country, fixed when the call starts. Every step is checked
+against it:
+
+- The request's `country` is only an assertion that the caller saw that declaration. A different country
+  is refused before any Stripe call (409 `payout_preference_changed`); a country change is the
+  preference PATCH's, which checks the revision.
+- What the call does is decided under the method lock, with the standing account and the method's one
+  creation, by the same decision the read makes (above).
+- A creation's identity includes the declaration: its stored fingerprint covers the declaration version
+  as well as the request. So a request is sent, or replayed, only for the declaration it was made for,
+  while that declaration is current, its country is open and Stripe still replays the key. Any other
+  outstanding creation is only looked for, by its own operation reference, and can never be sent for
+  the first time later.
+- A Stripe answer is written back only where it still holds: a failure only onto a creation still
+  outstanding with no known account, an account only onto a creation that names no other one.
+- The account is bound only onto that same declaration, from the locked account row. If the method's
+  destination already is this account, the call has nothing left to do. Anything else keeps the account,
+  unbound.
+- The hosted link is returned only after the method is checked again under the lock, and the response
+  describes that locked method.
+
+| Finding | Fix | Test |
+| --- | --- | --- |
+| Blocker 1: after another session declared FR, the phone's stale `country=DE` bound DE over FR | The country is an assertion against the declaration, checked before Stripe and, through the version, under the lock | `test_f1_a_call_naming_another_country_never_gets_the_bound_accounts_link` (DE and FR saved), `test_f1_a_declaration_committed_before_stripe_answers_is_never_overwritten` (with and without a named country) |
+| Blocker 2: a late timeout turned a refused v1 back into `unknown`; the method-wide search then bound v2's DE account to an FR version | Conditional failure writes; the search matches `shiptrip_operation`; binding compares the account's observed country with the declaration | `test_f1_a_late_timeout_never_reopens_a_refusal_and_a_search_finds_only_its_own` (two keys on one method) |
+| Blocker 3: an FR intent whose POST never left was sent after FR closed and DE was declared | A superseded or closed-country intent is only looked for; a found account is kept, nothing found waits for Finance | `test_f1_an_intent_that_never_reached_stripe_is_never_sent_after_its_country_closed`, `test_f1_a_superseded_creation_is_only_looked_for` (inside and past the window, found or not) |
+| Should-fix: binding projected an earlier copy of the account's readiness | The standing account is bound in the same transaction that locks it, and every binding projects the locked row | `test_f1_binding_reads_the_accounts_readiness_as_it_stands` |
+| Should-fix: after a platform or mode switch the read offered nothing while onboarding created a new account | The read decides from this platform's and mode's account only; the bound one from elsewhere stays in the method projection as history | `test_f1_an_account_from_another_platform_is_history_not_the_setup` |
+| Should-fix: an unresolved creation and a closed declared country gave two answers | One order on both paths: unresolved first. Recorded once, it needs no further Stripe call | `test_f1_an_unresolved_creation_outranks_a_closed_declared_country` |
+| Should-fix: a link minted while a PATCH committed went out with the newer method | The link is checked under the method lock before it is returned | `test_f1_a_link_minted_while_the_preference_changed_is_never_handed_out` |
+| Should-fix: of two calls for one declaration, the second called the first's binding a preference change | An account already the destination is success, not a conflict | `test_f1_two_calls_for_one_declaration_bind_once_and_both_succeed` |
+| Should-fix: a refused DZ declaration named the traveler's usable FR account as `account_country` | `CountryUnsupported` carries the refused country and whether it is the account's own | `test_f1_a_refused_declared_country_never_names_the_accounts_country` |
+| Nit: the replay assertion built its expectation from the replay; the past-window branch did not check the search | The replay is compared with every argument of the first request; the search's key, value and time bound are asserted | `test_f1_a_current_creation_is_replayed_exactly_as_it_was_sent`, `test_f1_a_superseded_creation_is_only_looked_for` |
+
+Removed: `resume_account`, a second recovery entry point no production code called, and the helpers it
+shared with the old flow (`_prepare_account_creation`, `_bind_account`, `_bind_standing_account`,
+`_recover_account_creation`, `_requested_country`, `creation_unresolved`). Onboarding is the one path.
+
+One stricter rule to know: an ambiguous creation made for an earlier declaration is never replayed, even
+when the traveler has declared the same country again. If the search finds nothing it waits for Finance.
+That needs a lost answer and a declaration change together, and it is the only way to be sure a request
+made for an older choice is never sent.
+
 ## Tests
 
-`apps/finance/tests/test_phase8fh6a_mobile.py`, F1 sections (rounds 1, 2 and 3), and
+`apps/finance/tests/test_phase8fh6a_mobile.py`, F1 sections (rounds 1 to 4), and
 `apps/finance/tests/test_f1_payout_method_set_race.py` (PostgreSQL threads):
 
 - profiles off, with Connect on and off: stable read (both reads, same contract), 409 on all seven
@@ -314,7 +371,13 @@ then what the read shows.
   explicit other country against a bound account; both country cases on the read and the write with no
   Stripe call; an ambiguous creation replayed with its own key and country, or searched past the window;
   another platform's operation; a refused search or replay that keeps the same key and one account; the
-  lock order of onboarding and refresh.
+  lock order of onboarding and refresh;
+- round 4: a stale named country before and during the call; a late timeout over a recorded refusal and a
+  search across two keys of one method; an intent that never reached Stripe, after its country closed; a
+  superseded creation inside and past the window, found or not; the exact replay; readiness projected on
+  binding; a bound account from another platform; an unresolved creation against a closed declared
+  country; a link minted during a preference change; two calls for one declaration; a refused DZ
+  declaration beside a usable account.
 
 Each round-3 test was checked against the code without its fix: binding regardless of the started
 version, moving the early return back before the country decision (with the pre-Stripe check also
@@ -349,6 +412,14 @@ Round 3 strengthened, without changing a rule: the failure-after-binding test re
 the read; the race test's wait names the exact lock; the replacement and queue assertions look for the
 submitted values.
 
+Round 4 rewrote, because the rule changed: `test_f1_a_call_naming_another_country_never_gets_the_bound_accounts_link`
+now expects `payout_preference_changed` (a named country is an assertion, not a mismatch to explain);
+`test_f1_an_ambiguous_creation_is_resolved_as_it_was_sent` became
+`test_f1_a_superseded_creation_is_only_looked_for` (a superseded intent is no longer replayed). Three H2
+cases in `test_phase8fh2_accounts.py` called the removed `resume_account`; they now call `ensure_account`,
+the one entry point, with the same assertions (the expired-window case also sees the platform check
+first). `test_phase8fh26_business_profile.py` builds the creation identity from the declaration.
+
 ## Checks
 
 See the pull request for the exact local runs and CI. No migration, so no contract regeneration.
@@ -380,3 +451,8 @@ See the pull request for the exact local runs and CI. No migration, so no contra
   message. `payout_country_unsupported` can now name `account_country`: when it does, the country that
   closed is the one of the traveler's Stripe account, so say EUR payouts to that account are not
   available and offer DZD. After a 502 on onboarding, the EUR card offers `resume_eur_setup`; render it.
+- Round 4: onboarding's `country` is optional and, when sent, must be the saved `eur.country`; send it
+  from the summary just read, or not at all. To change the country, PATCH the preference first.
+  `account_country` on `payout_country_unsupported` is null when the refused country is a declaration
+  (for example a DZ choice), so say only that this country is not supported. A 409
+  `payout_preference_changed` can also come instead of an onboarding link: refetch, and open no URL.

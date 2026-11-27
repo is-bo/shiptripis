@@ -25,6 +25,14 @@
   decision. An ambiguous creation is recovered with its own key and country, per platform and mode, and a
   refused recovery search no longer opens a second Stripe account. Refresh locks the method before the
   account, as onboarding does. The read offers `resume_eur_setup` while Stripe still needs the traveler.
+- Round 4 (Astra review of `ee1e477`): one root cause behind three blockers. Every onboarding call now
+  serves one declaration, the method's current version and its country, and each Stripe account call is
+  tied to it: a named country is only an assertion; a creation's identity includes its declaration, so a
+  request is sent or replayed only for the declaration it was made for, while current and open, and is
+  otherwise only looked for by its own operation; answers are written back conditionally; binding and
+  the hosted link are checked under the method lock. The read decides from the configured platform and
+  mode only, and `account_country` names only an account's own closed country. The unused
+  `resume_account` path is removed.
 
 ## Wassla: the bell names the ticket decision (N2, 2026-11-26)
 

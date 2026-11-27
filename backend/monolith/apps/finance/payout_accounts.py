@@ -133,9 +133,20 @@ class ConnectUnavailable(PermissionDenied):
 
 
 class CountryUnsupported(ValidationError):
-    """The declared payout-account country cannot hold a Stripe EUR account here."""
+    """A payout-account country cannot hold a Stripe EUR account here.
+
+    `country` is the country refused. `of_account` says whose it is: true when
+    it is the country the Traveler's Stripe account was opened for, which no
+    new declaration can change; false when it is a declared country, which a
+    preference change naming an open country replaces.
+    """
 
     code = "payout_country_unsupported"
+
+    def __init__(self, message, *, country="", of_account=False):
+        super().__init__(message)
+        self.country = country
+        self.of_account = of_account
 
 
 class AccountCreationUnresolved(ValidationError):
@@ -172,21 +183,25 @@ class AccountKeptProviderError(ProviderError):
 
 
 class PreferenceChanged(ValidationError):
-    """The EUR preference changed while an onboarding call was in flight.
+    """The onboarding call no longer serves the Traveler's latest EUR choice.
 
-    Onboarding reads the declaration, calls Stripe, and only then binds. If the
-    method's current version or its enabled flag is no longer the one it
-    started from, binding would put an older destination over a newer choice,
-    and the next funding would use it. Nothing is bound; an account Stripe
-    created in the meantime is kept, unbound, for the next attempt.
+    Onboarding serves one declaration: the method version current when it
+    started, and that version's country. If the call names another country,
+    or the method is disabled or moves to a newer version before the account
+    is bound or before its link is handed out, binding or answering would put
+    an older destination over a newer choice. Nothing is bound and no link is
+    returned; an account Stripe created in the meantime is kept, unbound.
     """
 
     code = "payout_preference_changed"
 
 
-#: What `_recover_account_creation` records when, past the replay window, the
-#: search for an ambiguous creation finds no account.
+#: What onboarding records on an ambiguous creation when Stripe holds no
+#: account for it, so the read stops offering a setup that will refuse.
 CREATION_NOT_FOUND = "not_found"
+
+#: An account creation Stripe has given no definite answer for yet.
+OUTSTANDING = ("prepared", "committed", "unknown")
 
 
 @dataclass(frozen=True, slots=True)
@@ -240,7 +255,7 @@ def require_supported_country(country: str) -> str:
     code = str(country or "").strip().upper()
     permitted = allowed_countries()
     if code not in permitted:
-        raise CountryUnsupported("This payout-account country is not supported.")
+        raise CountryUnsupported("This payout-account country is not supported.", country=code)
     return code
 
 
@@ -363,32 +378,41 @@ def standing_accounts(traveler_id):
     )
 
 
+def in_this_environment(account) -> bool:
+    """Whether `account` was opened under the configured platform and mode.
+
+    Only such an account can be onboarded, refreshed or paid here. A method
+    can still be bound to one from another platform or mode, which stays its
+    recorded history until onboarding binds this environment's account.
+    """
+
+    platform = str(getattr(settings, "STRIPE_CONNECT_PLATFORM_ACCOUNT_ID", "") or "")
+    return account.platform_id == platform and account.provider_mode == expected_mode()
+
+
 def account_country(account) -> str:
     """The country an account was opened for, as readiness reads it."""
 
     return account.verified_country or account.declared_country
 
 
-def account_country_refusal(country: str, standing) -> ValidationError | None:
-    """The one country decision for EUR onboarding, on the read and the write.
+def account_country_refusal(country: str, account) -> ValidationError | None:
+    """Whether the Traveler's active `account` can serve a declaration of `country`.
 
     A connected account never changes country, and a Traveler has one active
-    account per platform and mode. So with a standing account, only that
-    account can serve the method: its own country must be open, and the
-    declaration must name it. Without one, the declared country must be open.
+    account per platform and mode. So once one exists, only it can serve the
+    method: its own country must be open, and the declaration must name it.
     """
 
-    if standing is not None:
-        opened_for = account_country(standing)
-        if opened_for not in allowed_countries():
-            return CountryUnsupported("The Stripe payout account's country is not supported.")
-        if opened_for != country:
-            return AccountCountryMismatch(
-                "The Stripe payout account was opened for another country."
-            )
-        return None
-    if country not in allowed_countries():
-        return CountryUnsupported("This payout-account country is not supported.")
+    opened_for = account_country(account)
+    if opened_for not in allowed_countries():
+        return CountryUnsupported(
+            "The Stripe payout account's country is not supported.",
+            country=opened_for,
+            of_account=True,
+        )
+    if opened_for != country:
+        return AccountCountryMismatch("The Stripe payout account was opened for another country.")
     return None
 
 
@@ -412,87 +436,62 @@ def onboarding_incomplete(account) -> bool:
     )
 
 
-def _creation_key(method, version: int) -> str:
+def _creation_key(method, attempt: int) -> str:
     platform = str(getattr(settings, "STRIPE_CONNECT_PLATFORM_ACCOUNT_ID", "") or "")
-    return f"acct_create:{platform}:{expected_mode()}:{method.public_reference}:v{version}"
+    return f"acct_create:{platform}:{expected_mode()}:{method.public_reference}:v{attempt}"
 
 
 def _creation_operation(method) -> tuple:
-    """The account creation the next onboarding call resumes, and its version.
+    """The method's account creation in this platform and mode, and its attempt.
 
     Found by its idempotency key, which names this platform, mode and method,
     so an operation from another platform or mode is never this environment's.
-    A failed identity with no provider object is passed over, exactly as the
-    write passes over it; anything else is the one to resume.
+    A failed attempt with no provider object is passed over, because Stripe
+    refused it and created nothing; anything else is the one creation the next
+    onboarding call deals with, so a method never has two in flight.
     """
 
-    version = 1
+    attempt = 1
     while True:
         operation = PayoutProviderOperation.objects.filter(
-            idempotency_key=_creation_key(method, version)
+            idempotency_key=_creation_key(method, attempt)
         ).first()
         if not operation or operation.status != "failed" or operation.provider_object_id:
-            return version, operation
-        version += 1
+            return attempt, operation
+        attempt += 1
 
 
-def _requested_country(method, operation, version: int) -> str | None:
-    """The account country an earlier creation request asked Stripe for.
+def current_creation(method):
+    """The account creation the next onboarding call for `method` deals with."""
 
-    The stored fingerprint covers the whole request, country included, and
-    every country a creation can name is inside the Connect ceiling. None when
-    no country reproduces it (the request text has changed since), in which
-    case the original request can no longer be replayed byte for byte.
+    return _creation_operation(method)[1] if method else None
+
+
+def _creation_identity(method, declaration, attempt: int) -> tuple:
+    """H0's stable account-creation identity, tied to the declaration it serves.
+
+    The key names the platform, mode, method and attempt. The fingerprint
+    covers the whole request and the declaration version it was made for, so
+    an operation is replayable for a declaration exactly when its fingerprint
+    is that declaration's: same version, same country, same request text.
     """
-
-    from config.settings.connect import CONNECT_COUNTRY_CEILING
-
-    for code in CONNECT_COUNTRY_CEILING:
-        if _creation_identity(method, code, version)[1] == operation.request_fingerprint:
-            return code
-    return None
-
-
-def creation_unresolved(method) -> bool:
-    """Whether this method's account creation now waits for Finance review.
-
-    True for the operation the next onboarding call would resume, when a search
-    past the replay window found nothing, or when its original request can no
-    longer be reproduced. Until it is resolved, every onboarding attempt
-    refuses with `AccountCreationUnresolved`.
-    """
-
-    version, operation = _creation_operation(method)
-    if (
-        operation is None
-        or operation.provider_object_id
-        or operation.status not in ("prepared", "committed", "unknown")
-    ):
-        return False
-    return (
-        operation.provider_object_status == CREATION_NOT_FOUND
-        or _requested_country(method, operation, version) is None
-    )
-
-
-def _creation_identity(method, country: str, version: int = 1) -> tuple:
-    """H0's stable account-creation identity: platform + mode + method + version."""
 
     platform = str(getattr(settings, "STRIPE_CONNECT_PLATFORM_ACCOUNT_ID", "") or "")
     mode = expected_mode()
-    key = _creation_key(method, version)
+    key = _creation_key(method, attempt)
     fingerprint = hashlib.sha256(
         json.dumps(
             [
                 platform,
                 mode,
                 str(method.public_reference),
-                country,
+                str(declaration.public_reference),
+                declaration.country,
                 "eur",
                 "individual",
                 sorted(EXPECTED_CONTROLLER.items()),
                 TRAVELER_PRODUCT_DESCRIPTION,
-                version,
+                attempt,
             ],
             sort_keys=True,
             default=str,
@@ -501,61 +500,106 @@ def _creation_identity(method, country: str, version: int = 1) -> tuple:
     return key, fingerprint, platform, mode
 
 
-def _require_unchanged(locked, expected_version_id) -> None:
-    """Refuse when the locked method is no longer the one onboarding started from."""
+def onboarding_refusal(country: str, *, standing, creation) -> ValidationError | None:
+    """The one decision for EUR onboarding, made by the read and by the write.
 
-    if not locked.enabled or locked.current_version_id != expected_version_id:
+    In order: the Traveler's active account in this platform and mode, which
+    alone can serve the method (`account_country_refusal`); then an account
+    creation that a search at Stripe found nothing for, which waits for
+    Finance whatever the country; then the declared country itself. The read
+    treats the last one as no obstacle to a new setup, which starts with the
+    preference change that names an open country.
+    """
+
+    if standing is not None:
+        return account_country_refusal(country, standing)
+    if (
+        creation is not None
+        and creation.status in OUTSTANDING
+        and not creation.provider_object_id
+        and creation.provider_object_status == CREATION_NOT_FOUND
+    ):
+        return AccountCreationUnresolved(
+            "A previous Stripe account creation for this payout method has an "
+            "unresolved outcome and requires Finance review."
+        )
+    if country not in allowed_countries():
+        return CountryUnsupported(
+            "This payout-account country is not supported.", country=country
+        )
+    return None
+
+
+def _declaration_of(method, asserted: str = ""):
+    """The declaration an onboarding call serves: the method's current version.
+
+    The country always comes from that version. A country in the request is
+    only an assertion that the caller saw the same declaration; a country
+    change is the preference PATCH's, which checks the revision.
+    """
+
+    if not method or not method.enabled or not method.current_version_id:
+        raise ValidationError("Enable the EUR payout preference first.")
+    declaration = method.current_version
+    asserted = str(asserted or "").strip().upper()
+    if asserted and asserted != declaration.country:
+        raise PreferenceChanged("The request names another country than the saved preference.")
+    return declaration
+
+
+def _require_unchanged(locked, declaration_id) -> None:
+    """Refuse when the locked method no longer serves the call's declaration."""
+
+    if not locked.enabled or locked.current_version_id != declaration_id:
         raise PreferenceChanged("The payout preference changed during onboarding.")
 
 
+@dataclass(frozen=True, slots=True)
+class _Onboarding:
+    """What one onboarding call does, decided under the method lock.
+
+    Either the Traveler's standing `account` already serves `declaration`, or
+    Stripe is asked about `operation`: `create` sends (or replays) its request,
+    `retrieve` reads back the account it is known to have created, and `search`
+    looks for that account without being able to create one.
+    """
+
+    declaration: PayoutMethodVersion
+    account: StripePayoutAccount | None = None
+    operation: PayoutProviderOperation | None = None
+    call: str = ""
+
+
 @transaction.atomic
-def _prepare_account_creation(*, user, method_id, country, expected_version_id):
-    """Record the durable local intent before any external POST.
+def _plan_onboarding(*, user, method_id, declaration_id) -> _Onboarding:
+    """Decide the call under the locks, and record a new intent before any POST.
 
-    The operation row exists first and carries the stable idempotency key, so a
-    process that dies between here and Stripe leaves behind the exact identity
-    needed to find out what happened rather than a blank space.
-
-    Returns the method, the standing account if there is one, and otherwise the
-    operation to send and the country *its* request names. That is the
-    declaration for a new operation, and the original country for one an
-    earlier call left ambiguous: an outstanding request is only ever resolved
-    as it was sent, under its own key.
+    An operation's request is sent only for the declaration it was made for,
+    while that declaration is current, its country open, and Stripe still
+    replays the key; the onboarding refusal has already checked the country.
+    An older or superseded intent is only ever looked for, so a request made
+    for a country the Traveler has since left, or that has since closed, is
+    never sent for the first time later. A new intent is committed with its
+    key before Stripe hears of it, so a process that dies in between leaves the
+    exact identity needed to find out what happened.
     """
 
     User.objects.select_for_update(no_key=True).get(pk=user.pk)
-    method = TravelerPayoutMethod.objects.select_for_update(no_key=True).get(
-        pk=method_id
-    )
-    _require_unchanged(method, expected_version_id)
-    existing = (
-        standing_accounts(method.traveler_id).select_for_update(no_key=True).first()
-    )
-    if existing:
-        return method, existing, None, None
-
-    # Stripe caches definite rejections too, so a failed intent is preserved
-    # and a new identity committed after configuration is repaired. An
-    # ambiguous or accepted operation is never advanced to a fresh key.
-    version, operation = _creation_operation(method)
-    key, fingerprint, platform, mode = _creation_identity(method, country, version)
-    if operation:
-        if operation.status == "failed":
-            raise ValidationError("A failed creation already has a provider identity.")
-        requested = _requested_country(method, operation, version)
-        if (
-            operation.status in ("accepted", "reconciled")
-            and operation.provider_object_id
-        ):
-            # The account exists at Stripe but no local row does. Reconcile.
-            return method, None, operation, requested
-        if requested is None:
-            raise AccountCreationUnresolved(
-                "A previous Stripe account creation for this payout method can no "
-                "longer be replayed as it was sent and requires Finance review."
-            )
-    else:
-        requested = country
+    method = TravelerPayoutMethod.objects.select_for_update(no_key=True).get(pk=method_id)
+    _require_unchanged(method, declaration_id)
+    declaration = method.current_version
+    standing = standing_accounts(method.traveler_id).select_for_update(no_key=True).first()
+    attempt, operation = _creation_operation(method)
+    refusal = onboarding_refusal(declaration.country, standing=standing, creation=operation)
+    if refusal is not None:
+        raise refusal
+    if standing:
+        if not _destination_of(method, standing):
+            _bind(method, standing, declaration.country)
+        return _Onboarding(declaration, account=standing)
+    key, fingerprint, platform, mode = _creation_identity(method, declaration, attempt)
+    now = timezone.now()
+    if operation is None:
         operation = PayoutProviderOperation.objects.create(
             method=method,
             kind="account_create",
@@ -565,15 +609,21 @@ def _prepare_account_creation(*, user, method_id, country, expected_version_id):
             idempotency_key=key,
             request_fingerprint=fingerprint,
             currency="EUR",
+            status="committed",
+            first_request_at=now,
+            last_request_at=now,
         )
-    now = timezone.now()
-    PayoutProviderOperation.objects.filter(pk=operation.pk).update(
-        status="committed",
-        first_request_at=operation.first_request_at or now,
-        last_request_at=now,
-    )
-    operation.refresh_from_db()
-    return method, None, operation, requested
+        return _Onboarding(declaration, operation=operation, call="create")
+    if operation.status == "failed":
+        raise ValidationError("A failed creation already has a provider identity.")
+    if operation.provider_object_id:
+        # The account exists at Stripe but this database has no row for it.
+        return _Onboarding(declaration, operation=operation, call="retrieve")
+    age = (now - (operation.first_request_at or operation.created_at)).total_seconds()
+    if operation.request_fingerprint == fingerprint and age <= IDEMPOTENT_REPLAY_SECONDS:
+        PayoutProviderOperation.objects.filter(pk=operation.pk).update(last_request_at=now)
+        return _Onboarding(declaration, operation=operation, call="create")
+    return _Onboarding(declaration, operation=operation, call="search")
 
 
 def _apply_snapshot(account: StripePayoutAccount, snapshot, *, observed_at):
@@ -741,75 +791,6 @@ def _provision_schedule(account: StripePayoutAccount, *, gateway, actor=None):
     return updated
 
 
-def _bind_account(*, method, operation, snapshot, country, declared, expected_version_id,
-                  observed_at):
-    """Record the account Stripe returned, and bind it when it still fits.
-
-    H0 allows exactly one verified binding when an initially incomplete Stripe
-    setup obtains its first account; a later *replacement* account is a new
-    immutable method version, never an edit of the old one.
-
-    `country` is what the creation request asked Stripe for; `declared` is what
-    this onboarding call serves. The account is bound only while the locked
-    method is still enabled on the version this call started from, and only
-    when the two countries agree. Otherwise it is kept as the Traveler's
-    standing account, unbound, so it is never lost and never created twice,
-    and the newer choice stays the destination. Returns the account and
-    whether it was bound.
-    """
-
-    platform = str(getattr(settings, "STRIPE_CONNECT_PLATFORM_ACCOUNT_ID", "") or "")
-    mode = expected_mode()
-    with transaction.atomic():
-        locked = TravelerPayoutMethod.objects.select_for_update(no_key=True).get(
-            pk=method.pk
-        )
-        existing = StripePayoutAccount.objects.filter(
-            platform_id=platform,
-            provider_mode=mode,
-            provider_account_id=snapshot.account_id,
-        ).first()
-        if existing:
-            if existing.traveler_id != locked.traveler_id:
-                raise ValidationError("This connected account belongs to another user.")
-            account = existing
-        else:
-            account = StripePayoutAccount.objects.create(
-                traveler=locked.traveler,
-                platform_id=platform,
-                provider_account_id=snapshot.account_id,
-                provider_mode=mode,
-                declared_country=country,
-                creation_operation_key=operation.idempotency_key,
-                status="setup_required",
-                status_reason="onboarding_required",
-            )
-        PayoutProviderOperation.objects.filter(pk=operation.pk).update(
-            status="accepted",
-            provider_object_id=snapshot.account_id,
-            provider_request_id=snapshot.request_id[:255],
-            last_request_at=timezone.now(),
-        )
-        bound = (
-            locked.enabled
-            and locked.current_version_id == expected_version_id
-            and country == declared
-        )
-        if bound:
-            _bind_version(locked, account, country)
-        record_admin_action(
-            actor=locked.traveler,
-            action="payout_account.bound" if bound else "payout_account.kept_unbound",
-            target=account,
-            after={
-                "country": country,
-                "mode": mode,
-                "operation": str(operation.public_reference),
-            },
-        )
-    return _apply_snapshot(account, snapshot, observed_at=observed_at)[0], bound
-
-
 def _bind_version(locked, account, country):
     """Make `account` the locked method's current destination.
 
@@ -852,92 +833,76 @@ def _bind_version(locked, account, country):
     locked.save(update_fields=["current_version", "revision", "updated_at"])
 
 
-def _bind_standing_account(*, method, account, country, expected_version_id):
-    """Serve a declaration with the Traveler's existing active account.
+def _bind(locked, account, country, *, operation=None) -> None:
+    """Bind `account` to the locked method, and project its locked readiness.
 
-    A Traveler who declared another country and then this one again has a
-    newer version with no account. The account is bound to it only when it was
-    opened for the declared country, because a connected account never changes
-    country; otherwise the declaration needs the account's own country back or
-    a Finance review, and nothing is created. The country is decided before an
-    account already bound is reused, so a call naming another country never
-    comes back with this account's link.
+    `account` is the row as locked inside this transaction, so the method's
+    status is read from what the account says now, not from an earlier copy
+    a webhook may have overtaken.
     """
 
-    with transaction.atomic():
-        locked = TravelerPayoutMethod.objects.select_for_update(no_key=True).get(
-            pk=method.pk
-        )
-        _require_unchanged(locked, expected_version_id)
-        refusal = account_country_refusal(country, account)
-        if refusal is not None:
-            raise refusal
-        if _destination_of(locked, account):
-            return account
-        _bind_version(locked, account, country)
-        record_admin_action(
-            actor=locked.traveler,
-            action="payout_account.bound",
-            target=account,
-            after={"country": country, "mode": account.provider_mode},
-        )
-        _sync_method_status(locked, account, evaluate_readiness(account))
-    return account
+    _bind_version(locked, account, country)
+    after = {"country": country, "mode": account.provider_mode}
+    if operation is not None:
+        after["operation"] = str(operation.public_reference)
+    record_admin_action(
+        actor=locked.traveler, action="payout_account.bound", target=account, after=after
+    )
+    _sync_method_status(locked, account, evaluate_readiness(account))
 
 
-def _recover_account_creation(*, method, operation, country, gateway):
-    """Resolve an ambiguous account creation without ever creating a second one.
+def _ask_stripe(method, plan: _Onboarding, gateway):
+    """Make the one Stripe call the plan names, and record a failure safely.
 
-    Two safe routes, in order:
+    Outside every lock. A failure is written only onto an operation that is
+    still outstanding with no known account, so a late answer from one call
+    never overwrites what another call already learnt: a timeout cannot turn
+    a recorded refusal back into an unknown, and nothing turns an accepted
+    creation into a failed one.
 
-    1. Inside Stripe's idempotency retention window, replay the byte-identical
-       request under the same key. Stripe returns the original account.
-    2. Past that window, *look for* the account by the internal method
-       reference stamped into its metadata, bounded by the operation's own
-       first-request time.
+    Only Stripe refusing the creation request itself marks it `failed`, the
+    one status that lets a later call use a new key: Stripe ran that request,
+    keeps its refusal for this key, and created nothing under it. A 401 or 403
+    is refused before Stripe runs a request, and a failed search says nothing
+    about whether the account exists, so both leave the outcome unknown.
 
-    If neither resolves it, this blocks. It never POSTs a fresh create, because
-    "the retry window expired" is not evidence that nothing was created.
-
-    Only Stripe refusing the creation request itself marks the operation
-    `failed`, the one status that lets a later call use a new key: Stripe ran
-    that request, keeps its refusal for this key, and created nothing under it.
-    Every other failure leaves the outcome unknown and the identity in place.
-    A 401 or 403 is refused before Stripe runs a request, so it says nothing
-    about an earlier attempt under the same key; a failed search says nothing
-    about whether the account exists.
+    The search looks for this operation's own reference, stamped into the
+    account's metadata, never for the method's: another attempt's account is
+    not this one's.
     """
 
-    first = operation.first_request_at or operation.created_at
-    age = (timezone.now() - first).total_seconds()
-    pending = PayoutProviderOperation.objects.filter(pk=operation.pk)
-    if age <= IDEMPOTENT_REPLAY_SECONDS:
+    operation = plan.operation
+    if plan.call == "retrieve":
+        return gateway.retrieve_account(operation.provider_object_id)
+    outstanding = PayoutProviderOperation.objects.filter(
+        pk=operation.pk, status__in=OUTSTANDING, provider_object_id=""
+    )
+    if plan.call == "create":
         try:
             return gateway.create_account(
-                country=country,
+                country=plan.declaration.country,
                 idempotency_key=operation.idempotency_key,
                 metadata=_account_metadata(method, operation),
                 product_description=TRAVELER_PRODUCT_DESCRIPTION,
             )
         except ProviderCheckoutRejected:
-            pending.update(status="failed")
+            outstanding.update(status="failed")
             raise
         except ProviderError:
-            pending.update(status="unknown")
+            outstanding.update(status="unknown")
             raise
+    first = operation.first_request_at or operation.created_at
     try:
         found = gateway.find_account_by_metadata(
-            key="shiptrip_method",
-            value=str(method.public_reference),
+            key="shiptrip_operation",
+            value=str(operation.public_reference),
             created_gte=int(first.timestamp()) - 60,
         )
     except ProviderError:
-        pending.update(status="unknown")
+        outstanding.update(status="unknown")
         raise
     if found is None:
-        # Recorded so the read model stops offering a setup that will refuse;
-        # the identity and this search stay the only routes to the account.
-        pending.update(
+        outstanding.update(
             status="unknown",
             provider_object_status=CREATION_NOT_FOUND,
             last_observed_at=timezone.now(),
@@ -947,6 +912,77 @@ def _recover_account_creation(*, method, operation, country, gateway):
             "unresolved outcome and requires Finance review."
         )
     return found
+
+
+def _record_account(*, method, plan: _Onboarding, snapshot, observed_at):
+    """Record the account Stripe answered with, and bind it only if it still fits.
+
+    Under the method lock, then the account's. The account is always kept: a
+    local row, and the operation `accepted` with its id, so it is never lost
+    and never created twice. It becomes the destination only while the method
+    is enabled on the very declaration this call serves and the account was
+    opened for that declaration's country. If the method's destination is
+    already this account (a concurrent call for the same declaration bound
+    it), the call has nothing left to do. Anything else keeps it unbound and
+    the newer choice stays the destination.
+    """
+
+    platform = str(getattr(settings, "STRIPE_CONNECT_PLATFORM_ACCOUNT_ID", "") or "")
+    mode = expected_mode()
+    operation = plan.operation
+    observed = str(snapshot.country or "").upper()[:2]
+    with transaction.atomic():
+        locked = TravelerPayoutMethod.objects.select_for_update(no_key=True).get(pk=method.pk)
+        account = (
+            StripePayoutAccount.objects.select_for_update(no_key=True)
+            .filter(platform_id=platform, provider_mode=mode,
+                    provider_account_id=snapshot.account_id)
+            .first()
+        )
+        if account and account.traveler_id != locked.traveler_id:
+            raise ValidationError("This connected account belongs to another user.")
+        if account is None:
+            account = StripePayoutAccount.objects.create(
+                traveler=locked.traveler,
+                platform_id=platform,
+                provider_account_id=snapshot.account_id,
+                provider_mode=mode,
+                declared_country=observed,
+                creation_operation_key=operation.idempotency_key,
+                status="setup_required",
+                status_reason="onboarding_required",
+            )
+        recorded = PayoutProviderOperation.objects.filter(
+            pk=operation.pk, provider_object_id__in=("", snapshot.account_id)
+        ).update(
+            status="accepted",
+            provider_object_id=snapshot.account_id,
+            provider_request_id=snapshot.request_id[:255],
+            last_request_at=timezone.now(),
+        )
+        if not recorded:
+            raise ValidationError("This account creation already names another connected account.")
+        served = locked.enabled and _destination_of(locked, account)
+        fits = (
+            locked.enabled
+            and locked.current_version_id == plan.declaration.pk
+            and observed == plan.declaration.country
+        )
+        if fits and not served:
+            _bind(locked, account, observed, operation=operation)
+        kept = not (served or fits)
+        if kept:
+            record_admin_action(
+                actor=locked.traveler,
+                action="payout_account.kept_unbound",
+                target=account,
+                after={"country": observed, "mode": mode,
+                       "operation": str(operation.public_reference)},
+            )
+    account = _apply_snapshot(account, snapshot, observed_at=observed_at)[0]
+    if kept:
+        _refuse_unbound(method, plan.declaration, account)
+    return account
 
 
 def _account_metadata(method, operation) -> dict:
@@ -964,58 +1000,37 @@ def ensure_account(*, actor, country="", gateway=None):
 
     Idempotent by construction: one active account per traveler/platform/mode is
     a database constraint, the creation identity is stable, and an ambiguous
-    outcome is recovered rather than retried. The call serves the method's
-    version as it found it: if a preference change commits while Stripe is
-    being called, nothing is bound over it (`PreferenceChanged`).
+    outcome is recovered rather than retried. The call serves one declaration,
+    the method's current version, from the first check to the binding: a call
+    naming another country, or a preference change committed while Stripe is
+    being called, binds nothing (`PreferenceChanged`).
     """
 
     require_connect_enabled()
     gateway = gateway or get_connect_gateway()
     method = _method_for(actor)
-    if not method or not method.enabled:
-        raise ValidationError("Enable the EUR payout preference first.")
-    started_on = method.current_version_id
-    declared = str(
-        country
-        or (method.current_version.country if method.current_version else "")
-        or method.country_code
-        or ""
-    ).strip().upper()
-    refusal = account_country_refusal(declared, standing_accounts(actor.pk).first())
+    declaration = _declaration_of(method, country)
+    # Refused before any Stripe call; `_plan_onboarding` decides again under
+    # the lock.
+    refusal = onboarding_refusal(
+        declaration.country,
+        standing=standing_accounts(actor.pk).first(),
+        creation=current_creation(method),
+    )
     if refusal is not None:
         raise refusal
     # Assert who this credential is before creating anything under it.
     gateway.platform_identity()
 
-    method, existing, operation, requested = _prepare_account_creation(
-        user=actor, method_id=method.pk, country=declared, expected_version_id=started_on
-    )
-    if existing:
-        account = _bind_standing_account(
-            method=method, account=existing, country=declared, expected_version_id=started_on
-        )
-    else:
+    plan = _plan_onboarding(user=actor, method_id=method.pk, declaration_id=declaration.pk)
+    account = plan.account
+    if account is None:
+        # Taken before the call, so a slower answer can never look newer
+        # than it is.
         observed_at = timezone.now()
-        if operation.status in ("accepted", "reconciled") and operation.provider_object_id:
-            # The account exists at Stripe but this database has no row for it.
-            # Read it back; the observation stamp is taken before the call so a
-            # slower answer can never look newer than it is.
-            snapshot = gateway.retrieve_account(operation.provider_object_id)
-        else:
-            snapshot = _recover_account_creation(
-                method=method, operation=operation, country=requested, gateway=gateway,
-            )
-        account, bound = _bind_account(
-            method=method,
-            operation=operation,
-            snapshot=snapshot,
-            country=requested or snapshot.country.upper()[:2],
-            declared=declared,
-            expected_version_id=started_on,
-            observed_at=observed_at,
-        )
-        if not bound:
-            _refuse_unbound(method, account, declared)
+        snapshot = _ask_stripe(method, plan, gateway)
+        account = _record_account(method=method, plan=plan, snapshot=snapshot,
+                                  observed_at=observed_at)
     # On every route to the account, so a call that reuses it after a failed
     # provisioning finishes the schedule instead of skipping it.
     if account.payout_schedule_interval != REQUIRED_PAYOUT_SCHEDULE:
@@ -1029,55 +1044,15 @@ def ensure_account(*, actor, country="", gateway=None):
     return account
 
 
-def _refuse_unbound(method, account, declared):
+def _refuse_unbound(method, declaration, account):
     """Say why an account Stripe returned was kept rather than bound."""
 
     current = TravelerPayoutMethod.objects.get(pk=method.pk)
-    if not current.enabled or current.current_version_id != method.current_version_id:
+    if not current.enabled or current.current_version_id != declaration.pk:
         raise PreferenceChanged("The payout preference changed during onboarding.")
-    raise account_country_refusal(declared, account) or AccountCountryMismatch(
+    raise account_country_refusal(declaration.country, account) or AccountCountryMismatch(
         "The Stripe payout account was opened for another country."
     )
-
-
-def resume_account(*, actor, gateway=None):
-    """Recover an account whose creation outcome is unknown, then bind it.
-
-    The operation is the one onboarding would resume, recovered with the
-    request it was sent with, and bound under the same rule as onboarding.
-    """
-
-    require_connect_enabled()
-    gateway = gateway or get_connect_gateway()
-    method = _method_for(actor)
-    if not method:
-        raise ValidationError("Enable the EUR payout preference first.")
-    version, operation = _creation_operation(method)
-    if not operation or operation.status not in ("committed", "unknown"):
-        return ensure_account(actor=actor, gateway=gateway)
-    requested = _requested_country(method, operation, version)
-    if requested is None:
-        raise AccountCreationUnresolved(
-            "A previous Stripe account creation for this payout method can no "
-            "longer be replayed as it was sent and requires Finance review."
-        )
-    declared = method.current_version.country if method.current_version else ""
-    observed_at = timezone.now()
-    snapshot = _recover_account_creation(
-        method=method, operation=operation, country=requested, gateway=gateway
-    )
-    account, bound = _bind_account(
-        method=method,
-        operation=operation,
-        snapshot=snapshot,
-        country=requested,
-        declared=declared,
-        expected_version_id=method.current_version_id,
-        observed_at=observed_at,
-    )
-    if not bound:
-        _refuse_unbound(method, account, declared)
-    return account
 
 
 # --------------------------------------------------------------------------
@@ -1191,13 +1166,23 @@ def start_onboarding(*, actor, country="", gateway=None) -> dict:
         raise AccountKeptProviderError(
             "Stripe did not return an onboarding link.", provider_code=exc.provider_code
         ) from exc
-    record_admin_action(
-        actor=actor,
-        action="payout_account.onboarding_link_issued",
-        target=account,
-        after={"expires_at": link.expires_at, "mode": account.provider_mode},
-    )
-    return {"account": account, "url": link.url, "expires_at": link.expires_at}
+    with transaction.atomic():
+        # The link is handed out only while this account is still the
+        # destination of the method the caller chose. A preference change
+        # committed while Stripe minted it wins, and the link is dropped. The
+        # method returned is this locked copy, so the response describes the
+        # same state the link was checked against.
+        locked = TravelerPayoutMethod.objects.select_for_update(no_key=True).get(pk=method.pk)
+        if not locked.enabled or not _destination_of(locked, account):
+            raise PreferenceChanged("The payout preference changed while the link was issued.")
+        record_admin_action(
+            actor=actor,
+            action="payout_account.onboarding_link_issued",
+            target=account,
+            after={"expires_at": link.expires_at, "mode": account.provider_mode},
+        )
+    return {"account": account, "method": locked, "url": link.url,
+            "expires_at": link.expires_at}
 
 
 def _state_url(base: str, state: str) -> str:
