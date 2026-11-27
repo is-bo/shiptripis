@@ -3,8 +3,7 @@
 Covers:
 - either party cancels a pending match; nobody else can
 - list and detail visibility, including full names
-- chat eligibility for historical pre-V1 matches settled through the retired
-  `PaymentIntent`
+- the chat-eligibility endpoint
 
 V1 negotiation (propose, counter, accept, decline, withdraw) is covered in
 `test_v1_matching.py`.
@@ -19,6 +18,9 @@ from django.utils import timezone
 from rest_framework.test import APIClient, APITestCase
 
 from apps.accounts.models import User
+from apps.chat.tests.test_chat import _fund
+from apps.deals.models import Deal
+from apps.finance.tests.factories import build_scenario
 from apps.matching.models import Match, Offer
 from apps.parcels.models import DeliveryRequest, ParcelRequest
 from apps.trips.models import Trip
@@ -190,52 +192,24 @@ class MatchListAndDetailTests(APITestCase):
 
 
 class ChatEligibilityTests(APITestCase):
-    """GET /api/matches/<id>/chat-eligibility — payment-gated chat."""
+    """GET /api/matches/<id>/chat-eligibility — payment-gated chat.
+
+    The answer for every Deal state is in `test_chat_eligibility.py`; these
+    cover the endpoint itself.
+    """
 
     def setUp(self):
-        self.sender = _user("sender-chat@example.com", "1")
-        self.traveler = _user("traveler-chat@example.com", "2")
-        self.outsider = _user("outsider@example.com", "3")
-        parcel = _make_delivery(self.sender)
-        trip = _make_trip(self.traveler)
-        self.match = Match.objects.create(
-            parcel=parcel,
-            trip=trip,
-            sender=self.sender,
-            traveler=self.traveler,
-            status=Match.Status.PENDING,
-        )
-        self.offer = Offer.objects.create(
-            match=self.match,
-            proposed_by=Offer.ProposedBy.TRAVELER,
-            proposer=self.traveler,
-            base_amount_dzd=4000,
-            base_fee_dzd=0,
-            commission_dzd=1000,
-            total_dzd=5000,
-            economics_version=Offer.EconomicsVersion.LEGACY_DZD,
-            currency=Offer.Currency.DZD,
-            status=Offer.Status.PENDING,
-        )
+        self.scenario = build_scenario(prefix="chat-gate")
+        self.sender = self.scenario.sender
+        self.traveler = self.scenario.traveler
+        self.outsider = self.scenario.outsider
+        self.match = self.scenario.propose().match
 
     def _accept_offer(self):
-        self.offer.status = Offer.Status.ACCEPTED
-        self.offer.save(update_fields=["status"])
-        self.match.status = Match.Status.ACCEPTED
-        self.match.save(update_fields=["status"])
+        return self.scenario.accept()
 
-    def _succeed_payment(self):
-        from apps.payments.models import PaymentIntent
-
-        return PaymentIntent.objects.create(
-            offer=self.offer,
-            payer=self.sender,
-            amount_minor=5000,
-            currency="DZD",
-            provider=PaymentIntent.Provider.MOCK,
-            provider_intent_id=f"pi_test_{self.offer.id}",
-            status=PaymentIntent.Status.SUCCEEDED,
-        )
+    def _fund(self):
+        _fund(self.client, self._accept_offer())
 
     def test_unauth_rejected(self):
         c = APIClient()
@@ -268,27 +242,8 @@ class ChatEligibilityTests(APITestCase):
         assert r.data["eligible"] is False
         assert r.data["reason"] == "payment_pending"
 
-    def test_pending_payment_blocked(self):
-        from apps.payments.models import PaymentIntent
-
-        self._accept_offer()
-        PaymentIntent.objects.create(
-            offer=self.offer,
-            payer=self.sender,
-            amount_minor=5000,
-            currency="DZD",
-            provider=PaymentIntent.Provider.MOCK,
-            provider_intent_id=f"pi_pending_{self.offer.id}",
-            status=PaymentIntent.Status.PROCESSING,
-        )
-        c = _client(self.sender)
-        r = c.get(reverse("matches-chat-eligibility", args=[self.match.id]))
-        assert r.data["eligible"] is False
-        assert r.data["reason"] == "payment_pending"
-
-    def test_succeeded_payment_unlocks_chat_for_sender(self):
-        self._accept_offer()
-        self._succeed_payment()
+    def test_funded_deal_unlocks_chat_for_sender(self):
+        self._fund()
         c = _client(self.sender)
         r = c.get(reverse("matches-chat-eligibility", args=[self.match.id]))
         assert r.status_code == 200
@@ -299,18 +254,15 @@ class ChatEligibilityTests(APITestCase):
             "blocked_by_me": False,
         }
 
-    def test_succeeded_payment_unlocks_chat_for_traveler(self):
-        self._accept_offer()
-        self._succeed_payment()
+    def test_funded_deal_unlocks_chat_for_traveler(self):
+        self._fund()
         c = _client(self.traveler)
         r = c.get(reverse("matches-chat-eligibility", args=[self.match.id]))
         assert r.data["eligible"] is True
 
-    def test_cancelled_match_blocks_chat_even_after_payment(self):
-        self._accept_offer()
-        self._succeed_payment()
-        self.match.status = Match.Status.CANCELLED
-        self.match.save(update_fields=["status"])
+    def test_cancelled_deal_blocks_chat_even_after_payment(self):
+        self._fund()
+        Deal.objects.filter(match=self.match).update(status=Deal.Status.CANCELLED)
         c = _client(self.sender)
         r = c.get(reverse("matches-chat-eligibility", args=[self.match.id]))
         assert r.data["eligible"] is False

@@ -99,6 +99,7 @@ INSTALLED_APPS = [
     "apps.disputes",
     "apps.ratings",
     "apps.boosts",
+    # Empty shells: their last migration drops their tables on existing databases.
     "apps.payments",
     "apps.wallet",
     "apps.verification",
