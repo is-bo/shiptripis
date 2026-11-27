@@ -1,11 +1,45 @@
 You are an independent second-pass reviewer. This review is read-only: do not write, commit or push code, and do not comment on GitHub. You may read files and run read-only git commands.
 
-Review pull request #71, "N1: ask for notifications once on first open", in this repository (is-bo/shiptripis), at head `b200577afa53b0c5021cb7bc0f759b37723deba8` (round 3; round 2 was `5372776`, round 1 `6f1b858`). Use a three-dot diff against `origin/main`, and run `git fetch origin` first if the commit is missing.
+Review pull request #71, "N1: ask for notifications once on first open", in this repository (is-bo/shiptripis), at head `139a206bb1b79a990d42d8766dfb3f8e431dbff9` (round 4; round 3 was `b200577`, round 2 `5372776`, round 1 `6f1b858`). Use a three-dot diff against `origin/main`, and run `git fetch origin` first if the commit is missing.
 - The Flutter app is under `mobile/lib/`.
 - The rules are in `CLAUDE.md`, especially "Mobile rules" and the rule that strings must exist in EN/FR/MSA.
 - The package is section 4 "N1" of `docs/WASSLA_PHONE_TEST_2_PLAN.md`, and the finding is section 1.2.
 - The write-up is `docs/PHASE_N1_NOTIFICATION_FIRST_OPEN.md`.
 - The screenshots are in `docs/screenshots/n1/`.
+
+## Round 4
+Your round-3 result (`docs/handoff/astra/results/n1-astra-round3-result.md`, 4 blockers, 5 should-fixes, 1
+nit) is answered in the phase doc ("Registration order", "Files", "Tests"). Rounds 2 and 3 patched each
+case and new variants kept appearing, so round 4 replaces the mechanism rather than adding a fifth patch:
+1. **One server row per sign-in.** `SignInSession` (`apps/accounts/models.py`, migration `accounts.0008`)
+   is created when tokens are issued (`_tokens_for_user`); every token of the sign-in carries its id as
+   `sid`, rotation included. `/api/auth/refresh` uses `SessionTokenRefreshSerializer`
+   (`apps/accounts/sessions.py`), which refuses an ended sign-in. A push registration needs the sign-in
+   live, checked under `lock_account` (`apps/accounts/locks.py`), the lock sign-out (`end_session`) and
+   `end_all_sessions` take first; `PushDevice.session` is now a foreign key. `PushAccountRevocation`, the
+   `iat` cutoff and the outstanding-token blacklist loop in `end_all_sessions` are gone. Check the lock
+   order (account, then installation binding, then devices) on all four paths (register, sign-out,
+   unregister, end-all), the refresh race (a refresh that passes the check just before the sign-in ends
+   yields tokens of an ended sign-in: can any of them still do harm?), and that no other token issuer
+   bypasses `_tokens_for_user`.
+2. Blocker 1: sign-out ends the sign-in and switches off **every** device it registered, whether or not
+   the body names an installation or a number. Blocker 2: no time comparison remains. Blocker 3: real
+   sign-in, two rotations, reset, then the rotated refresh and its access token (`test_l18a_sessions.py`,
+   `RotatedSignInTests`). Blocker 4: the sign-in is part of the exact-repeat identity
+   (`PushInstallationBinding.session_id`), and an acknowledged repeat returns the binding unchanged (a
+   repeat whose device is gone is refused so the app registers again).
+3. Migration `notifications.0009` deletes push devices that predate sign-in rows (they name none; no real
+   users, CLAUDE.md). Tokens that name no sign-in no longer refresh, so every tester signs in once more.
+4. Phone: `_syncRegistration` checks `overtaken()` (account, newest attempt, signed in) after every await
+   and before numbering, sending or publishing; a failed `raisePushBindingSequence` during the 409
+   catch-up leaves `failed`; the retry starts only if still newest, and `_syncRegistration` refuses a
+   stale `expectedGeneration` at its top. The Profile button passes `onScreen` (`ModalRoute.isCurrent`),
+   checked after the count write. A request started from `deniedRequestable` on Android records
+   `afterDenial` (count at least two). Guest denial copy `pushPermissionDeniedRequestableGuest`.
+   Should-fix 5 (offline sign-out) is handled as Astra suggested option 1: the device checklist now
+   matches the best-effort contract and states the exposure (phase doc, device check 7; runbook).
+5. Tests: each blocker and each should-fix has a test that fails with its fix removed (checked by
+   mutation; the phase doc lists them and the tests rewritten because their rule changed).
 
 ## Round 3
 Your round-2 result (`docs/handoff/astra/results/n1-astra-round2-result.md`, 6 blockers and 7 should-fixes)
