@@ -537,3 +537,45 @@ weakened.
 **Known limits.** `bearerAccountId` is read only to refuse; a bearer that is not a readable JWT is not refused
 by the app (the server still decides). The second-window case is closed by `singleTask` first and by the
 bearer check as a net; neither has run on a device.
+
+## Round eight
+
+Astra 6.2 rejected head `a286b34` (`docs/handoff/astra/results/p3b-astra-round7-result.md`): 5 blockers and 5
+should-fixes. Ismail's triage for this round, which this section follows:
+
+1. **In scope, fixed here:** the photo section's Dismiss press, the session republish after an overtaken
+   sign-in, the storage-failure recovery, the stale result of a profile update, the source sheet that outlives
+   its section, and a Dismiss that can take a replacement uploaded elsewhere.
+2. **Out of scope, not fixed here:** wrong-account writes in the public-profile and discovery forms, KYC,
+   the payout cheque form, account deletion and sign-out. They are the same class of problem in screens that
+   are not the photo package. They are written up as one follow-up package in
+   `docs/handoff/WRONG_ACCOUNT_WRITES_FOLLOWUP.md`, which also says what the `MemberScope` primitive already
+   gives that package and what it still needs.
+3. **Not applicable:** anything about legacy data or upgrades. The app has never been live and has no users.
+
+| Finding | Fix | Test |
+| --- | --- | --- |
+| **Blocker: a tap on A's Dismiss (or Remove) delivered after B was published and before the next frame took B's scope** (R5-2, round-3 finding 4) | The section records the account and authentication it was last drawn for (`_drawnFor`, set in `build`); `_begin()` refuses a press unless the scope it just took is that member's. The press of a control is therefore the press of the member it was drawn for, however late it arrives | `p3b_photo_round8_test.dart` group 1: A's removal notice and A's Remove, B published through the real sign-in and **no frame pumped**, then a tap: no dialog, no DELETE, B keeps their photo; a press for the member still shown still goes through (fails when the check is removed) |
+| **Blocker: the republish after a failed sign-in assumed the shown member owns the stored credentials** (R6-6) | The session tracks which account the stored credentials belong to (`_credentialOwner`: set when a sign-in's credentials were saved, even if that sign-in was then overtaken, and when a restore confirms them; cleared when they are cleared). A failed newest sign-in is settled against it (`_settleAfterFailedSignIn`): the shown member is republished only when the credentials are theirs; credentials of a member this window did not publish are restored and shown (as a launch would, from `SessionRestoring`, because a guest's reads carry no bearer); a guest whose overtaken login saved is signed in as that login instead of staying signed out while the next launch restores it | group 3: B saves and is overtaken by a refused C: B ends up shown and A is never re-published, no PATCH went out; the same from the sign-in screen as a guest; a refusal with nothing overtaken leaves A able to act |
+| **Should-fix: a storage failure bypassed recovery** (R6-6) | `_authenticateWith` recovers from any failure, not only `ApiException`. The repository reads the answer before it saves, so an `ApiException` means nothing was written. Any other failure may have come before or after the credentials changed, so storage is asked whose they are (`bearerAccountId` of the stored access token): the shown member if they are theirs, otherwise the local session ends and what is stored is cleared | group 3: storage that fails before anything changed leaves A shown and able to act; storage that fails after the credentials changed ends the session and clears them |
+| **Should-fix: a role-context storage error after the credentials changed stranded the transition** | The role context is a convenience read again later; `_adoptRoleContextFor` is best effort and the sign-in publishes | group 3: a sign-in whose role context cannot be written still publishes |
+| **Should-fix: a refused profile update completed normally** (language screen announced "saved", name screen left) | `updatePreferredLanguage`, `setFullName` and `_updateProfile` answer `bool`: true only when the answered profile was published for the member who asked. A request out when the member left (refused, or answering for nobody) is "not applied", not a failure to show. The language screen announces success and the name screen leaves only when it is true | group 4: an update begun while B's credentials are saved is not sent and answers false (`setFullName` too); an answer coming back after B signed in answers false and changes nothing; the normal update answers true |
+| **Should-fix: the source sheet outlived its section** | `_choose` checks `mounted` right after the sheet returns, before `_pick`, which now takes its scope as a required argument. The two buttons of an account with no photo take it through `_take` | group 1: the session expires under the open sheet, a source is chosen: no picker, no exception |
+| **Should-fix: Dismiss was an unconditional DELETE, so a replacement uploaded elsewhere was deleted with the notice** | `DELETE /api/me/photo?version=<v>` names the photo the member was looking at (a removed photo's own version is in `/api/me` already; the app now keeps it, and no longer reads a removed photo without one). If the stored photo has another version the server changes nothing and answers 409 `profile_photo_changed`; the app reads the profile again and says nothing. The removal of an active photo sends its version too. Without `version` the server behaves as before. This is a small server change in `apps/accounts/photos.py` and `views.py`, with tests in `test_p3a_profile_photos.py` | group 2: the DELETE carries the notice's version, and a removal's; a 409 shows no error and shows the new photo; a removed photo with no version is not a photo. Server: a versioned removal of an old version changes nothing (409), the current version goes, none is a no-op |
+| **Should-fix: round-7 group 1 never stored B's bearer** (R6-9) | `FakeTokenStore` records the access token a sign-in saves (`savedAccess`) and answers it from `readAccess` (the refresh token stays as the test set it, because whether one exists decides what a sign-out sends); the new tests sign in with real-shaped access tokens and answer `/api/me` by the bearer they carry, so "B's bearer is stored while A is published" is the actual state | `p3b_photo_round8_test.dart` group 3 |
+
+**Tests changed, and why.** `removePhoto` and `ProfilePhotoController.remove` take the shown version, so the
+direct calls in `p3b_photo_round4_test.dart`, `p3b_photo_round6_test.dart`, `p3b_photo_round7_test.dart`,
+`p3b_photo_state_test.dart` and `removeOwnPhoto` in `test/support/photo_rig.dart` pass one. A removed photo now
+needs a version to be a photo (the server always sends it; the contract test already had one). No assertion
+was changed, and no test was skipped, deleted or weakened.
+
+**Mutation checks.** Removing the drawn-for check fails the first two press tests, removing the `mounted`
+check fails the sheet test; replacing the owner-based settle with "republish whoever is shown" fails the
+overtaken-sign-in test and the end-the-session test; making a stale update answer true fails the group 4 test.
+
+**Known limits.** The tracked owner is per window: a second window of the app is closed by `singleTask`, and
+a bearer that is not a readable JWT cannot be tied to an account by the app. The server-side conditional
+DELETE and its tests run in the Django CI job (Django is not installed in the builder's sandbox). The
+language and name screens' use of the new answer is plain code, covered through the session tests rather
+than screen tests.

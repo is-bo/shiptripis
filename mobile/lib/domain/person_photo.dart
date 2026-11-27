@@ -58,10 +58,12 @@ class OwnPhoto {
       removedAt = null,
       reason = null;
 
-  const OwnPhoto.removed({this.removedAt, this.reason})
-    : state = OwnPhotoState.removed,
-      version = null,
-      url = null;
+  const OwnPhoto.removed({
+    required String this.version,
+    this.removedAt,
+    this.reason,
+  }) : state = OwnPhotoState.removed,
+       url = null;
 
   /// Null for no photo, and for a state this build does not know.
   static OwnPhoto? maybe(Object? raw) {
@@ -74,18 +76,24 @@ class OwnPhoto {
         ),
         _ => null,
       },
-      OwnPhotoState.removed => OwnPhoto.removed(
-        removedAt: readDate(json?['removed_at']),
-        // May be empty: render the generic notice then, never a blank line.
-        reason: readString(json?['reason']),
-      ),
+      OwnPhotoState.removed => switch (readString(json?['version'])) {
+        final version? when version.isNotEmpty => OwnPhoto.removed(
+          version: version,
+          removedAt: readDate(json?['removed_at']),
+          // May be empty: render the generic notice then, never a blank line.
+          reason: readString(json?['reason']),
+        ),
+        _ => null,
+      },
       null => null,
     };
   }
 
   final OwnPhotoState state;
 
-  /// The active photo's version, whether or not it has an address.
+  /// The photo's version: of the active photo, whether or not it has an
+  /// address, and of the one Wassla removed. It names the photo a removal or a
+  /// dismissal is for, so one the member never saw is not taken with it.
   final String? version;
 
   /// Null while the photo is active but the server could not sign it.

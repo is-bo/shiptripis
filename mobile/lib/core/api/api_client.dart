@@ -262,6 +262,7 @@ class ApiClient {
     String path, {
     int? expectedIdentity,
     int? expectedAccount,
+    Json? query,
     CancelToken? cancelToken,
   }) async {
     if (expectedIdentity != null &&
@@ -271,6 +272,7 @@ class ApiClient {
     await _write(
       (identity) => _dio.delete<dynamic>(
         path,
+        queryParameters: _clean(query),
         cancelToken: cancelToken,
         options: _requestOptions(identity, account: expectedAccount),
       ),

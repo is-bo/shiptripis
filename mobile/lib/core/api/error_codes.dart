@@ -65,6 +65,7 @@ class ApiErrorCode {
   static const profilePhotoMediaTypeUnsupported = ApiErrorCode(
     'profile_photo_media_type_unsupported',
   );
+  static const profilePhotoChanged = ApiErrorCode('profile_photo_changed');
   static const profilePhotoStorageUnavailable = ApiErrorCode(
     'profile_photo_storage_unavailable',
   );

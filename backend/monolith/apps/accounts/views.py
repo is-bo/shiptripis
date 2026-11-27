@@ -407,7 +407,12 @@ class MePhotoView(APIView):
         return Response(photos.own_view(photo))
 
     def delete(self, request: Request) -> Response:
-        photos.remove_own_photo(request.user)
+        try:
+            photos.remove_own_photo(
+                request.user, version=request.query_params.get("version") or None
+            )
+        except photos.PhotoRefused as exc:
+            return Response(exc.payload, status=exc.status)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

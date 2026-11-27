@@ -1,5 +1,17 @@
 # Waçla V1 Implementation Status
 
+## Wassla: P3B round eight, the press, the stored owner and the shown version (2026-11-27)
+
+- Astra rejected `a286b34` (5 blockers, 5 should-fixes). The app, plus one small server change; nothing
+  deployed. In scope by Ismail's triage: a press is refused unless the control was drawn for the member who is
+  signed in now; a failed sign-in is settled against the account the stored credentials belong to (an
+  overtaken sign-in that saved owns them), for any failure, with storage failures recovered or the local session
+  ended; profile updates answer whether they were applied; the source sheet checks `mounted`; Dismiss and Remove
+  name the photo that was shown (`DELETE /api/me/photo?version=`, 409 `profile_photo_changed`). The wrong-account
+  writes of KYC, cheque, account deletion, sign-out and the public-profile forms are outside the photo package and
+  are written up in `docs/handoff/WRONG_ACCOUNT_WRITES_FOLLOWUP.md`. Detail:
+  `docs/PHASE_P3B_PROFILE_PHOTOS_APP.md`, "Round eight".
+
 ## Wassla: P3B round seven, one identity per action (2026-11-27)
 
 - Astra rejected `ead30e2` (3 blockers, 6 should-fixes), each a new account-switch race. The app only;

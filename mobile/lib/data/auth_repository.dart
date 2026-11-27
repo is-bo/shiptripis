@@ -182,8 +182,16 @@ class AuthRepository {
 
   /// Removes the photo, or dismisses the notice that Wassla removed it. The
   /// server answers 204 either way, and also when there was nothing.
-  Future<void> removePhoto({required MemberScope scope}) => _api.deleteVoid(
+  ///
+  /// [shownVersion] is the photo the member was looking at: if another device
+  /// has put a different one up since, the server changes nothing and answers
+  /// `profile_photo_changed`.
+  Future<void> removePhoto({
+    required MemberScope scope,
+    required String shownVersion,
+  }) => _api.deleteVoid(
     '/api/me/photo',
+    query: {'version': shownVersion},
     expectedIdentity: scope.credentials,
     expectedAccount: scope.accountId,
   );

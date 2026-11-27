@@ -471,7 +471,7 @@ void main() {
 
       await tester.runAsync(() async {
         await expectLater(
-          session.removePhoto(scope: pressed),
+          session.removePhoto(scope: pressed, shownVersion: 'v1'),
           throwsA(isA<ApiException>()),
         );
       });

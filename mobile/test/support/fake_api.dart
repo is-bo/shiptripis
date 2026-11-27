@@ -205,10 +205,17 @@ class FakeTokenStore extends TokenStore {
   String? _locale;
   String? _roleContext;
 
+  /// The access token a sign-in saved, as storage would hold it; null until
+  /// one did (and then [readAccess] answers its default). Only the bearer is
+  /// kept: whether a refresh token exists decides what a sign-out sends, and
+  /// tests rely on [refresh] for that.
+  String? savedAccess;
+
   @override
   Future<void> save({required String access, required String refresh}) async {
     invalidateIdentity();
     accountSnapshot = null;
+    savedAccess = access;
   }
 
   @override
@@ -228,7 +235,7 @@ class FakeTokenStore extends TokenStore {
   Future<void> deleteAccountSnapshot() async => accountSnapshot = null;
 
   @override
-  Future<String?> readAccess() async => 'access-token';
+  Future<String?> readAccess() async => savedAccess ?? 'access-token';
 
   @override
   Future<String?> readRefresh() async => refresh;
@@ -254,6 +261,7 @@ class FakeTokenStore extends TokenStore {
   }) async {
     if (identityGeneration != expectedIdentityGeneration) return false;
     accountSnapshot = null;
+    savedAccess = access;
     return true;
   }
 
@@ -302,6 +310,7 @@ class FakeTokenStore extends TokenStore {
   Future<void> clear() async {
     invalidateIdentity();
     accountSnapshot = null;
+    savedAccess = null;
   }
 
   @override
@@ -309,6 +318,7 @@ class FakeTokenStore extends TokenStore {
     if (identityGeneration != expectedIdentityGeneration) return false;
     invalidateIdentity();
     accountSnapshot = null;
+    savedAccess = null;
     return true;
   }
 

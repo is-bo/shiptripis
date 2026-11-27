@@ -350,8 +350,13 @@ Future<bool> pickPhoto(ProviderContainer container, ImageSource source) async {
 }
 
 /// The press of a removal; see [pickPhoto]. Null when nothing could begin.
-Future<ProfilePhotoRemoval?> removeOwnPhoto(ProviderContainer container) async {
+Future<ProfilePhotoRemoval?> removeOwnPhoto(
+  ProviderContainer container, {
+  String shownVersion = 'v1',
+}) async {
   final scope = container.read(sessionProvider.notifier).beginAction();
   if (scope == null) return null;
-  return container.read(profilePhotoProvider.notifier).remove(scope);
+  return container
+      .read(profilePhotoProvider.notifier)
+      .remove(scope, shownVersion: shownVersion);
 }

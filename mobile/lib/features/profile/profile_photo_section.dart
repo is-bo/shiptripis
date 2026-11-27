@@ -49,10 +49,26 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
   ProfilePhotoController get _controller =>
       ref.read(profilePhotoProvider.notifier);
 
+  /// The member and sign-in this section was last drawn for. A press is the
+  /// member's only if it is still theirs: a tap can arrive after another
+  /// member was published and before the next frame replaced the controls.
+  AccountSession? _drawnFor;
+
   /// The member this press is for, taken when the member first touches a
   /// control and carried through every sheet and dialog after it: a choice made
-  /// in a sheet that another member's sign-in found open is not theirs.
-  MemberScope? _begin() => ref.read(sessionProvider.notifier).beginAction();
+  /// in a sheet that another member's sign-in found open is not theirs. Null
+  /// when the control pressed was drawn for anyone else than who is signed in.
+  MemberScope? _begin() {
+    final scope = ref.read(sessionProvider.notifier).beginAction();
+    final drawn = _drawnFor;
+    if (scope == null ||
+        drawn == null ||
+        scope.accountId != drawn.accountId ||
+        scope.session != drawn.generation) {
+      return null;
+    }
+    return scope;
+  }
 
   Future<void> _choose() async {
     final scope = _begin();
@@ -79,14 +95,20 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
         );
       },
     );
-    if (source != null) await _pick(source, scope: scope);
+    // The sheet may have been open while the session ended and this section
+    // went away with it.
+    if (source == null || !mounted) return;
+    await _pick(source, scope);
   }
 
-  Future<void> _pick(ImageSource source, {MemberScope? scope}) async {
+  Future<void> _take(ImageSource source) async {
+    final scope = _begin();
+    if (scope != null) await _pick(source, scope);
+  }
+
+  Future<void> _pick(ImageSource source, MemberScope scope) async {
     final l = L.of(context);
-    final owner = scope ?? _begin();
-    if (owner == null) return;
-    final saved = await _controller.pick(source, owner);
+    final saved = await _controller.pick(source, scope);
     if (saved && mounted) AppSnack.success(context, l.profilePhotoUpdated);
   }
 
@@ -96,7 +118,12 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
     if (saved && mounted) AppSnack.success(context, l.profilePhotoUpdated);
   }
 
-  Future<void> _remove({required bool confirm}) async {
+  /// [shownVersion] is the photo the control was drawn for, so a photo the
+  /// member put up elsewhere meanwhile is not removed in its place.
+  Future<void> _remove({
+    required bool confirm,
+    required String shownVersion,
+  }) async {
     final l = L.of(context);
     if (ref.read(profilePhotoProvider).busy) return;
     // Before the dialog, not after it: the removal belongs to the member whose
@@ -113,7 +140,7 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
       );
       if (!ok || !mounted) return;
     }
-    final removal = await _controller.remove(scope);
+    final removal = await _controller.remove(scope, shownVersion: shownVersion);
     if (!mounted) return;
     final error = removal.error;
     if (error != null) {
@@ -144,7 +171,13 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
     final text = Theme.of(context).textTheme;
     final account = widget.account;
     final photo = ref.watch(profilePhotoProvider);
+    final session = ref.watch(accountSessionProvider);
+    _drawnFor = session != null && session.accountId == account.id
+        ? session
+        : null;
     final own = account.photo;
+    // The photo, or the notice for it, this build of the section is drawn for.
+    final shown = own?.version;
     final name = account.fullName.trim().isEmpty
         ? account.email
         : account.fullName;
@@ -204,7 +237,9 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
                   tone: StatusTone.bad,
                   icon: Icons.no_photography_outlined,
                   actionLabel: l.profilePhotoDismiss,
-                  onAction: photo.busy ? null : () => _remove(confirm: false),
+                  onAction: photo.busy || shown == null
+                      ? null
+                      : () => _remove(confirm: false, shownVersion: shown),
                 ),
               ],
               if (failure != null) ...[
@@ -238,7 +273,9 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
                   variant: AppButtonVariant.tertiary,
                   icon: Icons.delete_outline_rounded,
                   isLoading: photo.removing,
-                  onPressed: photo.busy ? null : () => _remove(confirm: true),
+                  onPressed: photo.busy || shown == null
+                      ? null
+                      : () => _remove(confirm: true, shownVersion: shown),
                 ),
               ] else ...[
                 AppButton(
@@ -247,7 +284,7 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
                   icon: Icons.photo_camera_outlined,
                   onPressed: photo.busy
                       ? null
-                      : () => _pick(ImageSource.camera),
+                      : () => _take(ImageSource.camera),
                 ),
                 const SizedBox(height: AppSpace.sm),
                 AppButton(
@@ -256,7 +293,7 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
                   icon: Icons.photo_library_outlined,
                   onPressed: photo.busy
                       ? null
-                      : () => _pick(ImageSource.gallery),
+                      : () => _take(ImageSource.gallery),
                 ),
               ],
               if (photo.picked != null && !photo.uploading) ...[

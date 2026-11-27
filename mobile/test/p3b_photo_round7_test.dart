@@ -306,7 +306,7 @@ void main() {
         await session.signIn(email: 'b@example.test', password: 'password-b');
         return rig.container
             .read(profilePhotoProvider.notifier)
-            .remove(scopeOfA);
+            .remove(scopeOfA, shownVersion: 'v1');
       });
 
       expect(result!.isStale, isTrue);

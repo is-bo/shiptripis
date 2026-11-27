@@ -115,8 +115,11 @@ class _AccountNameScreenState extends ConsumerState<AccountNameScreen> {
       _error = null;
     });
     try {
-      await ref.read(sessionProvider.notifier).setFullName(_name.text);
-      if (mounted) _leave();
+      final named = await ref
+          .read(sessionProvider.notifier)
+          .setFullName(_name.text);
+      // Not named for this member: the form is not theirs to leave.
+      if (mounted && named) _leave();
     } on ApiException catch (error) {
       if (!mounted) return;
       setState(() => _error = describeFailure(context, error).body);

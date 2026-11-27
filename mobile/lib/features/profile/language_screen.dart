@@ -74,10 +74,12 @@ class _LanguageScreenState extends ConsumerState<LanguageScreen> {
       // stranger reads in an email about somebody's money; showing it as
       // changed before the server has stored it would be a lie the user
       // cannot check.
-      await ref
+      final saved = await ref
           .read(sessionProvider.notifier)
           .updatePreferredLanguage(language);
-      if (!mounted) return;
+      // Not saved for this member (they signed out, or someone else signed in,
+      // while it was out): nothing was stored here, so nothing is announced.
+      if (!mounted || !saved) return;
       AppSnack.success(context, l.profileEmailLanguageSaved);
     } on ApiException catch (error) {
       if (!mounted) return;

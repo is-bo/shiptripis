@@ -368,6 +368,7 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 30));
         await session.removePhoto(
           scope: rig.container.read(sessionProvider.notifier).beginAction()!,
+          shownVersion: 'v1',
         );
         gate.complete(FakeResponse(200, meFixture(photo: photoActive('v1'))));
         await refresh;
@@ -386,6 +387,7 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 30));
         await session.removePhoto(
           scope: rig.container.read(sessionProvider.notifier).beginAction()!,
+          shownVersion: 'v1',
         );
         gate.complete(
           FakeResponse(200, {
@@ -413,6 +415,7 @@ void main() {
         final session = rig.container.read(sessionProvider.notifier);
         await session.removePhoto(
           scope: rig.container.read(sessionProvider.notifier).beginAction()!,
+          shownVersion: 'v1',
         );
         await session.refreshAccount();
       });

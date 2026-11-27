@@ -557,6 +557,7 @@ void main() {
               scope: rig.container
                   .read(sessionProvider.notifier)
                   .beginAction()!,
+              shownVersion: 'v1',
             );
           } on ApiException {
             // The server refused.

@@ -27,6 +27,7 @@
 /// have been meant for another pick.
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -474,16 +475,29 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
   /// member [scope] names (captured by the screen when the member first pressed,
   /// before any confirmation): a confirmation that was left open while another
   /// member signed in removes nothing ([ProfilePhotoRemoval.stale]).
-  Future<ProfilePhotoRemoval> remove(MemberScope scope) async {
+  ///
+  /// [shownVersion] is the photo the member was looking at when they pressed.
+  /// If another device has put a different one up since, nothing is removed:
+  /// the profile is read again to show what is there and the answer is stale.
+  Future<ProfilePhotoRemoval> remove(
+    MemberScope scope, {
+    required String shownVersion,
+  }) async {
     if (state.busy) return const ProfilePhotoRemoval.stale();
     final launch = _launch(scope);
     if (!_live(launch)) return const ProfilePhotoRemoval.stale();
     state = state.copyWith(removing: true);
     try {
-      await ref.read(sessionProvider.notifier).removePhoto(scope: scope);
+      await ref
+          .read(sessionProvider.notifier)
+          .removePhoto(scope: scope, shownVersion: shownVersion);
     } on ApiException catch (error) {
       if (_live(launch)) {
         state = state.copyWith(removing: false);
+        if (error.code == ApiErrorCode.profilePhotoChanged) {
+          unawaited(ref.read(sessionProvider.notifier).refreshAccount());
+          return const ProfilePhotoRemoval.stale();
+        }
         return ProfilePhotoRemoval.failed(error);
       }
       // The credentials moved while the request was out (a sign-in of the same

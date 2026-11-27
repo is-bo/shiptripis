@@ -19,6 +19,7 @@ import '../../domain/communication_language.dart';
 import '../../domain/person_photo.dart';
 import '../api/api_client.dart';
 import '../api/api_exception.dart';
+import '../api/bearer_account.dart';
 import '../api/error_codes.dart';
 import 'member_scope.dart';
 import 'token_store.dart';
@@ -190,6 +191,13 @@ class SessionController extends Notifier<SessionState> {
   int _photoApplied = 0;
   Timer? _revalidation;
 
+  /// The account the credentials in storage belong to, as far as this window
+  /// has seen them committed: set when a sign-in's credentials were saved or a
+  /// restore confirmed them, cleared when they are cleared. A failed sign-in
+  /// is settled against it, not against whoever happens to be displayed: a
+  /// sign-in that was overtaken after it saved still owns the credentials.
+  int? _credentialOwner;
+
   /// Monotonic; [_accountReadAt] is measured on it.
   final Stopwatch _clock = Stopwatch()..start();
   Duration? _accountReadAt;
@@ -283,6 +291,7 @@ class SessionController extends Notifier<SessionState> {
 
     if (generation != _generation) return;
     if (refresh == null) {
+      _credentialOwner = null;
       state = const SessionSignedOut();
       return;
     }
@@ -290,6 +299,7 @@ class SessionController extends Notifier<SessionState> {
     final cached = await _readSnapshot();
     if (generation != _generation) return;
     if (cached != null) {
+      _credentialOwner = cached.id;
       state = SessionSignedIn(
         cached,
         generation: generation,
@@ -322,6 +332,7 @@ class SessionController extends Notifier<SessionState> {
         // read to a fresh generation rather than let one survive the swap.
         account = answered;
         _generation++;
+        _credentialOwner = account.id;
         state = SessionSignedIn(
           account,
           generation: _generation,
@@ -331,6 +342,7 @@ class SessionController extends Notifier<SessionState> {
         // The member may have changed their photo while this answer was on
         // its way: the newer photo is kept.
         account = _withNewestPhoto(answered, photoWrites);
+        _credentialOwner = account.id;
         state = SessionSignedIn(
           account,
           generation: generation,
@@ -373,6 +385,7 @@ class SessionController extends Notifier<SessionState> {
       await _tokens.clear();
       if (generation == _generation) {
         _generation++;
+        _credentialOwner = null;
         state = const SessionSignedOut();
       }
     }
@@ -470,25 +483,17 @@ class SessionController extends Notifier<SessionState> {
     final Account account;
     try {
       account = await authenticate(identity);
-    } on ApiException {
-      // The server or the network refused before any credential was written
-      // (the repository parses the answer before it saves), so whoever was
-      // signed in still is, on the credentials they had. This sign-in already
-      // moved the store's generation, so the member is published again under
-      // the generation they now hold; without that every action of theirs would
-      // find the credentials "changed" and refuse until the next sign-in.
-      final still = state;
-      if (generation == _generation &&
-          still is SessionSignedIn &&
-          _tokens.identityGeneration == identity) {
-        state = SessionSignedIn(
-          still.account,
-          generation: generation,
-          identity: identity,
-        );
-      }
+    } on Object catch (error) {
+      await _settleAfterFailedSignIn(
+        generation,
+        identity,
+        credentialsUncertain: error is! ApiException,
+      );
       rethrow;
     }
+    // Saved: from here the stored credentials are this account's, whether or
+    // not a newer sign-in overtakes this one before it is published.
+    _credentialOwner = account.id;
     if (generation != _generation) return;
     await _adoptRoleContextFor(account);
     if (generation != _generation) return;
@@ -501,6 +506,73 @@ class SessionController extends Notifier<SessionState> {
     unawaited(_remember(account, identity));
   }
 
+  /// Brings what is published in line with the credentials in storage after a
+  /// sign-in that did not end in a published member, when it is still the
+  /// newest one (a newer sign-in settles itself).
+  ///
+  /// The attempt moved the store's generation already, so whoever is shown
+  /// must be published again under the generation the credentials now carry,
+  /// or every action of theirs would find them "changed" and refuse. But only
+  /// if the credentials are theirs: an earlier sign-in that was overtaken
+  /// after it saved owns them, and then that member is the one to show.
+  ///
+  /// A refusal before anything was written ([credentialsUncertain] false)
+  /// left the credentials as they were. A storage failure may have come before
+  /// or after the credentials changed, so storage is asked whose they are.
+  /// Credentials that cannot be tied to the member shown end the local
+  /// session: nobody is signed in, and nothing is left half written.
+  Future<void> _settleAfterFailedSignIn(
+    int generation,
+    int identity, {
+    required bool credentialsUncertain,
+  }) async {
+    if (generation != _generation) return;
+    int? owner = _credentialOwner;
+    if (credentialsUncertain) {
+      try {
+        final access = await _tokens.readAccess().timeout(_storageBudget);
+        owner = access == null ? null : bearerAccountId(access);
+      } on Object {
+        owner = null;
+      }
+    }
+    if (generation != _generation) return;
+    final shown = state;
+    if (owner != null &&
+        shown is SessionSignedIn &&
+        shown.account.id == owner) {
+      _credentialOwner = owner;
+      state = SessionSignedIn(
+        shown.account,
+        generation: generation,
+        identity: identity,
+      );
+      return;
+    }
+    if (owner != null && !credentialsUncertain) {
+      // Saved by a sign-in this window did not publish: show that member, as a
+      // launch would. Restoring, not signed out: a guest's reads carry no
+      // bearer, and this one asks the server whose the credentials are.
+      state = const SessionRestoring();
+      unawaited(restore());
+      return;
+    }
+    if (shown is SessionSignedIn || credentialsUncertain) {
+      _generation++;
+      _credentialOwner = null;
+      state = const SessionSignedOut();
+      if (credentialsUncertain) unawaited(_clearQuietly(identity));
+    }
+  }
+
+  Future<void> _clearQuietly(int identity) async {
+    try {
+      await _tokens.clearIfIdentityCurrent(identity);
+    } on Object {
+      // Nothing more can be done about a keystore that cannot be written.
+    }
+  }
+
   /// Changes the language ShipTrip writes to this account in.
   ///
   /// Deliberately not swallowed the way [refreshAccount] is: this one is a
@@ -509,7 +581,11 @@ class SessionController extends Notifier<SessionState> {
   /// accepted. The state moves only once the server has answered, and it moves
   /// to the profile the server returned — never to the value that was asked
   /// for.
-  Future<void> updatePreferredLanguage(CommunicationLanguage language) =>
+  ///
+  /// True when the member's profile now shows what the server stored. False
+  /// when nothing was applied because the member signed out or another member
+  /// signed in meanwhile: there is nothing for the screen to confirm.
+  Future<bool> updatePreferredLanguage(CommunicationLanguage language) =>
       _updateProfile(() => _auth.updateProfile(preferredLanguage: language));
 
   /// Names an account that has no name: a social sign-in that gave none.
@@ -518,12 +594,19 @@ class SessionController extends Notifier<SessionState> {
   /// answers `name_already_set` (the name arrived another way, such as a
   /// later sign-in that carried it) the account is re-read and the step is
   /// done, the same as a success. Any other failure is the screen's to show.
-  Future<void> setFullName(String fullName) async {
+  ///
+  /// True when the step is done for the member who asked, false when that
+  /// member is no longer the one signed in (see [updatePreferredLanguage]).
+  Future<bool> setFullName(String fullName) async {
+    final scope = beginAction();
     try {
-      await _updateProfile(() => _auth.updateProfile(fullName: fullName));
+      return await _updateProfile(
+        () => _auth.updateProfile(fullName: fullName),
+      );
     } on ApiException catch (error) {
-      if (error.code != ApiErrorCode.nameAlreadySet) rethrow;
+      if (error.code != ApiErrorCode.nameAlreadySet || scope == null) rethrow;
       await refreshAccount();
+      return isCurrent(scope);
     }
   }
 
@@ -555,11 +638,16 @@ class SessionController extends Notifier<SessionState> {
   ///
   /// [scope] is as for [uploadPhoto]: nothing is sent when it is no longer
   /// current.
-  Future<void> removePhoto({required MemberScope scope}) =>
-      _updatePhoto(scope, () async {
-        await _auth.removePhoto(scope: scope);
-        return null;
-      });
+  ///
+  /// [shownVersion] is the photo the member was looking at, see
+  /// `AuthRepository.removePhoto`.
+  Future<void> removePhoto({
+    required MemberScope scope,
+    required String shownVersion,
+  }) => _updatePhoto(scope, () async {
+    await _auth.removePhoto(scope: scope, shownVersion: shownVersion);
+    return null;
+  });
 
   Future<void> _updatePhoto(
     MemberScope scope,
@@ -595,17 +683,26 @@ class SessionController extends Notifier<SessionState> {
 
   /// Applies a profile change the server answered with the whole profile.
   /// The state moves only once the server has answered, and to the profile it
-  /// returned, never to the value that was asked for.
-  Future<void> _updateProfile(Future<Account> Function() update) async {
+  /// returned, never to the value that was asked for. False when it did not
+  /// move because the member who asked is no longer the one signed in.
+  Future<bool> _updateProfile(Future<Account> Function() update) async {
     final scope = beginAction();
-    if (scope == null) return;
+    if (scope == null) return false;
     final photoWrites = _photoApplied;
-    final answered = await update();
-    if (isCurrent(scope) && answered.id == scope.accountId) {
-      final account = _withNewestPhoto(answered, photoWrites);
-      _publishProfile(account);
-      unawaited(_remember(account, scope.credentials));
+    final Account answered;
+    try {
+      answered = await update();
+    } on ApiException {
+      // A request that was out when the member left is refused or answers for
+      // nobody here: that is not a failure of theirs to show.
+      if (!isCurrent(scope)) return false;
+      rethrow;
     }
+    if (!isCurrent(scope) || answered.id != scope.accountId) return false;
+    final account = _withNewestPhoto(answered, photoWrites);
+    _publishProfile(account);
+    unawaited(_remember(account, scope.credentials));
+    return true;
   }
 
   /// Replaces the published profile of the member who is signed in, keeping the
@@ -655,6 +752,7 @@ class SessionController extends Notifier<SessionState> {
     // a sign-out that can fail is not a sign-out.
     _generation++;
     _revalidation?.cancel();
+    _credentialOwner = null;
     state = const SessionSignedOut();
     // In the same turn as the tap: from here on no response or snapshot
     // write started under this login is accepted.
@@ -676,6 +774,7 @@ class SessionController extends Notifier<SessionState> {
   Future<void> accountDeleted() async {
     _generation++;
     _revalidation?.cancel();
+    _credentialOwner = null;
     state = const SessionSignedOut(becauseDeleted: true);
     final identity = _tokens.invalidateIdentity();
     try {
@@ -699,6 +798,7 @@ class SessionController extends Notifier<SessionState> {
     if (state is SessionSignedOut) return;
     _generation++;
     _revalidation?.cancel();
+    _credentialOwner = null;
     state = const SessionSignedOut(becauseExpired: true);
   }
 
@@ -714,14 +814,22 @@ class SessionController extends Notifier<SessionState> {
   /// Picks the starting context for a freshly authenticated account: the
   /// remembered choice when it is still permitted, otherwise whichever side
   /// the account can actually use.
+  ///
+  /// Best effort. It runs after the credentials are saved, so a keystore that
+  /// cannot keep the choice must not undo the sign-in: the account's own role
+  /// decides what is shown, and the choice is read again the next time.
   Future<void> _adoptRoleContextFor(Account account) async {
-    final stored = RoleContext.tryParse(await _tokens.readRoleContext());
-    final resolved = switch (account.role) {
-      AccountRole.sender => RoleContext.sender,
-      AccountRole.traveler => RoleContext.traveler,
-      _ => stored ?? RoleContext.sender,
-    };
-    await _tokens.writeRoleContext(resolved.wire);
+    try {
+      final stored = RoleContext.tryParse(await _tokens.readRoleContext());
+      final resolved = switch (account.role) {
+        AccountRole.sender => RoleContext.sender,
+        AccountRole.traveler => RoleContext.traveler,
+        _ => stored ?? RoleContext.sender,
+      };
+      await _tokens.writeRoleContext(resolved.wire);
+    } on Object {
+      // See above.
+    }
   }
 }
 
