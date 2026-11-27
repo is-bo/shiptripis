@@ -30,6 +30,7 @@ from apps.core.financial_locks import lock_request_graph
 from apps.parcels.models import DeliveryRequest, ParcelRequest
 
 from .models import (
+    LIVE_CHECKOUT,
     PaymentAttempt,
     PaymentOrder,
     PaymentProviderEvent,
@@ -209,15 +210,22 @@ def handle_payment_grace_release(payload: dict) -> str:
 
 
 def handle_attempt_expiry(payload: dict) -> str:
-    """Close a hosted checkout the customer never completed.
+    """End a hosted checkout's attempt once its time is up.
 
-    The attempt ends only once its provider confirms its checkout closed
-    (`expire_checkout_attempt`), so the order never opens a second checkout
-    beside one that can still collect (G1).
+    The attempt ends only once its provider confirms its checkout can take no
+    payment (`expire_checkout_attempt`), so the order never opens a second
+    checkout beside one that can still collect. While a payment is being made
+    or settling through it, its settle job follows it to its outcome (G1).
     """
 
     from .providers import ProviderError
-    from .services import CHECKOUT_OPENING_WINDOW, expire_checkout_attempt
+    from .services import (
+        CHECKOUT_COLLECTING_POLL,
+        CHECKOUT_OPENING_WINDOW,
+        CHECKOUT_SETTLING_POLL,
+        _arm_checkout_settle,
+        expire_checkout_attempt,
+    )
 
     attempt_id = payload.get("attempt_id")
     if not isinstance(attempt_id, int):
@@ -247,43 +255,35 @@ def handle_attempt_expiry(payload: dict) -> str:
             code="attempt_opening",
             delay=CHECKOUT_OPENING_WINDOW,
         )
+    if result in ("attempt_settling", "attempt_collecting"):
+        poll = (
+            CHECKOUT_SETTLING_POLL
+            if result == "attempt_settling"
+            else CHECKOUT_COLLECTING_POLL
+        )
+        _arm_checkout_settle(attempt_id, run_at=timezone.now() + poll)
     return result
 
 
-def handle_checkout_close(payload: dict) -> str:
-    """Close the checkout of an attempt that ended with its order (G1).
+def handle_provider_reconcile(payload: dict) -> str:
+    """Settle one stored checkout: drive it to a fate its provider confirms (G1).
 
-    `cancel_order` and `close_order_to_collection` end the attempt at once and
-    leave this job to make its provider stop the checkout a payer may still
-    hold. Retried until the provider confirms.
+    Providers do not guarantee webhook delivery, so this reads the provider's
+    own answer and records it through the path a webhook takes
+    (`settle_checkout`). The job completes only once the checkout can take no
+    further payment, its outcome recorded. Until then it is deferred, or
+    retried while the provider answers nothing usable, and a checkout left
+    live without a pending settle job is armed again by the job loop
+    (`arm_live_checkouts`). It never repeats a create.
     """
 
     from .providers import ProviderError
-    from .services import close_ended_checkout
-
-    attempt_id = payload.get("attempt_id")
-    if not isinstance(attempt_id, int):
-        raise PermanentJobError(
-            "checkout_close needs an integer attempt_id.", code="invalid_payload"
-        )
-    try:
-        return close_ended_checkout(attempt_id=attempt_id)
-    except ProviderError as exc:
-        raise RetryableJobError(
-            "The provider has not confirmed the checkout closed.", code=exc.code
-        ) from exc
-
-
-def handle_provider_reconcile(payload: dict) -> str:
-    """Ask the provider what really happened, for a webhook that never came.
-
-    Providers do not guarantee delivery, so an integration that only listens
-    will eventually strand a paid order. This polls the provider's own API and
-    feeds the answer through the same reconciliation path a webhook uses.
-    """
-
-    from .providers import ProviderError, ProviderUnavailable, get_gateway
-    from .services import CHECKOUT_OPENING_WINDOW, reconcile_attempt
+    from .services import (
+        CHECKOUT_COLLECTING_POLL,
+        CHECKOUT_OPENING_WINDOW,
+        CHECKOUT_SETTLING_POLL,
+        settle_checkout,
+    )
 
     attempt_id = payload.get("attempt_id")
     if not isinstance(attempt_id, int):
@@ -293,13 +293,9 @@ def handle_provider_reconcile(payload: dict) -> str:
     attempt = PaymentAttempt.objects.filter(pk=attempt_id).first()
     if attempt is None:
         return "attempt_missing"
-    if attempt.status == PaymentAttempt.Status.SUCCEEDED:
-        return "already_succeeded"
     if not attempt.provider_session_id:
         # No checkout was ever stored for it, so its URL never left the server
-        # and nobody could pay it: there is nothing at the provider to learn.
-        # This job never repeats a create, so it never brings back a checkout
-        # nobody may hold (G1).
+        # and nobody could pay it.
         if attempt.status in PaymentAttempt.OPEN_STATUSES:
             raise JobDeferred(
                 "The attempt's checkout is still being opened.",
@@ -308,44 +304,36 @@ def handle_provider_reconcile(payload: dict) -> str:
             )
         return "checkout_never_handed_out"
     try:
-        gateway = get_gateway(attempt.provider)
-        from .mode_safety import require_object_mode
-
-        require_object_mode(attempt.provider_mode)
-        snapshot = gateway.fetch_attempt(
-            provider_session_id=attempt.provider_session_id,
-            provider_payment_id=attempt.provider_payment_id,
-        )
-        from .mode_safety import event_mode_allowed
-
-        if attempt.provider in ("stripe", "chargily") and not event_mode_allowed(snapshot.raw):
-            raise PermanentJobError("Provider returned another or unknown payment mode.", code="provider_mode_mismatch")
-    except ProviderUnavailable as exc:
-        raise RetryableJobError(
-            "Provider reconciliation is temporarily unavailable.", code=exc.code
-        ) from exc
+        note = settle_checkout(attempt_id=attempt_id)
     except ProviderError as exc:
-        raise PermanentJobError(
-            "Provider reconciliation was permanently refused.", code=exc.code
+        # Unreachable or refused: the checkout's fate is still unknown, and a
+        # payer may still hold its URL, so the obligation is kept.
+        raise RetryableJobError(
+            "The provider has not told what became of the checkout.", code=exc.code
         ) from exc
-    if snapshot.outcome == "ignored":
-        raise RetryableJobError(
-            "Provider still reports the attempt as pending.",
-            code="provider_pending",
+    if note == "checkout_open":
+        now = timezone.now()
+        raise JobDeferred(
+            "The checkout can still be paid.",
+            code="checkout_open",
+            delay=max(
+                (attempt.expires_at or now + CHECKOUT_SETTLING_POLL) - now,
+                timedelta(seconds=30),
+            ),
         )
-    result = reconcile_attempt(
-        attempt_id=attempt_id,
-        outcome=snapshot.outcome,
-        provider_payment_id=snapshot.provider_payment_id,
-        provider_amount_minor=snapshot.amount_minor,
-        provider_currency=snapshot.currency,
-    )
-    if snapshot.outcome == "processing":
-        raise RetryableJobError(
-            "Provider reports processing; poll again.",
-            code="provider_processing",
+    if note == "checkout_settling":
+        raise JobDeferred(
+            "A payment through the checkout is settling.",
+            code="checkout_settling",
+            delay=CHECKOUT_SETTLING_POLL,
         )
-    return result
+    if note == "checkout_collecting":
+        raise JobDeferred(
+            "A payment is being made through the checkout.",
+            code="checkout_collecting",
+            delay=CHECKOUT_COLLECTING_POLL,
+        )
+    return note
 
 
 def handle_provider_event_process(payload: dict) -> str:
@@ -789,7 +777,6 @@ HANDLERS = {
     ScheduledJob.Kind.DEPOSIT_EXPIRY_REFUND: handle_deposit_expiry_refund,
     ScheduledJob.Kind.PAYMENT_GRACE_RELEASE: handle_payment_grace_release,
     ScheduledJob.Kind.ATTEMPT_EXPIRY: handle_attempt_expiry,
-    ScheduledJob.Kind.CHECKOUT_CLOSE: handle_checkout_close,
     ScheduledJob.Kind.PROVIDER_RECONCILE: handle_provider_reconcile,
     ScheduledJob.Kind.PROVIDER_EVENT_PROCESS: handle_provider_event_process,
     ScheduledJob.Kind.REFUND_RECONCILE: handle_refund_reconcile,
@@ -856,7 +843,6 @@ def _already_satisfied_reason(job: ScheduledJob) -> str:
     payload = dict(job.payload or {})
     if job.kind in {
         ScheduledJob.Kind.ATTEMPT_EXPIRY,
-        ScheduledJob.Kind.CHECKOUT_CLOSE,
         ScheduledJob.Kind.PROVIDER_RECONCILE,
     }:
         attempt_id = payload.get("attempt_id")
@@ -865,18 +851,20 @@ def _already_satisfied_reason(job: ScheduledJob) -> str:
         attempt = PaymentAttempt.objects.filter(pk=attempt_id).first()
         if attempt is None:
             return "attempt_missing"
-        if job.kind == ScheduledJob.Kind.CHECKOUT_CLOSE:
-            # Only the provider's answer proves its checkout closed.
-            return ""
         if job.kind == ScheduledJob.Kind.ATTEMPT_EXPIRY:
             return (
                 "attempt_already_terminal"
                 if attempt.status not in PaymentAttempt.OPEN_STATUSES
                 else ""
             )
+        # Only a checkout that can take no payment ends its settle job (G1).
+        if PaymentAttempt.objects.filter(LIVE_CHECKOUT, pk=attempt.pk).exists():
+            return ""
+        if attempt.provider_session_id:
+            return "checkout_final"
         return (
-            "payment_already_succeeded"
-            if attempt.status == PaymentAttempt.Status.SUCCEEDED
+            "checkout_never_handed_out"
+            if attempt.status not in PaymentAttempt.OPEN_STATUSES
             else ""
         )
     if job.kind == ScheduledJob.Kind.PROVIDER_EVENT_PROCESS:
@@ -1133,11 +1121,29 @@ def _sweep_payout_backlog() -> None:
         logger.exception("finance.payout_sweep_failed")
 
 
+def _sweep_live_checkouts() -> None:
+    """Give every live checkout a pending settle job, before claiming this batch.
+
+    In the loop for the reason `_sweep_payout_backlog` is: a checkout that may
+    still take a payment must be followed to its fate even when the job that
+    should have done so ran out of retries or was never armed (G1). One
+    bounded lookup over an indexed predicate per cycle.
+    """
+
+    try:
+        from .services import arm_live_checkouts
+
+        arm_live_checkouts()
+    except Exception:  # noqa: BLE001 - the sweep must never stop the job loop
+        logger.exception("finance.live_checkout_sweep_failed")
+
+
 def run_due_jobs(*, limit: int = 50, at: datetime | None = None) -> JobRunReport:
     """Claim and run every due job, up to `limit`."""
 
     resolve_satisfied_failed_jobs(limit=min(limit, 100))
     _sweep_payout_backlog()
+    _sweep_live_checkouts()
     jobs = claim_due_jobs(limit=limit, at=at)
     results = [run_job(job) for job in jobs]
     failed = sum(1 for result in results if result in {"failed", "no_handler"})

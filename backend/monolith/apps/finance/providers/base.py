@@ -149,10 +149,6 @@ class ProviderEvent:
     provider_session_id: str = ""
     provider_payment_id: str = ""
     reference: str = ""
-    #: The attempt id our own create request put in the checkout's metadata,
-    #: echoed back. It binds an event that arrives before its checkout was
-    #: stored to that attempt and no other (G1).
-    attempt_reference: str = ""
     amount_minor: int | None = None
     currency: str = ""
     guest_email: str = ""

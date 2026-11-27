@@ -322,6 +322,16 @@ class PaymentOrder(models.Model):
         )
 
 
+#: A checkout that was stored, so may have been handed out, and that its
+#: provider has not confirmed can take no further payment, on an attempt that
+#: has not succeeded. It may still collect, whatever the attempt's status (G1).
+LIVE_CHECKOUT = (
+    Q(checkout_final_at__isnull=True)
+    & ~Q(provider_session_id="")
+    & ~Q(status="succeeded")
+)
+
+
 class PaymentAttempt(models.Model):
     """One provider attempt against a PaymentOrder.
 
@@ -436,6 +446,11 @@ class PaymentAttempt(models.Model):
     #: From then on it is never handed out again; any request may finish the
     #: close (G1).
     close_requested_at = models.DateTimeField(null=True, blank=True)
+    #: When the provider confirmed this checkout can take no further payment:
+    #: it closed or expired it, or reported its final outcome. Until then a
+    #: stored checkout that has not succeeded is live, whatever `status` says,
+    #: and the order hands out or opens no other (G1).
+    checkout_final_at = models.DateTimeField(null=True, blank=True)
 
     status = models.CharField(
         max_length=20,
@@ -490,6 +505,12 @@ class PaymentAttempt(models.Model):
             ),
             models.Index(
                 fields=["status", "expires_at"], name="fin_attempt_expiry_idx"
+            ),
+            # The job loop's sweep reads every live checkout (G1).
+            models.Index(
+                fields=["id"],
+                condition=LIVE_CHECKOUT,
+                name="fin_attempt_live_checkout_idx",
             ),
         ]
         constraints = [
@@ -1383,7 +1404,6 @@ class ScheduledJob(models.Model):
         DEPOSIT_EXPIRY_REFUND = "deposit_expiry_refund", "Deposit expiry refund"
         PAYMENT_GRACE_RELEASE = "payment_grace_release", "Payment grace release"
         ATTEMPT_EXPIRY = "attempt_expiry", "Checkout attempt expiry"
-        CHECKOUT_CLOSE = "checkout_close", "Ended checkout close"
         PROVIDER_RECONCILE = "provider_reconcile", "Provider reconciliation"
         PROVIDER_EVENT_PROCESS = "provider_event_process", "Provider event processing"
         REFUND_RECONCILE = "refund_reconcile", "Refund reconciliation"

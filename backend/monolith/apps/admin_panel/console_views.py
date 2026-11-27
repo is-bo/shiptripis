@@ -4110,7 +4110,6 @@ def _job_related_object(job: ScheduledJob) -> tuple[str, str]:
 
     if job.kind in {
         ScheduledJob.Kind.ATTEMPT_EXPIRY,
-        ScheduledJob.Kind.CHECKOUT_CLOSE,
         ScheduledJob.Kind.PROVIDER_RECONCILE,
     } and (pk := integer("attempt_id")):
         return f"Payment attempt {pk}", reverse(

@@ -286,7 +286,6 @@ class MockGateway:
             provider_session_id=str(data.get("session_id") or ""),
             provider_payment_id=str(data.get("payment_id") or ""),
             reference=str(data.get("reference") or ""),
-            attempt_reference=str(data.get("attempt_id") or ""),
             amount_minor=data.get("amount"),
             currency=str(data.get("currency") or "EUR").upper(),
             guest_email=str(data.get("guest_email") or ""),

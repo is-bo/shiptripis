@@ -71,6 +71,7 @@ from .services import (
     GuestLinkInvalid,
     NotAuthorized,
     chargily_display,
+    checkout_state,
     create_guest_link,
     ensure_posting_deposit_order,
     deposit_quote_payload,
@@ -159,6 +160,13 @@ def _with_payment_options(payload: dict, order: PaymentOrder) -> dict:
         return payload
     payload["providers"] = provider_options(
         policy, amount_eur_cents=order.outstanding_eur_cents
+    )
+    # What the owner's next tap meets, so the section never offers a rail or
+    # a "continue" the server would refuse (G1).
+    payload["checkout_state"] = checkout_state(
+        order,
+        available={row["provider"] for row in payload["providers"] if row["available"]},
+        guest=False,
     )
     if policy.providers.chargily_enabled:
         payload["chargily_quote"] = chargily_display(

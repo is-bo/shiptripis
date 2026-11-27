@@ -36,13 +36,13 @@ import hashlib
 import json
 import logging
 import secrets
-import uuid
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
-from django.db.models import Sum
+from django.db.models import CharField, Exists, OuterRef, Sum, Value
+from django.db.models.functions import Cast, Concat
 from django.utils import timezone
 
 from apps.core import channels, redis_bus
@@ -63,6 +63,7 @@ from .money import (
     require_positive_cents,
 )
 from .models import (
+    LIVE_CHECKOUT,
     GuestPaymentLink,
     LedgerAccount,
     LedgerTransaction,
@@ -78,6 +79,7 @@ from .policy import Phase3Policy, phase3_policy
 from .providers import (
     CHECKOUT_CLOSED,
     CheckoutRequest,
+    ProviderCheckoutRejected,
     ProviderConfigurationInvalid,
     ProviderError,
     ProviderEvent,
@@ -117,15 +119,40 @@ RECOVERABLE_CHECKOUT_PROVIDERS = frozenset({"mock", "stripe"})
 #: always safe: no checkout was stored, so its URL never left the server (G1).
 CHECKOUT_RECOVERY_LIMIT = timedelta(minutes=10)
 
-#: Locked looks `start_checkout` may take at the order's open attempt, with a
-#: provider call between two of them: recover it, close it, replace it (G1).
+#: Locked looks `start_checkout` may take at the order's checkouts, with a
+#: provider call between two of them: recover one, close one, replace it (G1).
 CHECKOUT_ROUNDS = 3
 
-#: Runs a job that must hear a provider confirm a checkout closed may make.
-#: With the capped backoff this spans about six days, longer than any rail
-#: keeps a checkout collecting on its own; an exhausted job is logged at error
-#: level for a human (G1).
-CHECKOUT_CLOSE_ATTEMPTS = 32
+#: Failed runs an attempt's expiry or settle job makes before it is logged at
+#: error level for a human. With the capped backoff this spans about six days.
+#: A checkout that is still live is never left without a settle job: the job
+#: loop arms it again (`arm_live_checkouts`) (G1).
+CHECKOUT_JOB_ATTEMPTS = 32
+
+#: How often a payment settling at its provider (a delayed method) is read
+#: again until its outcome is known (G1).
+CHECKOUT_SETTLING_POLL = timedelta(hours=1)
+
+#: How soon a checkout its provider would not close, because a payment was
+#: being made through it, is read again (G1).
+CHECKOUT_COLLECTING_POLL = timedelta(minutes=5)
+
+#: Outcomes after which a provider takes no further payment through a
+#: checkout: it was paid, its payment failed, or it expired or was cancelled
+#: (G1).
+FINAL_CHECKOUT_OUTCOMES = frozenset({"succeeded", "failed", "expired", "cancelled"})
+
+#: What a screen may offer for an order's next checkout tap (`checkout_state`).
+CHECKOUT_STATES = frozenset(
+    {"ready", "resumable", "guest_paying", "in_progress", "settling"}
+)
+
+#: What `settle_checkout` answers while a checkout may still take a payment:
+#: open and still wanted, settling a payment, or refusing to close because one
+#: is being made. Anything else it answers means the checkout is final (G1).
+LIVE_CHECKOUT_NOTES = frozenset(
+    {"checkout_open", "checkout_settling", "checkout_collecting"}
+)
 
 #: Errors after which a recovery keeps the attempt's key and is tried again:
 #: the provider may still hold the checkout it opened, so none of them proves
@@ -1345,10 +1372,12 @@ def start_checkout(
 
     One order has at most one checkout that can collect (G1). Only the member
     who opened it is handed it again. Anyone else, and that member on another
-    rail or amount, replaces it, and an open attempt whose checkout is out is
-    replaced only once its provider confirms it closed (`_close_checkout`).
-    Every case that cannot be settled now answers `CheckoutInProgress`, and a
-    session is returned only with a URL to visit.
+    rail or amount, replaces it. No checkout is handed out or opened while
+    another of the order's checkouts is live (`LIVE_CHECKOUT`): each is
+    settled first (`settle_checkout`), with no lock held, and only its
+    provider's confirmation lets the next look go on. Every case that cannot
+    be settled now answers `CheckoutInProgress`, and a session is returned
+    only with a URL to visit.
     """
 
     policy = policy or phase3_policy()
@@ -1361,7 +1390,6 @@ def start_checkout(
         guest_email = ""
     guest_email = guest_email[:254]
 
-    closed: set[int] = set()
     refused: tuple[int, datetime | None] | None = None
     for _ in range(CHECKOUT_ROUNDS):
         action, attempt = _checkout_step(
@@ -1372,7 +1400,6 @@ def start_checkout(
             policy=policy,
             gateway=gateway,
             guest_email=guest_email,
-            closed=closed,
             refused=refused,
         )
         refused = None
@@ -1380,10 +1407,9 @@ def start_checkout(
             return CheckoutSession(attempt=attempt, created=False)
         if action == "open":
             break
-        # The order lock is released: the provider call below never holds it.
-        if action == "close":
-            _close_checkout(attempt)
-            closed.add(attempt.pk)
+        # The order lock is released: the provider calls below never hold it.
+        if action == "settle":
+            _settle_before_checkout(attempt)
             continue
         try:
             recover_checkout_attempt(attempt_id=attempt.pk)
@@ -1500,7 +1526,7 @@ def _store_checkout(attempt: PaymentAttempt, result) -> None:
 
 
 def _schedule_attempt_jobs(attempt: PaymentAttempt) -> None:
-    """Schedule, or move, an attempt's expiry and reconciliation (G1)."""
+    """Schedule, or move, an attempt's expiry and its checkout's settle job (G1)."""
 
     expires_at = attempt.expires_at or (timezone.now() + timedelta(hours=1))
     schedule_job(
@@ -1508,14 +1534,14 @@ def _schedule_attempt_jobs(attempt: PaymentAttempt) -> None:
         key=f"attempt_expiry:{attempt.pk}",
         run_at=expires_at,
         payload={"attempt_id": attempt.pk},
-        max_attempts=CHECKOUT_CLOSE_ATTEMPTS,
+        max_attempts=CHECKOUT_JOB_ATTEMPTS,
     )
     schedule_job(
         kind=ScheduledJob.Kind.PROVIDER_RECONCILE,
         key=f"provider_reconcile:{attempt.pk}",
         run_at=expires_at + timedelta(minutes=5),
         payload={"attempt_id": attempt.pk},
-        max_attempts=32,
+        max_attempts=CHECKOUT_JOB_ATTEMPTS,
     )
 
 
@@ -1542,22 +1568,26 @@ def _checkout_step(
     policy: Phase3Policy,
     gateway,
     guest_email: str,
-    closed: set[int],
     refused: tuple[int, datetime | None] | None,
 ) -> tuple[str, PaymentAttempt]:
-    """One look at the order's open attempt under the order lock (G1).
+    """One look at the order's checkouts under the order lock (G1).
 
-    Answers what `start_checkout` does next: "reuse" that attempt, "open" the
-    new one written here, or "close" or "recover" that attempt at its provider
-    once the lock is released. An open attempt is replaced only when its
-    checkout cannot collect: closed by its provider in this request
-    (`closed`), or never handed out. A URL leaves the server only after it is
-    stored on an open attempt, so one with none stored has a checkout no one
-    holds. Once the request that owns it is past its window, it is recovered
-    first on a rail that can return it, so the provider keeps one checkout,
-    and abandoned once that was refused under the same claim (`refused`) or
-    is no longer worth trying. One marked to be closed is never handed out
-    again. A payment already settling is never replaced.
+    Answers what `start_checkout` does next: "reuse" the open attempt, "open"
+    the new one written here, or "settle" or "recover" an attempt at its
+    provider once the lock is released.
+
+    Whether a checkout can still take a payment is the provider's fact, never
+    the attempt's status: a stored checkout is live until its provider
+    confirmed it final (`LIVE_CHECKOUT`). So a live checkout of another
+    attempt, from whatever path or release left it, is settled before anything
+    else, and the open attempt's own checkout is handed back only to the
+    member who opened it, else settled. A checkout that is not live is
+    replaced. An attempt with no checkout stored was never handed out, since a
+    URL leaves the server only after it is stored: once the request that owns
+    it is past its window, it is recovered first where its frozen request can
+    be repeated, so the provider keeps one checkout, and abandoned once that
+    was refused under the same claim (`refused`) or cannot be tried. A
+    payment already settling is never replaced.
     """
 
     with transaction.atomic():
@@ -1586,46 +1616,42 @@ def _checkout_step(
             .first()
         )
         # Read once the locks are held: a claim granted below runs its full
-        # window from the moment it is granted, however long the wait (G1).
+        # window from the moment it is granted, however long the wait.
         now = timezone.now()
+        if (
+            open_attempt is not None
+            and open_attempt.status == PaymentAttempt.Status.PROCESSING
+        ):
+            # The payer's money is authorised and settling: only its own
+            # outcome ends this attempt.
+            raise CheckoutInProgress("A payment for this order is settling.")
+
+        others = PaymentAttempt.objects.select_for_update(no_key=True).filter(
+            LIVE_CHECKOUT, order=order
+        )
         if open_attempt is not None:
-            if open_attempt.status == PaymentAttempt.Status.PROCESSING:
-                # The payer's money is authorised and settling: only its own
-                # outcome ends this attempt.
-                raise CheckoutInProgress("A payment for this order is settling.")
+            others = others.exclude(pk=open_attempt.pk)
+        other = others.order_by("pk").first()
+        if other is not None:
+            # Ended here, but its provider never confirmed it closed: a payer
+            # may still hold its URL.
+            _record_close_intent(other, at=now)
+            return "settle", other
+
+        if open_attempt is not None:
             if open_attempt.provider_session_id:
-                if open_attempt.pk in closed:
-                    # Confirmed closed by its provider in this request:
-                    # replaced below.
-                    pass
-                elif (
-                    guest_link is None
-                    and actor_id is not None
-                    and open_attempt.payer_id == actor_id
-                    and open_attempt.guest_link_id is None
-                    and open_attempt.provider == provider
-                    and int(open_attempt.amount_eur_cents)
-                    == amounts["amount_eur_cents"]
-                    and (
-                        open_attempt.expires_at is None
-                        or open_attempt.expires_at > now
-                    )
-                    and open_attempt.close_requested_at is None
-                    and open_attempt.checkout_url
-                ):
-                    # A guest is never handed an open checkout: nothing a link
-                    # holder sends tells the one who opened it from another.
-                    return "reuse", open_attempt
-                else:
-                    if open_attempt.close_requested_at is None:
-                        # Recorded before the provider is asked, so that no
-                        # request hands it out while the close is outstanding,
-                        # and any request may finish it.
-                        open_attempt.close_requested_at = now
-                        open_attempt.save(
-                            update_fields=["close_requested_at", "updated_at"]
-                        )
-                    return "close", open_attempt
+                if open_attempt.checkout_final_at is None:
+                    if guest_link is None and _hands_back(
+                        open_attempt,
+                        actor_id=actor_id,
+                        provider=provider,
+                        amount_eur_cents=amounts["amount_eur_cents"],
+                        at=now,
+                    ):
+                        return "reuse", open_attempt
+                    _record_close_intent(open_attempt, at=now)
+                    return "settle", open_attempt
+                # Its provider confirmed it takes no payment: replaced below.
             elif refused != (open_attempt.pk, open_attempt.opening_until):
                 if (
                     open_attempt.opening_until is not None
@@ -1635,10 +1661,12 @@ def _checkout_step(
                     raise CheckoutInProgress("This checkout is still being opened.")
                 if (
                     open_attempt.provider in RECOVERABLE_CHECKOUT_PROVIDERS
+                    and open_attempt.checkout_request
                     and open_attempt.created_at > now - CHECKOUT_RECOVERY_LIMIT
                 ):
                     # Claimed for the window, so that one request at a time
-                    # repeats its create.
+                    # repeats its create. Only the request it froze can be
+                    # repeated: none rebuilt from today's settings.
                     open_attempt.opening_until = now + CHECKOUT_OPENING_WINDOW
                     open_attempt.save(update_fields=["opening_until", "updated_at"])
                     return "recover", open_attempt
@@ -1675,36 +1703,142 @@ def _checkout_step(
     return "open", attempt
 
 
-def _close_checkout(attempt: PaymentAttempt) -> None:
-    """Make the provider stop `attempt`'s checkout from collecting (G1).
+def _hands_back(
+    attempt: PaymentAttempt,
+    *,
+    actor_id: int | None,
+    provider: str,
+    amount_eur_cents: int,
+    at: datetime,
+) -> bool:
+    """Whether a member's tap is handed this open attempt's checkout again (G1).
 
-    Returns only once the provider confirmed the checkout can no longer take a
-    payment. Anything else (an error, a timeout, a checkout that has taken or
-    is taking a payment) answers `CheckoutInProgress`, and the attempt stays
-    open: the payment, if any, settles it.
+    Only the member who opened it, on the same rail and amount, while it is
+    live, unexpired and not being closed. A guest never is: nothing a link
+    holder sends tells the one who opened it from another. The one rule for
+    `_checkout_step` and for what the member's screen offers
+    (`checkout_state`).
     """
 
-    from .mode_safety import require_object_mode
+    return (
+        actor_id is not None
+        and attempt.payer_id == actor_id
+        and attempt.guest_link_id is None
+        and attempt.provider == provider
+        and int(attempt.amount_eur_cents) == amount_eur_cents
+        and bool(attempt.provider_session_id)
+        and attempt.checkout_final_at is None
+        and (attempt.expires_at is None or attempt.expires_at > at)
+        and attempt.close_requested_at is None
+        and bool(attempt.checkout_url)
+    )
+
+
+def checkout_state(
+    order: PaymentOrder,
+    *,
+    available: frozenset[str] | set[str],
+    guest: bool,
+    at: datetime | None = None,
+) -> str:
+    """What the next checkout tap on `order` meets, for the screen offering it (G1).
+
+    One of `CHECKOUT_STATES`. "in_progress": a payment made through one of
+    its checkouts is settling, or a request is opening its checkout now, and
+    the tap would be told to try again. For the owner, "settling" says the
+    first of those apart when the owner paid; "resumable": their own checkout
+    is open and handed back to them (`_hands_back`) on a rail still
+    available; "guest_paying": a link holder's payment is settling, or the
+    checkout they opened can still be paid and a new one would replace it.
+    Otherwise "ready". A guest is never handed an open checkout, so meets
+    only "in_progress" or "ready". Read without a lock: the tap
+    decides under the order lock, so this keeps a screen from offering what
+    the server would refuse, and never grants anything.
+    """
+
+    at = at or timezone.now()
+    open_attempts = [
+        attempt
+        for attempt in order.attempts.all()
+        if attempt.status in PaymentAttempt.OPEN_STATUSES
+    ]
+    settling = [
+        attempt
+        for attempt in open_attempts
+        if attempt.status == PaymentAttempt.Status.PROCESSING
+    ]
+    if settling:
+        if guest:
+            return "in_progress"
+        return "guest_paying" if settling[0].guest_link_id else "settling"
+    if not open_attempts:
+        return "ready"
+    open_attempt = max(open_attempts, key=lambda attempt: attempt.pk)
+    if not open_attempt.provider_session_id:
+        claimed = open_attempt.opening_until is not None and (
+            open_attempt.opening_until > at
+        )
+        return "in_progress" if claimed else "ready"
+    if guest:
+        return "ready"
+    if open_attempt.provider in available and _hands_back(
+        open_attempt,
+        actor_id=order.owner_id,
+        provider=open_attempt.provider,
+        amount_eur_cents=order.outstanding_eur_cents,
+        at=at,
+    ):
+        return "resumable"
+    if (
+        open_attempt.guest_link_id is not None
+        and open_attempt.checkout_final_at is None
+        and open_attempt.close_requested_at is None
+        and (open_attempt.expires_at is None or open_attempt.expires_at > at)
+    ):
+        return "guest_paying"
+    return "ready"
+
+
+def _record_close_intent(attempt: PaymentAttempt, *, at: datetime) -> None:
+    """Mark a locked attempt's checkout to be closed, before any provider is asked.
+
+    From then on it is never handed out again, and any request or job may
+    finish the close (G1).
+    """
+
+    if attempt.close_requested_at is None:
+        attempt.close_requested_at = at
+        attempt.save(update_fields=["close_requested_at", "updated_at"])
+
+
+def _settle_before_checkout(attempt: PaymentAttempt) -> None:
+    """Settle a live checkout a new checkout is waiting on, or answer in progress.
+
+    Returns once its provider confirmed it can take no further payment, its
+    outcome recorded if it took one. Anything else (an error, a payment being
+    made or settling through it) answers `CheckoutInProgress`, and its settle
+    job is due at once to follow it up (G1).
+    """
 
     try:
-        require_object_mode(attempt.provider_mode)
-        outcome = get_gateway(attempt.provider).close_checkout(
-            provider_session_id=attempt.provider_session_id
-        )
+        note = settle_checkout(attempt_id=attempt.pk)
     except ProviderError as exc:
         logger.warning(
-            "finance.checkout_close_unconfirmed order=%s attempt=%s code=%s",
+            "finance.checkout_settle_unconfirmed order=%s attempt=%s code=%s",
             attempt.order_id,
             attempt.pk,
             exc.code,
         )
+        _arm_checkout_settle(attempt.pk)
         raise CheckoutInProgress("The open checkout could not be closed.") from exc
-    if outcome != CHECKOUT_CLOSED:
+    if note in LIVE_CHECKOUT_NOTES:
         logger.info(
-            "finance.checkout_close_collecting order=%s attempt=%s",
+            "finance.checkout_settle_waiting order=%s attempt=%s note=%s",
             attempt.order_id,
             attempt.pk,
+            note,
         )
+        _arm_checkout_settle(attempt.pk)
         raise CheckoutInProgress("The open checkout is taking a payment.")
 
 
@@ -1740,10 +1874,18 @@ def _checkout_request(attempt: PaymentAttempt) -> CheckoutRequest:
     Recovery repeats create under the attempt's key, and a provider replays
     its first answer only for the same parameters. So the first call and every
     recovery send the request frozen on the attempt, never one rebuilt from
-    settings that may have changed since (G1).
+    settings that may have changed since (G1). An attempt that kept none that
+    fits cannot be repeated: refused like a create its provider refused, so
+    the attempt is abandoned rather than answered with a server error.
     """
 
-    return CheckoutRequest(**attempt.checkout_request)
+    try:
+        return CheckoutRequest(**attempt.checkout_request)
+    except TypeError as exc:
+        raise ProviderCheckoutRejected(
+            "This attempt kept no request that can be repeated.",
+            provider_code="checkout_request_unusable",
+        ) from exc
 
 
 def recover_checkout_attempt(*, attempt_id: int) -> str:
@@ -1787,16 +1929,14 @@ def expire_checkout_attempt(*, attempt_id: int) -> str:
     """End an attempt whose time is up, once its checkout cannot collect (G1).
 
     Our expiry is not the provider's: a Stripe session stays payable for a day
-    unless it is expired. So an attempt whose checkout is out is closed at its
-    provider first, and ends only once the provider confirms the close. One
-    that is taking a payment, or settling one, is left to that payment's own
-    outcome, and the order stays reserved until then. An attempt with no
-    checkout stored was never handed out and ends now, unless the request that
-    owns it is still opening it. Raises `ProviderError` when the provider
-    confirms nothing, and the attempt stays open.
+    unless it is expired. An attempt with no checkout stored was never handed
+    out and ends now, unless the request that owns it is still opening it. One
+    whose checkout is out is marked to be closed and settled
+    (`settle_checkout`): it ends once its provider confirms the checkout
+    final, and a payment made or settling through it is left to that
+    payment's own outcome, the order staying reserved until then. Raises
+    `ProviderError` when the provider confirms nothing.
     """
-
-    from .mode_safety import require_object_mode
 
     order_id = PaymentAttempt.objects.values_list("order_id", flat=True).get(
         pk=attempt_id
@@ -1816,50 +1956,173 @@ def expire_checkout_attempt(*, attempt_id: int) -> str:
             ):
                 return "attempt_opening"
             return reconcile_attempt(attempt_id=attempt_id, outcome="expired")
-        if attempt.close_requested_at is None:
-            attempt.close_requested_at = timezone.now()
-            attempt.save(update_fields=["close_requested_at", "updated_at"])
-    # No lock is held across the provider call.
-    require_object_mode(attempt.provider_mode)
-    outcome = get_gateway(attempt.provider).close_checkout(
-        provider_session_id=attempt.provider_session_id
-    )
-    if outcome != CHECKOUT_CLOSED:
+        _record_close_intent(attempt, at=timezone.now())
+    # No lock is held across the provider calls.
+    note = settle_checkout(attempt_id=attempt_id)
+    if note == "checkout_settling":
+        return "attempt_settling"
+    if note in LIVE_CHECKOUT_NOTES:
         return "attempt_collecting"
+    if note != "checkout_final":
+        # The outcome its provider reported, recorded.
+        return note
     return reconcile_attempt(attempt_id=attempt_id, outcome="expired")
 
 
-def close_ended_checkout(*, attempt_id: int) -> str:
-    """Make sure an attempt ended with its order cannot still be paid (G1).
+def settle_checkout(*, attempt_id: int) -> str:
+    """Drive one stored checkout to a fate its provider confirms (G1).
 
-    `_stop_collecting_attempts` ends the attempt at once, so nothing funds the
-    order from it; this asks its provider, with no lock held, to stop the
-    checkout a payer may still hold. A checkout that took a payment first is
-    left to that payment, which lands as unapplied and is refunded. Raises
-    `ProviderError` while the provider confirms nothing.
+    The one place that decides what becomes of a checkout that may have been
+    handed out, whichever path asks: a checkout being replaced, the expiry
+    and settle jobs, an order that stopped collecting. No lock is held across
+    the provider calls. The provider is read first. A final outcome is
+    recorded through `reconcile_attempt`, so money paid through the checkout
+    always lands, applied or unapplied and refunded, and the checkout becomes
+    final. A checkout still open at its provider stays open while its attempt
+    may still be paid, and is closed otherwise; only the provider's
+    confirmation makes it final, and an attempt whose time is up then ends as
+    expired. The attempt's status is changed only by those facts.
+
+    Answers one of `LIVE_CHECKOUT_NOTES` while the checkout may still take a
+    payment, else "checkout_final" or the note of the outcome it recorded.
+    Raises `ProviderError` when the provider answers nothing usable.
     """
 
-    from .mode_safety import require_object_mode
+    from .mode_safety import event_mode_allowed, require_object_mode
 
-    attempt = PaymentAttempt.objects.filter(pk=attempt_id).first()
-    if attempt is None:
-        return "attempt_missing"
+    attempt = PaymentAttempt.objects.get(pk=attempt_id)
     if not attempt.provider_session_id:
-        return "checkout_never_handed_out"
-    if attempt.status == PaymentAttempt.Status.SUCCEEDED:
-        return "payment_already_succeeded"
+        # Never stored, so never handed out: nobody can pay through it.
+        return "checkout_final"
+    if (
+        attempt.checkout_final_at is not None
+        or attempt.status == PaymentAttempt.Status.SUCCEEDED
+    ):
+        return "checkout_final"
     require_object_mode(attempt.provider_mode)
-    outcome = get_gateway(attempt.provider).close_checkout(
-        provider_session_id=attempt.provider_session_id
+    gateway = get_gateway(attempt.provider)
+    snapshot = gateway.fetch_attempt(
+        provider_session_id=attempt.provider_session_id,
+        provider_payment_id=attempt.provider_payment_id,
     )
-    if outcome != CHECKOUT_CLOSED:
-        logger.warning(
-            "finance.ended_checkout_collected order=%s attempt=%s",
-            attempt.order_id,
-            attempt.pk,
+    if attempt.provider in ("stripe", "chargily") and not event_mode_allowed(
+        snapshot.raw
+    ):
+        raise ProviderConfigurationInvalid(
+            "The provider answered for another or unknown payment mode."
         )
-        return "checkout_collected"
-    return "checkout_closed"
+    if snapshot.outcome in FINAL_CHECKOUT_OUTCOMES:
+        return reconcile_attempt(
+            attempt_id=attempt_id,
+            outcome=snapshot.outcome,
+            provider_payment_id=snapshot.provider_payment_id,
+            provider_amount_minor=snapshot.amount_minor,
+            provider_currency=snapshot.currency,
+        )
+    if snapshot.outcome == "processing":
+        reconcile_attempt(attempt_id=attempt_id, outcome="processing")
+        return "checkout_settling"
+    if (
+        attempt.status
+        in (PaymentAttempt.Status.CREATED, PaymentAttempt.Status.CHECKOUT_PENDING)
+        and attempt.close_requested_at is None
+        and (attempt.expires_at is None or attempt.expires_at > timezone.now())
+    ):
+        return "checkout_open"
+    if (
+        gateway.close_checkout(provider_session_id=attempt.provider_session_id)
+        != CHECKOUT_CLOSED
+    ):
+        # A payment is being made through it: read it again shortly.
+        return "checkout_collecting"
+    _record_checkout_final(attempt_id)
+    if attempt.expires_at is not None and attempt.expires_at <= timezone.now():
+        # Its time is up and nobody can pay it any more: an attempt still
+        # waiting on it ends (one that ended already is left as it is).
+        return reconcile_attempt(attempt_id=attempt_id, outcome="expired")
+    return "checkout_final"
+
+
+def _record_checkout_final(attempt_id: int) -> None:
+    """Record that a provider confirmed this checkout takes no further payment."""
+
+    now = timezone.now()
+    PaymentAttempt.objects.filter(pk=attempt_id, checkout_final_at__isnull=True).update(
+        checkout_final_at=now, updated_at=now
+    )
+
+
+def _arm_checkout_settle(attempt_id: int, *, run_at: datetime | None = None) -> None:
+    """Make sure a checkout's settle job is pending, due no later than `run_at`.
+
+    The settle job (`provider_reconcile`) is the one durable obligation that
+    drives a checkout to a fate its provider confirms, and it completes only
+    once that fate is known. So it is armed again here whatever an earlier
+    run left it as: finished, failed after its retries, or cancelled (G1).
+    """
+
+    run_at = run_at or timezone.now()
+    job, created = ScheduledJob.objects.get_or_create(
+        key=f"provider_reconcile:{attempt_id}",
+        defaults={
+            "kind": ScheduledJob.Kind.PROVIDER_RECONCILE,
+            "run_at": run_at,
+            "payload": {"attempt_id": attempt_id},
+            "max_attempts": CHECKOUT_JOB_ATTEMPTS,
+        },
+    )
+    if created or job.status == ScheduledJob.Status.RUNNING:
+        return
+    now = timezone.now()
+    if job.status == ScheduledJob.Status.PENDING:
+        ScheduledJob.objects.filter(
+            pk=job.pk, status=ScheduledJob.Status.PENDING, run_at__gt=run_at
+        ).update(run_at=run_at, updated_at=now)
+        return
+    ScheduledJob.objects.filter(pk=job.pk).exclude(
+        status__in=(ScheduledJob.Status.PENDING, ScheduledJob.Status.RUNNING)
+    ).update(
+        status=ScheduledJob.Status.PENDING,
+        run_at=run_at,
+        attempts=0,
+        max_attempts=CHECKOUT_JOB_ATTEMPTS,
+        locked_at=None,
+        locked_by="",
+        completed_at=None,
+        resolution="",
+        resolved_at=None,
+        resolved_by=None,
+        resolution_reason="",
+        updated_at=now,
+    )
+
+
+def arm_live_checkouts(*, limit: int = 100) -> int:
+    """Give each live checkout without one a pending settle job (G1).
+
+    Run by the job loop. A live checkout's settle job completes only once the
+    checkout is final, so one left without a pending job has lost it: its
+    retries ran out while the provider confirmed nothing, or it was issued by
+    code that never armed one. Returns how many were armed.
+    """
+
+    pending = ScheduledJob.objects.filter(
+        key=Concat(
+            Value("provider_reconcile:"),
+            Cast(OuterRef("pk"), output_field=CharField()),
+        ),
+        status__in=(ScheduledJob.Status.PENDING, ScheduledJob.Status.RUNNING),
+    )
+    unarmed = list(
+        PaymentAttempt.objects.filter(LIVE_CHECKOUT)
+        .filter(~Exists(pending))
+        .order_by("pk")
+        .values_list("pk", flat=True)[:limit]
+    )
+    for attempt_id in unarmed:
+        _arm_checkout_settle(attempt_id)
+        logger.warning("finance.live_checkout_rearmed attempt=%s", attempt_id)
+    return len(unarmed)
 
 
 def _checkout_description(order: PaymentOrder) -> str:
@@ -1943,7 +2206,6 @@ def _normalized_provider_event(event, attempt: PaymentAttempt | None) -> dict:
         "provider_session_id": event.provider_session_id,
         "provider_payment_id": event.provider_payment_id,
         "reference": event.reference,
-        "attempt_reference": event.attempt_reference,
         "amount_minor": event.amount_minor,
         "currency": event.currency,
         "guest_email": event.guest_email if keeps_address else "",
@@ -2051,7 +2313,6 @@ def _provider_event_from_record(record: PaymentProviderEvent) -> ProviderEvent:
         provider_session_id=str(data.get("provider_session_id") or ""),
         provider_payment_id=str(data.get("provider_payment_id") or ""),
         reference=str(data.get("reference") or ""),
-        attempt_reference=str(data.get("attempt_reference") or ""),
         amount_minor=data.get("amount_minor"),
         currency=str(data.get("currency") or ""),
         guest_email=str(data.get("guest_email") or ""),
@@ -2122,14 +2383,15 @@ def process_provider_event(*, event_id: int) -> str:
     durable_event = _provider_event_from_record(record)
     attempt = record.attempt or _match_attempt(durable_event)
     if attempt is None:
-        if durable_event.outcome == "ignored":
-            _finish_event(
-                record.pk,
-                PaymentProviderEvent.ProcessingResult.IGNORED,
-                "no_op_event",
+        if durable_event.outcome == "succeeded":
+            # Not ours by any id we stored, yet money moved: kept, retried and
+            # finally left for a human, never applied to a guess.
+            raise FinanceError(
+                "A provider reported a payment for a checkout this server never stored."
             )
-            return "no_op_event"
-        raise FinanceError("A money-moving provider event has no matching attempt.")
+        note = "no_op_event" if durable_event.outcome == "ignored" else "unknown_checkout"
+        _finish_event(record.pk, PaymentProviderEvent.ProcessingResult.IGNORED, note)
+        return note
 
     if record.attempt_id != attempt.pk:
         PaymentProviderEvent.objects.filter(pk=record.pk).update(
@@ -2158,51 +2420,27 @@ def process_provider_event(*, event_id: int) -> str:
     note = reconcile_attempt(
         attempt_id=attempt.pk,
         outcome=durable_event.outcome,
-        provider_session_id=durable_event.provider_session_id,
         provider_payment_id=durable_event.provider_payment_id,
         provider_amount_minor=durable_event.amount_minor,
         provider_currency=durable_event.currency,
         guest_email=durable_event.guest_email,
         failure_code=durable_event.failure_code,
     )
-    _finish_event(
-        record.pk,
-        PaymentProviderEvent.ProcessingResult.IGNORED
-        if note == "another_checkout"
-        else PaymentProviderEvent.ProcessingResult.APPLIED,
-        note,
-    )
+    _finish_event(record.pk, PaymentProviderEvent.ProcessingResult.APPLIED, note)
     return note
 
 
-def _reference_uuid(reference) -> uuid.UUID | None:
-    """Read a provider-echoed reference as an order reference, or as nothing.
-
-    `client_reference_id` is free text the provider hands back verbatim, and
-    anything able to open a Checkout Session on this account chooses it. Our
-    own references are UUIDs, so a value that is not one cannot name an order.
-    Passing it to a `UUIDField` lookup raises `ValidationError` out of the
-    webhook view, which answers 500 and asks the provider to redeliver the same
-    poisoned event forever. Refusing it here keeps one malformed reference from
-    wedging the whole endpoint for every other event behind it.
-    """
-
-    if not reference:
-        return None
-    try:
-        return uuid.UUID(str(reference))
-    except (AttributeError, TypeError, ValueError):
-        return None
-
-
 def _match_attempt(event) -> PaymentAttempt | None:
-    """The attempt a provider event is about, or none.
+    """The attempt that stored the provider object an event names, or none.
 
-    By the checkout or payment the event names, else, for an event that
-    arrives before its checkout was stored, by the attempt id our own create
-    request put in that checkout's metadata. Never by the order alone: an
-    order can have several attempts, and a late event from an abandoned
-    checkout must not land on the one opening now (G1).
+    An event is about the checkout it names, and binds only to the attempt
+    that stored that checkout's id, or the payment id recorded with its
+    success. A checkout's id is stored before its URL leaves the server, so
+    nobody can pay through a checkout this server has not stored, and an
+    event naming none it stored is about nothing of ours. Nothing else an
+    event carries (an order reference, metadata a request set, an attempt id)
+    ever binds it: anything able to open a checkout on the same account can
+    write those, and an order has many attempts (G1).
     """
 
     queryset = PaymentAttempt.objects.select_related("order")
@@ -2213,31 +2451,10 @@ def _match_attempt(event) -> PaymentAttempt | None:
         if found is not None:
             return found
     if event.provider_payment_id:
-        found = queryset.filter(
+        return queryset.filter(
             provider=event.provider, provider_payment_id=event.provider_payment_id
         ).first()
-        if found is not None:
-            return found
-    attempt_id = _attempt_reference(event.attempt_reference)
-    if attempt_id is None:
-        return None
-    found = queryset.filter(pk=attempt_id, provider=event.provider).first()
-    if found is None:
-        return None
-    reference = _reference_uuid(event.reference)
-    if reference is not None and found.order.public_reference != reference:
-        return None
-    if found.provider_session_id:
-        # That attempt stored another checkout: this event is not about it.
-        return None
-    return found
-
-
-def _attempt_reference(value) -> int | None:
-    """Read a provider-echoed attempt id, or nothing."""
-
-    text = str(value or "")
-    return int(text) if text.isdigit() and len(text) <= 18 else None
+    return None
 
 
 def _finish_event(event_id: int, result: str, note: str) -> None:
@@ -2307,7 +2524,6 @@ def reconcile_attempt(
     *,
     attempt_id: int,
     outcome: str,
-    provider_session_id: str = "",
     provider_payment_id: str = "",
     provider_amount_minor: int | None = None,
     provider_currency: str = "",
@@ -2339,16 +2555,15 @@ def reconcile_attempt(
     require_order_mode(order)
 
     if (
-        provider_session_id
+        outcome in FINAL_CHECKOUT_OUTCOMES
         and attempt.provider_session_id
-        and attempt.provider_session_id != provider_session_id
+        and attempt.checkout_final_at is None
     ):
-        # Bound to this attempt before it stored its checkout, and about
-        # another one: read again under the lock, it never ends this attempt
-        # or its checkout (G1). Money it reports is still money.
-        if outcome == "succeeded":
-            raise FinanceError("A payment was reported for another checkout.")
-        return "another_checkout"
+        # Every caller reports an outcome of the provider's for this stored
+        # checkout, or its close the provider confirmed: it takes no further
+        # payment (G1).
+        attempt.checkout_final_at = timezone.now()
+        attempt.save(update_fields=["checkout_final_at", "updated_at"])
 
     # The provider's address replaces only one the guest gave at checkout: an
     # attempt opened with receipts off has none, and is never given one, so no
@@ -3182,15 +3397,15 @@ def close_order_to_collection(*, order_id: int, reason: str) -> PaymentOrder:
 
 
 def _stop_collecting_attempts(order: PaymentOrder, *, reason: str) -> None:
-    """End a closed order's open attempts, and close their checkouts (G1).
+    """End a closed order's open attempts, and settle their checkouts (G1).
 
     Called under the order lock, once the order no longer collects. Each
     attempt ends now, so nothing funds the order from it. One whose checkout
-    was stored may have been handed out: it is marked to be closed, and a
-    durable job asks its provider to close it once this transaction commits,
-    so a payer still holding its URL is not charged for an order that no
-    longer exists. A payment already settling is left to its own outcome,
-    which lands as unapplied and is refunded if it succeeds.
+    was stored may have been handed out, so its settle job is due at once
+    (`settle_checkout`): it closes the checkout a payer may still hold, and
+    records a payment made through it first, which lands as unapplied and is
+    refunded. A payment already settling is left to its own outcome, which
+    its settle job follows.
     """
 
     now = timezone.now()
@@ -3204,18 +3419,12 @@ def _stop_collecting_attempts(order: PaymentOrder, *, reason: str) -> None:
         attempt.status = PaymentAttempt.Status.CANCELLED
         attempt.failure_code = reason[:64]
         fields = ["status", "failure_code", "updated_at"]
-        if attempt.provider_session_id:
-            if attempt.close_requested_at is None:
-                attempt.close_requested_at = now
-                fields.append("close_requested_at")
-            schedule_job(
-                kind=ScheduledJob.Kind.CHECKOUT_CLOSE,
-                key=f"checkout_close:{attempt.pk}",
-                run_at=now,
-                payload={"attempt_id": attempt.pk},
-                max_attempts=CHECKOUT_CLOSE_ATTEMPTS,
-            )
+        if attempt.provider_session_id and attempt.close_requested_at is None:
+            attempt.close_requested_at = now
+            fields.append("close_requested_at")
         attempt.save(update_fields=fields)
+        if attempt.provider_session_id:
+            _arm_checkout_settle(attempt.pk, run_at=now)
         ended.append(attempt.pk)
     ScheduledJob.objects.filter(
         kind=ScheduledJob.Kind.ATTEMPT_EXPIRY,
@@ -3639,6 +3848,15 @@ def guest_payment_view(link: GuestPaymentLink, *, policy: Phase3Policy) -> dict:
     """
 
     order = link.order
+    providers = [
+        row
+        for row in provider_options(
+            policy,
+            amount_eur_cents=order.outstanding_eur_cents,
+            guest_only=True,
+        )
+        if row["available"]
+    ]
     return {
         "amount_eur_cents": order.outstanding_eur_cents,
         "currency": "EUR",
@@ -3654,15 +3872,15 @@ def guest_payment_view(link: GuestPaymentLink, *, policy: Phase3Policy) -> dict:
         # Guest rails carry the same settlement preview as the signed-in
         # screen. Chargily reports `supports_guest_payment = False`, so it is
         # filtered out here rather than offered and refused at the tap.
-        "providers": [
-            row
-            for row in provider_options(
-                policy,
-                amount_eur_cents=order.outstanding_eur_cents,
-                guest_only=True,
-            )
-            if row["available"]
-        ],
+        "providers": providers,
+        # "in_progress" while a tap would be told a payment is under way, so
+        # the page offers to check again rather than a button the server
+        # would refuse (G1). Nothing about who is paying.
+        "checkout_state": checkout_state(
+            order,
+            available={row["provider"] for row in providers},
+            guest=True,
+        ),
     }
 
 

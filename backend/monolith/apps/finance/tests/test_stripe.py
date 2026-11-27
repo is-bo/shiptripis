@@ -17,7 +17,6 @@ import hashlib
 import hmac
 import json
 import time
-import uuid
 from datetime import UTC, datetime
 from urllib.parse import parse_qs
 
@@ -25,7 +24,6 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from apps.finance.models import PaymentProviderEvent
-from apps.finance.services import _reference_uuid
 
 from apps.finance.providers.base import (
     CHECKOUT_CLOSED,
@@ -533,15 +531,17 @@ class StripeWebhookParsingTests(TestCase):
 
         assert self._parse(body).outcome == "expired"
 
-    def test_a_failed_payment_intent_is_reported_as_failed(self):
+    def test_a_declined_card_ends_nothing(self):
+        """The payer may try again in the same session, so only the session's
+        own events end it (G1)."""
+
         body = self._event(
             "payment_intent.payment_failed",
             {"object": "payment_intent", "id": "pi_9", "last_payment_error": {"code": "card_declined"}},
         )
         event = self._parse(body)
 
-        assert event.outcome == "failed"
-        assert event.failure_code == "card_declined"
+        assert event.outcome == "ignored"
 
     def test_a_delayed_payment_method_is_reported_as_processing(self):
         """SEPA and bank transfer complete the session before the money lands."""
@@ -592,6 +592,7 @@ class StripeWebhookParsingTests(TestCase):
                 "customer_details": {"email": "guest@example.com", "name": "A Guest"},
                 "customer_email": "prefilled@example.com",
                 "billing_details": {"address": {"line1": "1 Secret Street"}},
+                "url": "https://checkout.stripe.test/c/pay/cs_4",
             },
         )
 
@@ -603,33 +604,9 @@ class StripeWebhookParsingTests(TestCase):
         assert "guest@example.com" not in stored
         assert "prefilled@example.com" not in stored
         assert "1 Secret Street" not in stored
+        # Nor the hosted URL, which lets whoever holds it pay (G1).
+        assert "checkout.stripe.test" not in stored
         assert "[redacted]" in stored
-
-    def test_an_event_names_the_attempt_its_checkout_was_opened_for(self):
-        session = self._parse(
-            self._event(
-                "checkout.session.expired",
-                {
-                    "object": "checkout.session",
-                    "id": "cs_5",
-                    "client_reference_id": "ref-5",
-                    "metadata": {"order_reference": "ref-5", "attempt_id": "41"},
-                },
-            )
-        )
-        intent = self._parse(
-            self._event(
-                "payment_intent.payment_failed",
-                {
-                    "object": "payment_intent",
-                    "id": "pi_5",
-                    "metadata": {"order_reference": "ref-5", "attempt_id": "41"},
-                },
-                event_id="evt_2",
-            )
-        )
-
-        assert session.attempt_reference == intent.attempt_reference == "41"
 
     def test_a_body_that_is_not_json_is_rejected(self):
         body = b"not json at all"
@@ -714,9 +691,62 @@ class StripeWebhookEndpointTests(TestCase):
             provider_event_id="evt_bad_reference"
         ).exists()
 
-    def test_a_reference_that_is_not_a_uuid_matches_no_order(self):
-        assert _reference_uuid("not-a-uuid") is None
-        assert _reference_uuid("") is None
-        assert _reference_uuid(None) is None
-        reference = uuid.uuid4()
-        assert _reference_uuid(str(reference)) == reference
+    @override_settings(STRIPE_WEBHOOK_SECRET=SECRET)
+    def test_a_declined_card_and_a_session_never_stored_bind_to_nothing(self):
+        """A decline leaves its session open for another try, and an event
+        binds only by an id this server stored, never by metadata or a
+        reference anything on the account can write (G1, sixth pass). Both
+        finish as ignored, with no retry left to run out."""
+
+        from apps.finance.models import ScheduledJob
+
+        for event_id, event_type, obj in (
+            (
+                "evt_declined",
+                "payment_intent.payment_failed",
+                {
+                    "object": "payment_intent",
+                    "id": "pi_declined",
+                    "metadata": {"attempt_id": "1"},
+                    "last_payment_error": {"code": "card_declined"},
+                },
+            ),
+            (
+                "evt_unknown_session",
+                "checkout.session.expired",
+                {
+                    "object": "checkout.session",
+                    "id": "cs_never_stored",
+                    "metadata": {"attempt_id": "1"},
+                },
+            ),
+        ):
+            with self.subTest(event_type):
+                body = json.dumps(
+                    {
+                        "id": event_id,
+                        "type": event_type,
+                        "livemode": False,
+                        "data": {"object": obj},
+                    },
+                    separators=(",", ":"),
+                ).encode("utf-8")
+
+                response = self.client.post(
+                    reverse("finance-webhook-stripe"),
+                    data=body,
+                    content_type="application/json",
+                    HTTP_STRIPE_SIGNATURE=stripe_signature(body),
+                )
+
+                assert response.status_code == 200
+                record = PaymentProviderEvent.objects.get(provider_event_id=event_id)
+                assert record.attempt_id is None
+                assert (
+                    record.processing_result
+                    == PaymentProviderEvent.ProcessingResult.IGNORED
+                )
+                assert not ScheduledJob.objects.filter(
+                    key=f"provider_event_process:{record.pk}",
+                    status=ScheduledJob.Status.PENDING,
+                ).exists()

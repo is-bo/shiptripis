@@ -167,6 +167,9 @@ Map<String, dynamic> _payment({
     ],
     'refunds': <Object>[],
     'providers': <Object>[],
+    // The server's word on the next tap: the Sender's own payment is
+    // settling (G1).
+    if (attemptStatus == 'processing') 'checkout_state': 'settling',
   },
 };
 

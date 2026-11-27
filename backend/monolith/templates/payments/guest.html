@@ -104,12 +104,19 @@ Its look -- tokens, faces, header and language switch -- is the shared
       <h1 class="title">{{ t.in_progress_title }}</h1>
       <p class="lead">{{ t.in_progress_body }}</p>
     </div>
+    {% if reload %}
+    <form method="get" action="{{ checkout_action }}">
+      <input type="hidden" name="lang" value="{{ lang }}">
+      <button type="submit" class="secondary">{{ t.try_again }}</button>
+    </form>
+    {% else %}
     <form method="post" action="{{ checkout_action }}">
       <input type="hidden" name="lang" value="{{ lang }}">
       <input type="hidden" name="provider" value="{{ chosen }}">
       {% if email %}<input type="hidden" name="email" value="{{ email }}">{% endif %}
       <button type="submit" class="secondary">{{ t.try_again }}</button>
     </form>
+    {% endif %}
   {% elif already_paid %}
     <div class="mark seal-mark" aria-hidden="true">
       <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>

@@ -1815,6 +1815,7 @@ CREATE TABLE public.finance_payment_attempt (
     checkout_request jsonb NOT NULL,
     close_requested_at timestamp with time zone,
     opening_until timestamp with time zone,
+    checkout_final_at timestamp with time zone,
     CONSTRAINT fin_attempt_amount_positive CHECK ((amount_eur_cents > 0)),
     CONSTRAINT fin_attempt_fx_required_for_conversion CHECK ((((fx_rate_micros IS NULL) AND ((payment_currency)::text = 'EUR'::text)) OR ((NOT ((payment_currency)::text = 'EUR'::text)) AND (fx_rate_micros IS NOT NULL)))),
     CONSTRAINT fin_attempt_resolution_complete CHECK (((((operational_resolution)::text = ''::text) AND ((operational_resolution_reason)::text = ''::text) AND (operational_resolved_at IS NULL) AND (operational_resolved_by_id IS NULL)) OR ((NOT ((operational_resolution)::text = ''::text)) AND (operational_resolved_at IS NOT NULL) AND (NOT ((operational_resolution_reason)::text = ''::text))))),
@@ -7689,6 +7690,13 @@ CREATE UNIQUE INDEX fin_account_operation_sequence ON public.finance_payout_prov
 --
 
 CREATE INDEX fin_attempt_expiry_idx ON public.finance_payment_attempt USING btree (status, expires_at);
+
+
+--
+-- Name: fin_attempt_live_checkout_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fin_attempt_live_checkout_idx ON public.finance_payment_attempt USING btree (id) WHERE ((checkout_final_at IS NULL) AND (NOT ((provider_session_id)::text = ''::text)) AND (NOT ((status)::text = 'succeeded'::text)));
 
 
 --

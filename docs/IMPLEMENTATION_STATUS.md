@@ -47,6 +47,17 @@
   the locks; an attempt ends no later than its provider's own checkout expiry; a completed, unpaid
   Stripe session is read with its payment intent; and the owner screen shows a settling payment
   without a Pay button. Migration `0036` also adds the new job kind.
+- Sixth pass (Astra 6.2, three blockers and seven should-fix findings), fixed at their two causes. An
+  event binds only to the attempt that stored the checkout or payment id it names; every metadata and
+  reference fallback is removed. A checkout is live until its provider confirms it can take no
+  payment (new `checkout_final_at`, set only on a provider's word), whatever its attempt's status.
+  One routine settles a checkout (`settle_checkout`: read the provider, record any outcome, close if
+  not wanted) for replacement, expiry, order closure and its settle job; that job completes only when
+  the checkout is final, and the job loop re-arms one for any live checkout without it, old code's
+  included. The fifth pass's `checkout_close` job kind is gone. A Stripe card decline ends nothing;
+  Chargily states its 30-minute expiry, its string `livemode` reads as a boolean, and no hosted URL
+  is stored. The server tells each screen what its next tap meets (`checkout_state`), and the app's
+  payment section and guest screen follow it.
 
 ## Wassla: the bell names the ticket decision (N2, 2026-11-26)
 

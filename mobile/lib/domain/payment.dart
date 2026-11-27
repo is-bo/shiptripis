@@ -319,24 +319,35 @@ class PaymentAttempt {
   final DateTime? expiresAt;
   final DateTime? succeededAt;
   final DateTime? createdAt;
+}
 
-  bool get isExpired {
-    final at = expiresAt;
-    return at != null && at.isBefore(DateTime.now());
-  }
+/// What the owner's next tap on an order's payment meets, as the server
+/// decides it (G1). The payment section offers only what the server would
+/// accept; the tap itself is decided again on the server.
+enum CheckoutState {
+  /// Choose a rail and pay.
+  ready,
 
-  /// Someone is partway through this payment: its checkout is open, or its
-  /// money is settling.
-  bool get isUnderWay => status.isInFlight && !isExpired;
+  /// The owner's own checkout is open, and continuing hands it back.
+  resumable,
 
-  /// The payment was made and its money is settling. Only its own outcome
-  /// ends it, whatever its expiry says, and no new checkout opens meanwhile.
-  bool get isSettling => status == PaymentAttemptStatus.processing;
+  /// Someone the owner sent the link to is paying: their checkout can still
+  /// be paid, or their payment is settling.
+  guestPaying,
 
-  /// Whether the payer can be offered to continue this attempt: its checkout
-  /// is open, not yet paid. Continuing asks the checkout endpoint again, which
-  /// hands the payer's own checkout back or says a payment is under way.
-  bool get canResume => isUnderWay && !isSettling;
+  /// A payment is being made or a checkout opened: try again shortly.
+  inProgress,
+
+  /// A payment was made and its money is settling.
+  settling;
+
+  static CheckoutState parse(Object? raw) => switch (raw) {
+    'resumable' => resumable,
+    'guest_paying' => guestPaying,
+    'in_progress' => inProgress,
+    'settling' => settling,
+    _ => ready,
+  };
 }
 
 class PaymentRefund {
@@ -508,6 +519,7 @@ class PaymentOrder {
     this.createdAt,
     this.chargilyQuote,
     this.settlement,
+    this.checkoutState = CheckoutState.ready,
     this.isReducedProjection = false,
   });
 
@@ -553,6 +565,7 @@ class PaymentOrder {
     settlement: readObject(json['settlement']) == null
         ? null
         : PaymentSettlement.fromJson(readObject(json['settlement'])!),
+    checkoutState: CheckoutState.parse(json['checkout_state']),
     isReducedProjection: isReducedProjection,
   );
 
@@ -592,6 +605,10 @@ class PaymentOrder {
 
   final ChargilyQuote? chargilyQuote;
   final PaymentSettlement? settlement;
+
+  /// What the next tap on this order's payment meets. Present while something
+  /// is still owed; [CheckoutState.ready] otherwise.
+  final CheckoutState checkoutState;
 
   /// True for the traveller's cut-down view of a Deal's balance order: status
   /// and outstanding only, no attempts and no payer detail.
@@ -804,6 +821,7 @@ class GuestPaymentView {
     this.expiresAt,
     this.purpose = PaymentPurpose.unknown,
     this.receiptEmailRequired = true,
+    this.checkoutInProgress = false,
   });
 
   factory GuestPaymentView.fromJson(Map<String, dynamic> json) =>
@@ -828,6 +846,7 @@ class GuestPaymentView {
             .map(ProviderOption.fromJson)
             .where((p) => p.provider != PaymentProviderId.mock)
             .toList(growable: false),
+        checkoutInProgress: json['checkout_state'] == 'in_progress',
       );
 
   final Money? amount;
@@ -845,6 +864,10 @@ class GuestPaymentView {
 
   /// Already filtered server-side to rails that are usable right now.
   final List<ProviderOption> providers;
+
+  /// A payment for this is being made or settling, so a tap now would be
+  /// told to try again: the screen offers to check again instead (G1).
+  final bool checkoutInProgress;
 }
 
 /// Where the sender's "someone else can pay" link stands. Derived by the

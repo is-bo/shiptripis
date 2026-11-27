@@ -704,6 +704,179 @@ settling payment and expected the rail choice; it now expects the "still confirm
 rail choice (finding 10), then goes on to the captured and failed events as before. No assertion was
 removed or loosened.
 
+## Sixth-pass review
+
+Astra 6.2 rejected `a0b48be`: round-3 #7 and round-4 #3, #5 to #8 and #10 fixed; round-3 #2, round-4
+#1, #2, #4 and #9, B and C partly; three new blockers and seven should-fix findings. This is the sixth
+round, so the recurring findings were traced to their causes first and fixed there, in one commit on
+top of `a0b48be`. No fix changes an amount, a fee, a currency or what funds an order.
+
+### The two causes behind six rounds of findings
+
+Every checkout-correlation and closing finding since the third pass is one of two mistakes, each
+patched where it surfaced instead of where it lived:
+
+1. **Events were bound by guesses.** An event was matched by the checkout or payment id we stored,
+   and failing that by something the event carried: the order reference, then (fifth pass) an
+   attempt id in metadata. Anything able to open a checkout on the same provider account writes
+   those, so each fallback had a variant that bound an event to the wrong attempt (round-4 #1, fifth
+   pass #1, sixth-pass blocker 1).
+2. **Whether a checkout can take money was read from the attempt's status.** "Open" was taken to mean
+   "can collect" and "ended" to mean "cannot", while only the provider knows. Each path that ends an
+   attempt (replacement, expiry, cancellation, closing to collection, old code before G1) did part
+   of the close-and-reconcile work, and each left a gap: a cancelled order's checkout still payable,
+   a collected payment never recorded, a superseded session still live after the upgrade (round-4
+   #2 and #4, fifth pass #2, sixth-pass blockers 2 and 3, B).
+
+### The rules now
+
+- **An event binds only to the attempt that stored the provider object it names** (`_match_attempt`):
+  its checkout id, else the payment id recorded with its success. Nothing else an event carries
+  binds it. An event naming nothing we stored is ignored (`unknown_checkout`), and a success of that
+  kind raises, so the money is kept, retried and left for a human. This is complete because a
+  checkout's id is stored before its URL leaves the server: nobody can pay through a checkout we have
+  not stored. The order-reference and attempt-id fallbacks, `ProviderEvent.attempt_reference`,
+  `_reference_uuid` and the lock-time `another_checkout` comparison are removed, and Chargily's
+  metadata is back to the reference alone.
+- **A checkout is live until its provider confirms it can take no further payment.** The attempt
+  records that fact in a new column, `checkout_final_at`, set only on a provider's word: an outcome
+  it reported (paid, failed, expired, cancelled), or its confirmation that the checkout closed.
+  `LIVE_CHECKOUT` (stored checkout, not final, not succeeded) is the one definition, with a partial
+  index. The attempt's status no longer says anything about the checkout.
+- **One routine decides what becomes of a checkout: `settle_checkout`.** It reads the provider first
+  and records a final outcome through `reconcile_attempt`, so money paid through the checkout always
+  lands (applied, or unapplied and refunded when the order is gone). A checkout still wanted is left
+  open; any other is closed, and only the provider's confirmation makes it final. A payment settling
+  or being made answers "still live". The in-request replacement, the expiry job, the settle job and
+  order closure all go through it; `_close_checkout`, `close_ended_checkout` and the fifth pass's
+  `checkout_close` job kind are removed.
+- **One durable obligation follows a live checkout to its end: its settle job**
+  (`provider_reconcile:<attempt>`). It completes only when the checkout is final, is deferred (without
+  spending its retries) while a payment settles or is being made, and is retried while the provider
+  answers nothing usable. `_arm_checkout_settle` arms it again from whatever state an earlier run
+  left. The job loop's new sweep (`arm_live_checkouts`, from `run_due_jobs`) gives every live
+  checkout without a pending settle job one, so no retry budget, outage, or code path (old code
+  included) can leave a live checkout unwatched.
+- **No checkout is handed out or opened while another of the order's checkouts is live.**
+  `_checkout_step` looks for any live checkout on the order, whatever its attempt's status, and
+  settles it first, with no lock held; only the provider's confirmation lets the next look go on.
+  The rule for handing a member their own checkout back is one function, `_hands_back`, used by the
+  checkout path and by what the screens offer.
+
+### Blockers
+
+1. **An early event could bind by metadata to the wrong attempt** (services.py:2227, stripe.py:585).
+   Fixed by the first rule: no binding by metadata or reference at all, so there is nothing to
+   collide with. A `payment_intent.payment_failed` no longer ends anything (see should-fix 1).
+   *Check:* `test_an_event_naming_a_checkout_never_stored_binds_to_nothing`,
+   `test_a_late_event_from_an_abandoned_checkout_never_ends_the_one_opening` (rewritten, below), and
+   the Stripe endpoint test `test_a_declined_card_and_a_session_never_stored_bind_to_nothing`.
+2. **A close that found the checkout collected recorded nothing** (services.py:1855, jobs.py:327).
+   Closing is now part of settling: the provider is read before any close, a collected checkout
+   answers "still live" and the settle job reads it again five minutes later, its retries untouched,
+   until the payment's outcome is recorded; on a cancelled order it lands as unapplied and is
+   refunded. A refused or failed provider call keeps the job (retried, then re-armed by the sweep).
+   *Check:* `test_a_cancelled_orders_checkout_that_took_a_payment_refunds_it`,
+   `test_a_payment_being_made_holds_off_expiry_and_is_followed_to_its_end`,
+   `test_a_settle_job_that_ran_out_is_armed_again_until_the_checkout_is_final`.
+3. **Sessions superseded by old code stayed live after the upgrade** (0036, services.py:1583). Live
+   is read from the provider's word, not the status, so a session old code left cancelled, expired
+   or superseded without closing is live, settled before the order hands out or opens anything, and
+   watched by the sweep. No data migration: the same rule covers every row.
+   *Check:* `test_a_checkout_old_code_ended_is_closed_before_any_other_opens` (cancelled and
+   expired, with the close refused first) and
+   `test_the_job_loop_arms_every_live_checkout_left_without_a_settle_job`, on rows left as old code
+   left them (no close, no job).
+
+### Should-fix
+
+1. **A Stripe card decline exhausted its job.** `payment_intent.payment_failed` is ignored: the payer
+   may try again in the same session, which only its own session's events end
+   (`checkout.session.async_payment_failed` for a delayed method, or the session read by the settle
+   job). *Check:* `test_a_declined_card_ends_nothing` (rewritten, below) and the endpoint test above.
+2. **Chargily's 30-minute lifetime was not stated.** The adapter returns
+   `expires_at = created_at + 30 minutes` (`CHECKOUT_LIFETIME`), or from the time of the request when
+   the answer carries no `created_at`, so the attempt ends and is never handed back past it.
+   *Check:* `test_a_checkout_states_when_chargily_stops_it_collecting`,
+   `test_a_checkout_without_its_creation_time_ends_no_later_than_stated`, and the existing
+   `test_an_owner_is_never_handed_a_checkout_its_provider_expired` for the tap past the deadline.
+3. **Chargily's hosted URL was stored and shown on the provider-event page.** Both scrubbers drop
+   hosted-URL keys before anything is stored: `url` and `checkout_url` for Chargily, `url` for
+   Stripe. *Check:* `test_the_published_webhook_shape_passes_the_mode_check_and_keeps_no_url` (the
+   published shape), `test_the_stored_payload_carries_no_customer_pii` (Stripe).
+4. **Chargily's string `livemode` was isolated as another mode.** After the signature is verified,
+   and on Chargily's own API answers, `"true"` and `"false"` become booleans; any other value is left
+   for the strict mode check to refuse. *Check:* the published-shape test with mode enforcement on
+   (a test event passes, a live one is refused) and
+   `test_a_livemode_that_is_neither_true_nor_false_is_left_to_be_refused`.
+5. **A row with no frozen request made recovery raise a 500.** Recovery needs the request frozen on
+   the attempt; one that has none, or one that no longer fits, is refused like a create the provider
+   refused (`checkout_request_unusable`), so the attempt is abandoned and replaced. Its key is not
+   replayed with rebuilt parameters, which C forbids, and nothing is lost: a checkout behind that key
+   was never stored, so its URL never left the server. *Check:*
+   `test_a_lost_checkout_with_no_request_to_repeat_is_replaced_not_a_500` (through the API),
+   `test_a_lost_checkout_whose_request_no_longer_fits_is_replaced`.
+6. **and 7. The screens offered what the server would refuse.** The server now says what the next
+   tap meets (`checkout_state`): on the owner's order payload `ready`, `resumable` (their own checkout,
+   handed back by `_hands_back`, on a rail still available), `guest_paying` (a link holder's checkout
+   can still be paid, or their payment is settling), `in_progress` (a checkout is being opened) or
+   `settling`; on the guest quote only `ready` or `in_progress`, with nothing about who is paying.
+   The app's payment section is driven by it alone (the client-side `isUnderWay`, `isSettling` and
+   `canResume` are removed): Continue only when resumable, the rails when the old rail is off. The
+   guest screen replaces Pay with "Check again", which reads the quote again, while the server says
+   a payment is under way or after a tap was told so; the guest web page opened in that state says
+   so and offers to look again. Existing strings only, in English, French and Arabic.
+   *Check:* server `test_the_owner_is_offered_their_checkout_only_while_it_is_handed_back`,
+   `test_a_checkout_being_opened_or_settling_is_waited_for_on_every_screen`,
+   `test_a_guests_payment_is_shown_to_the_owner_as_theirs` (with the web page); app
+   `an open checkout on a rail switched off is not continued`,
+   `a checkout being opened is waited for, not continued`,
+   `the Sender's own open checkout is continued`,
+   `a payment already under way is waited for, then checked again`,
+   `a link opened while its payment is settling offers no Pay`.
+   *Screenshots* (360 px, widget tests with the app's fonts): the owner's payment screen while a
+   checkout is being opened, `docs/screenshots/g1/app-owner-opening-{en,ar}.png`, and the guest
+   screen with "Check again" in place of Pay, `app-guest-check-again-{en,ar}.png`. The guest web
+   page opened in that state looks like `guest-in-progress-{en,ar}.png`; only its button now reloads
+   the page instead of resubmitting a choice.
+
+**Each new test fails with its fix removed** (16 server mutations): the job loop's sweep; the
+live-checkout gate in `_checkout_step`; reading the provider before closing; a collected checkout
+treated as final; order closure arming the settle job; the provider fact recorded by
+`reconcile_attempt`; the unusable-request guard; the rail-availability condition and the opening
+claim in `checkout_state`; the guest page's in-progress branch; Chargily's livemode normalisation, URL
+scrub and stated expiry; Stripe's URL scrub; the declined card mapped back to failed; and the settle
+job armed when a close cannot be confirmed. On the app, each new test fails against the fifth pass's
+attempt-derived chooser or guest footer.
+
+**Tests rewritten to the new rule** (CLAUDE.md: a test that encoded a rule since changed). No
+assertion about money, funding or what a payer is handed was removed or loosened.
+
+- `test_a_failed_payment_intent_is_reported_as_failed` (Stripe adapter) is now
+  `test_a_declined_card_ends_nothing`: a decline is ignored (should-fix 1).
+- `test_an_event_names_the_attempt_its_checkout_was_opened_for` (Stripe adapter) and the attempt-id
+  assertions of the Chargily create and paid-event tests, added in the fifth pass, are removed with
+  the metadata binding they tested; the Chargily tests are back to their fourth-pass form.
+  `test_a_reference_that_is_not_a_uuid_matches_no_order` goes with `_reference_uuid`.
+- `test_an_event_bound_before_its_checkout_was_stored_is_read_again_under_lock` is now
+  `test_an_event_naming_a_checkout_never_stored_binds_to_nothing`, and
+  `test_a_late_event_from_an_abandoned_checkout_never_ends_the_one_opening` expects that event bound
+  to nothing instead of to the abandoned attempt (blocker 1). The live attempt's assertions are kept.
+- `test_a_checkout_that_took_a_payment_is_not_replaced`: the next tap now reads the provider and
+  records the payment, so it is told the link is used, and the order is paid before the webhook.
+- `test_a_payment_taken_before_its_webhook_holds_off_expiry_and_replacement`: a payment settling at
+  the provider is now recorded as settling by the first tap (status `processing`, expiry
+  `attempt_settling`); the case of a close refused while the checkout is still open moved to the new
+  `test_a_payment_being_made_holds_off_expiry_and_is_followed_to_its_end`.
+- The four order-closure tests now follow the settle job (`provider_reconcile`) instead of the removed
+  `checkout_close` job, with the same retried-then-confirmed close; the two that asserted no close
+  job now assert the settle job ends without asking the provider, or defers while a payment settles.
+- The guest quote's key allowlist (three tests: two in the guest payment file, one in j2 guest
+  payer) includes `checkout_state`.
+- App: `a payment already under way is waited for, in words` expected Pay to stay; it now expects
+  "Check again" (should-fix 7). The phase 8ff4, j7c and j7d fixtures carry the server's
+  `checkout_state`, as the server now sends it.
+
 ## Checks
 
 Locally, against PostgreSQL (embedded cluster, `config.settings.test_pg`):
@@ -760,18 +933,36 @@ After the fifth pass, on Linux against PostgreSQL 16 and Redis 7 with CI's setti
 - The whole Django and app suites run in CI on the pushed commit, as the project runs long suites on
   GitHub.
 
+After the sixth pass, the same way:
+
+- `ruff check .`: clean. `makemigrations --check --dry-run`: no changes. `build_helper_instructions
+  --check`: up to date. Schema contract regenerated: the new column and its partial index, nothing
+  else.
+- The 26 files on the changed paths (guest payment, Stripe, Chargily, recovery, the three concurrency
+  files, lock order, webhooks, adapter, contracts, provider currency and HTTP, j2 guest payer, j7c,
+  j7d, invariants, jobs and payouts, operations, posting deposit, protection, the worker snapshot,
+  the admin console and the two marketplace switch files): 668 passed, 0 failed, after the j2 guest
+  payer allowlist was given the new key (listed above).
+- Mutation checks: each of the 16 server fixes, reverted alone, fails its tests.
+- App: `dart format` and `flutter analyze --fatal-infos` clean; the seven touched test files: 223
+  passed.
+- The whole Django and app suites run in CI on the pushed commit.
+
 ## Handoff
 
-- **Board:** G1 built, PR open. Migration `finance 0036` adds three nullable or defaulted columns
-  to the payment attempt and the `checkout_close` job kind; the schema contract is regenerated in the
-  same commit.
-- **Gate, second pass (strongest-model package).** Astra 6.2 rejected `4337d9c` (five findings) and
-  `f1fe565` (six findings), `d99c838` (three blockers, six should-fix) and `1643afc` (two blockers,
-  eight should-fix); all are fixed (see the second to fifth-pass sections). Astra re-reviews the
-  fifth pass before merge.
+- **Board:** G1 built, PR open. Migration `finance 0036` adds four nullable or defaulted columns to
+  the payment attempt (`checkout_request`, `opening_until`, `close_requested_at`,
+  `checkout_final_at`) and the partial index `fin_attempt_live_checkout_idx`; no job kind. The schema
+  contract is regenerated in the same commit.
+- **Gate, second pass (strongest-model package).** Astra 6.2 rejected `4337d9c` (five findings),
+  `f1fe565` (six findings), `d99c838` (three blockers, six should-fix), `1643afc` (two blockers,
+  eight should-fix) and `a0b48be` (three blockers, seven should-fix); all are fixed (see the second
+  to sixth-pass sections). Astra re-reviews the sixth pass before merge.
 - **Deploy (Ismail's approval).** The proxy changes (findings 1, A and F) reach the server only with a
   release: update the `/opt/wacla` checkout to the merged commit and `vps deploy` the image built from
-  it. No configuration or secret changes.
+  it. No configuration or secret changes. On its first cycles the job loop's sweep arms a settle job
+  for every older checkout not yet confirmed final, and each asks its provider once (test mode on the
+  server today), so those rows end as their providers report.
 - **After merge:** rerun the integrated finance suite once F1 is merged too (plan section 4, G1).
 - **O2 after an approved deployment** (plan section 3): a fresh synthetic link through public HTTPS in
   Android Chrome, an embedded browser if available, and once with a Wassla login open; Stripe test rail

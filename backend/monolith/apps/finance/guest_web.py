@@ -369,12 +369,20 @@ def _no_rail(request: HttpRequest, lang: str) -> HttpResponse:
 
 
 def _in_progress(
-    request: HttpRequest, lang: str, *, provider: str, email: str
+    request: HttpRequest,
+    lang: str,
+    *,
+    provider: str,
+    email: str,
+    reload: bool = False,
 ) -> HttpResponse:
     """A payment for this is already under way, perhaps a tap ago (G1).
 
     Neither a dead link nor an outage, and the same for every holder of the
     link, whatever they sent. The page offers to send the same choices again.
+    Shown on opening the page as well while the server would answer a tap so
+    (`checkout_state`), so no payer is offered a button it would refuse; that
+    page offers to look again (`reload`), as nothing was chosen yet.
     """
 
     return _page(
@@ -386,8 +394,9 @@ def _in_progress(
             "chosen": provider,
             "email": email,
             "checkout_action": request.path,
+            "reload": reload,
         },
-        status=409,
+        status=200 if reload else 409,
     )
 
 
@@ -499,6 +508,8 @@ def guest_payment_page(request: HttpRequest, token: str) -> HttpResponse:
     email_error = ""
     status = 200
     chosen = providers[0]["provider"]
+    if request.method == "GET" and payload["checkout_state"] == "in_progress":
+        return _in_progress(request, lang, provider=chosen, email="", reload=True)
 
     if request.method == "POST":
         chosen = request.POST.get("provider", "")

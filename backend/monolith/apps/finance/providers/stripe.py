@@ -553,8 +553,9 @@ class StripeGateway:
             outcome = "expired"
         elif event_type == "checkout.session.async_payment_failed":
             outcome = "failed"
-        elif event_type == "payment_intent.payment_failed":
-            outcome = "failed"
+        # A declined card (`payment_intent.payment_failed`) ends nothing: the
+        # payer may try again in the same session, which only its own
+        # session's events end (G1).
 
         payment_intent = obj.get("payment_intent") or obj.get("id") or ""
         if isinstance(payment_intent, dict):
@@ -564,12 +565,6 @@ class StripeGateway:
         guest_email = ""
         if isinstance(customer_details, dict):
             guest_email = str(customer_details.get("email") or "")
-        # A session and its payment intent both carry the metadata our create
-        # request set, the attempt id included.
-        metadata = obj.get("metadata") or {}
-        attempt_reference = (
-            str(metadata.get("attempt_id") or "") if isinstance(metadata, dict) else ""
-        )
 
         return ProviderEvent(
             provider=self.name,
@@ -583,7 +578,6 @@ class StripeGateway:
             provider_session_id=str(session_id or ""),
             provider_payment_id=str(payment_intent or ""),
             reference=str(obj.get("client_reference_id") or ""),
-            attempt_reference=attempt_reference,
             amount_minor=obj.get("amount_total"),
             currency=str(obj.get("currency") or "").upper(),
             guest_email=guest_email,
@@ -652,6 +646,9 @@ _SENSITIVE_KEYS = frozenset(
         "phone",
         "address",
         "name",
+        # A session's hosted URL lets whoever holds it pay: it is handed to
+        # its payer and never kept anywhere else (G1).
+        "url",
     }
 )
 

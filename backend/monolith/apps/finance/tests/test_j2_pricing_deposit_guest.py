@@ -407,6 +407,9 @@ class GuestPayerTests(TestCase):
             "description",
             "expires_at",
             "providers",
+            # G1: what the next tap meets ("ready" or "in_progress"), never
+            # who is paying.
+            "checkout_state",
             # J7C: whether the page asks for a receipt address. Server config,
             # not a fact about the obligation or anyone attached to it.
             "receipt_email_required",

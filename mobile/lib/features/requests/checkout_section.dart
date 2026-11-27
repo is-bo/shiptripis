@@ -630,15 +630,15 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
     final l = L.of(context);
     final providers = ref.watch(paymentProvidersProvider);
 
+    // What the next tap meets is the server's to say (G1): a rail or a
+    // "continue" it would refuse is never offered.
+    final state = order?.checkoutState ?? CheckoutState.ready;
     final resumable = order?.latestAttempt;
-    if (order != null &&
-        resumable != null &&
-        (resumable.isUnderWay || resumable.isSettling) &&
-        resumable.isGuestPayment) {
-      // Somebody the Sender sent the link to is on the provider's page now.
-      // That session is theirs: offering "continue your payment" would send
-      // the Sender into it, and starting a fresh checkout would supersede it
-      // and risk the obligation being paid twice. Say what is happening.
+    if (order != null && state == CheckoutState.guestPaying) {
+      // Somebody the Sender sent the link to is paying: on the provider's
+      // page, or settling. That session is theirs: offering "continue your
+      // payment" would send the Sender into it, and starting a fresh checkout
+      // would replace it while they pay. Say what is happening.
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -673,16 +673,22 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
         ],
       );
     }
-    if (resumable != null && resumable.isSettling) {
-      // The Sender's own payment was made and is settling. The server answers
-      // every new checkout with "a payment is under way" until it settles, so
-      // offering a rail would only offer a refusal.
+    if (state == CheckoutState.settling || state == CheckoutState.inProgress) {
+      // The Sender's own payment was made and is settling, or a checkout is
+      // being opened this moment. The server answers every new checkout with
+      // "a payment is under way" until then, so offering a rail would only
+      // offer a refusal.
+      final settling = state == CheckoutState.settling;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           InfoNotice(
-            title: l.payResultStillCheckingTitle,
-            message: l.payResultStillCheckingBody,
+            title: settling
+                ? l.payResultStillCheckingTitle
+                : l.paymentInProgressTitle,
+            message: settling
+                ? l.payResultStillCheckingBody
+                : l.paymentInProgressBody,
             tone: StatusTone.waiting,
             icon: Icons.hourglass_top_rounded,
           ),
@@ -697,7 +703,7 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
         ],
       );
     }
-    if (resumable != null && resumable.canResume) {
+    if (resumable != null && state == CheckoutState.resumable) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

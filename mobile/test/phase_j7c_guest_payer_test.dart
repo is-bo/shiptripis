@@ -41,6 +41,7 @@ Map<String, dynamic> _order({
   int depositCredit = 0,
   List<Map<String, dynamic>> attempts = const [],
   List<Map<String, dynamic>>? providers,
+  String checkoutState = 'ready',
 }) => {
   'public_reference': _ref,
   'status': status,
@@ -54,6 +55,7 @@ Map<String, dynamic> _order({
   'attempts': attempts,
   'refunds': const <Map<String, dynamic>>[],
   'providers': providers ?? const <Map<String, dynamic>>[],
+  'checkout_state': checkoutState,
 };
 
 Map<String, dynamic> _link(
@@ -742,6 +744,7 @@ void main() {
               },
             ],
             providers: [rail('stripe', guest: true)],
+            checkoutState: 'guest_paying',
           ),
         );
         await pumpApp(
@@ -792,6 +795,7 @@ void main() {
                 },
               ],
               providers: [rail('stripe', guest: true)],
+              checkoutState: guest ? 'guest_paying' : 'settling',
             ),
           );
           await pumpApp(
@@ -823,6 +827,98 @@ void main() {
         },
       );
     }
+
+    // G1: what the Sender is offered is the server's word on the next tap,
+    // never the client's reading of an attempt. Their own open checkout on a
+    // rail switched off since is not offered again, and while a checkout is
+    // being opened nothing is offered but a way to check.
+    Map<String, dynamic> ownCheckout() => {
+      'id': 9,
+      'provider': 'chargily',
+      'status': 'checkout_pending',
+      'amount_eur_cents': 4250,
+      'payment_currency': 'DZD',
+      'provider_amount_minor': 6375,
+      'provider_amount_exponent': 0,
+      'is_guest_payment': false,
+      'expires_at': '2099-01-01T00:00:00Z',
+    };
+
+    Future<L> pumpSection(WidgetTester tester, PaymentOrder order) async {
+      await pumpApp(
+        tester,
+        Scaffold(
+          body: SingleChildScrollView(
+            child: CheckoutSection(
+              orderReference: _ref,
+              order: order,
+              onSettled: () {},
+            ),
+          ),
+        ),
+        container: containerFor(providersBackend()),
+      );
+      await tester.pumpAndSettle();
+      return L.of(tester.element(find.byType(CheckoutSection)));
+    }
+
+    testWidgets('an open checkout on a rail switched off is not continued', (
+      tester,
+    ) async {
+      final l = await pumpSection(
+        tester,
+        PaymentOrder.fromJson(
+          _order(
+            attempts: [ownCheckout()],
+            providers: [
+              {...rail('chargily', guest: false), 'available': false},
+              rail('stripe', guest: true),
+            ],
+          ),
+        ),
+      );
+
+      expect(find.text(l.paymentContinueAction), findsNothing);
+      expect(find.text(l.paymentChooseProvider), findsOneWidget);
+    });
+
+    testWidgets('a checkout being opened is waited for, not continued', (
+      tester,
+    ) async {
+      final l = await pumpSection(
+        tester,
+        PaymentOrder.fromJson(
+          _order(
+            attempts: [
+              {...ownCheckout(), 'status': 'created'},
+            ],
+            providers: [rail('stripe', guest: true)],
+            checkoutState: 'in_progress',
+          ),
+        ),
+      );
+
+      expect(find.text(l.paymentInProgressTitle), findsOneWidget);
+      expect(find.text(l.paymentCheckAgain), findsOneWidget);
+      expect(find.text(l.paymentContinueAction), findsNothing);
+      expect(find.text(l.paymentChooseProvider), findsNothing);
+    });
+
+    testWidgets('the Sender\'s own open checkout is continued', (tester) async {
+      final l = await pumpSection(
+        tester,
+        PaymentOrder.fromJson(
+          _order(
+            attempts: [ownCheckout()],
+            providers: [rail('chargily', guest: false)],
+            checkoutState: 'resumable',
+          ),
+        ),
+      );
+
+      expect(find.text(l.paymentContinueAction), findsOneWidget);
+      expect(find.text(l.paymentChooseProvider), findsNothing);
+    });
   });
 
   // -------------------------------------------------------------------------

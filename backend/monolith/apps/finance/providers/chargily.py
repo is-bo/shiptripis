@@ -14,7 +14,8 @@ Contract used (https://dev.chargily.com/pay-v2):
 * checkout  ``POST /checkouts`` with ``amount`` + ``currency`` (``dzd``),
   ``success_url`` (required), ``failure_url``, ``webhook_endpoint``,
   ``description``, ``metadata``; the response carries ``id`` and
-  ``checkout_url``
+  ``checkout_url``, and ``created_at`` as a Unix time; a checkout expires 30
+  minutes after it was created
 * webhook   header ``signature`` = HMAC-SHA256 hex digest of the **raw body**
   keyed with the API secret key; events are ``checkout.paid``,
   ``checkout.failed``, ``checkout.canceled``, ``checkout.expired``
@@ -30,9 +31,11 @@ import hmac
 import json
 import logging
 import time
+from datetime import UTC, datetime, timedelta
 
 import requests
 from django.conf import settings
+from django.utils import timezone
 
 from .base import (
     CHECKOUT_CLOSED,
@@ -62,6 +65,11 @@ LIVE_API_BASE = "https://pay.chargily.net/api/v2"
 TEST_API_BASE = "https://pay.chargily.net/test/api/v2"
 
 MAX_WEBHOOK_BYTES = 512 * 1024
+
+#: How long a checkout can be paid. Chargily expires a checkout 30 minutes
+#: after it was created unless it is told otherwise, and no request here tells
+#: it otherwise (G1).
+CHECKOUT_LIFETIME = timedelta(minutes=30)
 
 #: Chargily maps its checkout lifecycle onto these event types.
 _EVENT_OUTCOMES = {
@@ -332,16 +340,9 @@ class ChargilyGateway:
             "failure_url": request.failure_url,
             "webhook_endpoint": request.webhook_url,
             "description": request.description[:255],
-            # Chargily echoes metadata back on the webhook, which is how an
-            # event finds its own attempt even before its checkout id was
-            # stored (G1).
-            "metadata": [
-                {
-                    "reference": request.reference,
-                    "attempt_id": str(request.metadata.get("attempt_id") or ""),
-                }
-            ],
+            "metadata": [{"reference": request.reference}],
         }
+        requested_at = timezone.now()
         body = self._request(
             "POST", "/checkouts", operation="checkout_create", payload=payload
         )
@@ -349,10 +350,17 @@ class ChargilyGateway:
         checkout_url = str(body.get("checkout_url") or "")
         if not checkout_id or not checkout_url:
             raise ProviderError("Chargily did not return a usable checkout.")
+        created_at = body.get("created_at")
+        if type(created_at) is int and created_at > 0:
+            created = datetime.fromtimestamp(created_at, UTC)
+        else:
+            # It was created no earlier than it was asked for.
+            created = requested_at
         return CheckoutResult(
             provider_session_id=checkout_id,
             checkout_url=checkout_url,
             provider_status=str(body.get("status") or "pending"),
+            expires_at=created + CHECKOUT_LIFETIME,
             raw=_scrub(body),
         )
 
@@ -401,7 +409,7 @@ class ChargilyGateway:
             provider_payment_id=str(body.get("id") or provider_payment_id),
             amount_minor=body.get("amount"),
             currency=str(body.get("currency") or "").upper(),
-            raw=_scrub(body),
+            raw=_with_boolean_livemode(_scrub(body)),
         )
 
     def refund(self, request: RefundRequest) -> RefundResult:
@@ -452,20 +460,12 @@ class ChargilyGateway:
             outcome = "ignored"
 
         reference = ""
-        attempt_reference = ""
         metadata = data.get("metadata")
-        entries = (
-            [metadata]
-            if isinstance(metadata, dict)
-            else metadata
-            if isinstance(metadata, list)
-            else []
-        )
-        for entry in entries:
-            if isinstance(entry, dict) and entry.get("reference"):
-                reference = str(entry["reference"])
-                attempt_reference = str(entry.get("attempt_id") or "")
-                break
+        if isinstance(metadata, list):
+            for entry in metadata:
+                if isinstance(entry, dict) and entry.get("reference"):
+                    reference = str(entry["reference"])
+                    break
 
         return ProviderEvent(
             provider=self.name,
@@ -475,11 +475,10 @@ class ChargilyGateway:
             provider_session_id=str(data.get("id") or ""),
             provider_payment_id=str(data.get("id") or ""),
             reference=reference,
-            attempt_reference=attempt_reference,
             amount_minor=data.get("amount"),
             currency=str(data.get("currency") or "").upper(),
             failure_code=str(data.get("failure_reason") or ""),
-            payload=_scrub(event),
+            payload=_with_boolean_livemode(_scrub(event)),
         )
 
 
@@ -492,8 +491,34 @@ _SENSITIVE_KEYS = frozenset(
         "name",
         "address",
         "secret",
+        # A checkout's hosted URL lets whoever holds it pay: it is handed to
+        # its payer and never kept anywhere else (G1).
+        "url",
+        "checkout_url",
     }
 )
+
+#: How Chargily writes `livemode`: a boolean on a checkout, and the string
+#: "true" or "false" at the top of a webhook event.
+_LIVEMODE_VALUES = {True: True, False: False, "true": True, "false": False}
+
+
+def _with_boolean_livemode(payload: dict) -> dict:
+    """`payload` with each `livemode` Chargily wrote as a string made a boolean.
+
+    Applied to a body only once it is authenticated (a verified signature, or
+    Chargily's own API), so the mode checks read one type from every provider
+    (G1). A value that is neither stays as it is, and those checks refuse it.
+    """
+
+    for target in (payload, payload.get("data")):
+        if isinstance(target, dict) and "livemode" in target:
+            value = target["livemode"]
+            if isinstance(value, str):
+                value = value.strip().lower()
+            if isinstance(value, (bool, str)) and value in _LIVEMODE_VALUES:
+                target["livemode"] = _LIVEMODE_VALUES[value]
+    return payload
 
 
 def _scrub(value: object, *, depth: int = 0) -> dict:
