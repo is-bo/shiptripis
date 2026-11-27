@@ -24,6 +24,15 @@ done, the next step, and the findings still open. **Read that file first** when 
 then `git log` on the branch, then the latest Astra result. If a status file is missing, the builder
 stopped before writing it: work from the last commit, the phase doc and the latest Astra result.
 
+**Final heads at the stop (11:24 UTC). These override the table below where they differ.**
+
+| Package | Branch | Final head | State | Exact next step |
+|---|---|---|---|---|
+| P3B #66 | `claude/p3b-profile-photos-app` | `778da3a` | Round 8 **WIP**, CI has not run on it | Read `docs/handoff/status/P3B.md` on the branch and finish round 8. The round-8 Astra prompt draft was **lost** (it was never committed): rewrite it as `docs/handoff/astra/p3b-review-round8.md` from the round-7 prompt, stating the three triage rules. |
+| F1 #69 | `claude/f1-payout-availability` | `7b5a5aa` | Round 5 **done**; prompt `docs/handoff/astra/f1-review-round5.md` (commit `ef04fd3`); CI was running at the stop | Check that CI is green on `7b5a5aa`, set the head SHA in the prompt if needed, then give Ismail the prompt. |
+| G1 #67 | `claude/g1-guest-checkout-csrf` | `6933306` | Round 7 **WIP** | Read `docs/handoff/status/G1.md`, finish, get CI green. The round-7 Astra prompt draft is committed on `main` at `docs/handoff/astra/drafts/g1-review-r7.md` (fill `NEWHEAD`, `NEWSHORT`, `CHECKS7`, then move it into `docs/handoff/astra/g1-review.md`). The PR body draft was lost: rewrite the PR description from the phase doc's seventh-pass section. |
+| N1 #71 | `claude/n1-notification-first-open` | `d8e53f6` | Round 5 code **done**; Astra prompt not written yet | Get CI green, then write the round-5 section of `docs/handoff/astra/n1-review.md` (head SHA, triage rules) and give it to Ismail. |
+
 All four were **rejected in the latest Astra round**, and their next fix round had started:
 
 | Package | PR | Branch | Builder (model, effort) | Last Astra verdict | Round in progress at the stop | Resume |
