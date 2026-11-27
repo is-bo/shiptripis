@@ -23,7 +23,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shiptrip/core/money/money.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shiptrip/app/router.dart';
-import 'package:shiptrip/core/session/session.dart';
 import 'package:shiptrip/design/components/forms.dart';
 import 'package:shiptrip/design/components/money.dart';
 import 'package:shiptrip/design/tokens.dart';
@@ -448,9 +447,7 @@ Future<ProviderContainer> _signedIn(
 ) async {
   final container = containerFor(backend);
   addTearDown(container.dispose);
-  await tester.runAsync(
-    () => container.read(sessionProvider.notifier).restore(),
-  );
+  await tester.runAsync(() => launch(container));
   return container;
 }
 

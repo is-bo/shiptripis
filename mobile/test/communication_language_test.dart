@@ -42,7 +42,7 @@ import 'support/harness.dart';
 /// its signed-out placeholder and the assertions below measure the wrong
 /// thing.
 Future<void> _signIn(WidgetTester tester, ProviderContainer container) =>
-    tester.runAsync(() => container.read(sessionProvider.notifier).restore());
+    tester.runAsync(() => launch(container));
 
 void main() {
   // -------------------------------------------------------------------------
@@ -692,8 +692,8 @@ void main() {
           'POST',
           '/api/auth/sign-up',
           (request) => FakeResponse(201, {
-            'access': 'a',
-            'refresh': 'r',
+            'access': fakeToken('sid-b', 'access'),
+            'refresh': fakeToken('sid-b'),
             'user': meFixture(
               preferredLanguage: request.body['preferred_language'],
             ),
@@ -703,7 +703,7 @@ void main() {
       // go looking for a profile that does not exist yet.
       final container = containerFor(
         backend,
-        tokens: FakeTokenStore(refresh: null),
+        session: coreFor(backend, signedIn: false),
       );
       addTearDown(container.dispose);
 

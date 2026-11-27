@@ -259,21 +259,17 @@ class SessionCore extends ChangeNotifier {
   /// The app came to the foreground.
   void resumed() => loaded ? unawaited(sendEnded()) : unawaited(load());
 
+  /// Signed out even if the empty record cannot be stored: the next launch
+  /// finds the same loss.
   Future<void> _lose() async {
-    try {
-      await _storage.write(key: recordKey, value: SessionRecord.empty.encode());
-    } on Object {
-      // Signed out all the same; the next launch finds the same loss.
-    }
-    _record = SessionRecord.empty;
-    notifyListeners();
+    await _commit(SessionRecord.empty, evenIfUnsaved: true);
     unawaited(_erasePushToken());
   }
 
   /// Retried until it succeeds, waiting twice as long each time, up to five
   /// minutes.
   Future<void> _erasePushToken() async {
-    for (var wait = const Duration(seconds: 2); ; ) {
+    for (var wait = const Duration(seconds: 2); ;) {
       try {
         return await _deletePushToken();
       } on Object {
@@ -314,7 +310,7 @@ class SessionCore extends ChangeNotifier {
         try {
           await _commit(
             SessionRecord(current: signIn, ended: _record!.ended),
-            clearNotice: true,
+            notice: true,
           );
         } on Object {
           unawaited(_confirmEnd(signIn.refresh));
@@ -381,13 +377,15 @@ class SessionCore extends ChangeNotifier {
           ended: [...record.ended, EndedSignIn(sid, signIn.refresh)],
         );
         try {
-          await _storage.write(key: recordKey, value: next.encode());
+          await _commit(
+            next,
+            notice: true,
+            reason: reason == EndReason.signedOut ? null : reason,
+            evenIfUnsaved: reason != EndReason.signedOut,
+          );
         } on Object {
-          if (reason == EndReason.signedOut) throw const SessionNotSaved();
+          throw const SessionNotSaved();
         }
-        _record = next;
-        _notice = reason == EndReason.signedOut ? null : reason;
-        notifyListeners();
         unawaited(sendEnded());
       });
 
@@ -452,10 +450,24 @@ class SessionCore extends ChangeNotifier {
   // The one writer
   // ---------------------------------------------------------------------------
 
-  Future<void> _commit(SessionRecord next, {bool clearNotice = false}) async {
-    await _storage.write(key: recordKey, value: next.encode());
+  /// The one place the record is written: storage first, then memory, then
+  /// the listeners. If storage refuses, memory is unchanged and the error is
+  /// thrown, unless [evenIfUnsaved]: a lost record, or an end the server
+  /// decided, holds in memory all the same. With [notice], the notice becomes
+  /// [reason] in the same step.
+  Future<void> _commit(
+    SessionRecord next, {
+    bool notice = false,
+    EndReason? reason,
+    bool evenIfUnsaved = false,
+  }) async {
+    try {
+      await _storage.write(key: recordKey, value: next.encode());
+    } on Object {
+      if (!evenIfUnsaved) rethrow;
+    }
     _record = next;
-    if (clearNotice) _notice = null;
+    if (notice) _notice = reason;
     notifyListeners();
   }
 

@@ -475,7 +475,7 @@ void main() {
       // Measure live-event reads after sign-in finishes. A 20 ms sleep could
       // count the null -> signed-in provider rebuild as another event read on
       // a busy runner, even though it belongs to session restoration.
-      await container.read(sessionProvider.notifier).restore();
+      await launch(container);
       expect(container.read(accountProvider)?.id, _viewerId);
       final lists = container.listen(matchesProvider, (_, _) {});
       final badge = container.listen(unreadNotificationsProvider, (_, _) {});

@@ -132,14 +132,13 @@ class _FormHarness {
     container = ProviderContainer(
       overrides: [
         tokenStoreProvider.overrideWithValue(tokens),
-        apiClientProvider.overrideWithValue(apiClientFor(backend, tokens)),
+        sessionCoreProvider.overrideWithValue(backend.session),
+        apiClientProvider.overrideWithValue(apiClientFor(backend)),
         if (picker != null) itemPhotoPickerProvider.overrideWithValue(picker!),
       ],
     );
     addTearDown(container.dispose);
-    await tester.runAsync(
-      () => container.read(sessionProvider.notifier).restore(),
-    );
+    await tester.runAsync(() => launch(container));
 
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(411, 869);

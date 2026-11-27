@@ -33,6 +33,7 @@ import 'package:shiptrip/core/auth/social_sign_in.dart';
 import 'package:shiptrip/core/push/notification_socket.dart';
 import 'package:shiptrip/core/push/push_coordinator.dart';
 import 'package:shiptrip/core/session/session.dart';
+import 'package:shiptrip/core/session/session_core.dart';
 import 'package:shiptrip/design/components/primitives.dart';
 import 'package:shiptrip/design/identity.dart';
 import 'package:shiptrip/features/auth/account_gate.dart';
@@ -52,12 +53,7 @@ final L _en = lookupL(const Locale('en'));
 final L _ar = lookupL(const Locale('ar'));
 
 class _Store extends FakeTokenStore {
-  _Store({super.refresh, super.locale, this.access = 'access-token'});
-
-  final String? access;
-
-  @override
-  Future<String?> readAccess() async => access;
+  _Store({super.locale});
 
   @override
   Future<String> readOrCreateInstallationId() async => 'installation';
@@ -68,9 +64,6 @@ class _Store extends FakeTokenStore {
   @override
   Future<void> writePendingPushToken(String? token) async {}
 }
-
-_Store _guest({String? locale}) =>
-    _Store(refresh: null, access: null, locale: locale);
 
 class _IdleConnection implements NotificationSocketConnection {
   final _controller = StreamController<dynamic>();
@@ -114,14 +107,12 @@ class _Server {
 
   Map<String, dynamic> _me() => {...meFixture(), 'id': id, 'full_name': name};
 
+  /// Every sign-in the server issues is a new one.
+  int _signIns = 0;
+
   FakeResponse _next(List<FakeResponse?> answers) {
     final answer = answers.length > 1 ? answers.removeAt(0) : answers.single;
-    return answer ??
-        FakeResponse(200, {
-          'access': 'access-token',
-          'refresh': 'refresh-token',
-          'user': _me(),
-        });
+    return answer ?? signInAnswer(sid: 'sid-g${++_signIns}', user: _me());
   }
 
   FakeResponse _patch(RecordedRequest r) {
@@ -170,20 +161,27 @@ Future<ProviderContainer> _boot(
   _Server server, {
   SocialSignIn? social,
   _Store? store,
+  bool member = false,
   Size size = const Size(412, 915),
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size;
   addTearDown(tester.view.reset);
 
-  final tokens = store ?? _guest();
+  final tokens = store ?? _Store();
+  // A member's phone holds the account as the server last described it.
+  server.backend.session = coreFor(
+    server.backend,
+    storage: MemoryStorage({
+      if (member) SessionCore.recordKey: signedInRecord(account: server._me()),
+    }),
+  );
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         tokenStoreProvider.overrideWithValue(tokens),
-        apiClientProvider.overrideWithValue(
-          apiClientFor(server.backend, tokens),
-        ),
+        sessionCoreProvider.overrideWithValue(server.backend.session),
+        apiClientProvider.overrideWithValue(apiClientFor(server.backend)),
         notificationSocketProvider.overrideWithValue(
           NotificationSocket(connector: (_, _) async => _IdleConnection()),
         ),
@@ -1014,7 +1012,7 @@ void main() {
     ) async {
       final server = _Server(name: '');
 
-      var container = await _boot(tester, server, store: _Store());
+      var container = await _boot(tester, server, member: true);
       expect(find.byType(AccountNameScreen), findsOneWidget);
       await tester.tap(find.byType(PaperCloseButton));
       await _settle(tester);
@@ -1029,13 +1027,13 @@ void main() {
       expect(find.byType(AccountNameScreen), findsNothing);
       await _shutdown(tester);
 
-      container = await _boot(tester, server, store: _Store());
+      container = await _boot(tester, server, member: true);
       expect(find.byType(AccountNameScreen), findsOneWidget);
       await _shutdown(tester);
 
       // Named: no ask.
       server.name = 'Yacine';
-      container = await _boot(tester, server, store: _Store());
+      container = await _boot(tester, server, member: true);
       expect(_at(container).path, '/home');
       expect(find.byType(AccountNameScreen), findsNothing);
       await _shutdown(tester);
@@ -1223,7 +1221,7 @@ void main() {
         tester,
         _Server(),
         social: FakeSocialSignIn(),
-        store: _guest(locale: 'ar'),
+        store: _Store(locale: 'ar'),
         size: small,
       );
       final router = _router(container);
@@ -1267,6 +1265,7 @@ void main() {
         tester,
         _Server(name: ''),
         store: _Store(locale: 'ar'),
+        member: true,
         size: small,
       );
       expect(find.byType(AccountNameScreen), findsOneWidget);

@@ -190,11 +190,18 @@ class SessionController extends Notifier<SessionState> {
   SessionState build() {
     final core = ref.watch(sessionCoreProvider);
     var loaded = core.loaded;
+    var signedIn = core.current != null;
     void sync() {
       if (!loaded && core.loaded) {
         loaded = true;
         _confirmStored(core);
       }
+      // A sign-in that ends takes its side of the marketplace with it, so the
+      // next account starts from its own (or from the guest's choice).
+      if (signedIn && core.current == null) {
+        ref.read(tokenStoreProvider).writeRoleContext(null).ignore();
+      }
+      signedIn = core.current != null;
       final shown = _showing(core);
       if (shown == _shown) return;
       _shown = shown;
@@ -320,7 +327,22 @@ class SessionController extends Notifier<SessionState> {
     }
     await core.signedIn(attempt, signIn);
     _markAccountRead();
+    _adoptRoleContext(signIn.account).ignore();
     return true;
+  }
+
+  /// Stores the side a sign-in starts on: the server's when the account has
+  /// only one, else the guest's choice, else sending. A preference only, so a
+  /// keystore that refuses it changes nothing else.
+  Future<void> _adoptRoleContext(Account account) async {
+    final tokens = ref.read(tokenStoreProvider);
+    final stored = RoleContext.tryParse(await tokens.readRoleContext());
+    final side = switch (account.role) {
+      AccountRole.sender => RoleContext.sender,
+      AccountRole.traveler => RoleContext.traveler,
+      _ => stored ?? RoleContext.sender,
+    };
+    await tokens.writeRoleContext(side.wire);
   }
 
   Future<bool> signIn({required String email, required String password}) =>

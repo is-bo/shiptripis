@@ -16,7 +16,7 @@ import 'support/fake_api.dart';
 ) {
   final backend = FakeBackend()..emptyDiscovery();
   routes(backend);
-  final api = apiClientFor(backend, FakeTokenStore());
+  final api = apiClientFor(backend);
   addTearDown(() => api.raw.close(force: true));
   return (repo: DiscoveryRepository(api), backend: backend);
 }

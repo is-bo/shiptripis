@@ -22,7 +22,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shiptrip/core/api/api_exception.dart';
-import 'package:shiptrip/core/session/session.dart';
 import 'package:shiptrip/data/repositories.dart';
 import 'package:shiptrip/design/components/forms.dart';
 
@@ -38,9 +37,7 @@ Future<ProviderContainer> _signedIn(
   backend.on('GET', '/api/me', FakeResponse(200, meFixture()));
   final container = containerFor(backend);
   addTearDown(container.dispose);
-  await tester.runAsync(
-    () => container.read(sessionProvider.notifier).restore(),
-  );
+  await tester.runAsync(() => launch(container));
   return container;
 }
 

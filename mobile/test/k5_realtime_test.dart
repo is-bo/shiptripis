@@ -79,11 +79,11 @@ class _Session extends SessionController {
   Account account;
 
   @override
-  SessionState build() => SessionSignedIn(account);
+  SessionState build() => SessionSignedIn(account, sid: 'sid-a');
 
   void switchTo(Account next) {
     account = next;
-    state = SessionSignedIn(next);
+    state = SessionSignedIn(next, sid: 'sid-a');
   }
 
   void signOutLocally() => state = const SessionSignedOut();
@@ -97,13 +97,17 @@ class _ResumeSession extends SessionController {
   int refreshes = 0;
 
   @override
-  SessionState build() => SessionSignedIn(Account.fromJson(meFixture()));
+  SessionState build() =>
+      SessionSignedIn(Account.fromJson(meFixture()), sid: 'sid-a');
 
   @override
   bool accountReadWithin(Duration window) => readRecently;
 
   @override
-  Future<void> refreshAccount() async => refreshes++;
+  Future<bool> refreshAccount() async {
+    refreshes++;
+    return true;
+  }
 }
 
 void _leave(WidgetTester tester) {
@@ -161,16 +165,14 @@ Future<(ProviderContainer, _Session, int Function())> _mount(
   );
   final session = _Session(Account.fromJson(meFixture()));
   final tokens = FakeTokenStore();
+  // A refused handshake re-reads `/api/me` to refresh the token.
+  final backend = FakeBackend()
+    ..on('GET', '/api/me', FakeResponse(200, meFixture()));
   final container = ProviderContainer(
     overrides: [
       tokenStoreProvider.overrideWithValue(tokens),
-      // A refused handshake re-reads `/api/me` to refresh the token.
-      apiClientProvider.overrideWithValue(
-        apiClientFor(
-          FakeBackend()..on('GET', '/api/me', FakeResponse(200, meFixture())),
-          tokens,
-        ),
-      ),
+      sessionCoreProvider.overrideWithValue(backend.session),
+      apiClientProvider.overrideWithValue(apiClientFor(backend)),
       sessionProvider.overrideWith(() => session),
       routerProvider.overrideWithValue(router),
       notificationSocketProvider.overrideWithValue(

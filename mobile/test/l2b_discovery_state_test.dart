@@ -42,7 +42,7 @@ Future<AsyncValue<T>> _settled<T>(AsyncValue<T> Function() read) async {
 Future<ProviderContainer> _signedIn(FakeBackend backend) async {
   final container = discoveryContainer(backend);
   addTearDown(container.dispose);
-  await container.read(sessionProvider.notifier).restore();
+  await launch(container);
   return container;
 }
 
@@ -220,7 +220,12 @@ void main() {
           '/api/discovery/trips',
           (_) => discoveryPage([tripCardFixture(1, name: '$viewer-card')]),
         )
-        ..on('POST', '/api/auth/sign-out', const FakeResponse(200, {}));
+        ..on('POST', '/api/auth/sign-out', const FakeResponse(205))
+        ..handle(
+          'POST',
+          '/api/auth/sign-in',
+          (_) => signInAnswer(user: {...meFixture(), 'id': account}),
+        );
       final container = await _signedIn(backend);
       final sub = container.listen(previewTripsProvider(null), (_, _) {});
       addTearDown(sub.close);
@@ -246,7 +251,9 @@ void main() {
       // stays as it was; the previous member's never come back.
       account = 99;
       viewer = 'B';
-      await container.read(sessionProvider.notifier).restore();
+      await container
+          .read(sessionProvider.notifier)
+          .signIn(email: 'b@example.com', password: 'secret');
       final inFlight = container
           .read(previewTripsProvider(null))
           .ofCurrentAccount;
@@ -271,7 +278,7 @@ void main() {
               ? const FakeResponse(500, {'detail': 'boom'})
               : discoveryPage([tripCardFixture(1, name: 'member-card')]),
         )
-        ..on('POST', '/api/auth/sign-out', const FakeResponse(200, {}));
+        ..on('POST', '/api/auth/sign-out', const FakeResponse(205));
       final container = await _signedIn(backend);
       const filter = BrowseFilter();
       final subs = [
@@ -318,16 +325,17 @@ void main() {
     test('signed out, only the public listings are read', () async {
       // Nothing stored: the app opens as a guest.
       final backend = discoveryBackend();
-      final store = FakeTokenStore(refresh: null);
+      backend.session = coreFor(backend, signedIn: false);
       final container = ProviderContainer(
         retry: (_, _) => null,
         overrides: [
-          tokenStoreProvider.overrideWithValue(store),
-          apiClientProvider.overrideWithValue(apiClientFor(backend, store)),
+          tokenStoreProvider.overrideWithValue(FakeTokenStore()),
+          sessionCoreProvider.overrideWithValue(backend.session),
+          apiClientProvider.overrideWithValue(apiClientFor(backend)),
         ],
       );
       addTearDown(container.dispose);
-      await container.read(sessionProvider.notifier).restore();
+      await launch(container);
       expect(container.read(sessionProvider), isA<SessionSignedOut>());
 
       final subs = [

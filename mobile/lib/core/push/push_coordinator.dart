@@ -530,8 +530,7 @@ class PushCoordinator extends Notifier<PushRuntimeState>
     // single-flight refresh as every screen. It refreshes an expired access
     // token and ends a sign-in the server refused instead of looping a
     // rejected WS bearer forever.
-    if (refresh &&
-        !await ref.read(sessionProvider.notifier).refreshAccount()) {
+    if (refresh && !await ref.read(sessionProvider.notifier).refreshAccount()) {
       return null;
     }
     return ref.read(sessionCoreProvider).accessFor(session.sid);

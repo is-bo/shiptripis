@@ -40,7 +40,8 @@ ProviderContainer discoveryContainer(
     retry: (_, _) => null,
     overrides: [
       tokenStoreProvider.overrideWithValue(store),
-      apiClientProvider.overrideWithValue(apiClientFor(backend, store)),
+      sessionCoreProvider.overrideWithValue(backend.session),
+      apiClientProvider.overrideWithValue(apiClientFor(backend)),
       if (now != null) clockProvider.overrideWithValue(now),
     ],
   );
@@ -132,9 +133,7 @@ Future<ProviderContainer> pumpDiscovery(
 }) async {
   final container = discoveryContainer(backend, now: now);
   addTearDown(container.dispose);
-  await tester.runAsync(
-    () => container.read(sessionProvider.notifier).restore(),
-  );
+  await tester.runAsync(() => launch(container));
   container.read(roleContextProvider.notifier).set(role);
   await pumpApp(
     tester,

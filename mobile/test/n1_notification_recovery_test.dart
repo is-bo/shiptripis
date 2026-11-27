@@ -14,8 +14,8 @@ import 'package:shiptrip/core/push/notification_socket.dart';
 import 'package:shiptrip/core/push/push_coordinator.dart';
 import 'package:shiptrip/core/push/push_messaging.dart';
 import 'package:shiptrip/core/session/session.dart';
+import 'package:shiptrip/core/session/session_core.dart';
 import 'package:shiptrip/core/session/token_store.dart';
-import 'package:shiptrip/data/auth_repository.dart';
 import 'package:shiptrip/domain/account.dart';
 import 'package:shiptrip/features/profile/notification_settings_screen.dart';
 import 'package:shiptrip/features/profile/profile_screen.dart';
@@ -24,8 +24,6 @@ import 'support/fake_api.dart';
 import 'support/push_router.dart';
 
 class _Store extends FakeTokenStore {
-  _Store({super.refresh});
-
   /// Every change of the pending token, in order.
   final List<String?> pendingWrites = [];
 
@@ -136,11 +134,14 @@ class _NoopSocket extends NotificationSocket {
 
 class _Member extends SessionController {
   @override
-  SessionState build() => SessionSignedIn(Account.fromJson(meFixture()));
+  SessionState build() =>
+      SessionSignedIn(Account.fromJson(meFixture()), sid: 'sid-a');
 
-  /// Another account takes the phone.
-  void become(int id) =>
-      state = SessionSignedIn(Account.fromJson(meFixture(id: id)));
+  /// Another account takes the phone: a new sign-in.
+  void become(int id) => state = SessionSignedIn(
+    Account.fromJson(meFixture(id: id)),
+    sid: 'sid-$id',
+  );
 }
 
 Future<void> _settle(WidgetTester tester, [int frames = 10]) async {
@@ -160,12 +161,14 @@ void main() {
       tester.view.physicalSize = const Size(360, 800);
       addTearDown(tester.view.reset);
       final backend = FakeBackend()..emptyDiscovery();
-      tokens ??= _Store(refresh: null);
+      backend.session = coreFor(backend, signedIn: false);
+      tokens ??= _Store();
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
             tokenStoreProvider.overrideWithValue(tokens),
-            apiClientProvider.overrideWithValue(apiClientFor(backend, tokens)),
+            sessionCoreProvider.overrideWithValue(backend.session),
+            apiClientProvider.overrideWithValue(apiClientFor(backend)),
             notificationSocketProvider.overrideWithValue(_NoopSocket()),
             pushMessagingProvider.overrideWithValue(push),
           ],
@@ -229,7 +232,7 @@ void main() {
       final push = _Messaging(
         currentPermission: PushPermission.deniedRequestable,
       );
-      final tokens = _Store(refresh: null);
+      final tokens = _Store();
       final (container, _, _) = await openGuestProfile(
         tester,
         push,
@@ -314,7 +317,8 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           tokenStoreProvider.overrideWithValue(tokens),
-          apiClientProvider.overrideWithValue(apiClientFor(backend, tokens)),
+          sessionCoreProvider.overrideWithValue(backend.session),
+          apiClientProvider.overrideWithValue(apiClientFor(backend)),
           sessionProvider.overrideWith(_Member.new),
           routerProvider.overrideWithValue(router),
           notificationSocketProvider.overrideWithValue(_NoopSocket()),
@@ -331,41 +335,6 @@ void main() {
       await mountRouter(tester, container, router);
       return container;
     }
-
-    testWidgets(
-      'signing out takes a number above the registration it follows',
-      (tester) async {
-        final backend = FakeBackend()
-          ..on(
-            'POST',
-            '/api/notifications/devices',
-            const FakeResponse(201, {'id': 3, 'active': true}),
-          )
-          ..on('POST', '/api/auth/sign-out', const FakeResponse(205));
-        final tokens = _Store();
-        final container = await member(tester, backend, tokens);
-        container.read(pushCoordinatorProvider);
-        await _settle(tester);
-
-        unawaited(
-          AuthRepository(apiClientFor(backend, tokens), tokens).signOut(),
-        );
-        await _settle(tester);
-
-        expect(
-          backend
-              .lastTo('POST', '/api/notifications/devices')
-              ?.body['binding_sequence'],
-          1,
-        );
-        expect(
-          backend
-              .lastTo('POST', '/api/auth/sign-out')
-              ?.body['binding_sequence'],
-          2,
-        );
-      },
-    );
 
     testWidgets('a phone that fell behind the server catches up and registers '
         'once more', (tester) async {
@@ -757,22 +726,29 @@ void main() {
   });
 
   group('signing out and the phone identity', () {
-    testWidgets('a counter that cannot be written still ends the sign-in on '
-        'the server', (tester) async {
+    // Plan 5.3, rule N-B: ending a sign-in switches off every device it
+    // registered, so a sign-out carries its refresh token and nothing of the
+    // phone: no installation ID, no registration number.
+    testWidgets('a sign-out carries its refresh token and nothing of the '
+        'phone, even when the counter cannot be written', (tester) async {
       final backend = FakeBackend()
         ..on('POST', '/api/auth/sign-out', const FakeResponse(205));
+      final storage = MemoryStorage({SessionCore.recordKey: signedInRecord()});
+      backend.session = coreFor(backend, storage: storage);
       final tokens = _Store()..countFails = true;
+      final container = containerFor(backend, tokens: tokens);
+      addTearDown(container.dispose);
+      container.read(sessionProvider);
+      await backend.session.load();
 
-      unawaited(
-        AuthRepository(apiClientFor(backend, tokens), tokens).signOut(),
-      );
+      unawaited(container.read(sessionProvider.notifier).signOut());
       await _settle(tester);
 
-      final sent = backend.lastTo('POST', '/api/auth/sign-out');
-      expect(sent, isNotNull, reason: 'the refresh token is revoked');
-      expect(sent!.body['refresh'], 'refresh-token');
-      expect(sent.body['installation_id'], isNotEmpty);
-      expect(sent.body.containsKey('binding_sequence'), isFalse);
+      expect(container.read(sessionProvider), isA<SessionSignedOut>());
+      expect(backend.to('POST', '/api/auth/sign-out').single.body, {
+        'refresh': fakeToken('sid-a'),
+      });
+      expect(storage.record!.ended, isEmpty, reason: 'the server confirmed');
     });
 
     test(

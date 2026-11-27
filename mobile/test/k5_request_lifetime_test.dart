@@ -16,6 +16,7 @@ import 'package:shiptrip/app/app_state.dart';
 import 'package:shiptrip/core/api/api_exception.dart';
 import 'package:shiptrip/core/live/live_updates.dart';
 import 'package:shiptrip/core/session/session.dart';
+import 'package:shiptrip/core/session/session_core.dart';
 import 'package:shiptrip/data/repositories.dart';
 import 'package:shiptrip/domain/deal.dart';
 import 'package:shiptrip/domain/find_travelers.dart';
@@ -32,34 +33,9 @@ Future<void> _waitFor(bool Function() condition) async {
   expect(condition(), isTrue);
 }
 
-/// Wipes the stored role on sign-out, as the real keystore does: the only
-/// place a previous account's choice could survive is then the app itself.
 class _TokenStore extends FakeTokenStore {
-  String? _role;
-
   @override
   Future<String> readOrCreateInstallationId() async => 'installation';
-
-  @override
-  Future<String?> readRoleContext() async => _role;
-
-  @override
-  Future<void> writeRoleContext(String value) async => _role = value;
-
-  @override
-  Future<void> clear() async {
-    _role = null;
-    await super.clear();
-  }
-
-  @override
-  Future<bool> clearIfIdentityCurrent(int expectedIdentityGeneration) async {
-    final cleared = await super.clearIfIdentityCurrent(
-      expectedIdentityGeneration,
-    );
-    if (cleared) _role = null;
-    return cleared;
-  }
 }
 
 Future<ProviderContainer> _signedIn(
@@ -260,7 +236,7 @@ void main() {
       final reply = Completer<FakeResponse>();
       final backend = FakeBackend()
         ..handle('GET', '/api/me', (_) => reply.future);
-      final api = apiClientFor(backend, FakeTokenStore());
+      final api = apiClientFor(backend);
 
       final first = api.getObject('/api/me', share: true);
       final second = api.getObject('/api/me', share: true);
@@ -276,49 +252,50 @@ void main() {
     test('unshared reads are never joined', () async {
       final backend = FakeBackend()
         ..on('GET', '/api/me', FakeResponse(200, meFixture()));
-      final api = apiClientFor(backend, FakeTokenStore());
+      final api = apiClientFor(backend);
 
       await Future.wait([api.getObject('/api/me'), api.getObject('/api/me')]);
 
       expect(backend.to('GET', '/api/me'), hasLength(2));
     });
 
-    test(
-      'a read from a different identity generation is never joined',
-      () async {
-        final replies = <Completer<FakeResponse>>[];
-        final backend = FakeBackend()
-          ..handle('GET', '/api/me', (_) {
-            final reply = Completer<FakeResponse>();
-            replies.add(reply);
-            return reply.future;
-          });
-        final tokens = FakeTokenStore();
-        final api = apiClientFor(backend, tokens);
+    test('a read from another sign-in is never joined', () async {
+      final replies = <Completer<FakeResponse>>[];
+      final backend = FakeBackend()
+        ..on('POST', '/api/auth/sign-out', const FakeResponse(205))
+        ..handle('GET', '/api/me', (_) {
+          final reply = Completer<FakeResponse>();
+          replies.add(reply);
+          return reply.future;
+        });
+      final core = backend.session;
+      await core.load();
+      final api = apiClientFor(backend);
 
-        final before = api.getObject('/api/me', share: true);
-        await _waitFor(() => replies.length == 1);
-        tokens.invalidateIdentity(); // sign-out / sign-in happened meanwhile
-        final after = api.getObject('/api/me', share: true);
-        await _waitFor(() => replies.length == 2);
-        for (final reply in replies) {
-          reply.complete(FakeResponse(200, meFixture()));
-        }
+      final before = api.getObject('/api/me', share: true);
+      await _waitFor(() => replies.length == 1);
+      // Sign-out and sign-in happened meanwhile.
+      await core.end('sid-a', EndReason.signedOut);
+      await core.signedIn(core.reserve()!, signInFor(sid: 'sid-b'));
+      final after = api.getObject('/api/me', share: true);
+      await _waitFor(() => replies.length == 2);
+      for (final reply in replies) {
+        reply.complete(FakeResponse(200, meFixture()));
+      }
 
-        await expectLater(
-          before,
-          throwsA(
-            isA<ApiException>().having(
-              (e) => e.kind,
-              'kind',
-              ApiFailureKind.cancelled,
-            ),
+      await expectLater(
+        before,
+        throwsA(
+          isA<ApiException>().having(
+            (e) => e.kind,
+            'kind',
+            ApiFailureKind.cancelled,
           ),
-        );
-        expect((await after)['id'], 42);
-        expect(backend.to('GET', '/api/me'), hasLength(2));
-      },
-    );
+        ),
+      );
+      expect((await after)['id'], 42);
+      expect(backend.to('GET', '/api/me'), hasLength(2));
+    });
 
     test(
       'one caller leaving does not cancel the read for the others',
@@ -326,7 +303,7 @@ void main() {
         final reply = Completer<FakeResponse>();
         final backend = FakeBackend()
           ..handle('GET', '/api/me', (_) => reply.future);
-        final api = apiClientFor(backend, FakeTokenStore());
+        final api = apiClientFor(backend);
 
         final leaving = CancelToken();
         final left = api.getObject(
@@ -363,7 +340,7 @@ void main() {
           replies.add(reply);
           return reply.future;
         });
-      final api = apiClientFor(backend, FakeTokenStore());
+      final api = apiClientFor(backend);
 
       final a = CancelToken();
       final b = CancelToken();
@@ -391,7 +368,7 @@ void main() {
           return reply.future;
         })
         ..on('POST', '/api/kyc/submit', const FakeResponse(200));
-      final api = apiClientFor(backend, FakeTokenStore());
+      final api = apiClientFor(backend);
 
       final stale = api.getObject('/api/me', share: true);
       await _waitFor(() => replies.length == 1);
@@ -414,7 +391,7 @@ void main() {
           reads++;
           return reads == 1 ? reply.future : FakeResponse(200, meFixture());
         });
-      final api = apiClientFor(backend, FakeTokenStore());
+      final api = apiClientFor(backend);
 
       final first = api.getObject('/api/me', share: true);
       final second = api.getObject('/api/me', share: true);
@@ -537,7 +514,8 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           tokenStoreProvider.overrideWithValue(tokens),
-          apiClientProvider.overrideWithValue(apiClientFor(backend, tokens)),
+          sessionCoreProvider.overrideWithValue(backend.session),
+          apiClientProvider.overrideWithValue(apiClientFor(backend)),
         ],
         observers: [mounts],
       );
@@ -603,8 +581,8 @@ void main() {
             'POST',
             '/api/auth/sign-in',
             FakeResponse(200, {
-              'access': 'b-access',
-              'refresh': 'b-refresh',
+              'access': fakeToken('b', 'access'),
+              'refresh': fakeToken('b'),
               'user': {...meFixture(), 'id': 77, 'email': 'b@example.com'},
             }),
           );
@@ -632,14 +610,22 @@ void main() {
       },
     );
 
-    test('an expired session tears down without an error', () async {
+    test('a refused session tears down without an error', () async {
       final container = await _signedIn(_backend(), tokens: _TokenStore());
       final role = container.listen(roleContextProvider, (_, _) {});
       addTearDown(role.close);
 
-      container.read(sessionProvider.notifier).handleSessionExpired();
+      final core = container.read(sessionCoreProvider);
+      await core.end(core.current!.sid, EndReason.refused);
 
-      expect(container.read(sessionProvider), isA<SessionSignedOut>());
+      expect(
+        container.read(sessionProvider),
+        isA<SessionSignedOut>().having(
+          (state) => state.becauseExpired,
+          'becauseExpired',
+          isTrue,
+        ),
+      );
     });
   });
 }

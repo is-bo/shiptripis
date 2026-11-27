@@ -12,7 +12,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shiptrip/app/router.dart';
-import 'package:shiptrip/core/session/session.dart';
 import 'package:shiptrip/design/components/forms.dart';
 import 'package:shiptrip/design/components/primitives.dart';
 import 'package:shiptrip/domain/canonical_place.dart';
@@ -175,9 +174,7 @@ Future<ProviderContainer> _signedIn(
   backend.on('GET', '/api/me', FakeResponse(200, meFixture()));
   final container = containerFor(backend);
   addTearDown(container.dispose);
-  await tester.runAsync(
-    () => container.read(sessionProvider.notifier).restore(),
-  );
+  await tester.runAsync(() => launch(container));
   return container;
 }
 

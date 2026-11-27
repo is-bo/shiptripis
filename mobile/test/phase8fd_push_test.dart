@@ -12,7 +12,6 @@ import 'package:shiptrip/core/push/notification_socket.dart';
 import 'package:shiptrip/core/push/push_coordinator.dart';
 import 'package:shiptrip/core/push/push_messaging.dart';
 import 'package:shiptrip/core/session/session.dart';
-import 'package:shiptrip/data/auth_repository.dart';
 import 'package:shiptrip/domain/account.dart';
 import 'package:shiptrip/domain/push.dart';
 import 'package:shiptrip/features/profile/notification_settings_screen.dart';
@@ -118,7 +117,8 @@ Future<ProviderContainer> _mountedCoordinator(
   final container = ProviderContainer(
     overrides: [
       tokenStoreProvider.overrideWithValue(tokens),
-      apiClientProvider.overrideWithValue(apiClientFor(backend, tokens)),
+      sessionCoreProvider.overrideWithValue(backend.session),
+      apiClientProvider.overrideWithValue(apiClientFor(backend)),
       sessionProvider.overrideWith(_FixedSession.new),
       routerProvider.overrideWithValue(router),
       notificationSocketProvider.overrideWithValue(_NoopSocket()),
@@ -135,7 +135,8 @@ Future<ProviderContainer> _mountedCoordinator(
 
 class _FixedSession extends SessionController {
   @override
-  SessionState build() => SessionSignedIn(Account.fromJson(meFixture()));
+  SessionState build() =>
+      SessionSignedIn(Account.fromJson(meFixture()), sid: 'sid-a');
 }
 
 class _NoopSocket extends NotificationSocket {
@@ -261,33 +262,31 @@ void main() {
     );
   });
 
-  test(
-    'logout sends only the current installation and still works offline',
-    () async {
-      final online = FakeBackend()
-        ..on('POST', '/api/auth/sign-out', const FakeResponse(205));
-      final onlineTokens = _PushTokenStore();
-      await AuthRepository(
-        apiClientFor(online, onlineTokens),
-        onlineTokens,
-      ).signOut();
-      expect(online.lastTo('POST', '/api/auth/sign-out')?.body, {
-        'refresh': 'refresh-token',
-        'installation_id': 'ca7eedc0-1665-4bbd-bfae-45f841beb8d7',
-        'binding_sequence': 1,
-      });
+  // Plan 5.3, rule N-B: ending the sign-in switches off every device it
+  // registered, so the sign-out no longer names the installation.
+  test('logout sends only its refresh token and still works offline', () async {
+    final online = FakeBackend()
+      ..on('GET', '/api/me', FakeResponse(200, meFixture()))
+      ..on('POST', '/api/auth/sign-out', const FakeResponse(205));
+    final signedIn = containerFor(online);
+    addTearDown(signedIn.dispose);
+    await launch(signedIn);
+    await signedIn.read(sessionProvider.notifier).signOut();
+    await pumpEventQueue();
+    expect(online.lastTo('POST', '/api/auth/sign-out')?.body, {
+      'refresh': fakeToken('sid-a'),
+    });
 
-      final offline = FakeBackend();
-      final offlineTokens = _PushTokenStore();
-      await expectLater(
-        AuthRepository(
-          apiClientFor(offline, offlineTokens),
-          offlineTokens,
-        ).signOut(),
-        completes,
-      );
-    },
-  );
+    final offline = FakeBackend();
+    final noNetwork = containerFor(offline);
+    addTearDown(noNetwork.dispose);
+    await noNetwork.read(sessionCoreProvider).load();
+    await expectLater(
+      noNetwork.read(sessionProvider.notifier).signOut(),
+      completes,
+    );
+    expect(noNetwork.read(sessionProvider), isA<SessionSignedOut>());
+  });
 
   testWidgets('the Profile screen asks only when its button is pressed', (
     tester,

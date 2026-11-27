@@ -360,9 +360,8 @@ void main() {
         final container = ProviderContainer(
           overrides: [
             tokenStoreProvider.overrideWithValue(tokens),
-            apiClientProvider.overrideWithValue(
-              apiClientFor(server.backend, tokens),
-            ),
+            sessionCoreProvider.overrideWithValue(server.backend.session),
+            apiClientProvider.overrideWithValue(apiClientFor(server.backend)),
             sessionProvider.overrideWith(_TestSessionController.new),
             liveUpdatesProvider.overrideWithValue(live),
           ],
@@ -744,9 +743,10 @@ Future<void> _eventually(bool Function() condition) async {
 
 class _TestSessionController extends SessionController {
   @override
-  SessionState build() => SessionSignedIn(Account.fromJson(meFixture()));
+  SessionState build() =>
+      SessionSignedIn(Account.fromJson(meFixture()), sid: 'sid-a');
 
   void switchAccount(Account account) {
-    state = SessionSignedIn(account);
+    state = SessionSignedIn(account, sid: 'sid-a');
   }
 }

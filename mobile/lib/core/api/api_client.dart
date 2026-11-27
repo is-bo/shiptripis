@@ -590,7 +590,8 @@ class _AuthInterceptor extends Interceptor {
 
     // Another request may have refreshed while this 401 was in flight. If the
     // current token is already newer than the one we sent, just replay.
-    if (request.headers['Authorization'] != 'Bearer ${signIn.access}') {
+    if (request.headers['Authorization'] !=
+        'Bearer ${_session.accessFor(sid)}') {
       return _resolveReplay(handler, request, sid);
     }
 

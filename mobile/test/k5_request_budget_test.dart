@@ -132,8 +132,8 @@ class _Server {
       ..handle('POST', '/api/auth/sign-in', (_) {
         accountId = 77;
         return FakeResponse(200, {
-          'access': 'b-access',
-          'refresh': 'b-refresh',
+          'access': fakeToken('b', 'access'),
+          'refresh': fakeToken('b'),
           'user': _me(),
         });
       });
@@ -221,9 +221,8 @@ Future<ProviderContainer> _boot(WidgetTester tester, _Server server) async {
     ProviderScope(
       overrides: [
         tokenStoreProvider.overrideWithValue(store),
-        apiClientProvider.overrideWithValue(
-          apiClientFor(server.backend, store),
-        ),
+        sessionCoreProvider.overrideWithValue(server.backend.session),
+        apiClientProvider.overrideWithValue(apiClientFor(server.backend)),
         notificationSocketProvider.overrideWithValue(socket),
       ],
       child: const ShipTripApp(),

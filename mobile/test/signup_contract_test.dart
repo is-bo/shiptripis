@@ -17,8 +17,8 @@ FakeResponse _signupResponse(RecordedRequest request) {
   final user = meFixture(preferredLanguage: request.body['preferred_language'])
     ..['wilaya'] = request.body['wilaya'] ?? '';
   return FakeResponse(201, {
-    'access': 'access-token',
-    'refresh': 'refresh-token',
+    'access': fakeToken('sid-b', 'access'),
+    'refresh': fakeToken('sid-b'),
     'user': user,
   });
 }
@@ -44,7 +44,7 @@ void main() {
         final backend = _backend();
         final container = containerFor(
           backend,
-          tokens: FakeTokenStore(refresh: null),
+          session: coreFor(backend, signedIn: false),
         );
         addTearDown(container.dispose);
 
@@ -75,7 +75,7 @@ void main() {
         final backend = _backend();
         final container = containerFor(
           backend,
-          tokens: FakeTokenStore(refresh: null),
+          session: coreFor(backend, signedIn: false),
         );
         addTearDown(container.dispose);
 

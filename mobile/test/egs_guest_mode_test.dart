@@ -29,6 +29,8 @@ import 'package:shiptrip/core/api/api_exception.dart';
 import 'package:shiptrip/core/api/error_codes.dart';
 import 'package:shiptrip/core/push/notification_socket.dart';
 import 'package:shiptrip/core/session/session.dart';
+import 'package:shiptrip/core/session/session_core.dart';
+import 'package:shiptrip/domain/account.dart';
 import 'package:shiptrip/core/push/push_coordinator.dart';
 import 'package:shiptrip/design/components/feedback.dart';
 import 'package:shiptrip/design/components/forms.dart';
@@ -55,42 +57,10 @@ import 'support/fake_api.dart';
 final L _en = lookupL(const Locale('en'));
 final L _ar = lookupL(const Locale('ar'));
 
-/// Sign-out asks the keystore for the installation id; a widget test has no
-/// keystore to answer, so this one does. [access] is what a request carries:
-/// a guest's keystore holds no token at all.
+/// The phone's own keys. A widget test has no keystore to answer for the
+/// installation id or a pending push token, so this one does.
 class _Store extends FakeTokenStore {
-  _Store({super.refresh, super.locale, this.access = 'access-token'})
-    : _refresh = refresh;
-
-  /// What the keystore holds. A clear really empties it, and a sign-in
-  /// really fills it, so a bearer sent afterwards is one that was stored.
-  String? access;
-  String? _refresh;
-  int clears = 0;
-
-  @override
-  Future<String?> readAccess() async => access;
-
-  @override
-  Future<String?> readRefresh() async => _refresh;
-
-  @override
-  Future<bool> saveAuthenticationIfCurrent({
-    required int expectedIdentityGeneration,
-    required String access,
-    required String refresh,
-  }) async {
-    final saved = await super.saveAuthenticationIfCurrent(
-      expectedIdentityGeneration: expectedIdentityGeneration,
-      access: access,
-      refresh: refresh,
-    );
-    if (saved) {
-      this.access = access;
-      _refresh = refresh;
-    }
-    return saved;
-  }
+  _Store({super.locale});
 
   @override
   Future<String> readOrCreateInstallationId() async => 'installation';
@@ -100,35 +70,14 @@ class _Store extends FakeTokenStore {
 
   @override
   Future<void> writePendingPushToken(String? token) async {}
-
-  @override
-  Future<bool> clearIfIdentityCurrent(int expectedIdentityGeneration) async {
-    clears++;
-    final cleared = await super.clearIfIdentityCurrent(
-      expectedIdentityGeneration,
-    );
-    if (cleared) {
-      access = null;
-      _refresh = null;
-    }
-    return cleared;
-  }
 }
 
-/// A member's keystore whose snapshot delete takes its time once [slow].
-class _SlowKeystore extends _Store {
-  bool slow = false;
-
-  @override
-  Future<void> deleteAccountSnapshot() async {
-    if (slow) await Future<void>.delayed(const Duration(milliseconds: 250));
-    await super.deleteAccountSnapshot();
-  }
+/// The server refuses the current sign-in's refresh token: the one exit a
+/// session that expired takes.
+void _expire(ProviderContainer container) {
+  final core = container.read(sessionCoreProvider);
+  unawaited(core.end(core.current!.sid, EndReason.refused));
 }
-
-/// A guest's keystore: no credentials.
-_Store _guest({String? locale}) =>
-    _Store(refresh: null, access: null, locale: locale);
 
 class _IdleConnection implements NotificationSocketConnection {
   final _controller = StreamController<dynamic>();
@@ -256,8 +205,8 @@ class _Server {
   };
 
   FakeResponse _signedIn(int status) => FakeResponse(status, {
-    'access': 'access-token',
-    'refresh': 'refresh-token',
+    'access': fakeToken('sid-b', 'access'),
+    'refresh': fakeToken('sid-b'),
     'user': _me(),
   });
 
@@ -294,21 +243,27 @@ Future<ProviderContainer> _boot(
   WidgetTester tester,
   _Server server, {
   _Store? store,
+  bool member = false,
+  MemoryStorage? storage,
   Size size = const Size(412, 915),
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size;
   addTearDown(tester.view.reset);
 
-  final tokens = store ?? _guest();
+  final tokens = store ?? _Store();
+  server.backend.session = coreFor(
+    server.backend,
+    signedIn: member,
+    storage: storage,
+  );
   await tester.pumpWidget(
     ProviderScope(
       retry: appRetry,
       overrides: [
         tokenStoreProvider.overrideWithValue(tokens),
-        apiClientProvider.overrideWithValue(
-          apiClientFor(server.backend, tokens),
-        ),
+        sessionCoreProvider.overrideWithValue(server.backend.session),
+        apiClientProvider.overrideWithValue(apiClientFor(server.backend)),
         notificationSocketProvider.overrideWithValue(
           NotificationSocket(connector: (_, _) async => _IdleConnection()),
         ),
@@ -508,7 +463,7 @@ void main() {
     testWidgets('a guest can switch to carrying, and it is kept', (
       tester,
     ) async {
-      final store = _guest();
+      final store = _Store();
       final container = await _boot(tester, _Server(), store: store);
 
       await tester.tap(find.text(_en.roleTraveler));
@@ -570,7 +525,7 @@ void main() {
 
     testWidgets('a member who reaches an account-flow screen by a link is '
         'moved on at once', (tester) async {
-      final container = await _boot(tester, _Server(), store: _Store());
+      final container = await _boot(tester, _Server(), member: true);
       final router = _router(container);
 
       for (final location in [
@@ -835,8 +790,8 @@ void main() {
 
       answer.complete(
         FakeResponse(200, {
-          'access': 'access-token',
-          'refresh': 'refresh-token',
+          'access': fakeToken('sid-b', 'access'),
+          'refresh': fakeToken('sid-b'),
           'user': meFixture(),
         }),
       );
@@ -1139,12 +1094,12 @@ void main() {
   group('session expiry', () {
     testWidgets('on a public screen the person stays, as a guest, and is '
         'told', (tester) async {
-      final container = await _boot(tester, _Server(), store: _Store());
+      final container = await _boot(tester, _Server(), member: true);
       expect(container.read(sessionProvider), isA<SessionSignedIn>());
       _router(container).push('/discover/trips');
       await _settle(tester);
 
-      container.read(sessionProvider.notifier).handleSessionExpired();
+      _expire(container);
       await _settle(tester);
 
       expect(_at(container).path, '/discover/trips');
@@ -1176,8 +1131,8 @@ void main() {
 
     testWidgets('the notice\'s "Sign in" brings the member back to where '
         'they were', (tester) async {
-      final container = await _boot(tester, _Server(), store: _Store());
-      container.read(sessionProvider.notifier).handleSessionExpired();
+      final container = await _boot(tester, _Server(), member: true);
+      _expire(container);
       await _settle(tester);
 
       await tester.tap(
@@ -1200,12 +1155,12 @@ void main() {
 
     testWidgets('on a private screen: Home, with sign-in on top, which goes '
         'back there', (tester) async {
-      final container = await _boot(tester, _Server(), store: _Store());
+      final container = await _boot(tester, _Server(), member: true);
       _router(container).push('/notifications');
       await _settle(tester);
       expect(_at(container).path, '/notifications');
 
-      container.read(sessionProvider.notifier).handleSessionExpired();
+      _expire(container);
       await _settle(tester);
 
       final at = _at(container);
@@ -1229,10 +1184,10 @@ void main() {
     testWidgets('closing sign-in after an expiry leaves a guest on Home', (
       tester,
     ) async {
-      final container = await _boot(tester, _Server(), store: _Store());
+      final container = await _boot(tester, _Server(), member: true);
       _router(container).push('/notifications');
       await _settle(tester);
-      container.read(sessionProvider.notifier).handleSessionExpired();
+      _expire(container);
       await _settle(tester);
 
       await _systemBack(tester);
@@ -1247,7 +1202,7 @@ void main() {
     testWidgets('signing out on Profile stays on guest Profile, untold', (
       tester,
     ) async {
-      final container = await _boot(tester, _Server(), store: _Store());
+      final container = await _boot(tester, _Server(), member: true);
       await _openTab(tester, _en.navProfile);
 
       // Awaited while fake time runs; awaiting it bare would wait on timers
@@ -1300,13 +1255,14 @@ void main() {
             guest: discoveryPage([_personCard()]),
           ),
         );
-      final store = _SlowKeystore();
-      final container = await _boot(tester, server, store: store);
+      final storage = MemoryStorage({SessionCore.recordKey: signedInRecord()});
+      final container = await _boot(tester, server, storage: storage);
       expect(container.read(sessionProvider), isA<SessionSignedIn>());
       expect(find.text('Mounir', skipOffstage: false), findsWidgets);
 
       slow = true;
-      store.slow = true;
+      final write = storage.writeGate = Completer<void>();
+      Future<void>.delayed(const Duration(milliseconds: 250), write.complete);
       final out = container.read(sessionProvider.notifier).signOut();
       await _settle(tester);
       await out;
@@ -1350,22 +1306,37 @@ void main() {
     });
 
     test(
-      'belongs to no login: answered after a sign-out or sign-in has '
-      'finished, it is still the answer; a member\'s read is voided',
+      'belongs to no sign-in: answered after a sign-in has finished, it is '
+      'still the answer; a member\'s read is voided by its sign-out',
       () async {
         for (final guest in [true, false]) {
           final answer = Completer<FakeResponse>();
           final backend = FakeBackend()
-            ..handle('GET', '/api/discovery/trips', (_) => answer.future);
-          final store = _Store()..bearerWithheld = guest;
-          final client = apiClientFor(backend, store);
+            ..handle('GET', '/api/discovery/trips', (_) => answer.future)
+            ..on('POST', '/api/auth/sign-out', const FakeResponse(205));
+          final core = backend.session = coreFor(backend, signedIn: !guest);
+          await core.load();
+          final client = apiClientFor(backend);
           addTearDown(() => client.raw.close(force: true));
 
           final read = client.getObject('/api/discovery/trips');
           while (backend.requests.isEmpty) {
             await Future<void>.delayed(Duration.zero);
           }
-          store.invalidateIdentity();
+          if (guest) {
+            final attempt = core.reserve()!;
+            await core.signedIn(
+              attempt,
+              SignIn(
+                sid: 'sid-b',
+                account: Account.fromJson(meFixture()),
+                access: fakeToken('sid-b', 'access'),
+                refresh: fakeToken('sid-b'),
+              ),
+            );
+          } else {
+            await core.end('sid-a', EndReason.signedOut);
+          }
           answer.complete(const FakeResponse(200, {'state': 'results'}));
 
           if (guest) {
@@ -1387,72 +1358,38 @@ void main() {
     );
 
     test('carries no bearer, and its 401 ends nothing and refreshes nothing, '
-        'even with a member\'s bytes still stored', () async {
-      final backend = unauthorized();
-      // A member's credentials still on disk while their sign-out is sent.
-      final store = _Store()..bearerWithheld = true;
-      var expired = 0;
-      final client = apiClientFor(
-        backend,
-        store,
-        onSessionExpired: () => expired++,
-      );
+        'even with a member\'s sign-out still being sent', () async {
+      final backend = unauthorized()
+        ..handle(
+          'POST',
+          '/api/auth/sign-out',
+          (_) => Completer<FakeResponse>().future,
+        );
+      final storage = MemoryStorage({
+        SessionCore.recordKey: const SessionRecord(
+          ended: [EndedSignIn('sid-a', 'a-refresh')],
+        ).encode(),
+      });
+      final core = backend.session = coreFor(backend, storage: storage);
+      await core.load();
+      final writes = storage.writes;
+      final client = apiClientFor(backend);
 
       await expectLater(
         client.getObject('/api/discovery/trips'),
         throwsA(anything),
       );
 
-      expect(backend.requests.single.headers, isNot(contains(_bearer)));
+      final read = backend.to('GET', '/api/discovery/trips').single;
+      expect(read.headers, isNot(contains(_bearer)));
       expect(backend.to('POST', '/api/auth/refresh'), isEmpty);
-      expect(store.clears, 0);
-      expect(expired, 0);
-    });
-
-    test('a member\'s 401 with no refresh token ends the session', () async {
-      final backend = unauthorized();
-      final store = _Store(refresh: null);
-      var expired = 0;
-      final client = apiClientFor(
-        backend,
-        store,
-        onSessionExpired: () => expired++,
-      );
-
-      await expectLater(
-        client.getObject('/api/discovery/trips'),
-        throwsA(anything),
-      );
-
-      expect(store.clears, 1);
-      expect(expired, 1);
-    });
-
-    test('a member whose keystore gave no access token still has their '
-        'session ended by a 401', () async {
-      final backend = unauthorized();
-      final store = _Store(refresh: null, access: null);
-      var expired = 0;
-      final client = apiClientFor(
-        backend,
-        store,
-        onSessionExpired: () => expired++,
-      );
-
-      await expectLater(
-        client.getObject('/api/discovery/trips'),
-        throwsA(anything),
-      );
-
-      expect(backend.requests.single.headers, isNot(contains(_bearer)));
-      expect(store.clears, 1);
-      expect(expired, 1);
+      expect(storage.writes, writes);
+      expect(storage.record!.ended.single.sid, 'sid-a');
     });
 
     testWidgets('after a sign-out, the guest\'s first reads go without the '
-        'member\'s bearer while the sign-out is still being sent', (
-      tester,
-    ) async {
+        'member\'s bearer while the sign-out is still being sent, and the '
+        'sign-out carries only its refresh token', (tester) async {
       final server = _Server();
       final signOut = Completer<FakeResponse>();
       server.backend.handle(
@@ -1460,8 +1397,8 @@ void main() {
         '/api/auth/sign-out',
         (_) => signOut.future,
       );
-      final store = _Store(access: 'member-token');
-      final container = await _boot(tester, server, store: store);
+      final storage = MemoryStorage({SessionCore.recordKey: signedInRecord()});
+      final container = await _boot(tester, server, storage: storage);
       await _openTab(tester, _en.navProfile);
       final from = server.backend.requests.length;
 
@@ -1473,8 +1410,14 @@ void main() {
       final signOutCall = sent.singleWhere(
         (r) => r.path == '/api/auth/sign-out',
       );
-      expect(signOutCall.headers[_bearer], 'Bearer member-token');
-      expect(store.access, 'member-token', reason: 'still being sent');
+      expect(signOutCall.headers, isNot(contains(_bearer)));
+      expect(signOutCall.body, {'refresh': fakeToken('sid-a')});
+      expect(storage.record!.current, isNull);
+      expect(
+        storage.record!.ended.single.sid,
+        'sid-a',
+        reason: 'not yet heard',
+      );
       final reads = sent.where((r) => r.path.startsWith('/api/discovery'));
       expect(reads, isNotEmpty);
       for (final r in reads) {
@@ -1482,10 +1425,10 @@ void main() {
       }
       expect(server.backend.to('POST', '/api/auth/refresh'), isEmpty);
 
-      signOut.complete(const FakeResponse(200, {}));
+      signOut.complete(const FakeResponse(205));
       await _settle(tester, 5);
       await out;
-      expect(store.access, isNull);
+      expect(storage.record!.ended, isEmpty);
 
       await _shutdown(tester);
     });
@@ -1521,7 +1464,7 @@ void main() {
       return _boot(
         tester,
         _Server(),
-        store: _guest(locale: 'ar'),
+        store: _Store(locale: 'ar'),
         size: small,
       );
     }

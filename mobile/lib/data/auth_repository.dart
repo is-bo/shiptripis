@@ -177,7 +177,10 @@ class AuthRepository {
     final refresh = body['refresh'];
     final user = body['user'];
     final sid = refresh is String ? SessionCore.sidOf(refresh) : null;
-    if (access is! String || refresh is! String || user is! Map || sid == null) {
+    if (access is! String ||
+        refresh is! String ||
+        user is! Map ||
+        sid == null) {
       throw ApiException(
         kind: ApiFailureKind.malformed,
         code: ApiErrorCode.unknown,

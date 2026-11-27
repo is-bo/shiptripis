@@ -479,9 +479,8 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           tokenStoreProvider.overrideWithValue(tokens),
-          apiClientProvider.overrideWithValue(
-            apiClientFor(server.backend, tokens),
-          ),
+          sessionCoreProvider.overrideWithValue(server.backend.session),
+          apiClientProvider.overrideWithValue(apiClientFor(server.backend)),
           paymentRepositoryProvider.overrideWith(
             (ref) => orders = _UnreadableOrders(ref.watch(apiClientProvider)),
           ),

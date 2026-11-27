@@ -45,7 +45,7 @@ void main() {
         ..on('POST', '/api/auth/sign-out', const FakeResponse(200, {}));
       final container = containerFor(backend);
       addTearDown(container.dispose);
-      await container.read(sessionProvider.notifier).restore();
+      await launch(container);
       final subscription = container.listen(receivedRatingsProvider, (_, _) {});
       addTearDown(subscription.close);
 
@@ -54,7 +54,7 @@ void main() {
       expect(container.read(receivedRatingsProvider).requireValue, isEmpty);
 
       accountId = 99;
-      await container.read(sessionProvider.notifier).restore();
+      await launch(container);
       expect(container.read(accountProvider)?.id, 99);
       expect(
         container
@@ -82,7 +82,7 @@ void main() {
         ..on('POST', '/api/auth/sign-out', const FakeResponse(200, {}));
       final container = containerFor(backend);
       addTearDown(container.dispose);
-      await container.read(sessionProvider.notifier).restore();
+      await launch(container);
       final subscription = container.listen(receivedRatingsProvider, (_, _) {});
       addTearDown(subscription.close);
 
@@ -90,7 +90,7 @@ void main() {
       await container.read(sessionProvider.notifier).signOut();
       expect(container.read(receivedRatingsProvider).requireValue, isEmpty);
       comment = 'A updated';
-      await container.read(sessionProvider.notifier).restore();
+      await launch(container);
       expect(
         container
             .read(receivedRatingsProvider)
@@ -123,7 +123,7 @@ void main() {
         ..on('POST', '/api/auth/sign-out', const FakeResponse(200, {}));
       final container = containerFor(backend);
       addTearDown(container.dispose);
-      await container.read(sessionProvider.notifier).restore();
+      await launch(container);
       final subscription = container.listen(receivedRatingsProvider, (_, _) {});
       addTearDown(subscription.close);
       await started.future;
@@ -131,7 +131,7 @@ void main() {
       await container.read(sessionProvider.notifier).signOut();
       expect(container.read(receivedRatingsProvider).requireValue, isEmpty);
       accountId = 99;
-      await container.read(sessionProvider.notifier).restore();
+      await launch(container);
       expect((await _ratingsReady(container)).single.comment, 'B private');
 
       oldResponse.complete(FakeResponse(200, [_rating('A late')]));

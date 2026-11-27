@@ -37,8 +37,6 @@ import 'support/harness.dart';
 import 'support/push_router.dart';
 
 class _PushTokenStore extends FakeTokenStore {
-  _PushTokenStore({super.refresh});
-
   /// While set, the write that counts a system request stays pending.
   Completer<void>? recordGate;
 
@@ -63,6 +61,13 @@ class _PushTokenStore extends FakeTokenStore {
     await recordGate?.future;
     return count;
   }
+}
+
+/// A phone with nobody signed in, whose guest Home reads the public listings.
+FakeBackend _guestBackend() {
+  final backend = FakeBackend()..emptyDiscovery();
+  backend.session = coreFor(backend, signedIn: false);
+  return backend;
 }
 
 class _FakePushMessaging implements PushMessaging {
@@ -132,7 +137,8 @@ class _StaticPushCoordinator extends PushCoordinator {
 
 class _FixedSession extends SessionController {
   @override
-  SessionState build() => SessionSignedIn(Account.fromJson(meFixture()));
+  SessionState build() =>
+      SessionSignedIn(Account.fromJson(meFixture()), sid: 'sid-a');
 }
 
 /// A session a test moves by hand: a guest until [enter], a guest again after
@@ -141,8 +147,10 @@ class _HandSession extends SessionController {
   @override
   SessionState build() => const SessionSignedOut();
 
-  void enter({int id = 42}) =>
-      state = SessionSignedIn(Account.fromJson(meFixture(id: id)));
+  void enter({int id = 42}) => state = SessionSignedIn(
+    Account.fromJson(meFixture(id: id)),
+    sid: 'sid-a',
+  );
   void leave() => state = const SessionSignedOut();
 }
 
@@ -191,7 +199,8 @@ Future<ProviderContainer> _boot(
     ProviderScope(
       overrides: [
         tokenStoreProvider.overrideWithValue(tokens),
-        apiClientProvider.overrideWithValue(apiClientFor(backend, tokens)),
+        sessionCoreProvider.overrideWithValue(backend.session),
+        apiClientProvider.overrideWithValue(apiClientFor(backend)),
         notificationSocketProvider.overrideWithValue(_NoopSocket()),
         pushMessagingProvider.overrideWithValue(push),
       ],
@@ -225,7 +234,8 @@ Future<ProviderContainer> _coordinatorContainer(
     overrides: [
       routeTransitionTrackerProvider.overrideWithValue(transitions),
       tokenStoreProvider.overrideWithValue(tokens),
-      apiClientProvider.overrideWithValue(apiClientFor(backend, tokens)),
+      sessionCoreProvider.overrideWithValue(backend.session),
+      apiClientProvider.overrideWithValue(apiClientFor(backend)),
       sessionProvider.overrideWith(session ?? _FixedSession.new),
       routerProvider.overrideWithValue(screens),
       notificationSocketProvider.overrideWithValue(_NoopSocket()),
@@ -260,8 +270,8 @@ void main() {
       final container = await _boot(
         tester,
         // Signed out opens guest Home, which reads the public listings.
-        backend: FakeBackend()..emptyDiscovery(),
-        tokens: _PushTokenStore(refresh: null),
+        backend: _guestBackend(),
+        tokens: _PushTokenStore(),
         push: push,
       );
       expect(starts, 1, reason: 'started right after the first frame');
@@ -1321,10 +1331,10 @@ void main() {
     testWidgets('a guest who opens sign-in while Firebase is slow is not '
         'interrupted', (tester) async {
       final deferred = DeferredPushMessaging();
-      final tokens = _PushTokenStore(refresh: null);
+      final tokens = _PushTokenStore();
       final container = await _boot(
         tester,
-        backend: FakeBackend()..emptyDiscovery(),
+        backend: _guestBackend(),
         tokens: tokens,
         push: deferred,
       );
@@ -1479,8 +1489,8 @@ void main() {
 
       await _boot(
         tester,
-        backend: FakeBackend()..emptyDiscovery(),
-        tokens: _PushTokenStore(refresh: null),
+        backend: _guestBackend(),
+        tokens: _PushTokenStore(),
         push: push,
       );
       expect(find.byType(MaterialApp), findsOneWidget);
@@ -1494,7 +1504,8 @@ void main() {
     });
   });
 
-  testWidgets('an offline launch without a snapshot offers a way out', (
+  testWidgets('an offline launch opens on the stored sign-in, with no '
+      'splash to wait on, and confirms it once the server answers', (
     tester,
   ) async {
     var online = false;
@@ -1502,9 +1513,11 @@ void main() {
       ..handle(
         'GET',
         '/api/me',
-        (r) => online ? FakeResponse(200, meFixture()) : _offline(r),
+        (r) => online
+            ? FakeResponse(200, {...meFixture(), 'full_name': 'Amina B.'})
+            : _offline(r),
       )
-      // Whatever Home reads once signed in; this test is about the splash.
+      // Whatever Home reads once signed in; this test is about the launch.
       ..fallback = (_) => const FakeResponse(503, {'detail': 'unavailable'});
     final container = await _boot(
       tester,
@@ -1514,25 +1527,20 @@ void main() {
     );
 
     await _settle(tester, 20);
-    expect(find.byType(SplashScreen), findsOneWidget);
-    expect(container.read(sessionProvider), isA<SessionRestoring>());
-    expect(find.text('Try again'), findsNothing, reason: 'not before 8 s');
-
-    await _settle(tester, 70);
-    expect(find.textContaining('Check your connection'), findsOneWidget);
-    expect(find.text('Try again'), findsOneWidget);
+    expect(find.byType(SplashScreen), findsNothing);
+    final session = container.read(sessionProvider);
     expect(
-      container.read(sessionProvider),
-      isA<SessionRestoring>(),
-      reason: 'offline is not signed out: credentials are kept',
+      session,
+      isA<SessionSignedIn>(),
+      reason: 'offline is not signed out',
     );
+    expect((session as SessionSignedIn).account.fullName, 'Amina Bouzid');
 
     online = true;
-    await tester.tap(find.text('Try again'));
-    await _settle(tester);
-
-    expect(container.read(sessionProvider), isA<SessionSignedIn>());
-    expect(find.byType(SplashScreen), findsNothing);
+    // The launch asks again 10 s after it could not reach the server.
+    await _settle(tester, 110);
+    final confirmed = container.read(sessionProvider) as SessionSignedIn;
+    expect(confirmed.account.fullName, 'Amina B.');
 
     await _shutdown(tester);
   });

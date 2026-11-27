@@ -1,7 +1,8 @@
 /// The phone's own keys: the interface language, the role context, a random
 /// installation ID, a pending push token, the count of notification
 /// permission requests and the number of the newest push registration. They
-/// belong to the phone rather than to a sign-in, so they survive a sign-out.
+/// belong to the phone rather than to a sign-in, so they survive a sign-out,
+/// except the role context, which the session removes when a sign-in ends.
 ///
 /// The sign-in itself (its tokens and the account snapshot) is not here: it is
 /// one record with one writer, `SessionCore`.
@@ -48,10 +49,12 @@ class TokenStore {
 
   /// Which side of the marketplace a dual-role user last worked from. A
   /// preference, not a permission — the server's role is always authoritative
-  /// about what the account may actually do.
+  /// about what the account may actually do. Null removes it: a sign-in that
+  /// ends takes its choice with it.
   Future<String?> readRoleContext() => _storage.read(key: _kRoleContext);
-  Future<void> writeRoleContext(String value) =>
-      _storage.write(key: _kRoleContext, value: value);
+  Future<void> writeRoleContext(String? value) => value == null
+      ? _storage.delete(key: _kRoleContext)
+      : _storage.write(key: _kRoleContext, value: value);
 
   /// Explicit language choice. Absent means "follow the device".
   Future<String?> readLocale() => _storage.read(key: _kLocale);

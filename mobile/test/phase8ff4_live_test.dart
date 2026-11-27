@@ -214,7 +214,7 @@ void main() {
               : secondRead.future;
         });
       final tokens = FakeTokenStore();
-      final api = apiClientFor(backend, tokens);
+      final api = apiClientFor(backend);
       final container = ProviderContainer(
         retry: (_, _) => null,
         overrides: [
@@ -389,7 +389,7 @@ class _FixedSession extends SessionController {
   final Account account;
 
   @override
-  SessionState build() => SessionSignedIn(account);
+  SessionState build() => SessionSignedIn(account, sid: 'sid-a');
 }
 
 class _SwitchingSession extends SessionController {
@@ -398,11 +398,11 @@ class _SwitchingSession extends SessionController {
   Account account;
 
   @override
-  SessionState build() => SessionSignedIn(account);
+  SessionState build() => SessionSignedIn(account, sid: 'sid-a');
 
   void switchTo(Account next) {
     account = next;
-    state = SessionSignedIn(next);
+    state = SessionSignedIn(next, sid: 'sid-a');
   }
 }
 
