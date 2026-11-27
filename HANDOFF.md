@@ -105,15 +105,15 @@ The local operator on Ismail's PC runs Astra 6.2 at high effort, read-only, and 
 | Package | Head reviewed | Verdict | Result file |
 |---|---|---|---|
 | C1 plan (extra high) | — | Plan complete, with questions for Ismail | `docs/handoff/astra/results/c1-plan.md` |
-| P3B round 6 | `ead30e2` | awaiting review (run by Ismail) | prompt `docs/handoff/astra/p3b-review-round6.md` |
+| P3B round 6 | `ead30e2` | **Reject** (run by Ismail): 3 blockers (a refresh during the A-to-B switch saves A's snapshot under B's generation, the removal dialog confirmed after a switch deletes B's photo, a second Android window shares the bearer with its own generation), 6 should-fixes | `docs/handoff/astra/results/p3b-astra-round6-result.md` |
 | P3B round 5 | `f4394f1` | **Reject** (run by Ismail): 2 blockers (a restored KYC image can still reach a Profile pick, and a fresh pick during an A-to-B switch pairs A with B's generation), 5 should-fixes | `docs/handoff/astra/results/p3b-astra-round5-result.md` |
 | P3B round 4 | `c8b4e68` | **Reject**: 5 of 13 fixed, 8 partly fixed; 3 new blockers (KYC picker ownership, uncertain tickets returned to the parcel picker, retry during an account switch) | `docs/handoff/astra/results/p3b-astra-round4-result.md` |
-| G1 round 5 | `a0b48be` | awaiting review (run by Ismail) | prompt `docs/handoff/astra/g1-review.md` |
+| G1 round 5 | `a0b48be` | **Reject** (run by Ismail): 3 blockers (the metadata fallback accepts a missing order reference and PaymentIntent events skip the session check, a close that finds collection re-arms no reconciliation, live sessions inherited from the old main stay payable), 7 should-fixes | `docs/handoff/astra/results/g1-astra-round5-result.md` |
 | G1 round 4 | `1643afc` | **Reject** (run by Ismail): 2 blockers (a delayed expired webhook is bound to the newest handleless attempt, and order cancellation leaves an issued checkout payable), 8 should-fixes | `docs/handoff/astra/results/g1-astra-round4-result.md` |
 | G1 round 3 | `d99c838` | **Reject**: A, D, E and F fixed, B and C partly fixed; 3 new blockers (an expiry job leaves a Stripe URL payable, recovery republishes a URL on a terminal attempt, a recovery race supersedes without closing) | `docs/handoff/astra/results/g1-astra-round3-result.md` |
-| N1 round 3 | `13b7ea4` | awaiting review (run by Ismail) | prompt `docs/handoff/astra/n1-review.md` (PR branch) |
+| N1 round 3 | `13b7ea4` | **Reject** (run by Ismail; accepts the declined old-app blocker): 4 blockers (an unnumbered sign-out before first registration, the same-second `iat` cutoff, a rotated session that survives reset, an exact-repeat check that ignores `sid`), 5 should-fixes, 1 nit | `docs/handoff/astra/results/n1-astra-round3-result.md` |
 | N1 round 2 | `49ae6d8` | **Reject** (run by Ismail on a second Codex account): 6 blockers. Logout can leave the old account receiving pushes (old-app compatibility, out-of-order logout and registration, stale logout after a counter reset, equal sequence numbers, a racing installation ID, password reset) | `docs/handoff/astra/results/n1-astra-round2-result.md` |
-| F1 round 3 | `cb80430` | awaiting review (run by Ismail) | prompt `docs/handoff/astra/f1-review-round3.md` |
+| F1 round 3 | `cb80430` | **Reject** (run by Ismail): 3 blockers (an explicit stale `country=DE` replaces a newer FR declaration, a late timeout reopens a failed key and recovery binds the wrong account, a crashed intent sends its first POST for a closed country), 6 should-fixes, 1 nit | `docs/handoff/astra/results/f1-astra-round3-result.md` |
 | F1 round 2 | `8d1a1cd` | **Reject** (run by Ismail): 8 of 10 fixed, 2 partly fixed; 1 blocker (a stale Stripe onboarding overwrites a newer payout-country declaration) | `docs/handoff/astra/results/f1-astra-round2-result.md` |
 
 ### 0.4 After every package is merged (each step needs Ismail's OK)
