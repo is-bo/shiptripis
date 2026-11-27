@@ -98,7 +98,6 @@ One line per folder in `backend/monolith/apps`. A member never sees these names;
 | `chat` | One-to-one messages between sender and traveler of a match |
 | `admin_panel` | Staff identity, the five roles, the console pages, audit log, two-step sign-in, invitations |
 | `admin_helper` | AI helper keys, call log, prepared changes, read API and this skill |
-| `payments`, `wallet`, `verification` | Old modules (mock payments, DZD wallet, match-based codes). Not routed; history only (money.md) |
 <!-- src: backend/monolith/apps/*/models.py docstrings, config/settings/base.py INSTALLED_APPS, config/urls.py -->
 ## How does one delivery go, from request to payout?
 Short answer: sender posts and offers, traveler accepts, sender pays, parcel is handed over with a code, delivered with a second code, then 48 hours of protection, then the traveler is paid. Details: deliveries.md, money.md.

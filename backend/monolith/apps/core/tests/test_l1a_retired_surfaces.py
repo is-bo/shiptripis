@@ -12,18 +12,14 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient, APITestCase
 
-from apps.admin_panel.tests.two_step_helpers import staff_login
 from apps.accounts.models import User
 from apps.matching.models import Match, Offer
 from apps.parcels.models import ParcelRequest, ProductRequest
-from apps.payments.models import PaymentIntent
 from apps.trips.models import Trip
-from apps.verification.models import HandoverCode
 
 
 def _user(email: str, suffix: str) -> User:
@@ -158,7 +154,7 @@ class RetiredProductBoundaryTests(APITestCase):
         )
         handover = client.post(
             f"/api/matches/{self.match.pk}/handover/issue",
-            {"kind": HandoverCode.Kind.PICKUP},
+            {"kind": "pickup"},
             format="json",
         )
         chat = client.get(reverse("matches-chat-eligibility", args=[self.match.pk]))
@@ -180,68 +176,3 @@ class RetiredProductBoundaryTests(APITestCase):
         }
         assert counter.status_code == 410
         assert accept.status_code == 410
-        assert PaymentIntent.objects.count() == 0
-        assert HandoverCode.objects.count() == 0
-
-
-#: The admin templates resolve static files; the manifest only exists after
-#: collectstatic, so rendering tests use plain storage.
-LOCAL_STATIC = override_settings(
-    STORAGES={
-        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-        "staticfiles": {
-            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
-        },
-    }
-)
-
-
-@LOCAL_STATIC
-class HistoricalAdminTests(APITestCase):
-    """The legacy money and handover tables are readable and nothing else."""
-
-    LEGACY_MODELS = (
-        ("payments", "paymentintent"),
-        ("payments", "paymentevent"),
-        ("payments", "refund"),
-        ("wallet", "wallet"),
-        ("wallet", "walletentry"),
-        ("wallet", "hold"),
-        ("wallet", "withdrawal"),
-        ("verification", "handovercode"),
-    )
-
-    def setUp(self):
-        self.staff = User.objects.create_superuser(
-            username="history-admin@example.com",
-            email="history-admin@example.com",
-            password="Sup3rStrongPass!",
-        )
-
-    def test_every_legacy_table_is_view_only_in_the_django_admin(self):
-        from django.apps import apps
-        from django.contrib import admin as django_admin
-        from django.test import RequestFactory
-
-        request = RequestFactory().get("/")
-        request.user = self.staff
-        for app_label, model_name in self.LEGACY_MODELS:
-            with self.subTest(model=f"{app_label}.{model_name}"):
-                model = apps.get_model(app_label, model_name)
-                model_admin = django_admin.site._registry[model]
-                assert model_admin.has_view_permission(request)
-                assert not model_admin.has_add_permission(request)
-                assert not model_admin.has_change_permission(request)
-                assert not model_admin.has_delete_permission(request)
-                assert not model_admin.get_actions(request)
-
-    def test_the_changelist_still_renders_for_staff(self):
-        staff_login(self.client, self.staff)
-        for app_label, model_name in self.LEGACY_MODELS:
-            with self.subTest(model=f"{app_label}.{model_name}"):
-                response = self.client.get(
-                    reverse(f"admin:{app_label}_{model_name}_changelist")
-                )
-                assert response.status_code == 200
-                add = self.client.get(reverse(f"admin:{app_label}_{model_name}_add"))
-                assert add.status_code == 403
