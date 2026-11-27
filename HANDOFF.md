@@ -58,6 +58,7 @@ branches; delete each after its package merges.
 ### 0.3 Merged already
 P1 #60, P2 #62, P4 #61, P3A #64, P3C #65, M1 #68, N2 #70 (`ec24abc`). Earlier: the whole L-series,
 EGS #53, STORE fixes #54.
+Ponytail working rules #72 (`d44345a`, 2026-11-27): documents and skill files only, no code. Every agent now works under the "Working style: ponytail" section of `CLAUDE.md`.
 
 ### 0.4 Next packages, in order (each planned in `docs/WASSLA_PHONE_TEST_2_PLAN.md`, each reviewed by Astra)
 1. **C1, pay only in the traveler's currency** (server). Starts **after G1 and F1 merge** (shared
