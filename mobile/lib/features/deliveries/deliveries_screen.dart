@@ -39,6 +39,7 @@ import '../../l10n/app_localizations.dart';
 import '../auth/account_gate.dart';
 import '../auth/guest_states.dart';
 import '../common/delivery_card.dart';
+import '../common/formatters.dart';
 import '../common/status_copy.dart';
 import '../offers/offer_deadline.dart';
 import '../requests/request_labels.dart';
@@ -350,6 +351,13 @@ class _NegotiationRow extends StatelessWidget {
         children: [
           Row(
             children: [
+              AppAvatar(
+                initials: initialsFor(match.counterpartyName(viewerId)),
+                name: match.counterpartyName(viewerId),
+                photo: match.counterpartyPhoto(viewerId),
+                size: 32,
+              ),
+              const SizedBox(width: AppSpace.md),
               Expanded(
                 child: Text(
                   match.counterpartyName(viewerId),

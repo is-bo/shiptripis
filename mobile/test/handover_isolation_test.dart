@@ -107,12 +107,15 @@ void main() {
       for (final file in storageWriters) {
         expect(
           file,
-          contains('token_store.dart'),
+          anyOf(
+            contains('token_store.dart'),
+            contains('pending_pick_store.dart'),
+          ),
           reason: 'unexpected secure-storage write in $file',
         );
       }
 
-      // And the keys it writes are exactly the seven it is allowed to hold.
+      // And the keys it writes are exactly the ones it is allowed to hold.
       // The account snapshot (K5) is the user's own presentation profile —
       // its key set is pinned in k5_session_snapshot_test.dart.
       final store = File(
@@ -137,6 +140,22 @@ void main() {
             'own profile snapshot, a random install ID, a role and a locale '
             '— never code material, a guest token or recipient details',
       );
+
+      // The eighth key is not in the token store: which pick had the photo
+      // picker open (a purpose and a nonce), so the next pick knows an earlier
+      // one may still answer. It names no code, token, account or person, and
+      // lives in its own store (on Android, in preferences written with
+      // `commit()`, because secure storage's `apply()` cannot report failure).
+      final pickStore = File(
+        'lib/core/session/pending_pick_store.dart',
+      ).readAsStringSync();
+      expect(
+        RegExp(
+          r'\.write\(\s*key:\s*([A-Za-z]+)',
+        ).allMatches(pickStore).map((m) => m.group(1)).toSet(),
+        {'key'},
+      );
+      expect(pickStore, contains("static const key = 'media.pending_pick';"));
     });
 
     test('nothing logs anything', () {

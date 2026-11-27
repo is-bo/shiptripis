@@ -18,10 +18,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:image_picker/image_picker.dart' show ImageSource, XFile;
 
 import '../../app/app_state.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/media/pick_guard.dart';
+import '../../core/media/pick_blocked_message.dart';
 import '../../data/repositories.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/forms.dart';
@@ -43,7 +45,6 @@ class DzdSetupScreen extends ConsumerStatefulWidget {
 
 class _DzdSetupScreenState extends ConsumerState<DzdSetupScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _picker = ImagePicker();
 
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
@@ -68,18 +69,28 @@ class _DzdSetupScreenState extends ConsumerState<DzdSetupScreen> {
 
   Future<void> _pickImage(ImageSource source) async {
     try {
-      final picked = await _picker.pickImage(
-        source: source,
-        maxWidth: 2400,
-        maxHeight: 2400,
-        imageQuality: 85,
-      );
+      final picked = await ref
+          .read(pickGuardProvider)
+          .pickImage(
+            PickPurpose.payoutCheque,
+            source: source,
+            maxWidth: 2400,
+            maxHeight: 2400,
+            imageQuality: 85,
+          );
       if (picked != null && mounted) {
         setState(() {
           _chequeFile = picked;
           _chequeError = null;
         });
       }
+    } on PickBlockedException catch (error) {
+      if (!mounted) return;
+      AppSnack.failure(
+        context,
+        null,
+        fallback: L.of(context).pickBlocked(error),
+      );
     } on Object catch (e) {
       if (!mounted) return;
       AppSnack.failure(context, e);

@@ -5,12 +5,17 @@
 /// sees is the screen's.
 library;
 
+import 'package:dio/dio.dart'
+    show CancelToken, DioMediaType, FormData, MultipartFile;
+
 import '../core/api/api_client.dart';
 import '../core/api/api_exception.dart';
 import '../core/api/error_codes.dart';
+import '../core/session/member_scope.dart';
 import '../core/session/token_store.dart';
 import '../domain/account.dart';
 import '../domain/communication_language.dart';
+import '../domain/person_photo.dart';
 
 class AuthRepository {
   AuthRepository(this._api, this._tokens);
@@ -131,6 +136,66 @@ class AuthRepository {
     ),
   );
 
+  /// Sets the member's photo, replacing any they have.
+  ///
+  /// Sent once. The server stores a new photo with every upload, so a caller
+  /// never repeats this on its own: every retry is the member pressing the
+  /// button again. The content type is stated rather than inferred, because a
+  /// gallery can hand back a path with no extension at all.
+  ///
+  /// [expectedIdentity] is the credential generation the caller read when the
+  /// member pressed the button, before the file was prepared: a member who
+  /// signs in meanwhile must not send this file under their own token.
+  Future<OwnPhoto> uploadPhoto({
+    required String filePath,
+    required String fileName,
+    required String contentType,
+    required MemberScope scope,
+    void Function(int sent, int total)? onProgress,
+    CancelToken? cancelToken,
+  }) async {
+    final body = await _api.upload(
+      '/api/me/photo',
+      method: 'PUT',
+      expectedIdentity: scope.credentials,
+      expectedAccount: scope.accountId,
+      form: FormData.fromMap({
+        'photo': await MultipartFile.fromFile(
+          filePath,
+          filename: fileName,
+          contentType: DioMediaType.parse(contentType),
+        ),
+      }),
+      onProgress: onProgress,
+      cancelToken: cancelToken,
+    );
+    final photo = OwnPhoto.maybe(body);
+    if (photo == null) {
+      throw ApiException(
+        kind: ApiFailureKind.malformed,
+        code: ApiErrorCode.unknown,
+        serverDetail: 'The photo answer carried no photo.',
+      );
+    }
+    return photo;
+  }
+
+  /// Removes the photo, or dismisses the notice that Wassla removed it. The
+  /// server answers 204 either way, and also when there was nothing.
+  ///
+  /// [shownVersion] is the photo the member was looking at: if another device
+  /// has put a different one up since, the server changes nothing and answers
+  /// `profile_photo_changed`.
+  Future<void> removePhoto({
+    required MemberScope scope,
+    required String shownVersion,
+  }) => _api.deleteVoid(
+    '/api/me/photo',
+    query: {'version': shownVersion},
+    expectedIdentity: scope.credentials,
+    expectedAccount: scope.accountId,
+  );
+
   /// What stands before deleting the account.
   Future<AccountDeletionCheck> deletionCheck() async =>
       AccountDeletionCheck.fromJson(await _api.getObject('/api/me/deletion'));
@@ -229,6 +294,20 @@ class AuthRepository {
       );
     }
 
+    // Read before anything is written: an answer that cannot be read must leave
+    // the stored credentials as they were (the session relies on a refusal here
+    // never having replaced them).
+    final Account account;
+    try {
+      account = Account.fromJson(Map<String, dynamic>.from(user));
+    } on Object {
+      throw ApiException(
+        kind: ApiFailureKind.malformed,
+        code: ApiErrorCode.unknown,
+        serverDetail: 'Authentication response carried an unreadable user.',
+      );
+    }
+
     final identity = expectedIdentityGeneration ?? _tokens.invalidateIdentity();
     final saved = await _tokens.saveAuthenticationIfCurrent(
       expectedIdentityGeneration: identity,
@@ -238,6 +317,6 @@ class AuthRepository {
     if (!saved) {
       throw StateError('The authenticated session changed.');
     }
-    return Account.fromJson(Map<String, dynamic>.from(user));
+    return account;
   }
 }

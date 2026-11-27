@@ -21,12 +21,14 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:image_picker/image_picker.dart' show ImageSource, XFile;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../common/contact_support.dart';
 import '../../app/app_state.dart' show cancelOnDispose;
 import '../../core/api/api_exception.dart';
+import '../../core/media/pick_guard.dart';
+import '../../core/media/pick_blocked_message.dart';
 import '../../core/format/locale_formats.dart';
 import '../../core/live/live_updates.dart';
 import '../../core/session/session.dart';
@@ -88,7 +90,6 @@ class DisputeDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _DisputeDetailScreenState extends ConsumerState<DisputeDetailScreen> {
-  final _picker = ImagePicker();
   bool _busy = false;
   double _progress = 0;
 
@@ -119,12 +120,25 @@ class _DisputeDetailScreenState extends ConsumerState<DisputeDetailScreen> {
 
   Future<void> _addFile(EvidenceKind kind) async {
     final l = L.of(context);
-    final picked = kind == EvidenceKind.video
-        ? await _picker.pickVideo(source: ImageSource.gallery)
-        : await _picker.pickImage(
-            source: ImageSource.gallery,
-            imageQuality: 92,
-          );
+    final guard = ref.read(pickGuardProvider);
+    final XFile? picked;
+    try {
+      picked = kind == EvidenceKind.video
+          ? await guard.pickVideo(
+              PickPurpose.disputeEvidence,
+              source: ImageSource.gallery,
+            )
+          : await guard.pickImage(
+              PickPurpose.disputeEvidence,
+              source: ImageSource.gallery,
+              imageQuality: 92,
+            );
+    } on PickBlockedException catch (error) {
+      if (mounted) {
+        AppSnack.failure(context, null, fallback: l.pickBlocked(error));
+      }
+      return;
+    }
     if (picked == null || !mounted) return;
 
     final bytes = await File(picked.path).length();

@@ -433,6 +433,68 @@ jobs:
       - name: Test
         run: flutter test
 
+      # The photo arithmetic and the metadata cleaner of the Android code use no
+      # Android type, so the real Kotlin runs under JUnit here, with a downloaded
+      # kotlinc and no Gradle.
+      # kotlinc 2.1 cannot read the version string of the runner's default JDK
+      # (25), so the step runs on JDK 17, the one the Android build uses.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Android photo code — Kotlin unit tests
+        run: ../tools/test_android_pure.sh
+
+  # ── Android ─────────────────────────────────────────────────────────────
+  # The Android code (PhotoPrepare, PickMarkerStore, PickLaunchGate, MainActivity)
+  # is compiled by a debug build, and the JUnit tests under android/app/src/test
+  # run through Gradle's own unit-test task. A debug APK only: nothing here is
+  # signed, uploaded or released.
+  android:
+    name: Android — compile and Gradle unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Writes android/gradlew (git-ignored) and compiles every Kotlin file of
+      # the app and the plugins.
+      - name: Compile the debug app
+        run: flutter build apk --debug
+
+      - name: Gradle unit tests
+        working-directory: mobile/android
+        run: ./gradlew :app:testDebugUnitTest --no-daemon
+
+      # Gradle reports a task with no test source as a success, so the three
+      # test classes are looked for in its results.
+      - name: The photo tests ran
+        # Flutter moves the app module's build directory to mobile/build/app.
+        run: |
+          for suite in PhotoGeometryTest JpegMetadataTest PickLaunchGateTest; do
+            file="build/app/test-results/testDebugUnitTest/TEST-eu.wassla.app.$suite.xml"
+            test -f "$file" || { echo "$suite did not run"; find build/app -name 'TEST-*.xml'; exit 1; }
+            echo "$suite: $(grep -o 'tests="[0-9]*"' "$file" | head -1)"
+          done
+
   # ── Schema-drift gate (CLAUDE.md §G3) ───────────────────────────────────
   # G3 requires BOTH steps: re-export schema.sql from Django AND re-run the
   # generators. Running only the generators would check Go against a stale

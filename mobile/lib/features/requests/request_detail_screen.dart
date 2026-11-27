@@ -618,6 +618,13 @@ class _MatchRow extends StatelessWidget {
       semanticLabel: match.counterpartyName(viewerId),
       child: Row(
         children: [
+          AppAvatar(
+            initials: initialsFor(match.counterpartyName(viewerId)),
+            name: match.counterpartyName(viewerId),
+            photo: match.counterpartyPhoto(viewerId),
+            size: 32,
+          ),
+          const SizedBox(width: AppSpace.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

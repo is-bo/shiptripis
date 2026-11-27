@@ -54,14 +54,24 @@ class RecordedRequest {
 /// What the fake should answer with.
 class FakeResponse {
   const FakeResponse(this.statusCode, [this.body = const <String, dynamic>{}])
-    : headers = const <String, List<String>>{};
+    : headers = const <String, List<String>>{},
+      raw = null;
+
+  /// An answer whose body is sent exactly as written, not as JSON: what an
+  /// edge proxy writes (HTML, an empty body, a JSON that is cut short). It is
+  /// still labelled `application/json`, the worst case for a decoder.
+  const FakeResponse.raw(this.statusCode, String this.raw)
+    : body = const <String, dynamic>{},
+      headers = const <String, List<String>>{};
 
   /// For a contract carried in headers — the K4 bare-array lists say whether
   /// another page follows in `X-Next-Page`, not in the body.
-  const FakeResponse.withHeaders(this.statusCode, this.body, this.headers);
+  const FakeResponse.withHeaders(this.statusCode, this.body, this.headers)
+    : raw = null;
 
   final int statusCode;
   final Object body;
+  final String? raw;
   final Map<String, List<String>> headers;
 }
 
@@ -154,10 +164,14 @@ class _FakeAdapter implements HttpClientAdapter {
       headers: Map<String, dynamic>.from(options.headers),
     );
     unawaited(cancelFuture?.then((_) => request.cancelled = true));
+    // A real adapter reads the whole body, and so closes a file the body came
+    // from. Leaving it unread would keep that file open, which a test that then
+    // deletes it cannot do on Windows.
+    if (requestStream != null) await requestStream.drain<void>();
 
     final response = await backend._dispatch(request);
     return ResponseBody.fromString(
-      jsonEncode(response.body),
+      response.raw ?? jsonEncode(response.body),
       response.statusCode,
       headers: {
         Headers.contentTypeHeader: [Headers.jsonContentType],
@@ -191,10 +205,17 @@ class FakeTokenStore extends TokenStore {
   String? _locale;
   String? _roleContext;
 
+  /// The access token a sign-in saved, as storage would hold it; null until
+  /// one did (and then [readAccess] answers its default). Only the bearer is
+  /// kept: whether a refresh token exists decides what a sign-out sends, and
+  /// tests rely on [refresh] for that.
+  String? savedAccess;
+
   @override
   Future<void> save({required String access, required String refresh}) async {
     invalidateIdentity();
     accountSnapshot = null;
+    savedAccess = access;
   }
 
   @override
@@ -214,7 +235,7 @@ class FakeTokenStore extends TokenStore {
   Future<void> deleteAccountSnapshot() async => accountSnapshot = null;
 
   @override
-  Future<String?> readAccess() async => 'access-token';
+  Future<String?> readAccess() async => savedAccess ?? 'access-token';
 
   @override
   Future<String?> readRefresh() async => refresh;
@@ -240,11 +261,41 @@ class FakeTokenStore extends TokenStore {
   }) async {
     if (identityGeneration != expectedIdentityGeneration) return false;
     accountSnapshot = null;
+    savedAccess = access;
     return true;
   }
 
   @override
   Future<String?> readRoleContext() async => _roleContext;
+
+  /// Which pick had a picker open, as secure storage holds it.
+  String? pendingPick;
+
+  /// Set to make secure storage refuse a change to the pending pick, as a
+  /// keystore that cannot be written would.
+  bool pendingPickWritesFail = false;
+
+  @override
+  Future<String?> readPendingPick() async => pendingPick;
+
+  @override
+  Future<({bool applied, String? previous})> exchangePendingPick(
+    String marker, {
+    required int expectedIdentityGeneration,
+  }) async {
+    if (pendingPickWritesFail) throw StateError('secure storage refused');
+    if (identityGeneration != expectedIdentityGeneration) {
+      return (applied: false, previous: null);
+    }
+    final previous = pendingPick;
+    pendingPick = marker;
+    return (applied: true, previous: previous);
+  }
+
+  @override
+  Future<void> releasePendingPick(String marker) async {
+    if (pendingPick == marker) pendingPick = null;
+  }
 
   @override
   Future<void> writeRoleContext(String value) async => _roleContext = value;
@@ -259,6 +310,7 @@ class FakeTokenStore extends TokenStore {
   Future<void> clear() async {
     invalidateIdentity();
     accountSnapshot = null;
+    savedAccess = null;
   }
 
   @override
@@ -266,6 +318,7 @@ class FakeTokenStore extends TokenStore {
     if (identityGeneration != expectedIdentityGeneration) return false;
     invalidateIdentity();
     accountSnapshot = null;
+    savedAccess = null;
     return true;
   }
 
@@ -319,8 +372,12 @@ ApiClient apiClientFor(
 ///
 /// [preferredLanguage] is passed through verbatim, including `null` and `''`,
 /// so a test can reproduce a legacy row exactly as an older deployment would
-/// serialise it rather than as the client wishes it looked.
-Map<String, dynamic> meFixture({Object? preferredLanguage = 'en'}) => {
+/// serialise it rather than as the client wishes it looked. [photo] is the
+/// member's own photo block, null for none.
+Map<String, dynamic> meFixture({
+  Object? preferredLanguage = 'en',
+  Map<String, dynamic>? photo,
+}) => {
   'id': 42,
   'email': 'sender@example.com',
   'full_name': 'Amina Bouzid',
@@ -334,6 +391,7 @@ Map<String, dynamic> meFixture({Object? preferredLanguage = 'en'}) => {
   'kyc_status': 'verified',
   'kyc_rejection_reason': null,
   'date_joined': '2026-01-04T09:00:00Z',
+  'photo': photo,
 };
 
 /// `GET /api/deals/{id}` as the **sender** sees it.
@@ -389,16 +447,24 @@ Map<String, dynamic> discoveryPlace(
   String country = 'FR',
 ]) => {'place_id': id, 'label': label, 'country_code': country};
 
+/// A person's `photo` block, as every public payload publishes it.
+Map<String, dynamic> photoFixture([String version = 'v1']) => {
+  'url': 'https://media.test/profile-photos/$version.jpg?sig=1',
+  'version': version,
+};
+
 Map<String, dynamic> discoveryPersonFields({
   String name = 'Samira',
   bool verified = true,
   Object? rating,
   int deliveries = 0,
+  Map<String, dynamic>? photo,
 }) => {
   'display_name': name,
   'identity_verified': verified,
   'rating': rating,
   'completed_deliveries': deliveries,
+  'photo': photo,
 };
 
 /// A trip card. [id] doubles as the journey id.
@@ -410,12 +476,14 @@ Map<String, dynamic> tripCardFixture(
   String departs = '2026-12-02T10:00:00Z',
   int freeWeightKg = 8,
   Map<String, dynamic>? price,
+  Map<String, dynamic>? photo,
 }) => {
   'journey_id': id,
   'traveler': discoveryPersonFields(
     name: name,
     rating: {'state': 'rated', 'average': 4.8, 'count': 24},
     deliveries: 3,
+    photo: photo,
   ),
   'stops': [discoveryPlace(1, from), discoveryPlace(2, to, 'DZ')],
   'legs': [
@@ -439,9 +507,10 @@ Map<String, dynamic> requestCardFixture(
   String sender = 'Yacine',
   String from = 'Algiers',
   String to = 'Paris',
+  Map<String, dynamic>? photo,
 }) => {
   'request_id': id,
-  'sender': {'display_name': sender},
+  'sender': {'display_name': sender, 'photo': photo},
   'pickup': discoveryPlace(2, from, 'DZ'),
   'delivery': discoveryPlace(1, to),
   'title': title,
@@ -459,9 +528,10 @@ Map<String, dynamic> profileCardFixture({
   String id = 'p-1',
   String name = 'Samira',
   List<Map<String, dynamic>> routes = const [],
+  Map<String, dynamic>? photo,
 }) => {
   'id': id,
-  ...discoveryPersonFields(name: name, deliveries: 2),
+  ...discoveryPersonFields(name: name, deliveries: 2, photo: photo),
   'member_since': '2026-03',
   'usual_routes': routes,
 };

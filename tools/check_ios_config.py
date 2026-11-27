@@ -13,6 +13,9 @@ What is checked:
   parse as plists;
 * Google's URL scheme is made from `GOOGLE_IOS_CLIENT_PREFIX`, and the plist
   lists no client id of its own (the app passes the define at run time);
+* the UIScene lifecycle (https://flutter.dev/to/uiscene-migration): `Info.plist` has a scene manifest
+  whose delegate is `FlutterSceneDelegate`, and `AppDelegate.swift` registers
+  plugins and the photo channel in `didInitializeImplicitFlutterEngine`;
 * push: both entitlements files carry `aps-environment` and `Info.plist` has
   the `remote-notification` background mode, so every signed build can
   receive notifications;
@@ -128,6 +131,24 @@ def main() -> int:
                 errors.append(f"Info.plist needs {key}")
         if "GIDClientID" in info:
             errors.append("Info.plist must not list GIDClientID")
+        scenes = (
+            info.get("UIApplicationSceneManifest", {})
+            .get("UISceneConfigurations", {})
+            .get("UIWindowSceneSessionRoleApplication", [])
+        )
+        if [scene.get("UISceneDelegateClassName") for scene in scenes] != [
+            "FlutterSceneDelegate"
+        ]:
+            errors.append("Info.plist needs a scene manifest with FlutterSceneDelegate")
+        delegate = (IOS / "Runner" / "AppDelegate.swift").read_text(encoding="utf-8")
+        for needle in (
+            "FlutterImplicitEngineDelegate",
+            "didInitializeImplicitFlutterEngine",
+            "GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)",
+            "registerPhotoPrepare(engineBridge.pluginRegistry)",
+        ):
+            if needle not in delegate:
+                errors.append(f"AppDelegate.swift must contain {needle}")
         schemes = [
             scheme
             for url_type in info.get("CFBundleURLTypes", [])

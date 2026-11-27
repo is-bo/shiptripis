@@ -77,6 +77,17 @@ android {
     }
 }
 
+dependencies {
+    // Reads the EXIF orientation of a picked photo (all eight values) in
+    // PhotoPrepare.kt. Named here because it is the app's own code that uses it.
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
+
+    // The plain-JVM tests of PhotoGeometry and JpegMetadata (src/test). CI runs
+    // them with kotlinc (tools/test_android_pure.sh); this lets Gradle's
+    // :app:testDebugUnitTest compile them too.
+    testImplementation("junit:junit:4.13.2")
+}
+
 flutter {
     source = "../.."
 }

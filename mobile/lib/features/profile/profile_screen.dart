@@ -35,6 +35,7 @@ import '../../domain/find_travelers.dart';
 import '../../l10n/app_localizations.dart';
 import '../common/formatters.dart';
 import '../shell/app_shell.dart';
+import 'profile_photo_section.dart';
 import '../auth/account_gate.dart';
 import '../auth/email_gate.dart';
 import '../auth/guest_states.dart';
@@ -94,6 +95,8 @@ class ProfileScreen extends ConsumerWidget {
                 },
               ),
             ],
+            // After verification, which gates carrying and so stays first.
+            ProfilePhotoSection(account: account),
             const SizedBox(height: AppSpace.xl),
 
             SectionHeader(title: l.profilePayments),
@@ -425,6 +428,7 @@ class _PassportCard extends StatelessWidget {
                         AppAvatar(
                           initials: initialsFor(displayName),
                           name: displayName,
+                          photo: account.photo?.photo,
                           size: 64,
                           isVerified: account.isKycVerified,
                         ),

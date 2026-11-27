@@ -24,6 +24,7 @@ import 'discovery.dart';
 import 'find_travelers.dart';
 import 'journey.dart' show JourneyPrice;
 import 'json.dart';
+import 'person_photo.dart';
 import 'transport_mode.dart';
 
 // ---------------------------------------------------------------------------
@@ -145,6 +146,7 @@ class PublicPerson {
       count: 0,
     ),
     this.completedDeliveries = 0,
+    this.photo,
   });
 
   factory PublicPerson.fromJson(Map<String, dynamic> json) => PublicPerson(
@@ -152,12 +154,16 @@ class PublicPerson {
     identityVerified: readBool(json['identity_verified']),
     rating: TravelerRating.fromJson(readObject(json['rating'])),
     completedDeliveries: readInt(json['completed_deliveries']) ?? 0,
+    photo: PersonPhoto.maybe(json['photo']),
   );
 
   final String displayName;
   final bool identityVerified;
   final TravelerRating rating;
   final int completedDeliveries;
+
+  /// Null when they have none, and when Wassla removed it.
+  final PersonPhoto? photo;
 
   bool get hasRating => rating.hasScore;
 }
@@ -305,6 +311,7 @@ class RequestCard {
     required this.category,
     required this.fragile,
     required this.totalOfferedReward,
+    this.senderPhoto,
     this.pickup,
     this.delivery,
     this.weightKg,
@@ -317,6 +324,7 @@ class RequestCard {
   factory RequestCard.fromJson(Map<String, dynamic> json) => RequestCard(
     requestId: readInt(json['request_id']) ?? 0,
     sender: readText(readObject(json['sender'])?['display_name']),
+    senderPhoto: PersonPhoto.maybe(readObject(json['sender'])?['photo']),
     pickup: PlaceRef.maybe(json['pickup']),
     delivery: PlaceRef.maybe(json['delivery']),
     title: readText(json['title']),
@@ -338,6 +346,7 @@ class RequestCard {
 
   final int requestId;
   final String sender;
+  final PersonPhoto? senderPhoto;
   final PlaceRef? pickup;
   final PlaceRef? delivery;
   final String title;
@@ -590,6 +599,7 @@ class RouteAlert {
     required this.origin,
     required this.destination,
     this.subjectName,
+    this.subjectPhoto,
     this.subjectProfileId,
     this.createdAt,
   });
@@ -612,6 +622,7 @@ class RouteAlert {
       origin: origin,
       destination: destination,
       subjectName: subject == null ? null : readString(subject['display_name']),
+      subjectPhoto: PersonPhoto.maybe(subject?['photo']),
       subjectProfileId: subject == null ? null : readString(subject['id']),
       createdAt: readDate(json['created_at']),
     );
@@ -624,6 +635,7 @@ class RouteAlert {
 
   /// Set when the alert follows one person rather than a route.
   final String? subjectName;
+  final PersonPhoto? subjectPhoto;
   final String? subjectProfileId;
   final DateTime? createdAt;
 

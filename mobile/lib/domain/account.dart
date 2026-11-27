@@ -5,6 +5,7 @@ import 'package:characters/characters.dart';
 
 import 'communication_language.dart';
 import 'json.dart';
+import 'person_photo.dart';
 
 /// What the account is permitted to do, per the server.
 ///
@@ -70,6 +71,7 @@ class Account {
     required this.kycStatus,
     this.kycRejectionReason,
     this.dateJoined,
+    this.photo,
   });
 
   factory Account.fromJson(Map<String, dynamic> json) => Account(
@@ -90,12 +92,14 @@ class Account {
     kycStatus: KycStatus.parse(json['kyc_status']),
     kycRejectionReason: readString(json['kyc_rejection_reason']),
     dateJoined: readDate(json['date_joined']),
+    photo: OwnPhoto.maybe(json['photo']),
   );
 
   /// The profile as [Account.fromJson] reads it, for the local launch
-  /// snapshot (K5). Exactly the keys parsed above and nothing else: no tokens,
-  /// no payout data, no KYC evidence. It is display state for the first
-  /// frames of a launch; `/api/me` replaces it as soon as the server answers.
+  /// snapshot (K5). The keys parsed above and nothing else: no tokens, no
+  /// payout data, no KYC evidence, and not the photo, whose signed address
+  /// would be stale on disk. It is display state for the first frames of a
+  /// launch; `/api/me` replaces it as soon as the server answers.
   Map<String, Object?> toSnapshotJson() => {
     'id': id,
     'email': email,
@@ -138,6 +142,27 @@ class Account {
   final String? kycRejectionReason;
 
   final DateTime? dateJoined;
+
+  /// The member's own photo, or null when they have none.
+  final OwnPhoto? photo;
+
+  /// This account with [photo] as the server just answered it. Null clears.
+  Account withPhoto(OwnPhoto? photo) => Account(
+    id: id,
+    email: email,
+    fullName: fullName,
+    phone: phone,
+    wilaya: wilaya,
+    role: role,
+    preferredLanguage: preferredLanguage,
+    isEmailVerified: isEmailVerified,
+    isPhoneVerified: isPhoneVerified,
+    isKycVerified: isKycVerified,
+    kycStatus: kycStatus,
+    kycRejectionReason: kycRejectionReason,
+    dateJoined: dateJoined,
+    photo: photo,
+  );
 
   /// Initials for the avatar. Falls back to the email so a user who signed up
   /// through Google without a name still gets something recognisable rather

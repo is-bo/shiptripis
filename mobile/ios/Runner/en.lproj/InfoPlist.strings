@@ -1,3 +1,3 @@
 /* The permission sheets iOS shows. Same text as Info.plist. */
-"NSCameraUsageDescription" = "Wassla uses your camera only when you choose to take a photo: your face for the identity check, your travel ticket, the item you are sending, or the crossed cheque for payouts in Algeria.";
-"NSPhotoLibraryUsageDescription" = "Wassla opens your photos only when you choose one: your ID document for the identity check, your travel ticket, the item you are sending, the crossed cheque for payouts in Algeria, or photos and videos as evidence in a dispute.";
+"NSCameraUsageDescription" = "Wassla uses your camera only when you choose to take a photo: your face for the identity check, your profile photo, your travel ticket, the item you are sending, or the crossed cheque for payouts in Algeria.";
+"NSPhotoLibraryUsageDescription" = "Wassla opens your photos only when you choose one: your ID document for the identity check, your profile photo, your travel ticket, the item you are sending, the crossed cheque for payouts in Algeria, or photos and videos as evidence in a dispute.";

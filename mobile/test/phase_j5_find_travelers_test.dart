@@ -87,7 +87,7 @@ Map<String, dynamic> candidateFixture({
   double? averageRating = 4.8,
   int ratingCount = 24,
   int completedDeliveries = 12,
-  String? avatarUrl,
+  Map<String, dynamic>? photo,
   String routeFit = 'excellent',
   String? timingFit = 'comfortable',
   int transfers = 0,
@@ -113,7 +113,7 @@ Map<String, dynamic> candidateFixture({
         'average': averageRating,
       },
       'completed_deliveries': completedDeliveries,
-      'avatar_url': avatarUrl,
+      'photo': photo,
     },
     'route': {
       'stops':
@@ -499,7 +499,7 @@ void main() {
       expect(find.textContaining('12'), findsWidgets);
     });
 
-    testWidgets('initials fallback renders when avatarUrl is null', (
+    testWidgets('initials fallback renders when the photo is null', (
       tester,
     ) async {
       final repo = FakeMatchingRepository(
@@ -508,10 +508,7 @@ void main() {
               return FindTravelersPage.fromJson(
                 pageFixture(
                   candidates: [
-                    candidateFixture(
-                      travelerName: 'Amina Bouzid',
-                      avatarUrl: null,
-                    ),
+                    candidateFixture(travelerName: 'Amina Bouzid', photo: null),
                   ],
                 ),
               );

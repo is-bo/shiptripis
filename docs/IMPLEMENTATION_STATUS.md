@@ -1,5 +1,51 @@
 # Waçla V1 Implementation Status
 
+## Wassla: P3B round eight, the press, the stored owner and the shown version (2026-11-27)
+
+- Astra rejected `a286b34` (5 blockers, 5 should-fixes). The app, plus one small server change; nothing
+  deployed. In scope by Ismail's triage: a press is refused unless the control was drawn for the member who is
+  signed in now; a failed sign-in is settled against the account the stored credentials belong to (an
+  overtaken sign-in that saved owns them), for any failure, with storage failures recovered or the local session
+  ended; profile updates answer whether they were applied; the source sheet checks `mounted`; Dismiss and Remove
+  name the photo that was shown (`DELETE /api/me/photo?version=`, 409 `profile_photo_changed`). The wrong-account
+  writes of KYC, cheque, account deletion, sign-out and the public-profile forms are outside the photo package and
+  are written up in `docs/handoff/WRONG_ACCOUNT_WRITES_FOLLOWUP.md`. Detail:
+  `docs/PHASE_P3B_PROFILE_PHOTOS_APP.md`, "Round eight".
+
+## Wassla: P3B round seven, one identity per action (2026-11-27)
+
+- Astra rejected `ead30e2` (3 blockers, 6 should-fixes), each a new account-switch race. The app only;
+  nothing deployed. The cause is fixed instead of the instance: `SessionNotifier.beginAction()` captures one
+  `MemberScope` (account, authentication, credentials) when an action starts, the action carries it, and
+  `isCurrent` is asked once when it commits (pick, removal, photo write, profile read and update, the
+  confirmation dialog). The photo writes also name their account, and the request refuses a bearer issued to
+  another one; the activity is `singleTask`; the pick gate belongs to its activity; a refused second sign-in
+  leaves the member usable; avatar publication awaits and cleans up. Detail:
+  `docs/PHASE_P3B_PROFILE_PHOTOS_APP.md`, "Round seven".
+
+## Wassla: P3B round six, a result is bound to its launch (2026-11-26)
+
+- Astra rejected `f4394f1` (2 blockers, 5 should-fixes). The app only; nothing deployed. A result the phone
+  restores after it ended the app is dropped in `MainActivity` before the image plugin copies it (the Dart
+  side announces each launch on `wassla/pick_launch`), and a result is judged the moment the picker answers;
+  the published session stores the credential generation with the account, so a press during a switch from A
+  to B is never paired with B's generation, and a removal is checked like an upload; an upload always takes
+  the exact photo it was made for; a refused tombstone commit no longer stops a sign-out; avatar bodies are
+  read independently and published whole; HEIF over 64 MP is refused at the bounds read; JUnit is declared for
+  Gradle, and a new CI job compiles the debug app and runs the Gradle unit tests. Detail: `docs/PHASE_P3B_PROFILE_PHOTOS_APP.md`, "Round six".
+
+## Wassla: P3B round five, picker ownership and native photo fixes (2026-11-26)
+
+- Astra rejected `c8b4e68` (3 new blockers, 4 should-fixes, 8 partly-fixed round-3 findings). The app
+  only; nothing deployed. One picker at a time for the whole app, reserved before its first wait; the guard
+  returns a file only when it can prove it is that pick's, for every screen; a retry is bound to the session
+  that prepared the photo; only the operation that owns the profile photo state resets it; the pick marker is
+  written with `commit()` on Android; the Android decode retries 4, 8, 16, 32 and refuses a picture over
+  64 MP before decoding it; the encoder's ICC segment is cut out of the JPEG; avatar installs are serialized
+  per version; the iOS sweep cutoff is taken at registration. The Kotlin arithmetic and the JPEG cleaner now
+  have JUnit tests of the real code (`tools/test_android_pure.sh`, a CI step). Detail:
+  `docs/PHASE_P3B_PROFILE_PHOTOS_APP.md`, "Round five".
+
 ## Wassla: the bell names the ticket decision (N2, 2026-11-26)
 
 - Phone test 2 (plan 1.5): the owner's flight ticket was approved but the bell row only read
@@ -25,6 +71,24 @@
   alternate-pair selection, every hard gate, covered legs and price inputs are unchanged, shown by a
   before/after recording of every evaluation in nine test apps. Helper knowledge updated. Detail and
   the M2 handoff: `docs/PHASE_M1_ROUTE_STOP_REASONS.md`.
+
+## Wassla: profile photos in the app, chat included (P3B, 2026-11-25)
+
+- Ismail's phone test of 2026-11-24, fix plan P3B, on the server of P3A and P3C. The app only; no
+  migration, no Go change. Nothing deployed, and a phone needs a new build to see it.
+- Profile has a "Profile photo" section after the verification card: camera or library (resized to
+  1024 px by the phone), a centred-square preview, a confirmation before removing, and every state (empty,
+  uploading, active, removed by Wassla with the staff's reason, too large, unsupported type, inactive
+  account, storage unavailable, offline, general error, camera refused). An upload is sent once and never
+  retried by the app; any HTTP 413 reads as "too large". If the phone ends the app while a picker is open,
+  the photo is never recovered, and one a late copy of another pick might have answered is refused (a
+  photo's disk cache keeps the version and bytes only, never the signed address).
+- `AppAvatar` draws a photo through `CachedNetworkImage`, cached by the photo's version, with initials
+  while loading and on error. Photos show wherever a person is named, guests included: person rows, trip,
+  request and profile cards, Find Travelers, the person page, alerts, proposals, the chat list and a new
+  avatar slot in the chat header (a deleted counterparty shows initials). `avatar_url` is gone from the
+  app. Helper knowledge `accounts-and-verification.md` now describes the screens. Detail and the
+  screenshots (`docs/screenshots/p3b/`): `docs/PHASE_P3B_PROFILE_PHOTOS_APP.md`.
 
 ## Wassla: chat photos, server side (P3C, 2026-11-24)
 

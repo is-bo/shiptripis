@@ -106,6 +106,7 @@ class TravelerCandidateCard extends StatelessWidget {
               AppAvatar(
                 initials: travelerInitial(traveler.displayName),
                 name: hasName ? displayName : '',
+                photo: traveler.photo,
                 size: 34,
                 isVerified: traveler.identityVerified,
               ),

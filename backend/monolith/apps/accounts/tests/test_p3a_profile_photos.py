@@ -287,6 +287,17 @@ class ReplaceAndRemoveTests(StoreMixin, TestCase):
         # Removing again is harmless.
         assert self.client.delete(self.url).status_code == 204
 
+    def test_removing_a_version_that_is_no_longer_current_changes_nothing(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            first = self.put().data
+            second = self.put().data
+        response = self.client.delete(f"{self.url}?version={first['version']}")
+        assert response.status_code == 409
+        assert response.data["code"] == photos.PHOTO_CHANGED
+        assert ProfilePhoto.objects.get(user=self.user).version == second["version"]
+        assert self.client.delete(f"{self.url}?version={second['version']}").status_code == 204
+        assert not ProfilePhoto.objects.exists()
+
     def test_a_refused_row_write_deletes_the_object_it_stored(self):
         self.user.is_active = False
         self.user.save(update_fields=["is_active"])
@@ -352,6 +363,31 @@ class StaffRemovalRaceTests(StoreMixin, TestCase):
         with self.assertRaises(photos.PhotoRefused) as refused:
             self.remove(seen.version)
         assert refused.exception.code == photos.PHOTO_CHANGED
+
+    def test_a_member_removal_applies_only_to_the_version_they_were_shown(self):
+        shown = self.replace()
+        self.remove(shown.version)
+        # A second device uploads a replacement while the first still shows
+        # Wassla's notice for the version staff removed.
+        replacement = self.replace()
+        assert replacement.version != shown.version
+        with self.assertRaises(photos.PhotoRefused) as refused:
+            photos.remove_own_photo(self.user, version=shown.version)
+        assert refused.exception.code == photos.PHOTO_CHANGED
+        assert refused.exception.status == 409
+        kept = ProfilePhoto.objects.get(user=self.user)
+        assert kept.version == replacement.version
+        assert kept.state == ProfilePhoto.State.ACTIVE
+        # The version they are looking at now goes; so does nothing at all.
+        photos.remove_own_photo(self.user, version=replacement.version)
+        assert not ProfilePhoto.objects.exists()
+        photos.remove_own_photo(self.user, version=replacement.version)
+
+    def test_dismissing_the_notice_for_the_version_staff_removed_clears_it(self):
+        shown = self.replace()
+        self.remove(shown.version)
+        photos.remove_own_photo(self.user, version=shown.version)
+        assert not ProfilePhoto.objects.exists()
 
     def test_removal_needs_a_reason_and_an_active_photo(self):
         photo = self.replace()

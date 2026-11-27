@@ -75,11 +75,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:image_picker/image_picker.dart' show ImageSource, XFile;
 
 import '../../app/app_state.dart';
 import '../../app/router.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/media/pick_guard.dart';
+import '../../core/media/pick_blocked_message.dart';
 import '../../core/api/error_codes.dart';
 import '../../core/format/locale_formats.dart';
 import '../../core/money/money.dart';
@@ -163,8 +165,9 @@ typedef ItemPhotoPicker = Future<XFile?> Function(ImageSource source);
 /// there is no camera in a test runner, and a required photo whose only code
 /// path is unreachable under test is a requirement nobody is checking.
 final itemPhotoPickerProvider = Provider<ItemPhotoPicker>((ref) {
-  final picker = ImagePicker();
-  return (source) => picker.pickImage(
+  final guard = ref.read(pickGuardProvider);
+  return (source) => guard.pickImage(
+    PickPurpose.itemPhoto,
     source: source,
     maxWidth: _photoMaxEdge,
     maxHeight: _photoMaxEdge,
@@ -843,7 +846,15 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
 
   Future<void> _pickPhoto(ImageSource source) async {
     final l = L.of(context);
-    final picked = await ref.read(itemPhotoPickerProvider)(source);
+    final XFile? picked;
+    try {
+      picked = await ref.read(itemPhotoPickerProvider)(source);
+    } on PickBlockedException catch (error) {
+      if (mounted) {
+        AppSnack.failure(context, null, fallback: l.pickBlocked(error));
+      }
+      return;
+    }
     if (picked == null || !mounted) return;
 
     final bytes = await File(picked.path).length();

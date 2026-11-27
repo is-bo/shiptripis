@@ -594,6 +594,7 @@ class _ChatServer {
             'deal_id': 3,
             'counterparty_id': 99,
             'counterparty_name': 'Karim',
+            'counterparty_photo': null,
             'route': 'Paris - Algiers',
             'status': 'accepted',
             'can_send': true,

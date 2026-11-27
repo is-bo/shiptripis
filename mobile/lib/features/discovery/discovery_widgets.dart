@@ -100,6 +100,7 @@ class PublicPersonRow extends StatelessWidget {
         AppAvatar(
           initials: travelerInitial(name),
           name: name,
+          photo: person.photo,
           size: avatarSize,
           isVerified: person.identityVerified,
         ),
@@ -378,10 +379,25 @@ class RequestListingCard extends StatelessWidget {
             ],
           ),
           if (card.sender.isNotEmpty) ...[
-            const SizedBox(height: AppSpace.xs),
-            Text(
-              l.requestCardFrom(card.sender),
-              style: text.bodySmall?.copyWith(color: c.textTertiary),
+            const SizedBox(height: AppSpace.sm),
+            Row(
+              children: [
+                AppAvatar(
+                  initials: travelerInitial(card.sender),
+                  name: card.sender,
+                  photo: card.senderPhoto,
+                  size: 24,
+                ),
+                const SizedBox(width: AppSpace.sm),
+                Expanded(
+                  child: Text(
+                    l.requestCardFrom(card.sender),
+                    style: text.bodySmall?.copyWith(color: c.textTertiary),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ],
         ],

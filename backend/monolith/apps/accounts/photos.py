@@ -373,18 +373,30 @@ def replace_photo(user, upload) -> ProfilePhoto:
     return photo
 
 
-def remove_own_photo(user) -> None:
+def remove_own_photo(user, *, version: str | None = None) -> None:
     """The member removes their photo, or dismisses a removal notice.
 
     The row goes, and `post_delete` releases its object. Removing when there
     is no photo changes nothing. Never refused for the account's state.
+
+    ``version`` is the photo the member was looking at (the app always sends
+    it). If the member put another photo up since, on a second device say,
+    nothing changes and `profile_photo_changed` answers, so a notice or a photo
+    the member is no longer looking at never takes the new one with it.
     """
 
     with transaction.atomic():
         _hold_member(user.pk)
         photo = ProfilePhoto.objects.filter(user_id=user.pk).first()
-        if photo is not None:
-            photo.delete()
+        if photo is None:
+            return
+        if version is not None and photo.version != version:
+            raise PhotoRefused(
+                PHOTO_CHANGED,
+                "The photo changed since it was shown. Look at it again.",
+                status=409,
+            )
+        photo.delete()
 
 
 # ---------------------------------------------------------------------------

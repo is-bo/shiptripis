@@ -5,9 +5,13 @@
 /// screenshot into an unusable screen.
 library;
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/media/avatar_cache.dart';
+import '../../domain/person_photo.dart';
 import '../tokens.dart';
+import 'images.dart';
 import 'status.dart';
 
 // ---------------------------------------------------------------------------
@@ -139,7 +143,9 @@ class _PressScaleState extends State<_PressScale> {
   bool _down = false;
 
   void _set(bool value) {
-    if (!widget.enabled || _down == value) return;
+    // A finger that went down on a button and then scrolled the list lifts
+    // after the list has dropped the button.
+    if (!mounted || !widget.enabled || _down == value) return;
     setState(() => _down = value);
   }
 
@@ -630,10 +636,16 @@ class _NoticeAction extends StatelessWidget {
 /// A user's avatar. Initials rather than a generic silhouette — a silhouette
 /// says "no person here", which is the opposite of what a marketplace built on
 /// trusting a named individual should say.
+///
+/// With a [photo] the picture covers the initials, which stay underneath: they
+/// are what shows while the image loads and if it cannot be loaded. The image
+/// is cached by the photo's version, never by its address, because the signed
+/// address changes on every payload and the picture does not.
 class AppAvatar extends StatelessWidget {
   const AppAvatar({
     required this.initials,
     required this.name,
+    this.photo,
     this.size = 40,
     this.isVerified = false,
     super.key,
@@ -641,6 +653,7 @@ class AppAvatar extends StatelessWidget {
 
   final String initials;
   final String name;
+  final PersonPhoto? photo;
   final double size;
   final bool isVerified;
 
@@ -675,6 +688,7 @@ class AppAvatar extends StatelessWidget {
                 ),
               ),
             ),
+            if (photo case final photo?) _AvatarPhoto(photo: photo, size: size),
             if (isVerified)
               PositionedDirectional(
                 bottom: -1,
@@ -694,6 +708,85 @@ class AppAvatar extends StatelessWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The picture over an avatar's initials.
+///
+/// Keyed by its address: an image that failed on an expired signed address is
+/// loaded again as soon as a fresh address arrives for the same version. A load
+/// is named by the version and the address ([avatarCacheKey]), so two avatars
+/// that hold different addresses for one version never share a load and an
+/// expired address cannot fail a fresh one. The bytes are stored by version
+/// (`AvatarCacheManager`), so a working photo is not fetched twice.
+///
+/// A failed load is still tried once more, with the address the avatar holds
+/// now, in case that address was replaced while the load was on its way. A
+/// photo that cannot be loaded at all costs one extra request, then the
+/// initials stay.
+class _AvatarPhoto extends StatefulWidget {
+  const _AvatarPhoto({required this.photo, required this.size});
+
+  final PersonPhoto photo;
+  final double size;
+
+  @override
+  State<_AvatarPhoto> createState() => _AvatarPhotoState();
+}
+
+class _AvatarPhotoState extends State<_AvatarPhoto> {
+  int _attempt = 0;
+  bool _retried = false;
+
+  @override
+  void didUpdateWidget(_AvatarPhoto oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A new address is a new chance.
+    if (oldWidget.photo.url != widget.photo.url) _retried = false;
+  }
+
+  void _retryOnce(int? memCacheWidth) {
+    if (_retried) return;
+    _retried = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // The failed load may still be remembered under this image's key, and
+      // would be joined again: forget it, so the retry starts a load of its
+      // own with the address held now.
+      PaintingBinding.instance.imageCache.evict(
+        CachedNetworkImageProvider(
+          widget.photo.url,
+          cacheKey: avatarCacheKey(widget.photo),
+          maxWidth: memCacheWidth,
+        ),
+      );
+      setState(() => _attempt++);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final photo = widget.photo;
+    final memCacheWidth = decodeWidthFor(context, widget.size);
+    return ClipOval(
+      child: CachedNetworkImage(
+        key: ValueKey('${photo.url}#$_attempt'),
+        imageUrl: photo.url,
+        cacheKey: avatarCacheKey(photo),
+        width: widget.size,
+        height: widget.size,
+        fit: BoxFit.cover,
+        memCacheWidth: memCacheWidth,
+        fadeInDuration: const Duration(milliseconds: 120),
+        // Nothing while loading and nothing on error: the initials
+        // underneath are the fallback.
+        placeholder: (_, _) => const SizedBox.shrink(),
+        errorWidget: (_, _, _) {
+          _retryOnce(memCacheWidth);
+          return const SizedBox.shrink();
+        },
       ),
     );
   }

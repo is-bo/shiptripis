@@ -37,7 +37,7 @@ Map<String, dynamic> serverPayload() => {
       'traveler': {
         'id': 2,
         'display_name': 'Yacine',
-        'avatar_url': null,
+        'photo': null,
         'identity_verified': true,
         'rating': {'state': 'new', 'average': null, 'count': 0},
         'completed_deliveries': 0,
@@ -325,7 +325,7 @@ void main() {
       expect(traveler.displayName, 'Yacine');
       expect(traveler.identityVerified, isTrue);
       expect(traveler.completedDeliveries, 0);
-      expect(traveler.avatarUrl, isNull);
+      expect(traveler.photo, isNull);
     });
 
     test('an unrated traveller is never given a score', () {

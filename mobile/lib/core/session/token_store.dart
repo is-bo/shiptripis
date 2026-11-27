@@ -21,21 +21,32 @@ import 'dart:math';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'pending_pick_store.dart';
+
 class TokenStore {
-  TokenStore([FlutterSecureStorage? storage])
-    : _storage =
-          storage ??
-          const FlutterSecureStorage(
-            aOptions: AndroidOptions(encryptedSharedPreferences: true),
-            iOptions: IOSOptions(
-              // Not `afterFirstUnlock`: nothing here needs to be readable
-              // while the device is locked, and `thisDeviceOnly` keeps the
-              // session out of an iCloud keychain backup.
-              accessibility: KeychainAccessibility.first_unlock_this_device,
+  TokenStore([FlutterSecureStorage? storage, PendingPickStore? pendingPicks])
+    : this._(
+        storage ??
+            const FlutterSecureStorage(
+              aOptions: AndroidOptions(encryptedSharedPreferences: true),
+              iOptions: IOSOptions(
+                // Not `afterFirstUnlock`: nothing here needs to be readable
+                // while the device is locked, and `thisDeviceOnly` keeps the
+                // session out of an iCloud keychain backup.
+                accessibility: KeychainAccessibility.first_unlock_this_device,
+              ),
             ),
-          );
+        pendingPicks,
+      );
+
+  TokenStore._(this._storage, PendingPickStore? pendingPicks)
+    : _pendingPicks = pendingPicks ?? PendingPickStore.forPlatform(_storage);
 
   final FlutterSecureStorage _storage;
+
+  /// The pending-pick marker, where a write that reports success is on the disk
+  /// (see [PendingPickStore]).
+  final PendingPickStore _pendingPicks;
   int _identityGeneration = 0;
   Future<void> _credentialWriteTail = Future<void>.value();
 
@@ -186,6 +197,38 @@ class TokenStore {
       ? _storage.delete(key: _kPendingPushToken)
       : _storage.write(key: _kPendingPushToken, value: token);
 
+  /// Which pick had the camera or photo library open: the purpose, the account
+  /// and a nonce, written before the picker opens and cleared by the same pick
+  /// when it answers. If the phone ends the app meanwhile it is still here at
+  /// the next launch, which tells the next pick that a result of the earlier
+  /// one may still arrive (see `PickGuard`).
+  ///
+  /// Every change goes through the same queue as the credentials, so a pick
+  /// beginning, another pick ending and a sign-out never interleave.
+  Future<String?> readPendingPick() => _readBehindWrites(_pendingPicks.read);
+
+  /// Makes [marker] the pending pick and answers the one it replaced (null when
+  /// there was none), in one step. Nothing is written, and [applied] is false,
+  /// when a sign-in or sign-out happened since [expectedIdentityGeneration]: a
+  /// pick that began for one member never leaves its marker in another's
+  /// store. Throws when storage refuses; the caller must then not open a
+  /// picker.
+  Future<({bool applied, String? previous})> exchangePendingPick(
+    String marker, {
+    required int expectedIdentityGeneration,
+  }) => _serializeCredentialWrite(() async {
+    if (_identityGeneration != expectedIdentityGeneration) {
+      return (applied: false, previous: null);
+    }
+    final previous = await _pendingPicks.exchange(marker);
+    return (applied: true, previous: previous);
+  });
+
+  /// Clears the pending pick, but only while it is still [marker]: a pick that
+  /// began since owns the new one.
+  Future<void> releasePendingPick(String marker) =>
+      _serializeCredentialWrite(() => _pendingPicks.release(marker));
+
   /// Removes credentials and every user-scoped preference. Called on sign-out
   /// and whenever refresh fails terminally.
   Future<void> clear() {
@@ -206,6 +249,17 @@ class TokenStore {
     await _storage.delete(key: _kRefresh);
     await _storage.delete(key: _kAccountSnapshot);
     await _storage.delete(key: _kRoleContext);
+    // A pick still open at sign-out may yet answer, for nobody: its marker
+    // becomes a bare "something was open" so the next pick still hears of it,
+    // and names no account. A refusal of storage leaves the marker as it was
+    // (it names a purpose and a nonce, nothing of the account) and must not
+    // stop the sign-out: the credentials are already gone, and the next pick
+    // finds the marker and is careful.
+    try {
+      await _pendingPicks.closeBySignOut();
+    } on Object {
+      // The marker stays; the sign-out goes on.
+    }
     await purgeLegacyArtifacts();
   }
 
@@ -231,12 +285,16 @@ class TokenStore {
     return result;
   }
 
-  Future<String?> _readCredential(String key) async {
+  Future<String?> _readCredential(String key) =>
+      _readBehindWrites(() => _storage.read(key: key));
+
+  /// [read], started once no credential write is pending.
+  Future<T> _readBehindWrites<T>(Future<T> Function() read) async {
     while (true) {
       final pending = _credentialWriteTail;
       await pending;
       if (!identical(pending, _credentialWriteTail)) continue;
-      return _storage.read(key: key);
+      return read();
     }
   }
 }

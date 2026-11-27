@@ -2128,6 +2128,114 @@ class LFr extends L {
   String get profileAccount => 'Compte';
 
   @override
+  String get profilePhotoTitle => 'Photo de profil';
+
+  @override
+  String get profilePhotoHelpEmpty =>
+      'Ajoutez une photo pour qu\'on vous reconnaisse. C\'est facultatif. Toute personne qui voit votre prénom voit aussi votre photo, les visiteurs compris.';
+
+  @override
+  String get profilePhotoHelpActive =>
+      'Toute personne qui voit votre prénom voit aussi cette photo, les visiteurs compris.';
+
+  @override
+  String get profilePhotoFormatRule =>
+      'JPEG, PNG ou WebP, jusqu\'à 10 Mo. Elle est recadrée en carré centré.';
+
+  @override
+  String get profilePhotoTake => 'Prendre une photo';
+
+  @override
+  String get profilePhotoChoose => 'Choisir dans la photothèque';
+
+  @override
+  String get profilePhotoChange => 'Changer de photo';
+
+  @override
+  String get profilePhotoRemove => 'Retirer la photo';
+
+  @override
+  String get profilePhotoPreview => 'Votre nouvelle photo';
+
+  @override
+  String get profilePhotoUploading => 'Envoi de votre photo…';
+
+  @override
+  String get profilePhotoUpdated => 'Photo mise à jour';
+
+  @override
+  String get profilePhotoRemoved => 'Photo retirée';
+
+  @override
+  String get profilePhotoRemoveTitle => 'Retirer votre photo ?';
+
+  @override
+  String get profilePhotoRemoveBody =>
+      'Vos initiales s’afficheront à la place. Vous pourrez ajouter une nouvelle photo à tout moment.';
+
+  @override
+  String get profilePhotoWassla => 'Wassla a retiré votre photo';
+
+  @override
+  String get profilePhotoWasslaBody =>
+      'Elle ne respectait pas nos règles. Vous pouvez ajouter une autre photo.';
+
+  @override
+  String profilePhotoWasslaReason(String reason) {
+    return 'Motif : $reason';
+  }
+
+  @override
+  String get profilePhotoDismiss => 'Fermer';
+
+  @override
+  String get profilePhotoTooLarge =>
+      'Cette image est trop lourde. Choisissez-en une de moins de 10 Mo.';
+
+  @override
+  String get profilePhotoTypeNotAllowed =>
+      'Ce type de fichier n\'est pas accepté. Utilisez une image JPEG, PNG ou WebP.';
+
+  @override
+  String get profilePhotoAccountInactive =>
+      'Votre compte ne peut pas ajouter de photo pour le moment. Contactez le support si vous pensez à une erreur.';
+
+  @override
+  String get profilePhotoStorageUnavailable =>
+      'Le stockage des photos est indisponible. Votre photo est toujours sélectionnée. Réessayez dans un instant.';
+
+  @override
+  String get profilePhotoOffline =>
+      'Vous êtes hors ligne. Votre photo est toujours sélectionnée. Réessayez une fois connecté.';
+
+  @override
+  String get profilePhotoFailed =>
+      'Votre photo n\'a pas été envoyée. Elle est toujours sélectionnée. Réessayez.';
+
+  @override
+  String get profilePhotoPickFailed =>
+      'Impossible d\'ouvrir votre appareil photo ou vos photos. Vérifiez que Wassla y est autorisée dans les réglages de votre appareil.';
+
+  @override
+  String get profilePhotoUnreadable =>
+      'Impossible de lire cette photo. Choisissez-la de nouveau.';
+
+  @override
+  String get photoPickBlocked =>
+      'Impossible d\'ouvrir votre appareil photo ou vos photos en toute sécurité pour le moment. Réessayez dans un instant.';
+
+  @override
+  String get profilePhotoUncertain =>
+      'Nous ne pouvons pas être sûrs que cette photo est celle que vous avez choisie, elle n\'a donc pas été utilisée. Choisissez-la de nouveau.';
+
+  @override
+  String get profilePhotoPrepareFailed =>
+      'Impossible de préparer cette photo. Réessayez ou choisissez une autre photo.';
+
+  @override
+  String get profilePhotoDiscard => 'Ignorer cette photo';
+
+  @override
   String get profilePassportStamp => 'Wassla · MEMBRE';
 
   @override

@@ -46,6 +46,7 @@ import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../domain/chat.dart';
 import '../../l10n/app_localizations.dart';
+import '../common/formatters.dart';
 import 'chat_copy.dart';
 import 'chat_thread_controller.dart';
 
@@ -264,6 +265,15 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
       topBar: AppTopBar(
         title: thread == null ? l.chatTitle : chatCounterpartyName(l, thread),
         subtitle: thread?.route,
+        // No avatar while the thread row is unknown: nothing to draw yet.
+        titleLeading: thread == null
+            ? null
+            : AppAvatar(
+                initials: initialsFor(chatCounterpartyName(l, thread)),
+                name: chatCounterpartyName(l, thread),
+                photo: chatCounterpartyPhoto(thread),
+                size: 32,
+              ),
         showBack: true,
         actions: [
           if (thread?.dealId != null)

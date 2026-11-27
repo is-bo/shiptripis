@@ -16,10 +16,12 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:image_picker/image_picker.dart' show ImageSource, XFile;
 
 import '../../app/app_state.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/media/pick_guard.dart';
+import '../../core/media/pick_blocked_message.dart';
 import '../../core/format/locale_formats.dart';
 import '../../data/repositories.dart';
 import '../../design/components/feedback.dart';
@@ -92,8 +94,6 @@ class LegProofScreen extends ConsumerStatefulWidget {
 }
 
 class _LegProofScreenState extends ConsumerState<LegProofScreen> {
-  final _picker = ImagePicker();
-
   _ProofKind _kind = _ProofKind.ticket;
   XFile? _file;
   String? _fileMime;
@@ -114,7 +114,17 @@ class _LegProofScreenState extends ConsumerState<LegProofScreen> {
 
   Future<void> _pick(ImageSource source) async {
     final l = L.of(context);
-    final picked = await _picker.pickImage(source: source, imageQuality: 92);
+    final XFile? picked;
+    try {
+      picked = await ref
+          .read(pickGuardProvider)
+          .pickImage(PickPurpose.ticketProof, source: source, imageQuality: 92);
+    } on PickBlockedException catch (error) {
+      if (mounted) {
+        AppSnack.failure(context, null, fallback: l.pickBlocked(error));
+      }
+      return;
+    }
     if (picked == null || !mounted) return;
 
     final bytes = await File(picked.path).length();

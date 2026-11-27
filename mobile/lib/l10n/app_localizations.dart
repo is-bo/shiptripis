@@ -3765,6 +3765,186 @@ abstract class L {
   /// **'Account'**
   String get profileAccount;
 
+  /// No description provided for @profilePhotoTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile photo'**
+  String get profilePhotoTitle;
+
+  /// No description provided for @profilePhotoHelpEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a photo so people recognise you. It\'s optional. Anyone who sees your first name also sees your photo, visitors included.'**
+  String get profilePhotoHelpEmpty;
+
+  /// No description provided for @profilePhotoHelpActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Anyone who sees your first name also sees this photo, visitors included.'**
+  String get profilePhotoHelpActive;
+
+  /// No description provided for @profilePhotoFormatRule.
+  ///
+  /// In en, this message translates to:
+  /// **'JPEG, PNG or WebP, up to 10 MB. It is cropped to a centred square.'**
+  String get profilePhotoFormatRule;
+
+  /// No description provided for @profilePhotoTake.
+  ///
+  /// In en, this message translates to:
+  /// **'Take a photo'**
+  String get profilePhotoTake;
+
+  /// No description provided for @profilePhotoChoose.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose from library'**
+  String get profilePhotoChoose;
+
+  /// No description provided for @profilePhotoChange.
+  ///
+  /// In en, this message translates to:
+  /// **'Change photo'**
+  String get profilePhotoChange;
+
+  /// No description provided for @profilePhotoRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove photo'**
+  String get profilePhotoRemove;
+
+  /// No description provided for @profilePhotoPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Your new photo'**
+  String get profilePhotoPreview;
+
+  /// No description provided for @profilePhotoUploading.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading your photo…'**
+  String get profilePhotoUploading;
+
+  /// No description provided for @profilePhotoUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo updated'**
+  String get profilePhotoUpdated;
+
+  /// No description provided for @profilePhotoRemoved.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo removed'**
+  String get profilePhotoRemoved;
+
+  /// No description provided for @profilePhotoRemoveTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove your photo?'**
+  String get profilePhotoRemoveTitle;
+
+  /// No description provided for @profilePhotoRemoveBody.
+  ///
+  /// In en, this message translates to:
+  /// **'People will see your initials instead. You can add a new photo at any time.'**
+  String get profilePhotoRemoveBody;
+
+  /// No description provided for @profilePhotoWassla.
+  ///
+  /// In en, this message translates to:
+  /// **'Wassla removed your photo'**
+  String get profilePhotoWassla;
+
+  /// No description provided for @profilePhotoWasslaBody.
+  ///
+  /// In en, this message translates to:
+  /// **'It didn\'t follow our rules. You can add a different photo.'**
+  String get profilePhotoWasslaBody;
+
+  /// The reason Wassla's staff gave for removing the member's profile photo.
+  ///
+  /// In en, this message translates to:
+  /// **'Reason: {reason}'**
+  String profilePhotoWasslaReason(String reason);
+
+  /// No description provided for @profilePhotoDismiss.
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss'**
+  String get profilePhotoDismiss;
+
+  /// No description provided for @profilePhotoTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'That image is too large. Choose one under 10 MB.'**
+  String get profilePhotoTooLarge;
+
+  /// No description provided for @profilePhotoTypeNotAllowed.
+  ///
+  /// In en, this message translates to:
+  /// **'That file type isn\'t accepted. Use a JPEG, PNG or WebP image.'**
+  String get profilePhotoTypeNotAllowed;
+
+  /// No description provided for @profilePhotoAccountInactive.
+  ///
+  /// In en, this message translates to:
+  /// **'Your account can\'t add a photo right now. Contact support if you think this is a mistake.'**
+  String get profilePhotoAccountInactive;
+
+  /// No description provided for @profilePhotoStorageUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo storage is unavailable right now. Your photo is still selected. Try again in a moment.'**
+  String get profilePhotoStorageUnavailable;
+
+  /// No description provided for @profilePhotoOffline.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re offline. Your photo is still selected. Try again once you\'re connected.'**
+  String get profilePhotoOffline;
+
+  /// No description provided for @profilePhotoFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Your photo didn\'t upload. It\'s still selected. Try again.'**
+  String get profilePhotoFailed;
+
+  /// No description provided for @profilePhotoPickFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn\'t open your camera or photos. Check that Wassla is allowed to use them in your device settings.'**
+  String get profilePhotoPickFailed;
+
+  /// No description provided for @profilePhotoUnreadable.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn\'t read that photo. Choose it again.'**
+  String get profilePhotoUnreadable;
+
+  /// No description provided for @photoPickBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn\'t open your camera or photos safely just now. Try again in a moment.'**
+  String get photoPickBlocked;
+
+  /// No description provided for @profilePhotoUncertain.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn\'t be sure that photo was the one you chose, so it wasn\'t used. Choose it again.'**
+  String get profilePhotoUncertain;
+
+  /// No description provided for @profilePhotoPrepareFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn\'t get that photo ready. Try again, or choose a different photo.'**
+  String get profilePhotoPrepareFailed;
+
+  /// No description provided for @profilePhotoDiscard.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard this photo'**
+  String get profilePhotoDiscard;
+
   /// No description provided for @profilePassportStamp.
   ///
   /// In en, this message translates to:

@@ -175,6 +175,7 @@ class _PersonHeader extends StatelessWidget {
           AppAvatar(
             initials: travelerInitial(person.displayName),
             name: person.displayName,
+            photo: person.photo,
             size: 56,
             isVerified: person.identityVerified,
           ),
