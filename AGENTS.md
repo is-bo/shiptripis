@@ -12,4 +12,6 @@ The rules that are never broken, repeated here in case only this file is read:
 - Do not build the parked scope (professional transporters, manifest dashboard, custody history,
   courier handoff) and do not leave hooks for it.
 - There are no real users: no effort on legacy data or backward compatibility.
+- Work in ponytail mode, always: the smallest complete change, never a shortcut in money, code, sign-in or
+  staff code (`CLAUDE.md`, "Working style: ponytail").
 - The server is the authority for money, codes, verification and matching.

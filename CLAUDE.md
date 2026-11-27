@@ -94,6 +94,63 @@ location, finance and admin-control logic airtight. A package removes what it re
 pull request. No commented-out code, no parameter "for later", no second implementation of a rule
 that already has a home.
 
+## Working style: ponytail
+
+Ismail's rule since 2026-11-27: every agent works in "ponytail" mode, always, on every task. It is
+the lazy senior developer's rule set of github.com/DietrichGebert/ponytail (MIT), copied here at
+version 5.3.3 (commit `ebd8654`) so nothing changes under us. It is never updated from the author's
+repository; a new version is a reviewed pull request. Level: `full`.
+
+The best code is the code never written. Solve the whole problem with the least new code. End every
+reply with one or two lines: what you skipped or did not check, and any risk Ismail must know.
+
+**Before you write.** Read the task and the code it touches. List every place the change must reach:
+callers, tests, fixtures, config, exports. Check what it could break for users: data it would
+destroy or expose, callers that stop working. That is scope. Extra features are not.
+
+**The smallest complete change.** Take the first option that fully works:
+
+1. Does it need to exist? Skip features, options and flexibility nobody asked for, and name them in
+   one line.
+2. Already in this codebase (a helper, component, service, pattern)? Use it the way the surrounding
+   code does.
+3. Standard library or a platform feature? Use it, unless the project has its own. A house component
+   beats a native widget.
+4. An installed dependency? Use it. Never add a dependency for a few lines.
+5. Can it be one line a reader gets at a glance? One line.
+6. Otherwise: the minimum code that works.
+
+- Be lazy about the solution, never about the change: finish every part the task needs, including
+  the callers, tests and fixtures your change breaks.
+- No abstraction, wrapper, option, config, boilerplate or "for later" code nobody asked for.
+  Deletion beats addition. Keep the structure the codebase already has.
+- The shortest working diff wins, once you know everything it must touch. A one-liner that needs
+  decoding is not short.
+- Comment only the why the code cannot show, in one line.
+- Bug fix: before you edit, grep every caller of the function you touch, then fix the root cause
+  once in the shared code.
+- Code you move or merge keeps its error handling and validation.
+- Between options of equal size, take the one that is correct on edge cases.
+- New non-trivial logic (a branch, a loop, a parser, money or security) leaves a test.
+- A shortcut with a known limit gets a comment `shortcut: <the limit>, <when to upgrade>`.
+
+Never cut: validation at trust boundaries, error handling that prevents data loss, security,
+accessibility, anything the owner asked for.
+
+**Wassla's rules stay above ponytail.** Where they differ, these hold:
+
+- In money, payout, codes, sign-in, staff authority, matching and location code there is no
+  `shortcut:`. Those areas get the complete solution, the server-side check and the audit row.
+- Test tables stay complete: every case the plan or the specification lists is tested, and "one
+  small test" is the floor, never the ceiling.
+- The quality bar above and the parked-scope rule still decide what "smallest" means: a package
+  removes what it replaces, and leaves no hook for parked scope.
+- The gate review still checks every "Done when" line. Fewer lines is not a reason to skip one.
+
+Tools. The skills `/ponytail`, `/ponytail-review`, `/ponytail-audit` and `/ponytail-debt` are
+checked into `.claude/skills/`. Use `/ponytail-review` as a first pass before the gate review (it
+does not replace it). The ponytail plugin's hooks, its cost board and its webhook are not used.
+
 ## Product invariants
 
 - EUR integer cents are canonical. DZD exists only as a Chargily or manual-settlement
