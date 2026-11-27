@@ -67,6 +67,8 @@ branches; delete each after its package merges.
 P1 #60, P2 #62, P4 #61, P3A #64, P3C #65, M1 #68, N2 #70 (`ec24abc`). Earlier: the whole L-series,
 EGS #53, STORE fixes #54.
 Ponytail working rules #72 (`d44345a`, 2026-11-27): documents and skill files only, no code. Every agent now works under the "Working style: ponytail" section of `CLAUDE.md`.
+H1 #73 (`37eedf1`, 2026-11-27): stale root files and tool folders removed, root docs corrected, 0 broken doc links. Seven old branches await Ismail's manual deletion.
+L1 #74 (`1e8c41c`, 2026-11-27): the old payments, wallet and handover-code tables are dropped (one migration per app; the three apps stay as empty shells so the drop runs on existing databases), their admin pages and `core/historical_admin.py` removed, chat gated on the Deal only. L4's `historical_admin.py` item is done. Follow-ups: the chat inbox `route` is always empty for V1 requests; `REASON_V1_PAYMENT_UNAVAILABLE` has no reader (DC).
 
 ### 0.4 Next packages, in order (each planned in `docs/WASSLA_PHONE_TEST_2_PLAN.md`, each reviewed by Astra)
 Replaced by plan section 9 (see 0.0); kept for the package descriptions.
@@ -270,12 +272,15 @@ Known candidates, found during the L-series and deliberately left (verify each b
 
 ### 5.3 Repository cleanup
 
-Candidates, for Ismail to approve before anything is deleted:
+Done in H1 (PR #73, 2026-11-27): removed `TASKS.md`, `ShipTrip_Progress_Report.pdf` and
+`tools/make_progress_pdf.py`, the root `package.json` and `package-lock.json`, `.cursor/`,
+`.codegraph/`, the code-graph and editor-agent files in `backend/services/`, `docs/superpowers/` and
+two finished Astra prompts. Kept, because a live file names them: `backend/services/HANDOVER.md`
+(named by `internal/kyc/handler.go`, `pkg/config/config.go` and the admin-helper knowledge sources;
+follow-up for DC), `web/.impeccable/design.json`, `docs/k6-notes/`, `docs/k7-notes/`,
+`backend/loadtest/`, `tools/preview/`. Evidence: `docs/PHASE_H1_REPO_FILES.md`. Still open here:
+`web/README.md` says 'EU ↔ Algeria launch scope'.
 
-- Root files from earlier phases: `TASKS.md` (a two-person task list from mid-2026, stale but with
-  notes on why some behaviours are deliberate), `ShipTrip_Progress_Report.pdf`, the empty
-  `package.json` and `package-lock.json`, `backend/services/HANDOVER.md`.
-- Tool folders: `.cursor/`, `.codegraph/`.
 - `docs/`: about 120 files. The dated phase reports (`PHASE_*`, `K_SERIES_*`, `V1_*`, `V2_*`,
   `k6-notes/`, `k7-notes/`, `superpowers/`) are history; `docs/IMPLEMENTATION_STATUS.md` is close to
   9,000 lines. An archive folder or a trimmed status file would make the live documents easier to
