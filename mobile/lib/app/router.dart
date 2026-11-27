@@ -259,8 +259,7 @@ String? _redirectFor(SessionState session, Uri uri) {
   final location = uri.path;
 
   // Restoring: hold on the splash rather than flashing a sign-in screen at a
-  // user who is already signed in. A cold start with no network stays here
-  // too — being offline is not being signed out.
+  // user who is already signed in, until the stored record has been read.
   if (session is SessionRestoring) {
     return location == '/splash' ? null : '/splash';
   }

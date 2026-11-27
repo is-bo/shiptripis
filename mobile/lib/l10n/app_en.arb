@@ -98,6 +98,8 @@
   "stateRateLimitedBody": "Wait a moment before trying again.",
   "stateUnexpectedTitle": "Something unexpected happened",
   "stateUnexpectedBody": "We couldn't complete that. Try again, and tell us if it keeps happening.",
+  "stateSessionNotSavedTitle": "This phone couldn't save that",
+  "stateSessionNotSavedBody": "Nothing changed. Try again, and restart your phone if it keeps happening.",
   "stateAppOutdatedTitle": "This version is out of date",
   "stateAppOutdatedBody": "Update Wassla to continue. This part of the app no longer works on this version.",
   "staleTitle": "This has changed",

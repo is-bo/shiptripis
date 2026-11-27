@@ -76,6 +76,8 @@
   "stateRateLimitedBody": "انتظر قليلاً قبل إعادة المحاولة.",
   "stateUnexpectedTitle": "حدث أمر غير متوقع",
   "stateUnexpectedBody": "لم نتمكن من إتمام ذلك. أعد المحاولة، وأخبرنا إذا استمر حدوث هذا.",
+  "stateSessionNotSavedTitle": "تعذّر على هذا الهاتف حفظ ذلك",
+  "stateSessionNotSavedBody": "لم يتغيّر شيء. أعد المحاولة، وأعد تشغيل هاتفك إذا استمر ذلك.",
   "stateAppOutdatedTitle": "هذا الإصدار قديم",
   "stateAppOutdatedBody": "حدّث Wassla للمتابعة. لم يعد هذا الجزء من التطبيق يعمل مع هذا الإصدار.",
   "staleTitle": "تغيّر هذا",

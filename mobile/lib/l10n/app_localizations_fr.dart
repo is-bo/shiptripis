@@ -256,6 +256,14 @@ class LFr extends L {
       'Nous n’avons pas pu terminer cette action. Réessayez, et signalez-le si cela persiste.';
 
   @override
+  String get stateSessionNotSavedTitle =>
+      'Ce téléphone n’a pas pu l’enregistrer';
+
+  @override
+  String get stateSessionNotSavedBody =>
+      'Rien n’a changé. Réessayez, et redémarrez votre téléphone si cela persiste.';
+
+  @override
   String get stateAppOutdatedTitle => 'Cette version n’est plus à jour';
 
   @override

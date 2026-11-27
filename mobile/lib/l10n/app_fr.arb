@@ -76,6 +76,8 @@
   "stateRateLimitedBody": "Attendez un instant avant de réessayer.",
   "stateUnexpectedTitle": "Un problème inattendu est survenu",
   "stateUnexpectedBody": "Nous n’avons pas pu terminer cette action. Réessayez, et signalez-le si cela persiste.",
+  "stateSessionNotSavedTitle": "Ce téléphone n’a pas pu l’enregistrer",
+  "stateSessionNotSavedBody": "Rien n’a changé. Réessayez, et redémarrez votre téléphone si cela persiste.",
   "stateAppOutdatedTitle": "Cette version n’est plus à jour",
   "stateAppOutdatedBody": "Mettez à jour Wassla pour continuer. Cette partie de l’application ne fonctionne plus sur cette version.",
   "staleTitle": "Ceci a changé",

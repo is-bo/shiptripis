@@ -26,22 +26,16 @@ import 'dart:math';
 import 'package:dio/dio.dart';
 
 import '../env/app_config.dart';
-import '../session/token_store.dart';
+import '../session/session_core.dart';
 import 'api_exception.dart';
 import 'error_codes.dart';
-
-/// Called when refresh has definitively failed and the session is over.
-typedef OnSessionExpired = void Function();
 
 typedef Json = Map<String, dynamic>;
 
 class ApiClient {
-  ApiClient({
-    required TokenStore tokens,
-    Dio? dio,
-    OnSessionExpired? onSessionExpired,
-  }) : _tokens = tokens,
-       _dio = dio ?? Dio() {
+  ApiClient({required SessionCore session, Dio? dio})
+    : _session = session,
+      _dio = dio ?? Dio() {
     _dio.options = _dio.options.copyWith(
       baseUrl: AppConfig.apiBaseUrl,
       connectTimeout: AppConfig.connectTimeout,
@@ -60,15 +54,13 @@ class ApiClient {
       // failure in `_send` instead.
       validateStatus: (s) => s != null && s < 500,
     );
-    _auth = _AuthInterceptor(_dio, _tokens, onSessionExpired);
-    _dio.interceptors.add(_auth);
+    _dio.interceptors.add(_AuthInterceptor(_dio, _session));
   }
 
   final Dio _dio;
-  final TokenStore _tokens;
-  late final _AuthInterceptor _auth;
+  final SessionCore _session;
 
-  /// Shared reads in flight, by identity, write epoch, path and query.
+  /// Shared reads in flight, by sign-in, write epoch, path and query.
   final Map<String, _SharedRead> _sharedReads = {};
 
   /// Moves when any write starts and again when it ends, so a read asked for
@@ -85,7 +77,7 @@ class ApiClient {
   // ---------------------------------------------------------------------------
 
   /// [share] lets identical reads in flight at the same time go out as one
-  /// request (K5): the read joins one already in flight for the same identity,
+  /// request (K5): the read joins one already in flight for the same sign-in,
   /// or starts one later shared reads may join. [fresh] still starts a new
   /// one, for a caller whose reason to ask — a live event — may postdate the
   /// read in flight. Only for small reads several callers ask for at once.
@@ -97,11 +89,11 @@ class ApiClient {
     bool fresh = false,
   }) async {
     Future<dynamic> read(CancelToken? token) => _send(
-      (identity) => _dio.get<dynamic>(
+      (sid) => _dio.get<dynamic>(
         path,
         queryParameters: _clean(query),
         cancelToken: token,
-        options: _requestOptions(identity),
+        options: _requestOptions(sid),
       ),
       // Only reads are retried. Replaying a POST could double-charge a card
       // or burn one of five handover-code attempts.
@@ -124,11 +116,11 @@ class ApiClient {
     CancelToken? cancelToken,
   }) async {
     final data = await _send(
-      (identity) => _dio.get<dynamic>(
+      (sid) => _dio.get<dynamic>(
         path,
         queryParameters: _clean(query),
         cancelToken: cancelToken,
-        options: _requestOptions(identity),
+        options: _requestOptions(sid),
       ),
       retries: 2,
     );
@@ -152,11 +144,11 @@ class ApiClient {
     CancelToken? cancelToken,
   }) async {
     final response = await _sendResponse(
-      (identity) => _dio.get<dynamic>(
+      (sid) => _dio.get<dynamic>(
         path,
         queryParameters: _clean(query),
         cancelToken: cancelToken,
-        options: _requestOptions(identity),
+        options: _requestOptions(sid),
       ),
       retries: 2,
     );
@@ -225,12 +217,12 @@ class ApiClient {
     CancelToken? cancelToken,
   }) async => _expectObject(
     await _write(
-      (identity) => _dio.post<dynamic>(
+      (sid) => _dio.post<dynamic>(
         path,
         data: body,
         queryParameters: _clean(query),
         cancelToken: cancelToken,
-        options: _requestOptions(identity),
+        options: _requestOptions(sid),
       ),
     ),
     path,
@@ -243,11 +235,11 @@ class ApiClient {
     CancelToken? cancelToken,
   }) async {
     await _write(
-      (identity) => _dio.post<dynamic>(
+      (sid) => _dio.post<dynamic>(
         path,
         data: body,
         cancelToken: cancelToken,
-        options: _requestOptions(identity),
+        options: _requestOptions(sid),
       ),
     );
   }
@@ -255,10 +247,10 @@ class ApiClient {
   /// For `DELETE` endpoints, whose success is a 204.
   Future<void> deleteVoid(String path, {CancelToken? cancelToken}) async {
     await _write(
-      (identity) => _dio.delete<dynamic>(
+      (sid) => _dio.delete<dynamic>(
         path,
         cancelToken: cancelToken,
-        options: _requestOptions(identity),
+        options: _requestOptions(sid),
       ),
     );
   }
@@ -269,11 +261,11 @@ class ApiClient {
     CancelToken? cancelToken,
   }) async => _expectObject(
     await _write(
-      (identity) => _dio.patch<dynamic>(
+      (sid) => _dio.patch<dynamic>(
         path,
         data: body,
         cancelToken: cancelToken,
-        options: _requestOptions(identity),
+        options: _requestOptions(sid),
       ),
     ),
     path,
@@ -285,11 +277,11 @@ class ApiClient {
     CancelToken? cancelToken,
   }) async => _expectObject(
     await _write(
-      (identity) => _dio.put<dynamic>(
+      (sid) => _dio.put<dynamic>(
         path,
         data: body,
         cancelToken: cancelToken,
-        options: _requestOptions(identity),
+        options: _requestOptions(sid),
       ),
     ),
     path,
@@ -306,14 +298,14 @@ class ApiClient {
     CancelToken? cancelToken,
   }) async => _expectObject(
     await _write(
-      (identity) => _dio.post<dynamic>(
+      (sid) => _dio.post<dynamic>(
         path,
         data: form,
         cancelToken: cancelToken,
         onSendProgress: onProgress,
         options: Options(
           contentType: 'multipart/form-data',
-          extra: {'st.identity_generation': identity},
+          extra: {_AuthInterceptor.signInKey: sid},
           // An upload is bounded by bandwidth, not by server think-time.
           sendTimeout: const Duration(minutes: 5),
           receiveTimeout: const Duration(minutes: 2),
@@ -328,13 +320,13 @@ class ApiClient {
   // ---------------------------------------------------------------------------
 
   Future<dynamic> _send(
-    Future<Response<dynamic>> Function(int identityGeneration) call, {
+    Future<Response<dynamic>> Function(String? sid) call, {
     int retries = 0,
   }) async => (await _sendResponse(call, retries: retries)).data;
 
   /// Every write goes through here, never retried and never shared.
   Future<dynamic> _write(
-    Future<Response<dynamic>> Function(int identityGeneration) call,
+    Future<Response<dynamic>> Function(String? sid) call,
   ) async {
     _writeEpoch++;
     try {
@@ -350,8 +342,8 @@ class ApiClient {
   /// [caller] token without cancelling it for the others; it is cancelled
   /// only once every caller has left, and then forgotten, so the next caller
   /// starts afresh. A failure reaches every caller and is never remembered.
-  /// The key carries the identity generation, so a read begun for one sign-in
-  /// is never handed to the next.
+  /// The key carries the sign-in, so a read begun for one sign-in is never
+  /// handed to the next.
   Future<dynamic> _shared(
     String path,
     Json? query,
@@ -359,8 +351,7 @@ class ApiClient {
     Future<dynamic> Function(CancelToken token) read, {
     required bool fresh,
   }) {
-    final key =
-        '${_tokens.identityGeneration}:$_writeEpoch $path ${_clean(query)}';
+    final key = '${_session.current?.sid}:$_writeEpoch $path ${_clean(query)}';
     var shared = fresh ? null : _sharedReads[key];
     if (shared == null) {
       final created = shared = _SharedRead(CancelToken());
@@ -379,23 +370,25 @@ class ApiClient {
     );
   }
 
+  /// Sends [call] for the sign-in current now, or as a guest when nobody is
+  /// signed in. A member's answer that arrives after that sign-in ended is
+  /// refused as "session changed": it belongs to someone who has left. A
+  /// guest's read carried no bearer and belongs to no sign-in, so a sign-in
+  /// finishing meanwhile does not void it.
   Future<Response<dynamic>> _sendResponse(
-    Future<Response<dynamic>> Function(int identityGeneration) call, {
+    Future<Response<dynamic>> Function(String? sid) call, {
     int retries = 0,
   }) async {
-    final identityGeneration = _tokens.identityGeneration;
+    final sid = _session.current?.sid;
     final budget = Stopwatch()..start();
     var attempt = 0;
     while (true) {
       try {
-        if (identityGeneration != _tokens.identityGeneration) {
+        if (sid != _session.current?.sid) {
           throw _AuthInterceptor.sessionChanged();
         }
-        final response = await call(identityGeneration);
-        // A read sent as a guest carried no bearer and belongs to no login,
-        // so a sign-in or sign-out finishing meanwhile does not void it.
-        if (identityGeneration != _tokens.identityGeneration &&
-            !_AuthInterceptor.wasSentAsGuest(response.requestOptions)) {
+        final response = await call(sid);
+        if (sid != null && sid != _session.current?.sid) {
           throw _AuthInterceptor.sessionChanged(response.requestOptions);
         }
         final status = response.statusCode ?? 0;
@@ -424,7 +417,7 @@ class ApiClient {
             milliseconds: ceiling ~/ 2 + _random.nextInt(ceiling ~/ 2 + 1),
           ),
         );
-        if (identityGeneration != _tokens.identityGeneration) {
+        if (sid != _session.current?.sid) {
           throw ApiException.from(_AuthInterceptor.sessionChanged());
         }
         attempt++;
@@ -458,8 +451,8 @@ class ApiClient {
     return out.isEmpty ? null : out;
   }
 
-  Options _requestOptions(int identityGeneration) =>
-      Options(extra: {'st.identity_generation': identityGeneration});
+  Options _requestOptions(String? sid) =>
+      Options(extra: {_AuthInterceptor.signInKey: sid});
 
   static final _random = Random();
 }
@@ -526,16 +519,18 @@ class _SharedRead {
 // ---------------------------------------------------------------------------
 
 class _AuthInterceptor extends Interceptor {
-  _AuthInterceptor(this._dio, this._tokens, this._onExpired);
+  _AuthInterceptor(this._dio, this._session);
 
   final Dio _dio;
-  final TokenStore _tokens;
-  final OnSessionExpired? _onExpired;
+  final SessionCore _session;
+
+  /// The sign-in a request was sent for; null for a guest's request.
+  static const signInKey = 'st.sid';
 
   /// Shared across every 401 in flight, so a burst of parallel requests
   /// rotates the refresh token once instead of racing and blacklisting it.
   Future<String?>? _refreshInFlight;
-  int? _refreshGeneration;
+  String? _refreshSent;
 
   static const _authPaths = [
     '/api/auth/sign-in',
@@ -553,53 +548,24 @@ class _AuthInterceptor extends Interceptor {
   static bool _isGuestEndpoint(String path) =>
       path.contains('/api/payments/guest/');
 
+  /// The bearer comes from the core, and only for the sign-in the request was
+  /// sent for while it is still current: a request of a sign-in that ended
+  /// is refused here rather than sent with anyone else's token.
   @override
-  Future<void> onRequest(
-    RequestOptions options,
-    RequestInterceptorHandler handler,
-  ) async {
-    // The sign-out of a sign-in this phone already let go of
-    // (`_endSignInOnServer`): its refresh token is the whole proof, and the
-    // credentials stored now, if any, belong to whoever signed in since.
-    if (options.extra[_endsReleasedSignIn] == true) {
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    if (_isAuthEndpoint(options.path) || _isGuestEndpoint(options.path)) {
       return handler.next(options);
     }
-    if (!_isAuthEndpoint(options.path) && !_isGuestEndpoint(options.path)) {
-      final existingIdentity = options.extra['st.identity_generation'];
-      final identityGeneration = existingIdentity is int
-          ? existingIdentity
-          : _tokens.identityGeneration;
-      options.extra['st.identity_generation'] = identityGeneration;
-      if (identityGeneration != _tokens.identityGeneration) {
-        return handler.reject(sessionChanged(options));
-      }
-      // Signed out, a read is a guest's. Only the sign-out call itself still
-      // speaks for the member who is leaving: its access token is what proves
-      // which sign-in ends.
-      if (_tokens.bearerWithheld && !_isSignOut(options.path)) {
-        options.extra[_sentAsGuest] = true;
-        return handler.next(options);
-      }
-      final access = await _tokens.readAccess();
-      if (identityGeneration != _tokens.identityGeneration) {
-        return handler.reject(sessionChanged(options));
-      }
-      if (access != null) options.headers['Authorization'] = 'Bearer $access';
-    }
+    final sid = options.extra.containsKey(signInKey)
+        ? options.extra[signInKey] as String?
+        : _session.current?.sid;
+    options.extra[signInKey] = sid;
+    if (sid == null) return handler.next(options);
+    final access = _session.accessFor(sid);
+    if (access == null) return handler.reject(sessionChanged(options));
+    options.headers['Authorization'] = 'Bearer $access';
     handler.next(options);
   }
-
-  static const _sentAsGuest = 'st.sent_as_guest';
-
-  /// Whether [request] went without a bearer because nobody was signed in.
-  static bool wasSentAsGuest(RequestOptions request) =>
-      request.extra[_sentAsGuest] == true;
-
-  static const _signOutPath = '/api/auth/sign-out';
-
-  static bool _isSignOut(String path) => path.contains(_signOutPath);
-
-  static const _endsReleasedSignIn = 'st.ends_released_sign_in';
 
   @override
   Future<void> onResponse(
@@ -607,60 +573,29 @@ class _AuthInterceptor extends Interceptor {
     ResponseInterceptorHandler handler,
   ) async {
     final request = response.requestOptions;
-    final shouldRefresh =
-        response.statusCode == 401 &&
-        !_isAuthEndpoint(request.path) &&
-        !_isSignOut(request.path) &&
-        !_isGuestEndpoint(request.path) &&
-        // A guest has no session for a 401 to end, and nothing to refresh.
-        request.extra[_sentAsGuest] != true &&
-        request.extra['st.retried'] != true;
-
-    if (!shouldRefresh) return handler.next(response);
-
-    final requestIdentity = request.extra['st.identity_generation'];
-    if (requestIdentity is! int ||
-        requestIdentity != _tokens.identityGeneration) {
-      // This response belongs to the account that was logged out while the
-      // request was in flight. Replaying it with the next account's bearer
-      // could perform the old user's action as the new user.
+    final sid = request.extra[signInKey];
+    final signIn = _session.current;
+    if (response.statusCode != 401 ||
+        sid is! String ||
+        _isAuthEndpoint(request.path) ||
+        _isGuestEndpoint(request.path) ||
+        request.extra['st.retried'] == true ||
+        // The sign-in this answer belongs to has ended. Replaying it with the
+        // next sign-in's bearer could perform the old member's action as the
+        // new one.
+        signIn == null ||
+        signIn.sid != sid) {
       return handler.next(response);
     }
 
     // Another request may have refreshed while this 401 was in flight. If the
-    // stored token is already newer than the one we sent, just replay.
-    final current = await _tokens.readAccess();
-    if (requestIdentity != _tokens.identityGeneration) {
-      return handler.next(response);
-    }
-    if (current != null &&
-        request.headers['Authorization'] != 'Bearer $current') {
-      return _resolveReplay(handler, request, current, requestIdentity);
+    // current token is already newer than the one we sent, just replay.
+    if (request.headers['Authorization'] != 'Bearer ${signIn.access}') {
+      return _resolveReplay(handler, request, sid);
     }
 
-    final refresh = await _tokens.readRefresh();
-    if (requestIdentity != _tokens.identityGeneration) {
-      return handler.next(response);
-    }
-    if (refresh == null) {
-      await _endSession(expectedIdentityGeneration: requestIdentity);
-      return handler.next(response);
-    }
-
-    final rotated = await _refreshOnce(refresh, requestIdentity);
-    if (rotated != null && requestIdentity == _tokens.identityGeneration) {
-      return _resolveReplay(handler, request, rotated, requestIdentity);
-    }
-
-    // Do not wipe credentials that a newer sign-in wrote while this was in
-    // flight.
-    if (_tokens.identityGeneration == requestIdentity &&
-        await _tokens.readRefresh() == refresh &&
-        _tokens.identityGeneration == requestIdentity) {
-      await _endSession(
-        expectedIdentityGeneration: requestIdentity,
-        expectedRefresh: refresh,
-      );
+    if (await _refreshOnce(sid, signIn.refresh)) {
+      return _resolveReplay(handler, request, sid);
     }
     handler.next(response);
   }
@@ -668,11 +603,14 @@ class _AuthInterceptor extends Interceptor {
   Future<void> _resolveReplay(
     ResponseInterceptorHandler handler,
     RequestOptions request,
-    String access,
-    int identityGeneration,
+    String sid,
   ) async {
+    final access = _session.accessFor(sid);
+    if (access == null) return handler.reject(sessionChanged(request));
+    request.extra['st.retried'] = true;
+    request.headers['Authorization'] = 'Bearer $access';
     try {
-      handler.resolve(await _replay(request, access, identityGeneration));
+      handler.resolve(await _dio.fetch<dynamic>(request));
     } on DioException catch (error) {
       handler.reject(error);
     } catch (error, stackTrace) {
@@ -686,106 +624,63 @@ class _AuthInterceptor extends Interceptor {
     }
   }
 
-  Future<Response<dynamic>> _replay(
-    RequestOptions request,
-    String access,
-    int identityGeneration,
-  ) {
-    if (identityGeneration != _tokens.identityGeneration) {
-      return Future<Response<dynamic>>.error(sessionChanged(request));
-    }
-    request.extra['st.retried'] = true;
-    request.extra['st.identity_generation'] = identityGeneration;
-    request.headers['Authorization'] = 'Bearer $access';
-    return _dio.fetch<dynamic>(request);
-  }
-
   static DioException sessionChanged([RequestOptions? request]) => DioException(
     requestOptions: request ?? RequestOptions(),
     type: DioExceptionType.cancel,
     error: StateError('The authenticated session changed.'),
   );
 
-  Future<String?> _refreshOnce(String refresh, int identityGeneration) {
+  /// One refresh at a time per refresh token sent. True when [sid] holds a
+  /// new access token.
+  Future<bool> _refreshOnce(String sid, String refresh) async {
     final active = _refreshInFlight;
-    if (active != null && _refreshGeneration == identityGeneration) {
-      return active;
+    if (active != null && _refreshSent == refresh) {
+      return await active != null;
     }
-
-    final future = _performRefresh(refresh, identityGeneration);
+    final future = _performRefresh(sid, refresh);
     _refreshInFlight = future;
-    _refreshGeneration = identityGeneration;
-    return future.whenComplete(() {
+    _refreshSent = refresh;
+    try {
+      return await future != null;
+    } finally {
       if (identical(_refreshInFlight, future)) {
         _refreshInFlight = null;
-        _refreshGeneration = null;
+        _refreshSent = null;
       }
-    });
+    }
   }
 
-  Future<String?> _performRefresh(
-    String refresh,
-    int identityGeneration,
-  ) async {
+  /// Sends [refresh] once. Only the server's refusal of it (401) ends the
+  /// sign-in, and only while it is still the current token: a refusal that
+  /// arrives after another refresh replaced it says nothing. No network, a
+  /// throttle or a server error keeps the member signed in.
+  Future<String?> _performRefresh(String sid, String refresh) async {
+    final Response<Map<String, dynamic>> response;
     try {
-      final response = await _dio.post<Map<String, dynamic>>(
+      response = await _dio.post<Map<String, dynamic>>(
         '/api/auth/refresh',
         data: {'refresh': refresh},
       );
-      if (response.statusCode != 200) return null;
-
-      final access = response.data?['access'];
-      if (access is! String) return null;
-
-      // A logout or another login happened while the network request was in
-      // flight. Never let this older refresh overwrite the new credentials.
-      final rotated = response.data?['refresh'];
-      final saved = await _tokens.saveRefreshedIfCurrent(
-        expectedIdentityGeneration: identityGeneration,
-        expectedRefresh: refresh,
+    } on Object {
+      return null;
+    }
+    if (response.statusCode == 401) {
+      await _session.end(sid, EndReason.refused, refusedRefresh: refresh);
+      return null;
+    }
+    final access = response.data?['access'];
+    if (response.statusCode != 200 || access is! String) return null;
+    final rotated = response.data?['refresh'];
+    try {
+      final replaced = await _session.replaceTokens(
+        sid,
+        sentRefresh: refresh,
         access: access,
         refresh: rotated is String ? rotated : null,
       );
-      return saved ? access : null;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<void> _endSession({
-    required int expectedIdentityGeneration,
-    String? expectedRefresh,
-  }) async {
-    if (_tokens.identityGeneration != expectedIdentityGeneration) return;
-    if (expectedRefresh != null &&
-        await _tokens.readRefresh() != expectedRefresh) {
-      return;
-    }
-    if (await _tokens.clearIfIdentityCurrent(expectedIdentityGeneration)) {
-      if (expectedRefresh != null) {
-        unawaited(_endSignInOnServer(expectedRefresh));
-      }
-      _onExpired?.call();
-    }
-  }
-
-  /// Ends on the server, best-effort, the sign-in this phone has just let go
-  /// of because renewing it failed. It may still be live there, with this
-  /// phone's push device switched on: the refresh token expired while the app
-  /// went unopened, a refresh rotated it and the answer never arrived, or the
-  /// renewal never got through. The server takes this refresh token, whatever
-  /// its age, as proof of which sign-in ends, so the request carries no bearer
-  /// (`onRequest`). Like the Sign-out button's own request, a failure here
-  /// leaves the phone signed out all the same.
-  Future<void> _endSignInOnServer(String refresh) async {
-    try {
-      await _dio.post<void>(
-        _signOutPath,
-        data: {'refresh': refresh},
-        options: Options(extra: {_endsReleasedSignIn: true}),
-      );
+      return replaced ? access : null;
     } on Object {
-      // Nothing to recover: the phone is already signed out.
+      return null;
     }
   }
 }

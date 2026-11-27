@@ -23,6 +23,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/api/error_codes.dart';
+import '../../core/session/session_core.dart';
 import '../../l10n/app_localizations.dart';
 import '../tokens.dart';
 import 'primitives.dart';
@@ -64,6 +65,15 @@ class FailureCopy {
 /// is both unreadable and a small information disclosure.
 FailureCopy describeFailure(BuildContext context, Object? error) {
   final l = L.of(context);
+
+  if (error is SessionNotSaved) {
+    return FailureCopy(
+      title: l.stateSessionNotSavedTitle,
+      body: l.stateSessionNotSavedBody,
+      icon: Icons.sd_card_alert_outlined,
+      tone: StatusTone.bad,
+    );
+  }
 
   if (error is! ApiException) {
     return FailureCopy(

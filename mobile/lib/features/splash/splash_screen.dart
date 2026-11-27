@@ -8,11 +8,10 @@
 ///   loading reads as a stutter. The indicator appears only if the wait turns
 ///   out to be real.
 ///
-/// * **A long wait gets an exit.** A cold start with no network legitimately
-///   sits here, because being offline is not being signed out and the router
-///   deliberately refuses to bounce the user to a sign-in screen for it. That
-///   is the right call, and it makes an escape hatch mandatory: after a while
-///   this screen says what is happening and offers to try again.
+/// * **Never long.** A stored sign-in is shown from its snapshot without
+///   waiting for the network, and a store that cannot be read with the app on
+///   screen signs the member out (`SessionCore.load`), so nothing holds a
+///   person here.
 ///
 /// * **It is a ShipTrip screen, not a loading screen.** The original build had
 ///   no splash to copy — it bootstrapped straight into the welcome page — so
@@ -24,30 +23,25 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/session/session.dart';
 import '../../design/identity.dart';
 import '../../design/layout/app_scaffold.dart';
 import '../../design/tokens.dart';
 import '../../design/typography.dart';
 import '../../l10n/app_localizations.dart';
 
-class SplashScreen extends ConsumerStatefulWidget {
+class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
   @override
-  ConsumerState<SplashScreen> createState() => _SplashScreenState();
+  State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends ConsumerState<SplashScreen> {
+class _SplashScreenState extends State<SplashScreen> {
   static const _showProgressAfter = Duration(milliseconds: 600);
-  static const _offerRetryAfter = Duration(seconds: 8);
 
   Timer? _progressTimer;
-  Timer? _retryTimer;
   bool _showProgress = false;
-  bool _offerRetry = false;
 
   @override
   void initState() {
@@ -55,35 +49,18 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     _progressTimer = Timer(_showProgressAfter, () {
       if (mounted) setState(() => _showProgress = true);
     });
-    _retryTimer = Timer(_offerRetryAfter, () {
-      if (mounted) setState(() => _offerRetry = true);
-    });
   }
 
   @override
   void dispose() {
     _progressTimer?.cancel();
-    _retryTimer?.cancel();
     super.dispose();
-  }
-
-  Future<void> _retry() async {
-    setState(() {
-      _offerRetry = false;
-      _showProgress = true;
-    });
-    _retryTimer?.cancel();
-    _retryTimer = Timer(_offerRetryAfter, () {
-      if (mounted) setState(() => _offerRetry = true);
-    });
-    await ref.read(sessionProvider.notifier).restore();
   }
 
   @override
   Widget build(BuildContext context) {
     final l = L.of(context);
     final c = context.colors;
-    final text = Theme.of(context).textTheme;
 
     return AppScaffold(
       body: Center(
@@ -116,7 +93,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
               SizedBox(
                 height: 24,
                 child: AnimatedOpacity(
-                  opacity: _showProgress && !_offerRetry ? 1 : 0,
+                  opacity: _showProgress ? 1 : 0,
                   duration: AppMotion.respecting(context, AppMotion.normal),
                   child: SizedBox(
                     width: 22,
@@ -128,19 +105,6 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                   ),
                 ),
               ),
-              if (_offerRetry) ...[
-                const SizedBox(height: AppSpace.lg),
-                Semantics(
-                  liveRegion: true,
-                  child: Text(
-                    l.stateOfflineBody,
-                    style: text.bodyMedium?.copyWith(color: c.textSecondary),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                const SizedBox(height: AppSpace.lg),
-                TextButton(onPressed: _retry, child: Text(l.actionRetry)),
-              ],
             ],
           ),
         ),

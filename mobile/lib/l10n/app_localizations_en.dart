@@ -253,6 +253,13 @@ class LEn extends L {
       'We couldn\'t complete that. Try again, and tell us if it keeps happening.';
 
   @override
+  String get stateSessionNotSavedTitle => 'This phone couldn\'t save that';
+
+  @override
+  String get stateSessionNotSavedBody =>
+      'Nothing changed. Try again, and restart your phone if it keeps happening.';
+
+  @override
   String get stateAppOutdatedTitle => 'This version is out of date';
 
   @override

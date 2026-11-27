@@ -251,6 +251,13 @@ class LAr extends L {
       'لم نتمكن من إتمام ذلك. أعد المحاولة، وأخبرنا إذا استمر حدوث هذا.';
 
   @override
+  String get stateSessionNotSavedTitle => 'تعذّر على هذا الهاتف حفظ ذلك';
+
+  @override
+  String get stateSessionNotSavedBody =>
+      'لم يتغيّر شيء. أعد المحاولة، وأعد تشغيل هاتفك إذا استمر ذلك.';
+
+  @override
   String get stateAppOutdatedTitle => 'هذا الإصدار قديم';
 
   @override

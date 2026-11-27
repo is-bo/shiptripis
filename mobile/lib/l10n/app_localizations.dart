@@ -555,6 +555,18 @@ abstract class L {
   /// **'We couldn\'t complete that. Try again, and tell us if it keeps happening.'**
   String get stateUnexpectedBody;
 
+  /// No description provided for @stateSessionNotSavedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'This phone couldn\'t save that'**
+  String get stateSessionNotSavedTitle;
+
+  /// No description provided for @stateSessionNotSavedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing changed. Try again, and restart your phone if it keeps happening.'**
+  String get stateSessionNotSavedBody;
+
   /// No description provided for @stateAppOutdatedTitle.
   ///
   /// In en, this message translates to:

@@ -1,23 +1,18 @@
-/// Credential storage.
+/// The phone's own keys: the interface language, the role context, a random
+/// installation ID, a pending push token, the count of notification
+/// permission requests and the number of the newest push registration. They
+/// belong to the phone rather than to a sign-in, so they survive a sign-out.
 ///
-/// ## What is allowed on this device, and what is not
-///
-/// Stored: the access token, the refresh token, the user's chosen role
-/// context, and a snapshot of the last server-confirmed profile (presentation
-/// fields only — see `Account.toSnapshotJson`). All four go in the platform
-/// keystore, and all four are wiped on sign-out. Beside them sit a few things
-/// that belong to the phone rather than the account and so survive sign-out: a
-/// random installation ID, a pending push token, the count of notification
-/// permission requests and the number of the newest push registration.
+/// The sign-in itself (its tokens and the account snapshot) is not here: it is
+/// one record with one writer, `SessionCore`.
 ///
 /// **Never stored, at any layer:** a pickup code, a delivery code, a guest
 /// payment token, recipient contact details, or a payment provider secret.
 ///
-/// The previous build kept handover-code plaintext in exactly this keystore,
-/// keyed by match, for both pickup *and* delivery. That store is deleted, and
+/// The previous build kept handover-code plaintext in this keystore, keyed by
+/// match, for both pickup *and* delivery. That store is deleted, and
 /// [purgeLegacyArtifacts] removes what it left behind on devices that already
-/// have it — an upgrade must not leave a delivery code sitting in the keystore
-/// of a traveler's phone.
+/// have it.
 library;
 
 import 'dart:math';
@@ -39,28 +34,8 @@ class TokenStore {
           );
 
   final FlutterSecureStorage _storage;
-  int _identityGeneration = 0;
-  Future<void> _credentialWriteTail = Future<void>.value();
   Future<void> _phoneWriteTail = Future<void>.value();
 
-  /// Changes synchronously before any credential mutation awaits platform
-  /// storage. Token refresh uses it to reject a response started by an older
-  /// login, even when the next account signs in while that response is in
-  /// flight.
-  int get identityGeneration => _identityGeneration;
-
-  /// Invalidates requests and refreshes belonging to the current login while
-  /// retaining the bytes long enough for best-effort server sign-out.
-  int invalidateIdentity() => ++_identityGeneration;
-
-  /// True while nobody is signed in: requests then go without a bearer, even
-  /// while the previous member's bytes are still stored for the server
-  /// sign-out. Set by the session the moment it turns signed out, so a guest's
-  /// first read never carries the member's token.
-  bool bearerWithheld = false;
-
-  static const _kAccess = 'auth.access';
-  static const _kRefresh = 'auth.refresh';
   static const _kRoleContext = 'app.role_context';
   static const _kLocale = 'app.locale';
   static const _kInstallationId = 'push.installation_id';
@@ -68,89 +43,8 @@ class TokenStore {
   static const _kPushPermissionRequests = 'push.permission_requests';
   static const _kPushBindingSequence = 'push.binding_sequence';
 
-  /// The last profile the server confirmed for the stored credentials.
-  ///
-  /// Bound to them, not merely stored beside them: it is written only under
-  /// the identity generation that fetched it, and every credential change —
-  /// a new sign-in, a sign-out, a terminal expiry — deletes it. So a launch
-  /// can never show one account's snapshot over another account's tokens.
-  static const _kAccountSnapshot = 'auth.account_snapshot';
-
   /// Keys written by the retired build. Removed on every start.
   static const _legacyKeys = <String>['handover.codes', 'app.role'];
-
-  Future<void> save({required String access, required String refresh}) {
-    _identityGeneration++;
-    return _serializeCredentialWrite(() async {
-      await _storage.delete(key: _kAccountSnapshot);
-      await _storage.write(key: _kAccess, value: access);
-      await _storage.write(key: _kRefresh, value: refresh);
-    });
-  }
-
-  Future<String?> readAccess() => _readCredential(_kAccess);
-  Future<String?> readRefresh() => _readCredential(_kRefresh);
-
-  Future<void> updateAccess(String access) {
-    return _serializeCredentialWrite(
-      () => _storage.write(key: _kAccess, value: access),
-    );
-  }
-
-  /// Commits a refresh only if the login that started it is still current.
-  Future<bool> saveRefreshedIfCurrent({
-    required int expectedIdentityGeneration,
-    required String expectedRefresh,
-    required String access,
-    String? refresh,
-  }) => _serializeCredentialWrite(() async {
-    if (_identityGeneration != expectedIdentityGeneration) return false;
-    final currentRefresh = await _storage.read(key: _kRefresh);
-    if (_identityGeneration != expectedIdentityGeneration ||
-        currentRefresh != expectedRefresh) {
-      return false;
-    }
-    await _storage.write(key: _kAccess, value: access);
-    if (_identityGeneration != expectedIdentityGeneration) return false;
-    if (refresh != null) {
-      await _storage.write(key: _kRefresh, value: refresh);
-      if (_identityGeneration != expectedIdentityGeneration) return false;
-    }
-    return true;
-  });
-
-  Future<bool> saveAuthenticationIfCurrent({
-    required int expectedIdentityGeneration,
-    required String access,
-    required String refresh,
-  }) => _serializeCredentialWrite(() async {
-    if (_identityGeneration != expectedIdentityGeneration) return false;
-    await _storage.delete(key: _kAccountSnapshot);
-    await _storage.write(key: _kAccess, value: access);
-    if (_identityGeneration != expectedIdentityGeneration) return false;
-    await _storage.write(key: _kRefresh, value: refresh);
-    return _identityGeneration == expectedIdentityGeneration;
-  });
-
-  /// The stored profile snapshot, read behind any pending credential write so
-  /// it can never be one account's profile over another account's tokens.
-  Future<String?> readAccountSnapshot() => _readCredential(_kAccountSnapshot);
-
-  /// Stores [json] only if no credential change happened since
-  /// [expectedIdentityGeneration] — the generation the profile was read under.
-  Future<bool> writeAccountSnapshotIfCurrent({
-    required int expectedIdentityGeneration,
-    required String json,
-  }) => _serializeCredentialWrite(() async {
-    if (_identityGeneration != expectedIdentityGeneration) return false;
-    await _storage.write(key: _kAccountSnapshot, value: json);
-    return _identityGeneration == expectedIdentityGeneration;
-  });
-
-  /// Deleted at the very start of a sign-out, ahead of the network call.
-  /// Serialized with the writes, so one queued before it cannot land after.
-  Future<void> deleteAccountSnapshot() =>
-      _serializeCredentialWrite(() => _storage.delete(key: _kAccountSnapshot));
 
   /// Which side of the marketplace a dual-role user last worked from. A
   /// preference, not a permission — the server's role is always authoritative
@@ -270,29 +164,6 @@ class TokenStore {
       ? _storage.delete(key: _kPendingPushToken)
       : _storage.write(key: _kPendingPushToken, value: token);
 
-  /// Removes credentials and every user-scoped preference. Called on sign-out
-  /// and whenever refresh fails terminally.
-  Future<void> clear() {
-    _identityGeneration++;
-    return _serializeCredentialWrite(_clearCredentials);
-  }
-
-  Future<bool> clearIfIdentityCurrent(int expectedIdentityGeneration) =>
-      _serializeCredentialWrite(() async {
-        if (_identityGeneration != expectedIdentityGeneration) return false;
-        final clearingGeneration = ++_identityGeneration;
-        await _clearCredentials();
-        return _identityGeneration == clearingGeneration;
-      });
-
-  Future<void> _clearCredentials() async {
-    await _storage.delete(key: _kAccess);
-    await _storage.delete(key: _kRefresh);
-    await _storage.delete(key: _kAccountSnapshot);
-    await _storage.delete(key: _kRoleContext);
-    await purgeLegacyArtifacts();
-  }
-
   /// Deletes secrets written by the retired client. Cheap, idempotent, and
   /// run at every launch so an upgrade cannot leave a handover code behind.
   Future<void> purgeLegacyArtifacts() async {
@@ -303,24 +174,6 @@ class TokenStore {
         // A keystore that refuses a delete for an absent key must not stop
         // the app from starting.
       }
-    }
-  }
-
-  Future<T> _serializeCredentialWrite<T>(Future<T> Function() operation) {
-    final result = _credentialWriteTail.then((_) => operation());
-    _credentialWriteTail = result.then<void>(
-      (_) {},
-      onError: (Object _, StackTrace _) {},
-    );
-    return result;
-  }
-
-  Future<String?> _readCredential(String key) async {
-    while (true) {
-      final pending = _credentialWriteTail;
-      await pending;
-      if (!identical(pending, _credentialWriteTail)) continue;
-      return _storage.read(key: key);
     }
   }
 }

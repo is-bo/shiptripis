@@ -524,20 +524,17 @@ class PushCoordinator extends Notifier<PushRuntimeState>
   }
 
   Future<String?> _socketAccessToken({required bool refresh}) async {
-    if (ref.read(sessionProvider) is! SessionSignedIn) return null;
-    if (refresh) {
-      try {
-        // A normal authenticated read enters the same 401/single-flight
-        // interceptor as every screen. It refreshes an expired access token
-        // and ends a terminally expired session instead of looping a rejected
-        // WS bearer forever.
-        await ref.read(authRepositoryProvider).me();
-      } on Object {
-        return null;
-      }
-      if (ref.read(sessionProvider) is! SessionSignedIn) return null;
+    final session = ref.read(sessionProvider);
+    if (session is! SessionSignedIn) return null;
+    // A normal authenticated read of the account enters the same 401 and
+    // single-flight refresh as every screen. It refreshes an expired access
+    // token and ends a sign-in the server refused instead of looping a
+    // rejected WS bearer forever.
+    if (refresh &&
+        !await ref.read(sessionProvider.notifier).refreshAccount()) {
+      return null;
     }
-    return ref.read(tokenStoreProvider).readAccess();
+    return ref.read(sessionCoreProvider).accessFor(session.sid);
   }
 
   void _reconcileCurrentScope() {
