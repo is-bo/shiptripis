@@ -105,6 +105,17 @@ def _session_id(request: Request):
     return None if request.auth is None else request.auth.get("sid")
 
 
+def _superseded(superseded: PushBindingSuperseded) -> Response:
+    return Response(
+        {
+            "code": "push_registration_superseded",
+            "detail": "A newer registration or sign-out of this phone was already applied.",
+            "current_sequence": superseded.current_sequence,
+        },
+        status=status.HTTP_409_CONFLICT,
+    )
+
+
 class PushDeviceRegistrationView(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -126,14 +137,7 @@ class PushDeviceRegistrationView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
         except PushBindingSuperseded as superseded:
-            return Response(
-                {
-                    "code": "push_registration_superseded",
-                    "detail": "A newer registration or sign-out of this phone was already applied.",
-                    "current_sequence": superseded.current_sequence,
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
+            return _superseded(superseded)
         return Response(PushDeviceSerializer(device).data, status=status.HTTP_200_OK)
 
 
@@ -143,11 +147,14 @@ class PushDeviceUnregisterView(APIView):
     def post(self, request: Request) -> Response:
         serializer = PushDeviceUnregisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        unregister_push_device(
-            user=request.user,
-            session_id=_session_id(request),
-            **serializer.validated_data,
-        )
+        try:
+            unregister_push_device(
+                user=request.user,
+                session_id=_session_id(request),
+                **serializer.validated_data,
+            )
+        except PushBindingSuperseded as superseded:
+            return _superseded(superseded)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

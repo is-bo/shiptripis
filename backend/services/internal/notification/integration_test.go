@@ -431,6 +431,7 @@ func itNewConsumer(rdb *redisbus.Client, stream string, sender FCMSender) *Consu
 		ConsumerName:   "it-1",
 		FeedbackStream: stream + ":results",
 		Sender:         sender,
+		Devices:        fcmBoundDevices{},
 	}, discardLogger())
 	c.deliverGrace = 300 * time.Millisecond
 	return c

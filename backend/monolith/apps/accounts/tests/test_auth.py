@@ -140,11 +140,17 @@ class SignOutTests(APITestCase):
         )
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
 
-    def test_missing_refresh_returns_400(self):
+    def test_a_valid_access_token_signs_out_without_a_refresh_token(self):
+        # N1 Astra round 4, blocker 2: the access token proves its own
+        # sign-in, so a body without the refresh token still ends it.
         client = APIClient()
         client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access}")
         resp = client.post(reverse("auth-sign-out"), {}, format="json")
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(resp.status_code, status.HTTP_205_RESET_CONTENT)
+        refreshed = APIClient().post(
+            reverse("auth-refresh"), {"refresh": self.refresh}, format="json"
+        )
+        self.assertEqual(refreshed.status_code, status.HTTP_401_UNAUTHORIZED)
 
 
 class PasswordResetTests(APITestCase):

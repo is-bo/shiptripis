@@ -28,8 +28,18 @@
   gone, and `end_all_sessions` no longer relies on SimpleJWT's outstanding-token list, which misses
   rotated tokens. Phone: the newest-attempt check after every wait, a failed catch-up write leaves a
   retryable failure, the Profile request needs its screen still on top, an Android upgrade user's
-  second denial leads to Settings, guest denial copy without the inbox promise. Detail, screenshots and
-  the device checks still owed on real phones: `docs/PHASE_N1_NOTIFICATION_FIRST_OPEN.md`.
+  second denial leads to Settings, guest denial copy without the inbox promise. Round 5 (Astra round 4,
+  2026-11-27): a sign-in is issued under the account lock only if no reset, claim or deletion ended the
+  account's sign-ins after its credentials were checked (`User.session_epoch`); a sign-out is proved by
+  a valid access token or, once that expired, by a signed refresh token even if rotated, and blacklists
+  nothing; a late or ended-sign-in unregister no longer moves the order or switches off a newer
+  registration; a repeat of a switched-off registration is refused as superseded. Before N1 but closed
+  here: the Go sender checks each queued push's devices against the database right before sending,
+  and a notification WebSocket closes when its token stops being valid. Phone: permission loss
+  overtakes an in-flight registration, a token refresh registers even if the keystore refuses the
+  copy, an inactive receipt leaves Retry, guest copy without the inbox promise when push cannot start.
+  Detail, screenshots and the device checks still owed on real phones:
+  `docs/PHASE_N1_NOTIFICATION_FIRST_OPEN.md`.
 
 ## Wassla: the bell names the ticket decision (N2, 2026-11-26)
 

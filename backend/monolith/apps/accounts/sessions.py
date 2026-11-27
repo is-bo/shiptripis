@@ -11,7 +11,8 @@ The moment someone proves they own an account's email address (a completed
 password reset, or Google sign-in on an account that never confirmed its
 email), whoever held the account before may have been someone else: anyone can
 sign up with another person's address. `end_all_sessions` leaves the prover
-alone in it. An access token already issued lives to its own expiry
+alone in it, including against a sign-in whose old password was checked just
+before the end and whose session would otherwise be issued just after it. An access token already issued lives to its own expiry
 (`JWT_ACCESS_TTL_SECONDS`), but it can no longer renew itself or switch a phone
 on.
 """
@@ -33,13 +34,29 @@ from apps.notifications.push import (
 )
 
 from .locks import lock_account
-from .models import SignInSession
+from .models import SignInSession, User
+
+
+class SignInInterrupted(Exception):
+    """Every sign-in of the account ended after this one's credentials were checked."""
 
 
 def start_session(user) -> SignInSession:
-    """A new live sign-in of ``user``; its id goes into the tokens as ``sid``."""
+    """A new live sign-in of ``user``; its id goes into the tokens as ``sid``.
 
-    return SignInSession.objects.create(user=user)
+    ``user`` is the row as the credential check read it. A password reset, a
+    Google claim or a deletion can commit between that check and this call,
+    and the sign-in issued here would then outlive the end it missed. So the
+    account's ``session_epoch`` is read again under the account lock, which
+    `end_all_sessions` takes too: if it moved, the credentials were checked
+    against an account that has since changed hands, and `SignInInterrupted`
+    is raised instead of issuing anything.
+    """
+
+    with transaction.atomic():
+        if lock_account(user).session_epoch != user.session_epoch:
+            raise SignInInterrupted
+        return SignInSession.objects.create(user=user)
 
 
 def end_session(
@@ -74,10 +91,18 @@ def end_session(
 
 
 def end_all_sessions(user) -> None:
-    """End every sign-in of ``user`` and switch off all of their push devices."""
+    """End every sign-in of ``user`` and switch off all of their push devices.
+
+    The account's ``session_epoch`` moves on in the same transaction, and
+    ``user`` carries the new count, so a sign-in whose credentials were
+    checked before this end is refused (`start_session`), while one the
+    caller issues after it, such as a Google claim's own, is not.
+    """
 
     with transaction.atomic():
-        lock_account(user)
+        epoch = lock_account(user).session_epoch + 1
+        User.objects.filter(pk=user.pk).update(session_epoch=epoch)
+        user.session_epoch = epoch
         SignInSession.objects.filter(user=user, ended_at__isnull=True).update(
             ended_at=timezone.now()
         )

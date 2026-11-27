@@ -128,8 +128,46 @@ func fcmEntry(t *testing.T, id, eventID string) redisbus.StreamMessage {
 	}}
 }
 
+// fcmBoundDevices answers that every device is still its recipient's.
+type fcmBoundDevices struct{}
+
+func (fcmBoundDevices) StillBound(_ context.Context, _ int64, ids []int64, _ []string) ([]bool, error) {
+	bound := make([]bool, len(ids))
+	for i := range bound {
+		bound[i] = true
+	}
+	return bound, nil
+}
+
+// fcmScriptedDevices answers from a fixed set of still-bound device ids, or
+// with err; it records the users it was asked about.
+type fcmScriptedDevices struct {
+	mu    sync.Mutex
+	bound map[int64]bool
+	err   error
+	asked []int64
+}
+
+func (d *fcmScriptedDevices) StillBound(_ context.Context, userID int64, ids []int64, _ []string) ([]bool, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.asked = append(d.asked, userID)
+	if d.err != nil {
+		return nil, d.err
+	}
+	answer := make([]bool, len(ids))
+	for i, id := range ids {
+		answer[i] = d.bound[id]
+	}
+	return answer, nil
+}
+
 func fcmTestConsumer(rdb streamClient, sender FCMSender) *Consumer {
-	c := NewConsumer(nil, ConsumerConfig{Sender: sender}, discardLogger())
+	return fcmTestConsumerWith(rdb, sender, fcmBoundDevices{})
+}
+
+func fcmTestConsumerWith(rdb streamClient, sender FCMSender, devices DeviceRegistry) *Consumer {
+	c := NewConsumer(nil, ConsumerConfig{Sender: sender, Devices: devices}, discardLogger())
 	c.rdb = rdb
 	c.deliverGrace = 0
 	return c

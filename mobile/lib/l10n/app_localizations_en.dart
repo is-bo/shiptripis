@@ -3481,6 +3481,14 @@ class LEn extends L {
       'Push could not start on this phone. Your in-app notifications still work; reopen Wassla to try again.';
 
   @override
+  String get pushPermissionUnavailableGuest =>
+      'Push is not configured in this build.';
+
+  @override
+  String get pushPermissionInitializationFailedGuest =>
+      'Push could not start on this phone. Reopen Wassla to try again.';
+
+  @override
   String get pushEnableAction => 'Enable notifications';
 
   @override

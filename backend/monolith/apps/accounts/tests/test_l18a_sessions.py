@@ -18,7 +18,7 @@ from rest_framework.test import APIClient
 from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.accounts.models import PasswordResetCode, User
+from apps.accounts.models import PasswordResetCode, SignInSession, User
 from apps.accounts.sessions import end_all_sessions
 from apps.notifications.models import PushDevice
 from apps.notifications.push import register_push_device
@@ -263,3 +263,112 @@ class RotatedSignInTests(TestCase):
 
         assert self.register(rotated["access"]).status_code == 200
         assert self.rotate(rotated["refresh"])["access"]
+
+
+class SignInDuringAnEndTests(TestCase):
+    """Astra N1 round 4, blocker 1: an end landing between the credential check
+    and the issue of the sign-in.
+
+    Each test lets the real sign-in check the credentials, then commits the
+    end (a real password reset, a real Google claim) just before the sign-in
+    is issued, which is the window two concurrent requests open.
+    """
+
+    def end_before_the_issue(self, end):
+        """Run ``end`` once, right before the next sign-in is issued."""
+
+        from apps.accounts import sessions
+
+        real = sessions.start_session
+        pending = [end]
+
+        def start(user):
+            if pending:
+                pending.pop()()
+            return real(user)
+
+        return patch("apps.accounts.views.start_session", side_effect=start)
+
+    def reset(self, account: Account, new_password: str = "BrandNewPass99!"):
+        _, code = PasswordResetCode.issue(account.user)
+        response = APIClient().post(
+            RESET,
+            {"email": account.user.email, "code": code, "new_password": new_password},
+            format="json",
+        )
+        assert response.status_code == 204, response.data
+
+    def live_sign_ins(self, account: Account) -> int:
+        return SignInSession.objects.filter(
+            user=account.user, ended_at__isnull=True
+        ).count()
+
+    def test_an_old_password_checked_before_a_reset_gets_no_sign_in(self):
+        account = Account("l18a-race-reset@example.com")
+
+        with self.end_before_the_issue(lambda: self.reset(account)):
+            response = APIClient().post(
+                SIGN_IN,
+                {"email": account.user.email, "password": PASSWORD},
+                format="json",
+            )
+
+        assert response.status_code == 400
+        assert "refresh" not in response.data
+        assert self.live_sign_ins(account) == 0
+        assert account.password_works("BrandNewPass99!") is True
+
+    def test_a_password_checked_before_a_google_claim_gets_no_sign_in(self):
+        squatter = Account("l18a-race-claim@example.com")
+        claim = {}
+
+        with self.end_before_the_issue(
+            lambda: claim.setdefault("owner", google("l18a-race-claim@example.com"))
+        ):
+            response = APIClient().post(
+                SIGN_IN,
+                {"email": squatter.user.email, "password": PASSWORD},
+                format="json",
+            )
+
+        assert response.status_code == 400
+        assert claim["owner"].status_code == 200
+        live = SignInSession.objects.filter(user=squatter.user, ended_at__isnull=True)
+        assert [str(s.pk.hex) for s in live] == [
+            RefreshToken(claim["owner"].data["refresh"])["sid"]
+        ], "only the owner's own sign-in is live"
+
+    def test_a_google_sign_in_overtaken_by_a_reset_is_checked_again(self):
+        # The provider identity still owns the account after the reset, so
+        # the second check passes and the sign-in issued is live.
+        owner = Account("l18a-race-google@example.com")
+        User.objects.filter(pk=owner.user.pk).update(is_email_verified=True)
+        assert google("l18a-race-google@example.com").status_code == 200
+
+        with self.end_before_the_issue(lambda: self.reset(owner)):
+            response = google("l18a-race-google@example.com")
+
+        assert response.status_code == 200, response.data
+        assert APIClient().post(
+            REFRESH, {"refresh": response.data["refresh"]}, format="json"
+        ).status_code == 200
+
+    def test_an_end_before_every_check_answers_a_stable_code(self):
+        account = Account("l18a-race-twice@example.com")
+
+        def end_every_time(user):
+            end_all_sessions(account.user)
+            from apps.accounts.sessions import start_session
+
+            return start_session(user)
+
+        with patch("apps.accounts.views.start_session", side_effect=end_every_time):
+            response = APIClient().post(
+                SIGN_IN,
+                {"email": account.user.email, "password": PASSWORD},
+                format="json",
+            )
+
+        assert response.status_code == 409
+        assert response.data["code"] == "sign_in_interrupted"
+        assert self.live_sign_ins(account) == 0

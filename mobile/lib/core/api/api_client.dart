@@ -568,8 +568,8 @@ class _AuthInterceptor extends Interceptor {
         return handler.reject(sessionChanged(options));
       }
       // Signed out, a read is a guest's. Only the sign-out call itself still
-      // speaks for the member who is leaving: the server needs to know whose
-      // refresh token it blacklists.
+      // speaks for the member who is leaving: its access token is what proves
+      // which sign-in ends.
       if (_tokens.bearerWithheld && !_isSignOut(options.path)) {
         options.extra[_sentAsGuest] = true;
         return handler.next(options);

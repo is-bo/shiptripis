@@ -70,13 +70,21 @@ class _Store extends FakeTokenStore {
   @override
   Future<String?> readPendingPushToken() async => null;
 
+  /// While set, the keystore refuses to keep the pending token.
+  bool pendingFails = false;
+
   @override
-  Future<void> writePendingPushToken(String? token) async =>
-      pendingWrites.add(token);
+  Future<void> writePendingPushToken(String? token) async {
+    if (pendingFails) throw StateError('keystore refused the write');
+    pendingWrites.add(token);
+  }
 }
 
 class _Messaging implements PushMessaging {
-  _Messaging({this.currentPermission = PushPermission.notDetermined});
+  _Messaging({
+    this.currentPermission = PushPermission.notDetermined,
+    this.availability = PushAvailability.available,
+  });
 
   /// Where a test makes Firebase hand over a refreshed token.
   final refreshes = StreamController<String>.broadcast();
@@ -86,9 +94,9 @@ class _Messaging implements PushMessaging {
   int requests = 0;
 
   @override
-  bool get available => true;
+  final PushAvailability availability;
   @override
-  PushAvailability get availability => PushAvailability.available;
+  bool get available => availability == PushAvailability.available;
   @override
   Stream<PushMessage> get foregroundMessages => const Stream.empty();
   @override
@@ -263,6 +271,23 @@ void main() {
       await _settle(tester);
       expect(push.requests, 1);
     });
+
+    // Astra round 4, nit: a guest was still told their in-app notifications
+    // work when push could not start, though the inbox needs an account.
+    for (final failure in [
+      PushAvailability.initializationFailed,
+      PushAvailability.configurationIncomplete,
+    ]) {
+      testWidgets('a guest whose push cannot start ($failure) is not promised '
+          'the inbox', (tester) async {
+        await openGuestProfile(tester, _Messaging(availability: failure));
+        await tester.tap(find.text('Notifications'));
+        await _settle(tester);
+
+        expect(find.textContaining('Push '), findsOneWidget);
+        expect(find.textContaining('in-app'), findsNothing);
+      });
+    }
 
     testWidgets('a guest who refused is not promised the inbox', (
       tester,
@@ -628,6 +653,106 @@ void main() {
         container.read(pushCoordinatorProvider).registration,
         PushRegistrationState.registered,
       );
+    });
+    // Astra round 4, should-fix 6: losing permission set the state to idle
+    // but left the attempt current, so a token lookup still on its way could
+    // register and publish the phone as registered.
+    testWidgets('permission taken away during a token lookup sends nothing', (
+      tester,
+    ) async {
+      final backend = FakeBackend()
+        ..on(
+          'POST',
+          '/api/notifications/devices',
+          const FakeResponse(200, {'id': 3, 'active': true}),
+        );
+      final lookup = Completer<String?>();
+      final messaging = _Messaging(currentPermission: PushPermission.authorized)
+        ..tokenAnswers.add(lookup.future);
+      final container = await member(
+        tester,
+        backend,
+        _Store(),
+        messaging: messaging,
+      );
+      container.read(pushCoordinatorProvider);
+      await _settle(tester);
+
+      // Back from Settings, where the person switched notifications off.
+      messaging.currentPermission = PushPermission.deniedRequestable;
+      await container
+          .read(pushCoordinatorProvider.notifier)
+          .refreshPermission();
+      lookup.complete('fcm-token');
+      await _settle(tester);
+
+      expect(backend.to('POST', '/api/notifications/devices'), isEmpty);
+      expect(
+        container.read(pushCoordinatorProvider).registration,
+        PushRegistrationState.idle,
+      );
+    });
+
+    // Astra round 4, should-fix 7: a keystore refusing the pending-token
+    // write ended the refresh before it registered, so the server kept the
+    // replaced token while the phone still read as registered.
+    testWidgets('a refreshed token the keystore cannot keep is registered '
+        'all the same', (tester) async {
+      final backend = FakeBackend()
+        ..on(
+          'POST',
+          '/api/notifications/devices',
+          const FakeResponse(200, {'id': 3, 'active': true}),
+        );
+      final tokens = _Store();
+      final messaging = _Messaging(
+        currentPermission: PushPermission.authorized,
+      );
+      final container = await member(
+        tester,
+        backend,
+        tokens,
+        messaging: messaging,
+      );
+      container.read(pushCoordinatorProvider);
+      await _settle(tester);
+
+      tokens.pendingFails = true;
+      messaging.refreshes.add('fcm-token-2');
+      await _settle(tester);
+
+      final sent = backend.to('POST', '/api/notifications/devices');
+      expect(
+        [for (final r in sent) r.body['token']],
+        ['fcm-token', 'fcm-token-2'],
+      );
+      expect(
+        container.read(pushCoordinatorProvider).registration,
+        PushRegistrationState.registered,
+      );
+    });
+
+    // Astra round 4, should-fix 8: an exact repeat answers the device as it
+    // stands, and the phone read any answer as switched on.
+    testWidgets('a receipt that says the phone is off leaves Retry and the '
+        'pending token', (tester) async {
+      final backend = FakeBackend()
+        ..on(
+          'POST',
+          '/api/notifications/devices',
+          const FakeResponse(200, {'id': 3, 'active': false}),
+        );
+      final tokens = _Store();
+      final container = await member(tester, backend, tokens);
+      container.read(pushCoordinatorProvider);
+      await _settle(tester);
+
+      expect(backend.to('POST', '/api/notifications/devices'), hasLength(1));
+      expect(
+        container.read(pushCoordinatorProvider).registration,
+        PushRegistrationState.failed,
+      );
+      expect(tokens.pendingWrites, isNot(contains(null)));
     });
   });
 

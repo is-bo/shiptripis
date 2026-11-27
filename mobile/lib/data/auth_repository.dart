@@ -148,7 +148,11 @@ class AuthRepository {
     },
   );
 
-  /// Blacklists the refresh token server-side, then clears local storage.
+  /// Ends this sign-in on the server, with every phone it registered, then
+  /// clears local storage. The access token is sent as it is, expired or not,
+  /// with the refresh token: the server takes whichever still proves the
+  /// sign-in, so neither an expired access token nor a refresh rotated
+  /// meanwhile leaves the phone receiving notifications.
   ///
   /// Local clearing happens regardless of the network result: a user who taps
   /// sign out on a train must actually be signed out on the device.

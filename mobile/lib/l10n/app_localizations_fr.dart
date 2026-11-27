@@ -3512,6 +3512,14 @@ class LFr extends L {
       'Les notifications push n’ont pas pu démarrer sur ce téléphone. Les notifications dans l’application restent disponibles ; rouvrez Wassla pour réessayer.';
 
   @override
+  String get pushPermissionUnavailableGuest =>
+      'Les notifications push ne sont pas configurées dans cette version.';
+
+  @override
+  String get pushPermissionInitializationFailedGuest =>
+      'Les notifications push n’ont pas pu démarrer sur ce téléphone. Rouvrez Wassla pour réessayer.';
+
+  @override
   String get pushEnableAction => 'Activer les notifications';
 
   @override

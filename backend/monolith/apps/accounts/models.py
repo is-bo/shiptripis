@@ -43,6 +43,10 @@ class User(AbstractUser):
     #: When the member deleted their account (`apps.accounts.deletion`). The
     #: row stays, emptied, because deliveries and payments point at it.
     deleted_at = models.DateTimeField(null=True, blank=True)
+    #: How many times every sign-in of the account was ended at once
+    #: (`apps.accounts.sessions.end_all_sessions`). A sign-in is issued only
+    #: while the count is still the one its credentials were checked under.
+    session_epoch = models.PositiveIntegerField(default=0)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["username"]

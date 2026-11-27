@@ -173,7 +173,18 @@ registered; a password reset (`end_all_sessions`) ends every sign-in of the
 account. A registration, and a refresh, from a sign-in that has ended is refused
 (`409 push_session_ended`, checked under the account row lock that ending a
 sign-in also takes). A slow registration can therefore never rebind the phone to
-an account that signed out, was replaced or was reset.
+an account that signed out, was replaced or was reset. A sign-in is itself
+issued under that lock, and only if no reset, claim or deletion ended the
+account's sign-ins after its credentials were checked (`User.session_epoch`).
+
+A sign-out is proved by a valid access token, or, once that has expired, by a
+signed and unexpired refresh token of the sign-in, even one a concurrent refresh
+already rotated; with neither it is refused (401). A queued push is sent only to
+the devices still switched on for its recipient with the same token, checked
+against the database right before each send or retry (`DeviceRegistry`); when the
+database cannot answer, the entry stays pending for the sweeper. A notification
+WebSocket closes when the access token that opened it stops being valid (its
+expiry plus the 30 s leeway), and the app reconnects with a fresh token.
 
 Sign-out cleanup stays best-effort: a sign-out made offline never reaches the
 server, so that phone keeps receiving the account's notifications until it signs

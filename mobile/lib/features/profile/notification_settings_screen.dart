@@ -128,11 +128,16 @@ class _NotificationSettingsScreenState
       );
     }
     if (!runtime.available) {
+      final unconfigured =
+          runtime.availability == PushAvailability.configurationIncomplete;
+      // The in-app inbox is a member's, so a guest is not pointed to it.
       return InfoNotice(
-        message:
-            runtime.availability == PushAvailability.configurationIncomplete
-            ? l.pushPermissionUnavailable
-            : l.pushPermissionInitializationFailed,
+        message: switch ((unconfigured, isGuest)) {
+          (true, false) => l.pushPermissionUnavailable,
+          (true, true) => l.pushPermissionUnavailableGuest,
+          (false, false) => l.pushPermissionInitializationFailed,
+          (false, true) => l.pushPermissionInitializationFailedGuest,
+        },
         icon: Icons.notifications_off_outlined,
       );
     }

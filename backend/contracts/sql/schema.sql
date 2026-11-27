@@ -390,7 +390,9 @@ CREATE TABLE public.accounts_user (
     is_kyc_verified boolean NOT NULL,
     is_banned boolean NOT NULL,
     preferred_language character varying(2) NOT NULL,
-    deleted_at timestamp with time zone
+    deleted_at timestamp with time zone,
+    session_epoch integer NOT NULL,
+    CONSTRAINT accounts_user_session_epoch_check CHECK ((session_epoch >= 0))
 );
 
 

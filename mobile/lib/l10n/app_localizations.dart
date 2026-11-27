@@ -6069,6 +6069,18 @@ abstract class L {
   /// **'Push could not start on this phone. Your in-app notifications still work; reopen Wassla to try again.'**
   String get pushPermissionInitializationFailed;
 
+  /// No description provided for @pushPermissionUnavailableGuest.
+  ///
+  /// In en, this message translates to:
+  /// **'Push is not configured in this build.'**
+  String get pushPermissionUnavailableGuest;
+
+  /// No description provided for @pushPermissionInitializationFailedGuest.
+  ///
+  /// In en, this message translates to:
+  /// **'Push could not start on this phone. Reopen Wassla to try again.'**
+  String get pushPermissionInitializationFailedGuest;
+
   /// No description provided for @pushEnableAction.
   ///
   /// In en, this message translates to:

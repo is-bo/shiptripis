@@ -1862,6 +1862,8 @@
   "pushPermissionDenied": "Notifications are off at system level. You can enable them in Settings.",
   "pushPermissionUnavailable": "Push is not configured in this build. In-app notifications still work.",
   "pushPermissionInitializationFailed": "Push could not start on this phone. Your in-app notifications still work; reopen Wassla to try again.",
+  "pushPermissionUnavailableGuest": "Push is not configured in this build.",
+  "pushPermissionInitializationFailedGuest": "Push could not start on this phone. Reopen Wassla to try again.",
   "pushEnableAction": "Enable notifications",
   "pushOpenSettingsAction": "Open notification settings",
   "pushRegistrationPending": "System notification permission is on. Wassla is finishing notification setup for this phone.",

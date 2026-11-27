@@ -241,6 +241,10 @@ class PushCoordinator extends Notifier<PushRuntimeState>
     final granted =
         permission == PushPermission.authorized ||
         permission == PushPermission.provisional;
+    // Losing permission overtakes a registration still on its way: a token
+    // found after permission went away must not reach the server, nor
+    // publish the phone as registered.
+    if (!granted) _registrationAttempt++;
     state = state.copyWith(
       permission: permission,
       registration: granted ? state.registration : PushRegistrationState.idle,
@@ -561,6 +565,7 @@ class PushCoordinator extends Notifier<PushRuntimeState>
     int? expectedGeneration,
     bool force = false,
     bool retried = false,
+    String? refreshedToken,
   }) async {
     final generation = expectedGeneration ?? _sessionGeneration;
     if (generation != _sessionGeneration ||
@@ -589,7 +594,7 @@ class PushCoordinator extends Notifier<PushRuntimeState>
         ref.read(sessionProvider) is! SessionSignedIn;
     final store = ref.read(tokenStoreProvider);
     try {
-      final current = await _messaging.token();
+      final current = refreshedToken ?? await _messaging.token();
       if (overtaken()) return;
       final token = current ?? await store.readPendingPushToken();
       if (overtaken()) return;
@@ -604,7 +609,7 @@ class PushCoordinator extends Notifier<PushRuntimeState>
       // after them.
       final bindingSequence = await store.nextPushBindingSequence();
       if (overtaken()) return;
-      await ref
+      final active = await ref
           .read(pushRepositoryProvider)
           .registerDevice(
             token: token,
@@ -616,7 +621,18 @@ class PushCoordinator extends Notifier<PushRuntimeState>
             appVersion: '',
           );
       if (overtaken()) return;
-      await store.writePendingPushToken(null);
+      if (!active) {
+        // The server kept the phone switched off: the token stays pending,
+        // and Retry or the next resume registers it again.
+        state = state.copyWith(registration: PushRegistrationState.failed);
+        return;
+      }
+      try {
+        await store.writePendingPushToken(null);
+      } on Object {
+        // The server has the token; a copy left on disk only stands in for a
+        // token Firebase cannot hand over, and the next success clears it.
+      }
       if (overtaken()) return;
       state = state.copyWith(registration: PushRegistrationState.registered);
     } on ApiException catch (error) {
@@ -652,13 +668,26 @@ class PushCoordinator extends Notifier<PushRuntimeState>
     }
   }
 
+  /// Firebase replaced the token. The registration still on its way with the
+  /// old one is overtaken at once, and the new token is sent as it came: it is
+  /// also kept on disk for a registration that fails, but a keystore that
+  /// refuses the write must not leave the server holding the old token.
   Future<void> _tokenRefreshed(String token) async {
+    _registrationAttempt++;
     final generation = _sessionGeneration;
-    final store = ref.read(tokenStoreProvider);
-    await store.writePendingPushToken(token);
+    try {
+      await ref.read(tokenStoreProvider).writePendingPushToken(token);
+    } on Object {
+      // Sent below all the same; only a later retry would need the copy.
+    }
+    if (!ref.mounted) return;
     if (generation == _sessionGeneration &&
         ref.read(sessionProvider) is SessionSignedIn) {
-      await _syncRegistration(expectedGeneration: generation, force: true);
+      await _syncRegistration(
+        expectedGeneration: generation,
+        force: true,
+        refreshedToken: token,
+      );
     }
   }
 

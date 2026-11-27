@@ -705,10 +705,13 @@ def register_push_device(
                         session=session,
                         token_fingerprint=fingerprint,
                         binding_sequence=binding_sequence,
+                        active=True,
                     ).first()
                     if current is None:
-                        # The binding this number made is gone (its token moved
-                        # to another installation): the app registers again.
+                        # The binding this number made is gone or switched off
+                        # (its token moved to another installation, or Firebase
+                        # refused it): the app registers again, numbered after
+                        # this one, instead of reading this number as live.
                         raise PushBindingSuperseded(binding_sequence)
                     return current
                 rows = list(
@@ -809,24 +812,28 @@ def unregister_push_device(
 
     Owner-scoped and idempotent, and the sign-in itself stays live: this is the
     phone turning its own push off. A device another sign-in registered since
-    is left alone. With ``binding_sequence`` the operation is recorded in the
-    installation's order like a sign-out.
+    is left alone, and an ended sign-in changes nothing, not even the
+    installation's order. With ``binding_sequence`` the operation takes its
+    place in that order: one numbered below an operation already applied
+    raises :class:`PushBindingSuperseded` and leaves the newer registration
+    on. (A sign-out is different: it ends the sign-in, so it switches its
+    devices off however late it arrives; see `deactivate_session_push_devices`.)
     """
 
     with transaction.atomic():
         lock_account(user)
         session = SignInSession.live(user_id=user.pk, session_id=session_id)
+        if session is None:
+            return False
         if binding_sequence is not None:
             _claim_binding_sequence(
                 installation_id,
                 binding_sequence,
                 operation=Operation.SIGN_OUT,
                 user_id=user.pk,
-                session_id=session.pk if session is not None else None,
-                refuse_stale=False,
+                session_id=session.pk,
+                refuse_stale=True,
             )
-        if session is None:
-            return False
         return bool(
             _switch_off(
                 PushDevice.objects.filter(

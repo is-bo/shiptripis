@@ -1009,6 +1009,8 @@
   "pushPermissionDenied": "الإشعارات متوقفة على مستوى النظام. يمكنك تفعيلها من الإعدادات.",
   "pushPermissionUnavailable": "الإشعارات الفورية غير مضبوطة في هذا الإصدار. تظل إشعارات التطبيق متاحة.",
   "pushPermissionInitializationFailed": "تعذّر تشغيل الإشعارات الفورية على هذا الهاتف. تبقى إشعارات التطبيق متاحة؛ أعد فتح Wassla للمحاولة مرة أخرى.",
+  "pushPermissionUnavailableGuest": "الإشعارات الفورية غير مضبوطة في هذا الإصدار.",
+  "pushPermissionInitializationFailedGuest": "تعذّر تشغيل الإشعارات الفورية على هذا الهاتف. أعد فتح Wassla للمحاولة مرة أخرى.",
   "pushEnableAction": "تفعيل الإشعارات",
   "pushOpenSettingsAction": "فتح إعدادات الإشعارات",
   "pushRegistrationPending": "إذن إشعارات النظام مفعّل. يُكمل Wassla إعداد الإشعارات على هذا الهاتف.",

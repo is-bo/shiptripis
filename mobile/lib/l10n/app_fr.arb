@@ -1009,6 +1009,8 @@
   "pushPermissionDenied": "Les notifications sont désactivées dans le système. Vous pouvez les activer dans les réglages.",
   "pushPermissionUnavailable": "Les notifications push ne sont pas configurées dans cette version. Les notifications dans l’application restent disponibles.",
   "pushPermissionInitializationFailed": "Les notifications push n’ont pas pu démarrer sur ce téléphone. Les notifications dans l’application restent disponibles ; rouvrez Wassla pour réessayer.",
+  "pushPermissionUnavailableGuest": "Les notifications push ne sont pas configurées dans cette version.",
+  "pushPermissionInitializationFailedGuest": "Les notifications push n’ont pas pu démarrer sur ce téléphone. Rouvrez Wassla pour réessayer.",
   "pushEnableAction": "Activer les notifications",
   "pushOpenSettingsAction": "Ouvrir les réglages de notification",
   "pushRegistrationPending": "L’autorisation système des notifications est active. Wassla termine la configuration sur ce téléphone.",

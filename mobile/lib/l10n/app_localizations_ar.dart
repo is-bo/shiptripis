@@ -3487,6 +3487,14 @@ class LAr extends L {
       'تعذّر تشغيل الإشعارات الفورية على هذا الهاتف. تبقى إشعارات التطبيق متاحة؛ أعد فتح Wassla للمحاولة مرة أخرى.';
 
   @override
+  String get pushPermissionUnavailableGuest =>
+      'الإشعارات الفورية غير مضبوطة في هذا الإصدار.';
+
+  @override
+  String get pushPermissionInitializationFailedGuest =>
+      'تعذّر تشغيل الإشعارات الفورية على هذا الهاتف. أعد فتح Wassla للمحاولة مرة أخرى.';
+
+  @override
   String get pushEnableAction => 'تفعيل الإشعارات';
 
   @override

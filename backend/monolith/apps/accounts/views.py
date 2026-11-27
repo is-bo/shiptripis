@@ -1,3 +1,4 @@
+from collections.abc import Callable
 
 from django.db import transaction
 from django.utils import timezone
@@ -8,8 +9,11 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import TokenError
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.settings import api_settings as jwt_settings
+from rest_framework_simplejwt.tokens import RefreshToken, UntypedToken
 
 from apps.notifications.models import OutboundMessage
 from apps.notifications.outbox import cancel_message, enqueue_secret_message
@@ -19,7 +23,7 @@ from . import deletion, photos
 from .apple import AppleAuthError, AppleAuthUnavailable, verify_identity_token
 from .google import GoogleAuthError, GoogleAuthUnavailable, verify_id_token
 from .models import EmailVerificationCode, OAuthIdentity, PasswordResetCode, User
-from .sessions import end_all_sessions, end_session, start_session
+from .sessions import SignInInterrupted, end_all_sessions, end_session, start_session
 from .serializers import (
     AccountDeletionSerializer,
     AppleSignInSerializer,
@@ -38,6 +42,8 @@ from .social import SocialSignInRefused, sign_in_with_identity
 #: the provider is not configured on this server, or could not be reached.
 GOOGLE_SIGN_IN_UNAVAILABLE = "google_sign_in_unavailable"
 APPLE_SIGN_IN_UNAVAILABLE = "apple_sign_in_unavailable"
+#: Every sign-in of the account ended twice while this one was being issued.
+SIGN_IN_INTERRUPTED = "sign_in_interrupted"
 
 
 def _tokens_for_user(user: User) -> dict[str, str]:
@@ -47,6 +53,39 @@ def _tokens_for_user(user: User) -> dict[str, str]:
     # tokens copy it, so every token of the sign-in ends when it ends.
     refresh["sid"] = start_session(user).pk.hex
     return {"access": str(refresh.access_token), "refresh": str(refresh)}
+
+
+#: How many times a sign-in checks its credentials. A second check happens
+#: only when every sign-in of the account ended between the first check and
+#: the issue (`SignInInterrupted`); a third would need another end in that
+#: same instant.
+_SIGN_IN_CHECKS = 2
+
+
+def _sign_in(identify: Callable[[], User]) -> Response:
+    """Sign in the account whose credentials ``identify`` checks.
+
+    A password reset, a Google claim or a deletion that commits between the
+    check and the issue refuses the issue (`start_session`). The credentials
+    are then checked again against the account as it is now: an old password
+    no longer passes, and a provider identity that still owns the account
+    does. ``identify`` raises its own refusal.
+    """
+
+    for _ in range(_SIGN_IN_CHECKS):
+        user = identify()
+        try:
+            tokens = _tokens_for_user(user)
+        except SignInInterrupted:
+            continue
+        return Response({"user": MeSerializer(user).data, **tokens})
+    return Response(
+        {
+            "code": SIGN_IN_INTERRUPTED,
+            "detail": "The account changed during sign-in. Try again.",
+        },
+        status=status.HTTP_409_CONFLICT,
+    )
 
 
 def _send_verify_email(user: User) -> None:
@@ -85,38 +124,79 @@ class SignInView(APIView):
     throttle_scope = "login"
 
     def post(self, request: Request) -> Response:
-        s = SignInSerializer(data=request.data, context={"request": request})
-        s.is_valid(raise_exception=True)
-        user: User = s.validated_data["user"]
-        return Response({"user": MeSerializer(user).data, **_tokens_for_user(user)})
+        def identify() -> User:
+            s = SignInSerializer(data=request.data, context={"request": request})
+            s.is_valid(raise_exception=True)
+            return s.validated_data["user"]
+
+        return _sign_in(identify)
+
+
+class _AccessIfValid(JWTAuthentication):
+    """The access token while it is valid; an expired or refused one is no
+    answer rather than a 401, so the refresh token can prove the sign-in."""
+
+    def authenticate(self, request):
+        try:
+            return super().authenticate(request)
+        except AuthenticationFailed:
+            return None
+
+
+def _proven_sign_in(request: Request) -> tuple[User, str | None] | None:
+    """The account and sign-in (``sid``) that ``request`` proves, if any.
+
+    A valid access token proves its own sign-in, whatever refresh token comes
+    with it: a concurrent refresh may have rotated the one the phone captured,
+    and a refresh token of another account must not be touched. Without one,
+    a refresh token proves its sign-in when it is signed by this server and
+    unexpired, even if a refresh already rotated it: it still names the same
+    sign-in, and all that it can do here is end it.
+    """
+
+    if request.user.is_authenticated:
+        return request.user, request.auth.get("sid")
+    token = request.data.get("refresh")
+    if not isinstance(token, str) or not token:
+        return None
+    try:
+        refresh = UntypedToken(token)
+    except TokenError:
+        return None
+    if refresh.get(jwt_settings.TOKEN_TYPE_CLAIM) != RefreshToken.token_type:
+        return None
+    user = User.objects.filter(pk=refresh.get(jwt_settings.USER_ID_CLAIM)).first()
+    if user is None:
+        return None
+    return user, refresh.get("sid")
 
 
 class SignOutView(APIView):
-    permission_classes = (IsAuthenticated,)
+    """End the sign-in the request proves, and every phone it registered.
+
+    Signing out must not leave a phone receiving the account's notifications,
+    so an expired access token or a refresh token rotated meanwhile still
+    signs out (`_proven_sign_in`). Ending a sign-in that already ended ends
+    nothing more and answers the same. Which installation, and its number,
+    are best-effort extras that only order the sign-out against the phone's
+    own registrations: a body without them still signs out.
+    """
+
+    authentication_classes = (_AccessIfValid,)
+    permission_classes = (AllowAny,)
 
     def post(self, request: Request) -> Response:
-        token = request.data.get("refresh")
-        if not token:
+        proven = _proven_sign_in(request)
+        if proven is None:
             return Response(
-                {"detail": "Missing 'refresh' token."},
-                status=status.HTTP_400_BAD_REQUEST,
+                {"detail": "No valid access or refresh token."},
+                status=status.HTTP_401_UNAUTHORIZED,
             )
-        try:
-            refresh = RefreshToken(token)
-            refresh.blacklist()
-        except TokenError:
-            return Response(
-                {"detail": "Invalid or expired refresh token."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        # The sign-in that ends is the one the refresh token names, and with it
-        # every phone it registered. Which installation, and its number, are
-        # best-effort extras that only order the sign-out against the phone's
-        # own registrations: a body without them still signs out.
+        user, session_id = proven
         device = PushDeviceUnregisterSerializer(data=request.data)
         end_session(
-            request.user,
-            refresh.get("sid"),
+            user,
+            session_id,
             **(device.validated_data if device.is_valid() else {}),
         )
         return Response(status=status.HTTP_205_RESET_CONTENT)
@@ -125,8 +205,8 @@ class SignOutView(APIView):
 def _social_sign_in(*, provider: str, claims: dict, name, data: dict) -> Response:
     """Sign a verified provider identity in through the one rule (`social.py`)."""
 
-    try:
-        user = sign_in_with_identity(
+    def identify() -> User:
+        return sign_in_with_identity(
             provider=provider,
             subject=claims.get("sub"),
             email=claims.get("email"),
@@ -134,9 +214,11 @@ def _social_sign_in(*, provider: str, claims: dict, name, data: dict) -> Respons
             name=name,
             data=data,
         )
+
+    try:
+        return _sign_in(identify)
     except SocialSignInRefused as exc:
         return Response(exc.payload, status=exc.status)
-    return Response({"user": MeSerializer(user).data, **_tokens_for_user(user)})
 
 
 class GoogleSignInView(APIView):

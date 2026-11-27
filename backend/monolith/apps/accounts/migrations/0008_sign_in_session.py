@@ -40,4 +40,9 @@ class Migration(migrations.Migration):
                 "db_table": "accounts_sign_in_session",
             },
         ),
+        migrations.AddField(
+            model_name="user",
+            name="session_epoch",
+            field=models.PositiveIntegerField(default=0),
+        ),
     ]

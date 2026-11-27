@@ -245,9 +245,9 @@ func TestFirebaseSenderSend(t *testing.T) {
 }
 
 func TestTransientRetryPayload(t *testing.T) {
-	payload, err := transientRetryPayload(samplePayload(), []int{1})
+	payload, err := subsetPayload(samplePayload(), []int{1})
 	if err != nil {
-		t.Fatalf("transientRetryPayload = %v", err)
+		t.Fatalf("subsetPayload = %v", err)
 	}
 	if len(payload.Tokens) != 1 || payload.Tokens[0] != "tokB" {
 		t.Fatalf("retry tokens = %v, want [tokB]", payload.Tokens)
@@ -258,7 +258,7 @@ func TestTransientRetryPayload(t *testing.T) {
 	if len(payload.TokenFingerprints) != 1 || payload.TokenFingerprints[0] != "fpB" {
 		t.Fatalf("retry fingerprints = %v, want [fpB]", payload.TokenFingerprints)
 	}
-	if _, err := transientRetryPayload(samplePayload(), []int{2}); err == nil {
+	if _, err := subsetPayload(samplePayload(), []int{2}); err == nil {
 		t.Fatal("out-of-range retry index should fail")
 	}
 }

@@ -2019,14 +2019,17 @@ class PushRepository {
 
   final ApiClient _api;
 
-  Future<void> registerDevice({
+  /// Whether the server has the phone switched on after this registration.
+  /// An exact repeat of a registration answers the device as it stands,
+  /// which may be off.
+  Future<bool> registerDevice({
     required String token,
     required String installationId,
     required int bindingSequence,
     required String platform,
     required String appVersion,
   }) async {
-    await _api.postObject(
+    final receipt = await _api.postObject(
       '/api/notifications/devices',
       body: {
         'token': token,
@@ -2036,6 +2039,7 @@ class PushRepository {
         'app_version': appVersion,
       },
     );
+    return receipt['active'] == true;
   }
 
   Future<PushPreferences> preferences() async => PushPreferences.fromJson(

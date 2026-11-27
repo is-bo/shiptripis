@@ -14,7 +14,12 @@ from apps.accounts.models import SignInSession, User
 from apps.accounts.sessions import end_all_sessions
 from apps.core import redis_bus
 
-from ..models import Notification, NotificationPreference, PushDevice
+from ..models import (
+    Notification,
+    NotificationPreference,
+    PushDevice,
+    PushInstallationBinding,
+)
 from ..push import (
     consume_fcm_results,
     deactivate_stale_push_devices,
@@ -76,6 +81,18 @@ def _registration(
         "platform": platform,
         "app_version": "1.0.0",
     }
+
+
+def _refresh(token):
+    return APIClient().post("/api/auth/refresh", {"refresh": token}, format="json")
+
+
+def _expired(access: str) -> str:
+    """``access`` re-signed with an expiry past the 30 second leeway (G2)."""
+
+    token = AccessToken(access)
+    token.set_exp(from_time=timezone.now() - timedelta(minutes=10))
+    return str(token)
 
 
 class PushDeviceAPITests(TestCase):
@@ -180,7 +197,7 @@ class PushDeviceAPITests(TestCase):
         self._as(mine)
         response = self.client.post(
             "/api/notifications/devices/unregister",
-            {"installation_id": str(self.installation), "binding_sequence": 2},
+            {"installation_id": str(self.installation), "binding_sequence": 3},
             format="json",
         )
         self.assertEqual(response.status_code, 204)
@@ -437,8 +454,9 @@ class PushDeviceAPITests(TestCase):
         self.assertEqual(PushDevice.objects.count(), 0)
 
     def test_a_sign_in_cannot_be_ended_through_another_account(self):
-        # A sign-out names its sign-in by the refresh token, and only the
-        # authenticated account's own sign-ins end.
+        # A valid access token proves its own sign-in, so B's sign-out ends
+        # B's sign-in, and A's refresh token in the body is not touched
+        # (N1 Astra round 4, should-fix 1: it used to be blacklisted first).
         a, b = signed_in(self.user), signed_in(self.other)
         self.assertEqual(self._register(a, 1).status_code, 200)
         self._as(b)
@@ -448,6 +466,115 @@ class PushDeviceAPITests(TestCase):
         self.assertEqual(response.status_code, 205)
         self.assertTrue(self._device().active)
         self.assertTrue(SignInSession.live(user_id=self.user.pk, session_id=a["sid"]))
+        self.assertIsNone(SignInSession.live(user_id=self.other.pk, session_id=b["sid"]))
+        self.assertEqual(_refresh(a["refresh"]).status_code, 200)
+
+    # N1 Astra round 4, blocker 2: the phone signs out with whatever access
+    # token it holds, without refreshing it, and with the refresh token it
+    # read before a concurrent refresh may have rotated it. Each of these is
+    # the phone's own request (`AuthRepository.signOut`).
+    def _phone_sign_out(self, *, access, refresh, sequence=2):
+        client = APIClient()
+        if access is not None:
+            client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+        return client.post(
+            "/api/auth/sign-out",
+            {
+                "refresh": refresh,
+                "installation_id": str(self.installation),
+                "binding_sequence": sequence,
+            },
+            format="json",
+        )
+
+    def test_a_sign_out_with_an_expired_access_token_still_ends_the_sign_in(self):
+        a = signed_in(self.user)
+        self.assertEqual(self._register(a, 1).status_code, 200)
+
+        response = self._phone_sign_out(access=_expired(a["access"]), refresh=a["refresh"])
+
+        self.assertEqual(response.status_code, 205)
+        self.assertFalse(self._device().active)
+        self.assertIsNone(SignInSession.live(user_id=self.user.pk, session_id=a["sid"]))
+
+    def test_a_sign_out_whose_refresh_token_was_rotated_still_ends_the_sign_in(self):
+        a = signed_in(self.user)
+        self.assertEqual(self._register(a, 1).status_code, 200)
+        rotated = _refresh(a["refresh"])
+        self.assertEqual(rotated.status_code, 200)
+
+        response = self._phone_sign_out(access=a["access"], refresh=a["refresh"])
+
+        self.assertEqual(response.status_code, 205)
+        self.assertFalse(self._device().active)
+        self.assertEqual(_refresh(rotated.data["refresh"]).status_code, 401)
+
+    def test_a_rotated_refresh_token_proves_the_sign_in_once_access_expired(self):
+        a = signed_in(self.user)
+        self.assertEqual(self._register(a, 1).status_code, 200)
+        rotated = _refresh(a["refresh"])
+
+        response = self._phone_sign_out(access=_expired(a["access"]), refresh=a["refresh"])
+
+        self.assertEqual(response.status_code, 205)
+        self.assertFalse(self._device().active)
+        self.assertEqual(_refresh(rotated.data["refresh"]).status_code, 401)
+
+    def test_a_sign_out_that_proves_no_sign_in_is_refused(self):
+        a = signed_in(self.user)
+        self.assertEqual(self._register(a, 1).status_code, 200)
+
+        for access, refresh in (
+            (None, "not-a-token"),
+            (_expired(a["access"]), None),
+            # An access token is not a refresh token, even a valid one.
+            (None, a["access"]),
+        ):
+            response = self._phone_sign_out(access=access, refresh=refresh)
+            self.assertEqual(response.status_code, 401)
+        self.assertTrue(self._device().active)
+        self.assertTrue(SignInSession.live(user_id=self.user.pk, session_id=a["sid"]))
+
+    def test_a_repeated_sign_out_answers_the_same(self):
+        a = signed_in(self.user)
+        self.assertEqual(self._register(a, 1).status_code, 200)
+        self.assertEqual(self._phone_sign_out(access=a["access"], refresh=a["refresh"]).status_code, 205)
+
+        again = self._phone_sign_out(access=_expired(a["access"]), refresh=a["refresh"], sequence=3)
+
+        self.assertEqual(again.status_code, 205)
+        self.assertFalse(self._device().active)
+
+    # N1 Astra round 4, should-fix 2.
+    def _unregister(self, session, sequence):
+        self._as(session)
+        return self.client.post(
+            "/api/notifications/devices/unregister",
+            {"installation_id": str(self.installation), "binding_sequence": sequence},
+            format="json",
+        )
+
+    def test_an_unregister_from_an_ended_sign_in_leaves_the_order_alone(self):
+        a = signed_in(self.user)
+        self.assertEqual(self._register(a, 1).status_code, 200)
+        self.assertEqual(self._sign_out(a, None, installation=False).status_code, 205)
+
+        self.assertEqual(self._unregister(a, 9).status_code, 204)
+
+        self.assertEqual(PushInstallationBinding.objects.get().sequence, 1)
+
+    def test_a_late_unregister_leaves_the_newer_registration_on(self):
+        a = signed_in(self.user)
+        self.assertEqual(self._register(a, 1).status_code, 200)
+        self.assertEqual(self._register(a, 3).status_code, 200)
+
+        late = self._unregister(a, 2)
+
+        self.assertEqual(late.status_code, 409)
+        self.assertEqual(late.data["current_sequence"], 3)
+        self.assertTrue(self._device().active)
+        self.assertEqual(self._unregister(a, 4).status_code, 204)
+        self.assertFalse(self._device().active)
 
     def test_a_repeated_registration_is_idempotent(self):
         a = signed_in(self.user)
@@ -456,16 +583,23 @@ class PushDeviceAPITests(TestCase):
         self.assertEqual(PushDevice.objects.count(), 1)
         self.assertTrue(self._device().active)
 
-    def test_an_acknowledged_repeat_changes_nothing(self):
-        # A repeat of the registration already recorded is acknowledged as it
-        # stands: a device the delivery feedback switched off stays off.
+    def test_a_repeat_of_a_switched_off_registration_asks_for_a_new_number(self):
+        # N1 Astra round 4, should-fix 8. A repeat changes nothing, so a device
+        # the delivery feedback switched off stays off; it is refused as
+        # superseded rather than acknowledged, and the registration numbered
+        # after it switches the phone back on.
         a = signed_in(self.user)
         self.assertEqual(self._register(a, 4).status_code, 200)
         PushDevice.objects.update(active=False)
 
-        self.assertEqual(self._register(a, 4).status_code, 200)
+        repeat = self._register(a, 4)
 
+        self.assertEqual(repeat.status_code, 409)
+        self.assertEqual(repeat.data["code"], "push_registration_superseded")
+        self.assertEqual(repeat.data["current_sequence"], 4)
         self.assertFalse(self._device().active)
+        self.assertEqual(self._register(a, 5).status_code, 200)
+        self.assertTrue(self._device().active)
 
     def test_the_same_number_from_another_sign_in_of_the_same_person_collides(self):
         # Astra round 3, blocker 4. The phone's counter was lost and the same

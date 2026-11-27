@@ -130,8 +130,24 @@ func Upgrade(
 
 	go c.writer()
 	go c.pinger()
+	go c.closeAt(claims.ValidUntil())
 
 	return c, nil
+}
+
+// closeAt ends the connection when the access token that opened it stops
+// being valid. The handshake checks the token once; without this a socket
+// opened by a token whose sign-in then ended would keep receiving the
+// account's events for as long as it stayed up. The app reconnects with a
+// fresh token, which a live sign-in can always get.
+func (c *Conn) closeAt(deadline time.Time) {
+	t := time.NewTimer(time.Until(deadline))
+	defer t.Stop()
+	select {
+	case <-c.done:
+	case <-t.C:
+		c.Close(websocket.StatusPolicyViolation, "token expired")
+	}
 }
 
 // Read blocks until the next inbound envelope or an error. The returned
