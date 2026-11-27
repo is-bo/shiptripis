@@ -33,13 +33,11 @@ posting-deposit order whose cash was credited into that balance. Any transition 
 ascending id order before processing them in its domain-specific refund order.
 
 H1 profile writers lock User, then the method set (`lock_payout_method_set`),
-then methods only. Two of them come first through one more lock, the traveler's
-Stripe account setup (`hold_payout_account_setup`, `lock_payout_account_setup`):
-EUR onboarding holds it, before User, for its whole call, Stripe calls
-included, and every EUR preference write takes it before User. So a preference
-change and an onboarding call for one traveler never overlap: the change waits
-for the onboarding call to answer, or the call waits and serves the change.
-Nothing else takes it, so funding, refresh and webhooks never wait on Stripe. Funding takes the same set lock after the Deal aggregate, so
+then methods only. No lock is held across a Stripe call: EUR onboarding
+commits its account-creation intent under the method's row lock, and the
+preference write reads that intent under the same lock, so a declaration
+change and a creation always see each other (the freeze,
+`apps.finance.payout_accounts.creation_in_progress`). Funding takes the same set lock after the Deal aggregate, so
 it reads a traveler's methods before or after a whole preference change, never
 half of one. Profile writers never lock prior Deals;
 future account refresh must enqueue work after commit instead of acquiring a
@@ -107,15 +105,11 @@ funding -- so it adds no new edge into the money graph.
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 from dataclasses import dataclass
 
 #: First key of the two-key advisory lock `lock_payout_method_set` takes. Two-key
 #: advisory locks never collide with the one-key locks used elsewhere.
 PAYOUT_METHOD_SET_LOCK = 51420301
-
-#: First key of the two-key advisory lock on a traveler's Stripe account setup.
-PAYOUT_ACCOUNT_SETUP_LOCK = 51420302
 
 
 @dataclass(frozen=True, slots=True)
@@ -342,52 +336,6 @@ def lock_payment_order_aggregate(order_id: int) -> LockedPaymentAggregate:
         request_graph=request_graph,
         deal_aggregate=deal_aggregate,
     )
-
-
-@contextmanager
-def hold_payout_account_setup(traveler_id: int):
-    """Hold a traveler's Stripe account setup across a whole onboarding call.
-
-    A session-level advisory lock, taken before User and released when the
-    call answers, so it spans the call's own short transactions and the Stripe
-    calls between them: the account-creation intent is committed before its
-    POST, as recovery needs, and no preference change can commit between that
-    intent and the POST. A process that dies drops its connection and the
-    lock with it. The lock nests, so a call inside an onboarding call that
-    takes it again does not wait for itself.
-    """
-
-    from django.db import connection
-
-    if connection.vendor != "postgresql":
-        yield
-        return
-    key = [PAYOUT_ACCOUNT_SETUP_LOCK, traveler_id & 0x7FFFFFFF]
-    with connection.cursor() as cursor:
-        cursor.execute("SELECT pg_advisory_lock(%s, %s)", key)
-    try:
-        yield
-    finally:
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT pg_advisory_unlock(%s, %s)", key)
-
-
-def lock_payout_account_setup(traveler_id: int) -> None:
-    """Wait for any onboarding call of this traveler, for this transaction.
-
-    Every EUR preference write takes it before User, so a change either
-    commits before an onboarding call reads the declaration or waits until
-    the call has answered.
-    """
-
-    from django.db import connection
-
-    if connection.vendor == "postgresql":
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT pg_advisory_xact_lock(%s, %s)",
-                [PAYOUT_ACCOUNT_SETUP_LOCK, traveler_id & 0x7FFFFFFF],
-            )
 
 
 def models_q_deal_or_deposit(deal_id: int, request_id: int):

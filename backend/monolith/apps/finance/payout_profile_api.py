@@ -1,8 +1,10 @@
 """Flagged, owner-scoped profile API. Sensitive fields are write-only."""
 
+from contextlib import nullcontext
+
 from django.core.exceptions import ValidationError as DomainError, PermissionDenied
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import transaction
+from django.db import connection, transaction
 from django.utils.decorators import method_decorator
 from django.views.decorators.debug import sensitive_post_parameters
 from rest_framework import serializers
@@ -11,23 +13,23 @@ from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
-from apps.accounts.permissions import EmailVerifiedToWrite
 from apps.admin_panel.permissions import IsVerifiedStaff
 from apps.admin_panel.staff_api import StaffSessionMixin
-from apps.core.financial_locks import lock_payout_account_setup, lock_payout_method_set
+from apps.core.financial_locks import lock_payout_method_set
 
 from .models import PayoutIdentityReviewAssignment
 from .payout_accounts import (
     AccountCountryMismatch,
-    AccountCreationUnresolved,
     ConnectUnavailable,
     CountryUnsupported,
     PreferenceChanged,
+    SetupInProgress,
     account_country,
     standing_accounts,
     stripe_setup_projection,
 )
 from .payout_profiles import (
+    EmailVerificationRequired,
     PayoutProfilesDisabled,
     TravelerRequired,
     _traveler,
@@ -107,13 +109,14 @@ class AttestationInput(StrictInput):
 
 
 class PayoutSetupMember(BasePermission):
-    """The member payout-setup gate on every write, ahead of the email check.
+    """The member payout-setup gate on every write, before the body is read.
 
-    Listed between `IsAuthenticated` and `EmailVerifiedToWrite` on every member
-    setup view (`ProfileView`, `ConnectView`), so a write meets the refusal
-    order the read model reports (`payout_mobile.setup_gate`): payout profiles
-    switched off, then an account that cannot hold payout setup, then an
-    unconfirmed email. Reads pass and report the same order in their payload.
+    Listed after `IsAuthenticated` on every member setup view (`ProfileView`,
+    `ConnectView`), so a write meets the refusal order the read model reports
+    (`payout_mobile.setup_gate`): payout profiles switched off, then an
+    account that cannot hold payout setup, then an unconfirmed email. The
+    write asks the same question again of the User row it locks. Reads pass
+    and report the same order in their payload.
     """
 
     def has_permission(self, request, view):
@@ -122,13 +125,23 @@ class PayoutSetupMember(BasePermission):
         return True
 
 
+def one_read():
+    """One snapshot for a whole member read, so a commit between two of its
+    queries cannot split the answer. A write builds its answer inside its own
+    transaction, under the locks it holds, and so does a read made there.
+    """
+
+    from .control_plane.snapshot import consistent_read
+
+    return nullcontext() if connection.in_atomic_block else consistent_read()
+
+
 def setup_refusal(exc, user):
     """The stable answer to a refused member payout-setup call, or None.
 
     Every reason the read model gives as `unavailable_reason` refuses a direct
     write with the same code, so a client that skipped the read learns the same
-    thing. Email verification is refused by `EmailVerifiedToWrite`, after the
-    member gate.
+    thing.
     """
     if isinstance(exc, AccountCountryMismatch):
         account = standing_accounts(user.pk).first()
@@ -148,11 +161,11 @@ def setup_refusal(exc, user):
             },
             status=409,
         )
-    if isinstance(exc, AccountCreationUnresolved):
+    if isinstance(exc, SetupInProgress):
         return Response(
             {
-                "code": AccountCreationUnresolved.code,
-                "detail": "Your Stripe payout setup is waiting for a review by our team.",
+                "code": SetupInProgress.code,
+                "detail": "Your Stripe payout account is being created. Continue the setup first.",
             },
             status=409,
         )
@@ -164,6 +177,11 @@ def setup_refusal(exc, user):
     if isinstance(exc, TravelerRequired):
         return Response(
             {"code": TravelerRequired.code, "detail": "Payout setup needs a traveler account."},
+            status=403,
+        )
+    if isinstance(exc, EmailVerificationRequired):
+        return Response(
+            {"code": EmailVerificationRequired.code, "detail": "Confirm your email address first."},
             status=403,
         )
     if isinstance(exc, ConnectUnavailable):
@@ -203,7 +221,10 @@ def setup_refusal(exc, user):
     return None
 
 
-def method_projection(method, gate):
+def method_projection(method, gate, mobile=None):
+    """One method as the member sees it. `mobile` is the rail object the
+    response already computed, so the method list and the summary carry one
+    computation."""
     from .payout_mobile import eur_method, dzd_method
     version = method.current_version
     profile = version.dzd_profile_revision if version else None
@@ -232,7 +253,8 @@ def method_projection(method, gate):
         "stripe_setup": stripe_setup_projection(method)
         if method.currency == "EUR"
         else None,
-        "mobile": eur_method(method, gate) if method.currency == "EUR" else dzd_method(method, gate),
+        "mobile": mobile if mobile is not None else (
+            eur_method if method.currency == "EUR" else dzd_method)(method, gate),
     }
 
 
@@ -240,9 +262,9 @@ def method_projection(method, gate):
 class ProfileView(APIView):
     # Writing payout setup needs a confirmed email (L18A): a stranger who
     # opened the account under someone else's address must not leave a payout
-    # method behind for the owner to inherit. The member gate refuses first, in
-    # the read model's order. Staff views set their own.
-    permission_classes = [IsAuthenticated, PayoutSetupMember, EmailVerifiedToWrite]
+    # method behind for the owner to inherit. The member gate asks it, in the
+    # read model's order. Staff views set their own.
+    permission_classes = [IsAuthenticated, PayoutSetupMember]
     throttle_classes = [ProfileThrottle]
     #: A member read that stays open with payout profiles switched off: the
     #: stored setup stays visible and the read itself says setup is closed.
@@ -292,16 +314,18 @@ class PayoutMethodsView(ProfileView):
     def get(self, request):
         from .payout_mobile import methods_for, payout_summary, setup_gate
 
-        gate = setup_gate(request.user)
-        methods = list(methods_for(request.user))
-        return Response(
-            {
-                "methods": [method_projection(m, gate) for m in methods],
+        with one_read():
+            gate = setup_gate(request.user)
+            methods = list(methods_for(request.user))
+            summary = payout_summary(request.user, methods, gate)
+            rails = {"EUR": summary["eur"], "DZD": summary["dzd"]}
+            body = {
+                "methods": [method_projection(m, gate, rails[m.currency]) for m in methods],
                 "policy_version": "payout_profile_v1",
                 "execution_enabled": False,
-                **payout_summary(request.user, methods, gate),
+                **summary,
             }
-        )
+        return Response(body)
 
     @transaction.atomic
     def patch(self, request):
@@ -310,9 +334,6 @@ class PayoutMethodsView(ProfileView):
         data = MobilePreferenceInput(data=request.data)
         data.is_valid(raise_exception=True)
         values = data.validated_data
-        # The EUR half changes the declaration onboarding serves, so this
-        # waits for an onboarding call in flight, before User as it does.
-        lock_payout_account_setup(request.user.pk)
         User.objects.select_for_update(no_key=True).get(pk=request.user.pk)
         # Take the method set funding takes before making either preference
         # change; rollback both when any revision/country check fails.
@@ -329,15 +350,17 @@ class PayoutMethodsView(ProfileView):
             set_preference(actor=request.user, currency=currency, enabled=enabled,
                            expected_revision=values[f"{currency.lower()}_revision"],
                            country=country, consent_policy=values["consent_policy"])
+        # Read under the locks this write still holds.
         return self.get(request)
 
+    @transaction.atomic
     def post(self, request):
         from .payout_mobile import setup_gate
 
         data = PreferenceInput(data=request.data)
         data.is_valid(raise_exception=True)
         method = set_preference(actor=request.user, **data.validated_data)
-        return Response(method_projection(method, setup_gate(request.user)))
+        return Response(method_projection(method, setup_gate(method.traveler)))
 
 
 class DzdProfileView(ProfileView):
@@ -346,13 +369,15 @@ class DzdProfileView(ProfileView):
     def get(self, request):
         from .payout_mobile import methods_for, payout_summary, setup_gate
 
-        gate = setup_gate(request.user)
-        methods = list(methods_for(request.user))
-        method = next((m for m in methods if m.currency == "DZD"), None)
-        summary = payout_summary(request.user, methods, gate)
-        return Response({"contract_version": summary["contract_version"],
-                         "method": method_projection(method, gate) if method else None,
-                         "dzd": summary["dzd"], "setup": summary["setup"]})
+        with one_read():
+            gate = setup_gate(request.user)
+            methods = list(methods_for(request.user))
+            method = next((m for m in methods if m.currency == "DZD"), None)
+            summary = payout_summary(request.user, methods, gate)
+            body = {"contract_version": summary["contract_version"],
+                    "method": method_projection(method, gate, summary["dzd"]) if method else None,
+                    "dzd": summary["dzd"], "setup": summary["setup"]}
+        return Response(body)
 
     def post(self, request):
         from .payout_evidence import require_evidence_store
@@ -363,8 +388,10 @@ class DzdProfileView(ProfileView):
         require_evidence_store()
         data = DzdInput(data=request.data)
         data.is_valid(raise_exception=True)
-        method = submit_dzd_profile(actor=request.user, **data.validated_data)
-        return Response(method_projection(method, setup_gate(request.user)), status=201)
+        with transaction.atomic():
+            method = submit_dzd_profile(actor=request.user, **data.validated_data)
+            body = method_projection(method, setup_gate(method.traveler))
+        return Response(body, status=201)
 
 
 class PayoutIdentityReviewView(StaffSessionMixin, ProfileView):

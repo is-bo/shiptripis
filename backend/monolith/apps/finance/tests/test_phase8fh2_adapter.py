@@ -510,35 +510,73 @@ class TestSchedule:
 
 
 class TestRecoverySearch:
-    def _list(self, *entries):
-        return FakeResponse(body={"object": "list", "data": list(entries)})
+    """F1 F-C3: the search reads every page of the accounts created in its window."""
 
-    def test_exactly_one_metadata_match_resolves(self):
-        found = gateway(
-            self._list(account_body(metadata={"shiptrip_method": "m-1"}))
-        ).find_account_by_metadata(key="shiptrip_method", value="m-1", created_gte=1)
-        assert found is not None and found.account_id == "acct_1TESTconnected"
+    def _page(self, *entries, more=False):
+        return FakeResponse(body={"object": "list", "data": list(entries), "has_more": more})
 
-    def test_no_match_resolves_to_nothing_rather_than_a_guess(self):
-        assert (
-            gateway(self._list()).find_account_by_metadata(
-                key="shiptrip_method", value="m-1", created_gte=1
-            )
-            is None
+    def _search(self, client):
+        return client.find_account_by_metadata(
+            key="shiptrip_operation", value="op-1", created_gte=100, created_lte=200)
+
+    def test_an_empty_listing_is_complete_and_holds_no_match(self):
+        client = gateway(self._page())
+        assert self._search(client) == []
+        assert len(client._session.calls) == 1
+        query = client._session.calls[0]["url"]
+        assert "created%5Bgte%5D=100" in query and "created%5Blte%5D=200" in query
+        assert "limit=100" in query and "starting_after" not in query
+
+    def test_a_match_on_the_second_page_is_found(self):
+        client = gateway(
+            self._page(account_body(id="acct_other", metadata={"shiptrip_operation": "op-0"}),
+                       more=True),
+            self._page(account_body(metadata={"shiptrip_operation": "op-1"})),
         )
+        found = self._search(client)
+        assert [account.account_id for account in found] == ["acct_1TESTconnected"]
+        assert "starting_after=acct_other" in client._session.calls[1]["url"]
 
-    def test_two_matches_are_a_contradiction_not_a_first_wins(self):
-        assert (
-            gateway(
-                self._list(
-                    account_body(id="acct_a", metadata={"shiptrip_method": "m-1"}),
-                    account_body(id="acct_b", metadata={"shiptrip_method": "m-1"}),
-                )
-            ).find_account_by_metadata(
-                key="shiptrip_method", value="m-1", created_gte=1
-            )
-            is None
+    def test_no_match_on_a_complete_listing_is_an_empty_answer(self):
+        client = gateway(
+            self._page(account_body(id="acct_a", metadata={}), more=True),
+            self._page(account_body(id="acct_b", metadata={"shiptrip_operation": "op-2"})),
         )
+        assert self._search(client) == []
+        assert len(client._session.calls) == 2
+
+    def test_two_matches_are_both_returned_never_one_picked(self):
+        client = gateway(self._page(
+            account_body(id="acct_a", metadata={"shiptrip_operation": "op-1"}),
+            account_body(id="acct_b", metadata={"shiptrip_operation": "op-1"}),
+        ))
+        assert [account.account_id for account in self._search(client)] == ["acct_a", "acct_b"]
+
+    def test_an_error_on_the_second_page_is_an_error_not_a_miss(self):
+        client = gateway(
+            self._page(account_body(id="acct_a", metadata={}), more=True),
+            FakeResponse(status_code=500, body={"error": {"type": "api_error"}}),
+        )
+        with pytest.raises(ProviderUnavailable):
+            self._search(client)
+
+    def test_a_listing_longer_than_twenty_pages_is_not_complete(self):
+        from apps.finance.providers.stripe_connect import MAX_LISTING_PAGES
+
+        pages = [self._page(account_body(id=f"acct_{n}", metadata={}), more=True)
+                 for n in range(MAX_LISTING_PAGES)]
+        client = gateway(*pages)
+        assert self._search(client) is None
+        assert len(client._session.calls) == MAX_LISTING_PAGES == 20
+
+    @pytest.mark.parametrize("body", [
+        {"object": "list", "data": None},
+        {"object": "list", "data": ["acct_a"]},
+        {"object": "list", "data": [], "has_more": True},
+    ], ids=["no_list", "not_objects", "more_without_cursor"])
+    def test_a_malformed_page_is_an_error_not_a_miss(self, body):
+        with pytest.raises(ProviderUnavailable):
+            self._search(gateway(FakeResponse(body=body)))
 
 
 class TestFailures:

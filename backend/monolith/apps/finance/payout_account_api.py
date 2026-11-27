@@ -36,8 +36,6 @@ from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
-from apps.accounts.permissions import EmailVerifiedToWrite
-
 from .payout_accounts import (
     AccountKeptProviderError,
     destination_account,
@@ -49,7 +47,13 @@ from .payout_accounts import (
     start_onboarding,
 )
 from .payout_mobile import setup_gate
-from .payout_profile_api import PayoutSetupMember, StrictInput, method_projection, setup_refusal
+from .payout_profile_api import (
+    PayoutSetupMember,
+    StrictInput,
+    method_projection,
+    one_read,
+    setup_refusal,
+)
 from .providers.base import ProviderError
 from .providers.stripe_connect import get_connect_gateway
 from .models import TravelerPayoutMethod
@@ -74,9 +78,9 @@ class OnboardingInput(StrictInput):
 
 
 class ConnectView(APIView):
-    # As `ProfileView`: the member setup gate, then a confirmed email (L18A),
-    # both before the body is read.
-    permission_classes = [IsAuthenticated, PayoutSetupMember, EmailVerifiedToWrite]
+    # As `ProfileView`: the member setup gate, a confirmed email included
+    # (L18A), before the body is read.
+    permission_classes = [IsAuthenticated, PayoutSetupMember]
     throttle_classes = [ConnectThrottle]
 
     def finalize_response(self, request, response, *args, **kwargs):
@@ -150,8 +154,9 @@ class StripeOnboardingView(ConnectView):
                 # audited, not logged, not pushed.
                 "onboarding_url": result["url"],
                 "expires_at": result["expires_at"],
-                # The method as the link was checked against it.
-                "method": method_projection(result["method"], setup_gate(request.user)),
+                # The method as the link was checked against it, read in the
+                # same transaction.
+                "method": result["method"],
             },
             status=201,
         )
@@ -166,9 +171,9 @@ class StripeReadinessRefreshView(ConnectView):
         require_connect_enabled()
         _, account = self._account(request)
         refresh_account(account, gateway=get_connect_gateway())
-        return Response(
-            {"method": method_projection(self._method(request), setup_gate(request.user))}
-        )
+        with one_read():
+            body = {"method": method_projection(self._method(request), setup_gate(request.user))}
+        return Response(body)
 
 
 class StripeDashboardView(ConnectView):

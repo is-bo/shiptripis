@@ -38,7 +38,7 @@ from .test_phase8fh6a_mobile import (  # noqa: F401
     summary,
 )
 
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db, pytest.mark.usefixtures("configured_h4")]
 
 
 def staff_change(user, change):
@@ -67,7 +67,7 @@ def links_issued(user):
 
 @override_settings(**BOTH_COUNTRIES)
 @pytest.mark.parametrize("change", ["ban", "role", "email"])
-def test_no_link_is_handed_out_after_eligibility_ends(monkeypatch, configured_h4, change):
+def test_no_link_is_handed_out_after_eligibility_ends(monkeypatch, change):
     """Round-5 should-fix: eligibility is checked again at the link handoff."""
     user = make_user(f"f1link-{change}@f1.test", is_email_verified=True)
     client = client_for(user)
@@ -88,7 +88,7 @@ def test_no_link_is_handed_out_after_eligibility_ends(monkeypatch, configured_h4
 
 @override_settings(**BOTH_COUNTRIES)
 @pytest.mark.parametrize("change", ["ban", "role", "email"])
-def test_a_queued_onboarding_call_asks_stripe_for_nothing(monkeypatch, configured_h4, change):
+def test_a_queued_onboarding_call_asks_stripe_for_nothing(monkeypatch, change):
     """Round-5 should-fix: the change commits while the call checks the platform."""
     user = make_user(f"f1queued-{change}@f1.test", is_email_verified=True)
     client = client_for(user)
@@ -106,7 +106,7 @@ def test_a_queued_onboarding_call_asks_stripe_for_nothing(monkeypatch, configure
 @override_settings(**BOTH_COUNTRIES)
 @pytest.mark.parametrize("change", ["ban", "role", "email"])
 def test_a_creation_committed_before_the_change_is_recorded_and_left_unbound(
-    monkeypatch, configured_h4, change
+    monkeypatch, change
 ):
     """The account Stripe opened is known here; it is not bound and no link is handed out."""
     user = make_user(f"f1inflight-{change}@f1.test", is_email_verified=True)
@@ -128,7 +128,7 @@ def test_a_creation_committed_before_the_change_is_recorded_and_left_unbound(
 @override_settings(**BOTH_COUNTRIES)
 @pytest.mark.parametrize("change", ["ban", "role", "email"])
 @pytest.mark.parametrize("route", ["post", "patch"])
-def test_a_preference_write_reads_eligibility_on_the_row_it_locked(configured_h4, change, route):
+def test_a_preference_write_reads_eligibility_on_the_row_it_locked(change, route):
     """Round-5 should-fix: the change commits while the write waits for the User row.
 
     PostgreSQL hands a waiting `FOR NO KEY UPDATE` the row as the change left
@@ -165,7 +165,7 @@ def test_a_preference_write_reads_eligibility_on_the_row_it_locked(configured_h4
 
 
 @pytest.mark.parametrize("change", ["role", "email"])
-def test_the_read_names_the_same_reason_and_offers_nothing(configured_h4, change):
+def test_the_read_names_the_same_reason_and_offers_nothing(change):
     """The read model asks the same function for the reason it reports.
 
     A ban also ends the session, so its reads answer 401 (round 2, finding 10).
@@ -183,7 +183,7 @@ def test_the_read_names_the_same_reason_and_offers_nothing(configured_h4, change
         assert body[rail]["unavailable_reason"] == ANSWER[change]
 
 
-def test_unchanged_onboarding_still_links(monkeypatch, configured_h4):
+def test_unchanged_onboarding_still_links(monkeypatch):
     """Control: nothing changed, the link is handed out once."""
     user = make_user("f1control@f1.test", is_email_verified=True)
     client = client_for(user)

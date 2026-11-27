@@ -331,6 +331,10 @@ class LFr extends L {
       'Cette configuration de paiement n’a pas pu être finalisée. Vérifiez les informations et réessayez.';
 
   @override
+  String get stalePayoutSetupInProgress =>
+      'Votre compte Stripe pour les paiements en EUR est en cours de création. Poursuivez d’abord la configuration ; vous pourrez changer de pays ou désactiver les paiements en EUR une fois celle-ci terminée.';
+
+  @override
   String get stalePayoutEvidenceUnavailable =>
       'Le document envoyé n’est plus disponible. Veuillez téléverser de nouveau le chèque barré.';
 

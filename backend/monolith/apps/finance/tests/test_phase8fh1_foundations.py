@@ -118,7 +118,8 @@ def test_no_float_bool(bad):
 @pytest.mark.django_db
 def test_profile_version_and_safe_projection(configured):
     user = User.objects.create_user(
-        username="profile", email="profile@example.invalid", role="traveler"
+        username="profile", email="profile@example.invalid", role="traveler",
+        is_email_verified=True,
     )
     method = set_preference(
         actor=user, currency="DZD", enabled=True, expected_revision=0
@@ -349,7 +350,8 @@ def test_profile_endpoints_disabled_and_owner_only(configured):
     from rest_framework.test import APIClient
 
     owner = User.objects.create_user(
-        username="api-owner", email="api-owner@example.invalid", role="traveler"
+        username="api-owner", email="api-owner@example.invalid", role="traveler",
+        is_email_verified=True,
     )
     other = User.objects.create_user(
         username="api-other",
@@ -395,7 +397,8 @@ def test_postgres_raw_history_update_refused(configured):
     if connection.vendor != "postgresql":
         pytest.skip("PostgreSQL trigger contract")
     user = User.objects.create_user(
-        username="raw-history", email="raw-history@example.invalid", role="traveler"
+        username="raw-history", email="raw-history@example.invalid", role="traveler",
+        is_email_verified=True,
     )
     method = set_preference(
         actor=user, currency="DZD", enabled=True, expected_revision=0

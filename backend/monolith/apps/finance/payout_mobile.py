@@ -6,15 +6,16 @@ from django.conf import settings
 from django.db.models import Prefetch, Q
 from django.utils import timezone
 
-from apps.accounts.permissions import EMAIL_VERIFICATION_REQUIRED
 from apps.parcels import tracking
 
 from .models import FinanceHold, Payout, PayoutProfileReview, TravelerPayoutMethod
 from .payout_accounts import (
     ConnectUnavailable,
     CountryUnsupported,
+    SetupInProgress,
     account_country,
     allowed_countries,
+    creation_in_progress,
     current_creation,
     evaluate_readiness,
     in_this_environment,
@@ -25,7 +26,7 @@ from .payout_accounts import (
 )
 from .payout_evidence import evidence_store_configured
 from .payout_manual_profiles import approved_profile
-from .payout_profiles import PayoutProfilesDisabled, TravelerRequired, holds_payout_setup
+from .payout_profiles import PayoutProfilesDisabled, member_refusal
 
 #: Stripe Connect is switched on and configured, but no account country is open.
 NO_COUNTRIES = "stripe_connect_no_countries"
@@ -51,13 +52,9 @@ class SetupGate:
 def setup_gate(user):
     if not settings.PAYOUT_PROFILES_ENABLED:
         refusal = PayoutProfilesDisabled.code
-    elif not holds_payout_setup(user):
-        refusal = TravelerRequired.code
-    elif not user.is_email_verified:
-        # `EmailVerifiedToWrite` refuses every unsafe setup method on this flag.
-        refusal = EMAIL_VERIFICATION_REQUIRED
     else:
-        refusal = None
+        member = member_refusal(user)
+        refusal = member.code if member is not None else None
     try:
         require_connect_enabled()
         connect = True
@@ -99,8 +96,11 @@ def eur_method(method, gate):
     # The decision onboarding makes, from the same facts. A closed declared
     # country is no obstacle to a new setup: it starts with the preference
     # change, which names an open country.
+    creation = current_creation(method)
+    # The freeze: the declaration stays as it is until onboarding settles it.
+    frozen = creation_in_progress(creation)
     refusal = (
-        onboarding_refusal(country, standing=standing, creation=current_creation(method))
+        onboarding_refusal(country, standing=standing, creation=creation)
         if method else None
     )
     if isinstance(refusal, CountryUnsupported) and not refusal.of_account:
@@ -126,12 +126,16 @@ def eur_method(method, gate):
         state = "setup_required"
     if not country_supported:
         reason = "payout_country_unsupported"
+    # The order onboarding refuses in: the member gate, then a closed rail,
+    # then the creation in progress, then the onboarding decision.
     if gate.refusal:
         unavailable = gate.refusal
     elif not gate.connect:
         unavailable = ConnectUnavailable.code
     elif not countries:
         unavailable = NO_COUNTRIES
+    elif frozen:
+        unavailable = SetupInProgress.code
     elif refusal is not None:
         # The class's code: Django's ValidationError sets `code` on each
         # instance, to None here.
@@ -155,6 +159,9 @@ def eur_method(method, gate):
             state == "setup_required" or onboarding_incomplete(account)
         ):
             actions.append("resume_eur_setup")
+    elif connect and frozen and countries:
+        # Only onboarding settles the creation, so it is the way on.
+        actions.append("resume_eur_setup")
     elif not account and unavailable is None:
         actions.append("configure_eur")
     return {"state": state, "ready": state == "ready", "blocking_reason": reason or None,
@@ -166,8 +173,10 @@ def eur_method(method, gate):
             "supported_countries": countries,
             "supported": bool(gate.connect and countries and country_supported),
             # The preference PATCH accepts EUR with any open account country;
-            # it does not need Connect, which only onboarding calls.
-            "selectable": bool(gate.refusal is None and countries),
+            # it does not need Connect, which only onboarding calls. While a
+            # creation is in progress, only with the saved one.
+            "selectable": bool(gate.refusal is None and countries
+                               and (not frozen or country_supported)),
             "unavailable_reason": unavailable,
             "checked_at": account.readiness_checked_at if account else None}
 
@@ -209,7 +218,9 @@ def payout_summary(user, methods=None, gate=None):
     enabled = {m.currency for m in methods if m.enabled}
     preference = "both" if len(enabled) == 2 else "eur_only" if "EUR" in enabled else "dzd_only" if enabled else None
     eur, dzd = eur_method(by_currency.get("EUR"), gate), dzd_method(by_currency.get("DZD"), gate)
-    options = (("eur_only", eur["selectable"]), ("dzd_only", dzd["selectable"]),
+    # While the freeze holds, EUR stays on: switching it off is refused.
+    frozen = creation_in_progress(current_creation(by_currency.get("EUR")))
+    options = (("eur_only", eur["selectable"]), ("dzd_only", dzd["selectable"] and not frozen),
                ("both", eur["selectable"] and dzd["selectable"]))
     return {"contract_version": "f1.v1", "preference": preference,
             # Funding asks for a preference only while payout profiles are on.

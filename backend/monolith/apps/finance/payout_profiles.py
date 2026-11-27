@@ -10,6 +10,7 @@ from django.utils import timezone
 from django.views.decorators.debug import sensitive_variables
 
 from apps.accounts.models import User
+from apps.accounts.permissions import EMAIL_VERIFICATION_REQUIRED
 from apps.admin_panel.permissions import has_all_admin_permissions
 from apps.admin_panel.services import record_admin_action
 from apps.kyc.models import KycSubmission
@@ -45,16 +46,30 @@ class TravelerRequired(PermissionDenied):
     code = "payout_traveler_required"
 
 
+class EmailVerificationRequired(PermissionDenied):
+    """Payout setup is written only by an account whose email is confirmed (L18A)."""
+
+    code = EMAIL_VERIFICATION_REQUIRED
+
+
 def require_profiles():
     if not settings.PAYOUT_PROFILES_ENABLED:
         raise PayoutProfilesDisabled("Payout profiles are disabled.")
 
 
-def holds_payout_setup(user):
-    """Whether this account may hold payout setup: an active traveler, not banned."""
-    return bool(
-        user.is_active and not user.is_banned and user.role in ("traveler", "both")
-    )
+def member_refusal(user):
+    """Why this account may not write payout setup now, or None.
+
+    The one answer: an active traveler, not banned, with a confirmed email.
+    A write asks it of the User row it has locked, so a ban, a role change or
+    an email unconfirmed by staff that committed first is the one it sees; the
+    read model asks it for the reason it reports.
+    """
+    if not (user.is_active and not user.is_banned and user.role in ("traveler", "both")):
+        return TravelerRequired("Traveler access required.")
+    if not user.is_email_verified:
+        return EmailVerificationRequired("Confirm your email address first.")
+    return None
 
 
 def require_capabilities(actor, *codes):
@@ -63,27 +78,22 @@ def require_capabilities(actor, *codes):
         raise PermissionDenied("Payout capability required.")
 
 
-def _traveler(actor):
+def _traveler(user):
+    """`user`, as the caller read or locked it, if payout setup is open to it now."""
     require_profiles()
-    user = User.objects.get(pk=actor.pk)
-    if not holds_payout_setup(user):
-        raise TravelerRequired("Traveler access required.")
+    refusal = member_refusal(user)
+    if refusal is not None:
+        raise refusal
     return user
 
 
 def _method(actor, currency, expected_revision):
-    from apps.core.financial_locks import lock_payout_account_setup, lock_payout_method_set
+    from apps.core.financial_locks import lock_payout_method_set
 
-    user = _traveler(actor)
-    if currency == "EUR":
-        # Before User: an EUR change waits for an onboarding call in flight,
-        # which holds this lock from reading the declaration to its answer,
-        # so it never commits between an account-creation intent and its POST.
-        lock_payout_account_setup(user.pk)
     # A fixed row exists for each preference once set. Serialize initial insert
     # with the user witness, then the method set funding also takes; funding
-    # never acquires User after Payout.
-    User.objects.select_for_update(no_key=True).get(pk=user.pk)
+    # never acquires User after Payout. Eligibility is read on that locked row.
+    user = _traveler(User.objects.select_for_update(no_key=True).get(pk=actor.pk))
     lock_payout_method_set(user.pk)
     if currency not in ("EUR", "DZD"):
         raise ValidationError("Unsupported payout currency.")
@@ -127,6 +137,24 @@ def _version(method, *, actor, country="", profile=None):
     )
 
 
+def _refuse_during_creation(method, enabled, country):
+    """The freeze: no change of the euro declaration while its account is being created.
+
+    Read on the locked method row, the same lock onboarding records its
+    creation intent under, so a change and an intent always see each other.
+    A write that changes neither "enabled" nor the country passes.
+    """
+    from .payout_accounts import SetupInProgress, creation_in_progress, current_creation
+
+    version = method.current_version
+    saved = version.country if version else ""
+    changes = enabled != method.enabled or (
+        enabled and str(country or "").strip().upper() != saved
+    )
+    if changes and creation_in_progress(current_creation(method)):
+        raise SetupInProgress("A Stripe account is being created for this payout method.")
+
+
 @transaction.atomic
 def set_preference(
     *,
@@ -142,6 +170,8 @@ def set_preference(
             "Explicit current policy consent and boolean preference required."
         )
     method = _method(actor, currency, expected_revision)
+    if currency == "EUR":
+        _refuse_during_creation(method, enabled, country)
     method.currency = currency
     method.save(update_fields=["currency"])
     if currency == "DZD":

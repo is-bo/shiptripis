@@ -16,15 +16,14 @@ from unittest.mock import patch
 
 import pytest
 from django.db import connection, connections
-from django.test import TransactionTestCase, override_settings
+from django.test import TransactionTestCase
 from rest_framework.test import APIClient
 
-from apps.core.tests.business_settings_seed import seed_business_settings
 from apps.finance import payout_mobile
 from apps.finance.models import StripePayoutAccount, TravelerPayoutMethod
 
 from .factories import make_user
-from .test_phase8fh2_accounts import H2, PLATFORM
+from .test_phase8fh2_accounts import PLATFORM
 from .test_phase8fh4_manual import configured_h4  # noqa: F401
 from .test_phase8fh6a_mobile import client_for, preference, setup  # noqa: F401
 
@@ -38,8 +37,9 @@ def standing_de_account(user):
 
 
 @pytest.mark.django_db
+@pytest.mark.usefixtures("configured_h4")
 @pytest.mark.parametrize("url", ["/api/payouts/methods", "/api/payouts/profiles/dzd"])
-def test_each_rail_is_computed_once_per_response(configured_h4, url):
+def test_each_rail_is_computed_once_per_response(url):
     """Round-5 should-fix: the method list and the summary carry one computation.
 
     The account appears after the first computation, as an onboarding call
@@ -85,15 +85,16 @@ def in_own_connection(fn):
 
 
 @unittest.skipUnless(connection.vendor == "postgresql", "A snapshot is PostgreSQL behaviour.")
-@override_settings(**{**H2, "STRIPE_CONNECT_ALLOWED_COUNTRIES": ["FR", "DE"]})
 class OneSnapshotTest(TransactionTestCase):
-    """A commit between two of a read's queries does not split its response."""
+    """A commit between two of a read's queries does not split its response.
+
+    The module's autouse `setup` fixture applies the H2 settings (FR open).
+    """
 
     def setUp(self):
         publisher = patch("apps.core.redis_bus.publish_after_commit")
         publisher.start()
         self.addCleanup(publisher.stop)
-        seed_business_settings()
         self.traveler = make_user("f1snapshot@f1.test", is_email_verified=True)
         self.client_api = APIClient()
         self.client_api.force_authenticate(self.traveler)
@@ -124,8 +125,8 @@ class OneSnapshotTest(TransactionTestCase):
         self.assertEqual(during.status_code, 200, during.data)
         self.assertEqual(during.data, before)
         after = self.client_api.get("/api/payouts/methods").data
+        self.assertIsNone(before["eur"]["account_country"])
         self.assertEqual(after["eur"]["account_country"], "DE")
-        self.assertEqual(after["eur"]["unavailable_reason"], "stripe_account_country_mismatch")
         self.assertEqual(
             TravelerPayoutMethod.objects.get(traveler=self.traveler, currency="EUR").revision,
             before["revisions"]["EUR"])

@@ -835,9 +835,12 @@ def test_f1_outages_are_temporary_failures_not_unavailable_setup(monkeypatch):
     assert preference(client, "eur_only").status_code == 200
     failed = client.post("/api/payouts/methods/stripe/onboarding", {}, format="json")
     assert failed.status_code == 502 and failed.data["code"] == "stripe_connect_provider_error"
-    # An outage changes no stored readiness, so the same setup can be retried.
+    # An outage changes no stored readiness. The creation's answer is unclear,
+    # so the declaration waits for it (F1 F-C1) and continuing the setup
+    # sends the same request again.
     eur = summary(client)["eur"]
-    assert eur["state"] == "setup_required" and eur["available_actions"] == ["configure_eur"]
+    assert eur["state"] == "setup_required" and eur["available_actions"] == ["resume_eur_setup"]
+    assert eur["unavailable_reason"] == "payout_setup_in_progress"
     assert not StripePayoutAccount.objects.filter(traveler=user).exists()
 
 
@@ -1180,19 +1183,20 @@ def onboarded(monkeypatch, user, country):
 
 
 @override_settings(**BOTH_COUNTRIES)
-@pytest.mark.parametrize("body", [{}, {"country": "DE"}], ids=["saved", "named"])
+@pytest.mark.parametrize("body, code", [
+    ({}, "stripe_account_country_mismatch"),
+    ({"country": "DE"}, "payout_preference_changed"),
+], ids=["saved", "named"])
 def test_f1_a_declaration_committed_before_stripe_answers_is_never_overwritten(
-    monkeypatch, configured_h4, body
+    monkeypatch, configured_h4, body, code
 ):
     """Blocker: a stale onboarding of a bound DE account must not restore DE over FR.
 
-    Also when the call names DE, as the phone does from the summary it read:
-    the country passes the check before Stripe, and the lock refuses it.
-
-    The writer runs on onboarding's own connection, which already holds the
-    Traveler's account-setup lock, so it is not made to wait: this checks the
-    guard under the method lock itself. A second session waits instead
-    (`test_f1_payout_account_setup_race`).
+    FR is declared while the call checks the platform. The call finds its
+    version changed under the method lock and runs once more from the rows as
+    they are (F1 F-C2): with the saved country it finds FR declared over a DE
+    account; naming DE, as the phone does from the summary it read, it finds
+    DE no longer saved. Either way nothing is bound and no link is minted.
     """
     user = make_user(f"f1stale-bound-{len(body)}@h6a.test", is_email_verified=True)
     client, account = onboarded(monkeypatch, user, "DE")
@@ -1202,7 +1206,7 @@ def test_f1_a_declaration_committed_before_stripe_answers_is_never_overwritten(
     versions = PayoutMethodVersion.objects.count()
     refused = client.post(ONBOARDING, body, format="json")
     assert refused.status_code == 409, refused.data
-    assert refused.data["code"] == "payout_preference_changed"
+    assert refused.data["code"] == code
     # The FR declaration is the destination future funding reads, unbound.
     version = eur_version(user)
     assert version.country == "FR" and version.stripe_account_id is None
@@ -1215,33 +1219,38 @@ def test_f1_a_declaration_committed_before_stripe_answers_is_never_overwritten(
 
 
 @override_settings(**BOTH_COUNTRIES)
-def test_f1_an_account_created_while_the_declaration_changed_is_kept_unbound(
-    monkeypatch, configured_h4
-):
-    """Blocker: the account Stripe returns is kept for later, never bound over DE.
+def test_f1_a_declaration_change_waits_for_the_creation_in_flight(monkeypatch, configured_h4):
+    """Blocker, rewritten to F1 F-C1: the declaration cannot change under a creation.
 
-    The writer runs on onboarding's own connection, which already holds the
-    Traveler's account-setup lock, so it is not made to wait: this checks the
-    guard under the method lock itself. A second session waits instead
-    (`test_f1_payout_account_setup_race`).
+    It was "an account created while the declaration changed is kept
+    unbound": the freeze now refuses the change, so the account Stripe opens
+    is bound to the declaration it was asked for. Once it is, DE can be
+    declared, the read and the write agree that the FR account cannot serve
+    it, and declaring FR again binds that account without asking Stripe twice.
     """
+    from apps.finance.payout_accounts import SetupInProgress
+
     user = make_user("f1stale-create@h6a.test", is_email_verified=True)
     client = client_for(user)
     first = preference(client, "eur_only", country="FR")
+    refusals = []
+
+    def change_meanwhile():
+        with pytest.raises(SetupInProgress) as refused:
+            declare(user, "DE")
+        refusals.append(type(refused.value).code)
+
     gateway = connect_gateway(monkeypatch, HookedGateway(
-        during="create_account", hook=lambda: declare(user, "DE"),
-        create=snapshot(country="FR")))
-    refused = client.post(ONBOARDING, {}, format="json")
-    assert refused.status_code == 409, refused.data
-    assert refused.data["code"] == "payout_preference_changed"
+        during="create_account", hook=change_meanwhile, create=snapshot(country="FR")))
+    created = client.post(ONBOARDING, {}, format="json")
+    assert created.status_code == 201, created.data
+    assert refusals == ["payout_setup_in_progress"]
     account = StripePayoutAccount.objects.get(traveler=user)
-    assert account.active and account.declared_country == "FR"
-    assert not PayoutMethodVersion.objects.filter(stripe_account=account).exists()
-    version = eur_version(user)
-    assert version.country == "DE" and version.stripe_account_id is None
+    assert eur_version(user).country == "FR" and eur_version(user).stripe_account_id == account.pk
     operation = PayoutProviderOperation.objects.get(kind="account_create")
     assert operation.status == "accepted" and operation.provider_object_id == account.provider_account_id
-    # The read and the write agree on what is left: the FR account.
+    # The creation is settled: DE can be declared, and nothing serves it.
+    declare(user, "DE")
     eur = summary(client)["eur"]
     assert eur["unavailable_reason"] == "stripe_account_country_mismatch"
     assert eur["account_country"] == "FR"
@@ -1315,87 +1324,102 @@ def test_f1_the_read_and_onboarding_make_one_country_decision(
 
 
 @override_settings(**BOTH_COUNTRIES)
-@pytest.mark.parametrize("window", ["inside", "past"])
-@pytest.mark.parametrize("found", [True, False])
-def test_f1_a_superseded_creation_is_only_looked_for(monkeypatch, configured_h4, window, found):
-    """Round 4 blocker 3: an FR intent is never sent once DE is declared.
+@pytest.mark.parametrize("outcome", ["inside", "past_found", "past_none"])
+def test_f1_an_unclear_creation_holds_the_declaration_until_onboarding_settles_it(
+    monkeypatch, configured_h4, outcome
+):
+    """Round 4 blocker 3, rewritten to F1 F-C1 and F-C3.
 
-    Inside Stripe's window too: the FR request may never have reached Stripe,
-    so replaying it would open an FR account for a Traveler who now wants DE.
-    It is looked for by its own operation; an account found is kept unbound
-    and judged by the country decision, and nothing found waits for Finance.
+    It was "a superseded creation is only looked for": DE could be declared
+    over an unclear FR request. The freeze now refuses that change, so the FR
+    request is never superseded. The read says the setup is in progress and
+    offers to continue it; onboarding settles the creation. Inside Stripe's
+    replay window it replays the request; past it, it lists every account
+    created around the request: the one found is bound, and a complete
+    listing with none ends the creation, so a fresh attempt creates. Then DE
+    can be declared.
     """
     from datetime import timedelta
     from django.utils import timezone
 
-    user = make_user(f"f1superseded-{window}-{found}@h6a.test", is_email_verified=True)
+    user = make_user(f"f1unclear-{outcome}@h6a.test", is_email_verified=True)
     client = client_for(user)
     first = preference(client, "eur_only", country="FR")
     connect_gateway(monkeypatch, FakeGateway(create=ProviderUnavailable("timeout")))
     assert client.post(ONBOARDING, {}, format="json").status_code == 502
     operation = PayoutProviderOperation.objects.get(kind="account_create")
-    if window == "past":
+    if outcome != "inside":
         PayoutProviderOperation.objects.filter(pk=operation.pk).update(
             first_request_at=timezone.now() - timedelta(days=2))
     operation.refresh_from_db()
     revisions = summary(client)["revisions"]
-    assert preference(client, "eur_only", eur=revisions["EUR"],
-                      dzd=first.data["revisions"]["DZD"], country="DE").status_code == 200
-    # Until Stripe has been asked, the call that asks is the one offered.
-    assert summary(client)["eur"]["available_actions"] == ["configure_eur"]
-    gateway = FakeGateway(create=snapshot(country="DE"))
-    gateway._found = snapshot(country="FR") if found else None
+    to_de = preference(client, "eur_only", eur=revisions["EUR"],
+                       dzd=first.data["revisions"]["DZD"], country="DE")
+    assert to_de.status_code == 409 and to_de.data["code"] == "payout_setup_in_progress"
+    read = summary(client)
+    assert read["eur"]["unavailable_reason"] == "payout_setup_in_progress"
+    assert read["eur"]["available_actions"] == ["resume_eur_setup"]
+    assert "dzd_only" not in read["setup"]["preference_options"]
+    gateway = FakeGateway(create=snapshot(country="FR"))
+    gateway._found = [snapshot(country="FR")] if outcome == "past_found" else []
     connect_gateway(monkeypatch, gateway)
-    answered = client.post(ONBOARDING, {}, format="json")
-    eur = summary(client)["eur"]
-    assert [name for name, _ in gateway.calls] == ["platform_identity", "find_account_by_metadata"]
-    assert gateway.calls[1][1] == {
-        "key": "shiptrip_operation", "value": str(operation.public_reference),
-        "created_gte": int(operation.first_request_at.timestamp()) - 60}
-    assert PayoutProviderOperation.objects.count() == 1
-    assert eur_version(user).country == "DE" and eur_version(user).stripe_account_id is None
-    if found:
-        assert answered.status_code == 409 and answered.data["code"] == "stripe_account_country_mismatch"
-        assert eur["unavailable_reason"] == "stripe_account_country_mismatch"
-        assert eur["account_country"] == "FR"
-        assert StripePayoutAccount.objects.get(traveler=user).declared_country == "FR"
+    answered = client.post(ADVERTISED["resume_eur_setup"], {}, format="json")
+    assert answered.status_code == 201, answered.data
+    names = [name for name, _ in gateway.calls if name not in ("create_account_link",
+                                                              "retrieve_account")]
+    creates = [kw for name, kw in gateway.calls if name == "create_account"]
+    if outcome == "inside":
+        assert names == ["platform_identity", "create_account"]
+        assert creates[0]["idempotency_key"] == operation.idempotency_key
     else:
-        assert answered.status_code == 409 and answered.data["code"] == "stripe_account_unresolved"
-        assert eur["unavailable_reason"] == "stripe_account_unresolved"
-        assert not StripePayoutAccount.objects.filter(traveler=user).exists()
-    assert eur["available_actions"] == []
+        first_request = int(operation.first_request_at.timestamp())
+        assert gateway.calls[1][1] == {
+            "key": "shiptrip_operation", "value": str(operation.public_reference),
+            "created_gte": first_request - 60, "created_lte": first_request + 25 * 3600}
+        if outcome == "past_found":
+            assert names == ["platform_identity", "find_account_by_metadata"]
+        else:
+            assert names == ["platform_identity", "find_account_by_metadata",
+                             "platform_identity", "create_account"]
+            assert creates[0]["idempotency_key"] != operation.idempotency_key
+    account = StripePayoutAccount.objects.get(traveler=user)
+    assert eur_version(user).country == "FR" and eur_version(user).stripe_account_id == account.pk
+    operation.refresh_from_db()
+    assert operation.status == ("failed" if outcome == "past_none" else "accepted")
+    revisions = summary(client)["revisions"]
+    assert preference(client, "eur_only", eur=revisions["EUR"], dzd=revisions["DZD"],
+                      country="DE").status_code == 200
 
 
 @override_settings(**BOTH_COUNTRIES)
-def test_f1_an_intent_for_an_earlier_declaration_of_the_same_country_is_only_looked_for(
-    monkeypatch, configured_h4
-):
-    """Round 5 nit: FR, then DE, then FR again, inside Stripe's replay window.
+def test_f1_an_unclear_creation_is_replayed_for_its_own_declaration(monkeypatch, configured_h4):
+    """Round 5 nit, rewritten to F1 F-C1: FR, then DE, then FR again.
 
-    The country is the same as the ambiguous request's, but the declaration
-    is a new version, so the request is not replayed: only its own account is
-    looked for, and found, it serves the new FR declaration.
+    It was "an intent for an earlier declaration of the same country is only
+    looked for". DE is now refused while the FR request is unclear, and FR
+    again changes nothing, so the declaration stays the one the request was
+    made for and the request is replayed as it was sent, not looked for.
     """
+    from apps.finance.payout_accounts import SetupInProgress
+
     user = make_user("f1samecountry@h6a.test", is_email_verified=True)
     client = client_for(user)
     preference(client, "eur_only", country="FR")
     connect_gateway(monkeypatch, FakeGateway(create=ProviderUnavailable("timeout")))
     assert client.post(ONBOARDING, {}, format="json").status_code == 502
     operation = PayoutProviderOperation.objects.get(kind="account_create")
-    declared_first = eur_version(user)
-    declare(user, "DE")
+    declared = eur_version(user)
+    with pytest.raises(SetupInProgress):
+        declare(user, "DE")
     declare(user, "FR")
-    assert eur_version(user).country == "FR" and eur_version(user).pk != declared_first.pk
-    gateway = FakeGateway(create=snapshot(country="FR"))
-    gateway._found = snapshot(country="FR")
-    connect_gateway(monkeypatch, gateway)
+    assert eur_version(user).pk == declared.pk
+    gateway = connect_gateway(monkeypatch, FakeGateway(create=snapshot(country="FR")))
     answered = client.post(ONBOARDING, {}, format="json")
     assert answered.status_code == 201, answered.data
-    assert [name for name, _ in gateway.calls if name != "create_account_link"] == [
-        "platform_identity", "find_account_by_metadata"]
-    assert gateway.calls[1][1]["value"] == str(operation.public_reference)
-    account = StripePayoutAccount.objects.get(traveler=user)
-    assert eur_version(user).stripe_account_id == account.pk
+    assert [name for name, _ in gateway.calls if name == "find_account_by_metadata"] == []
+    replayed = [kw for name, kw in gateway.calls if name == "create_account"]
+    assert [kw["idempotency_key"] for kw in replayed] == [operation.idempotency_key]
+    assert eur_version(user).stripe_account_id == StripePayoutAccount.objects.get(traveler=user).pk
     assert PayoutProviderOperation.objects.count() == 1
 
 
@@ -1422,8 +1446,12 @@ def test_f1_a_current_creation_is_replayed_exactly_as_it_was_sent(monkeypatch, c
     assert account.readiness_checked_at == operation.first_request_at
 
 
-def test_f1_an_unresolved_creation_belongs_to_its_own_platform(monkeypatch, configured_h4):
-    """An operation under another platform neither blocks nor is resumed here."""
+def test_f1_an_unsettled_creation_belongs_to_its_own_platform(monkeypatch, configured_h4):
+    """An operation under another platform neither freezes nor is resumed here.
+
+    Rewritten from "an unresolved creation": past the window, a listing that
+    is not complete keeps the creation in progress on its own platform.
+    """
     from datetime import timedelta
     from django.utils import timezone
     from apps.finance.providers.stripe_connect import PlatformIdentity
@@ -1442,8 +1470,11 @@ def test_f1_an_unresolved_creation_belongs_to_its_own_platform(monkeypatch, conf
     old = PayoutProviderOperation.objects.get(kind="account_create")
     PayoutProviderOperation.objects.filter(pk=old.pk).update(
         first_request_at=timezone.now() - timedelta(days=2))
-    assert client.post(ONBOARDING, {}, format="json").status_code == 409
-    assert summary(client)["eur"]["unavailable_reason"] == "stripe_account_unresolved"
+    incomplete = connect_gateway(monkeypatch, FakeGateway())
+    incomplete._found = None
+    unsettled = client.post(ONBOARDING, {}, format="json")
+    assert unsettled.status_code == 409 and unsettled.data["code"] == "payout_setup_in_progress"
+    assert summary(client)["eur"]["unavailable_reason"] == "payout_setup_in_progress"
     with override_settings(STRIPE_CONNECT_PLATFORM_ACCOUNT_ID="acct_platform_two"):
         eur = summary(client)["eur"]
         assert eur["unavailable_reason"] is None and eur["available_actions"] == ["configure_eur"]
@@ -1469,7 +1500,7 @@ class RefusingSearch(FakeGateway):
 
             raise ProviderNotConfigured("Stripe rejected this deployment's API credentials.",
                                         provider_code="403")
-        return self._create
+        return [self._create]
 
 
 @pytest.mark.parametrize("call", ["search", "replay"])
@@ -1577,7 +1608,8 @@ class ByOperation(FakeGateway):
 
     def find_account_by_metadata(self, **kwargs):
         self.calls.append(("find_account_by_metadata", kwargs))
-        return self.accounts.get((kwargs["key"], kwargs["value"]))
+        return [account for (key, value), account in self.accounts.items()
+                if (key, value) == (kwargs["key"], kwargs["value"])]
 
 
 @override_settings(**BOTH_COUNTRIES)
@@ -1586,13 +1618,11 @@ def test_f1_a_late_timeout_never_reopens_a_refusal_and_a_search_finds_only_its_o
 ):
     """Round 4 blocker 2, with two operation keys on one method.
 
-    v1 (FR) is recorded refused while this call's v1 POST is in flight; its
-    late timeout must leave v1 refused. Two onboarding calls no longer
-    overlap (the setup lock), so the refusal is written from inside the call
-    here: this checks the conditional write itself. v2 (DE) creates a DE
-    account whose answer is lost. With FR declared again, the search for v2
-    finds the DE account by v2's own reference, which is kept and never
-    bound as FR; a search by method would have found it for v1.
+    v1 is recorded refused while this call's v1 POST is in flight; its late
+    timeout must leave v1 refused. The conditional write finds v1 settled, so
+    the call starts again (F1 F-C2) with v2, whose answer is lost too. Past
+    the window, the listing holds an account tagged with v1's reference and
+    one tagged with v2's: only v2's own is recorded and bound.
     """
     from datetime import timedelta
     from django.utils import timezone
@@ -1607,50 +1637,42 @@ def test_f1_a_late_timeout_never_reopens_a_refusal_and_a_search_finds_only_its_o
     connect_gateway(monkeypatch, HookedGateway(
         during="create_account", hook=refused_meanwhile, create=ProviderUnavailable("timeout")))
     assert client.post(ONBOARDING, {}, format="json").status_code == 502
-    v1 = PayoutProviderOperation.objects.get(kind="account_create")
+    v1, v2 = PayoutProviderOperation.objects.filter(kind="account_create").order_by("pk")
     assert v1.status == "failed" and v1.provider_object_id == ""
-
-    declare(user, "DE")
-    connect_gateway(monkeypatch, FakeGateway(create=ProviderUnavailable("timeout")))
-    assert client.post(ONBOARDING, {}, format="json").status_code == 502
-    v2 = PayoutProviderOperation.objects.exclude(pk=v1.pk).get()
     assert v2.idempotency_key.endswith(":v2") and v2.status == "unknown"
     PayoutProviderOperation.objects.filter(pk=v2.pk).update(
         first_request_at=timezone.now() - timedelta(days=2))
     v2.refresh_from_db()
 
-    declare(user, "FR")
-    german = snapshot(country="DE", account_id="acct_1TESTgerman")
     gateway = connect_gateway(monkeypatch, ByOperation({
-        ("shiptrip_operation", str(v2.public_reference)): german,
-        ("shiptrip_method", str(TravelerPayoutMethod.objects.get(
-            traveler=user, currency="EUR").public_reference)): german,
+        ("shiptrip_operation", str(v1.public_reference)): snapshot(account_id="acct_1TESTstale"),
+        ("shiptrip_operation", str(v2.public_reference)): snapshot(account_id="acct_1TESTown"),
     }))
-    refused = client.post(ONBOARDING, {}, format="json")
-    assert refused.status_code == 409, refused.data
-    assert refused.data["code"] == "stripe_account_country_mismatch"
-    assert refused.data["account_country"] == "DE"
-    assert [name for name, _ in gateway.calls] == ["platform_identity", "find_account_by_metadata"]
+    answered = client.post(ONBOARDING, {}, format="json")
+    assert answered.status_code == 201, answered.data
+    assert [name for name, _ in gateway.calls if name != "create_account_link"] == [
+        "platform_identity", "find_account_by_metadata"]
     assert gateway.calls[1][1]["key"] == "shiptrip_operation"
     assert gateway.calls[1][1]["value"] == str(v2.public_reference)
     v1.refresh_from_db()
     v2.refresh_from_db()
     assert v1.status == "failed" and v1.provider_object_id == ""
-    assert v2.status == "accepted" and v2.provider_object_id == "acct_1TESTgerman"
-    version = eur_version(user)
-    assert version.country == "FR" and version.stripe_account_id is None
-    assert StripePayoutAccount.objects.get(traveler=user).declared_country == "DE"
+    assert v2.status == "accepted" and v2.provider_object_id == "acct_1TESTown"
+    account = StripePayoutAccount.objects.get(traveler=user)
+    assert account.provider_account_id == "acct_1TESTown"
+    assert eur_version(user).stripe_account_id == account.pk
 
 
 @pytest.mark.parametrize("found", [True, False])
 def test_f1_an_intent_that_never_reached_stripe_is_never_sent_after_its_country_closed(
     monkeypatch, configured_h4, found
 ):
-    """Round 4 blocker 3: the worker dies between the intent and the POST.
+    """Round 4 blocker 3: the worker dies between the intent and the POST, and FR closes.
 
-    FR then closes, DE stays open, and the Traveler declares DE. Inside the
-    replay window the FR request is still never sent: it is looked for, and
-    an FR account found is kept, refused for its own closed country.
+    Inside the replay window the FR request is still never sent: it is looked
+    for. The FR declaration stays frozen meanwhile (F1 F-C1). An FR account
+    found is recorded and kept, refused for its own closed country; with none
+    found yet the creation stays in progress until the window has passed.
     """
     from apps.finance.payout_accounts import ensure_account
 
@@ -1668,10 +1690,11 @@ def test_f1_an_intent_that_never_reached_stripe_is_never_sent_after_its_country_
     assert operation.status == "committed"
     with override_settings(STRIPE_CONNECT_ALLOWED_COUNTRIES=["DE"]):
         revisions = summary(client)["revisions"]
-        assert preference(client, "eur_only", eur=revisions["EUR"],
-                          dzd=first.data["revisions"]["DZD"], country="DE").status_code == 200
+        to_de = preference(client, "eur_only", eur=revisions["EUR"],
+                           dzd=first.data["revisions"]["DZD"], country="DE")
+        assert to_de.status_code == 409 and to_de.data["code"] == "payout_setup_in_progress"
         gateway = FakeGateway(create=snapshot(country="DE"))
-        gateway._found = snapshot(country="FR") if found else None
+        gateway._found = [snapshot(country="FR")] if found else []
         connect_gateway(monkeypatch, gateway)
         answered = client.post(ONBOARDING, {}, format="json")
         eur = summary(client)["eur"]
@@ -1682,11 +1705,15 @@ def test_f1_an_intent_that_never_reached_stripe_is_never_sent_after_its_country_
         assert answered.status_code == 400 and answered.data["code"] == "payout_country_unsupported"
         assert answered.data["account_country"] == "FR"
         assert eur["unavailable_reason"] == "payout_country_unsupported"
+        assert eur["available_actions"] == []
+        assert StripePayoutAccount.objects.get(traveler=user).declared_country == "FR"
     else:
-        assert answered.status_code == 409 and answered.data["code"] == "stripe_account_unresolved"
-        assert eur["unavailable_reason"] == "stripe_account_unresolved"
-    assert eur["available_actions"] == []
-    assert eur_version(user).country == "DE" and eur_version(user).stripe_account_id is None
+        assert answered.status_code == 409 and answered.data["code"] == "payout_setup_in_progress"
+        assert eur["unavailable_reason"] == "payout_setup_in_progress"
+        assert eur["available_actions"] == ["resume_eur_setup"]
+        operation.refresh_from_db()
+        assert operation.status == "unknown"
+    assert eur_version(user).country == "FR" and eur_version(user).stripe_account_id is None
 
 
 @override_settings(**BOTH_COUNTRIES)
@@ -1759,11 +1786,13 @@ def test_f1_an_account_from_another_platform_is_history_not_the_setup(monkeypatc
 
 
 @override_settings(**BOTH_COUNTRIES)
-def test_f1_an_unresolved_creation_outranks_a_closed_declared_country(monkeypatch, configured_h4):
+def test_f1_a_creation_in_progress_outranks_a_closed_declared_country(monkeypatch, configured_h4):
     """Round 4 and 5 should-fixes: the read and onboarding give one answer, in one order.
 
-    A closed rail (no country open), then the creation that waits for
-    Finance, then the declared country.
+    A closed rail (no country open), then the creation in progress, then the
+    declared country. Rewritten from "an unresolved creation": a listing that
+    is not complete leaves the creation in progress, which only onboarding
+    can settle, so continuing the setup stays offered while a country is open.
     """
     from datetime import timedelta
     from django.utils import timezone
@@ -1776,23 +1805,22 @@ def test_f1_an_unresolved_creation_outranks_a_closed_declared_country(monkeypatc
     PayoutProviderOperation.objects.filter(kind="account_create").update(
         first_request_at=timezone.now() - timedelta(days=2))
     gateway = connect_gateway(monkeypatch, FakeGateway())
+    gateway._found = None
     assert client.post(ONBOARDING, {}, format="json").status_code == 409
-    searches = [name for name, _ in gateway.calls].count("find_account_by_metadata")
     with override_settings(STRIPE_CONNECT_ALLOWED_COUNTRIES=["DE"]):
         eur = summary(client)["eur"]
-        assert eur["unavailable_reason"] == "stripe_account_unresolved"
-        assert eur["available_actions"] == [] and eur["selectable"] is True
+        assert eur["unavailable_reason"] == "payout_setup_in_progress"
+        assert eur["available_actions"] == ["resume_eur_setup"] and eur["selectable"] is False
         refused = client.post(ONBOARDING, {}, format="json")
-        assert refused.status_code == 409 and refused.data["code"] == "stripe_account_unresolved"
-        # Choosing an open country stays possible; the creation still waits.
+        assert refused.status_code == 409 and refused.data["code"] == "payout_setup_in_progress"
+        # The declaration waits for the creation too.
         revisions = summary(client)["revisions"]
-        assert preference(client, "eur_only", eur=revisions["EUR"],
-                          dzd=first.data["revisions"]["DZD"], country="DE").status_code == 200
-        assert summary(client)["eur"]["unavailable_reason"] == "stripe_account_unresolved"
-        again = client.post(ONBOARDING, {}, format="json")
-        assert again.status_code == 409 and again.data["code"] == "stripe_account_unresolved"
+        moved = preference(client, "eur_only", eur=revisions["EUR"],
+                           dzd=first.data["revisions"]["DZD"], country="DE")
+        assert moved.status_code == 409 and moved.data["code"] == "payout_setup_in_progress"
     # Round 5 should-fix: with no country open at all, the closed rail is
-    # the answer on both paths, ahead of the creation that waits.
+    # the answer on both paths, ahead of the creation in progress.
+    searches = [name for name, _ in gateway.calls].count("find_account_by_metadata")
     with override_settings(STRIPE_CONNECT_ALLOWED_COUNTRIES=[]):
         eur = summary(client)["eur"]
         assert eur["unavailable_reason"] == "stripe_connect_no_countries"
@@ -1801,8 +1829,8 @@ def test_f1_an_unresolved_creation_outranks_a_closed_declared_country(monkeypatc
         assert closed.status_code == 409, closed.data
         assert closed.data["code"] == "stripe_connect_no_countries"
         assert closed.data["account_country"] is None
-    # Recorded once, the answer needs no further Stripe call.
     assert [name for name, _ in gateway.calls].count("find_account_by_metadata") == searches
+    assert "create_account" not in [name for name, _ in gateway.calls]
 
 
 @override_settings(**BOTH_COUNTRIES)
@@ -1815,11 +1843,9 @@ def test_f1_a_link_minted_while_the_preference_changed_is_never_handed_out(
     Away: FR is declared while the DE link is minted. Away and back: FR, then
     DE again, and the standing DE account is bound to that newer version, so
     the account is the destination once more but of another declaration.
-
-    The writers run on onboarding's own connection, which already holds the
-    Traveler's account-setup lock, so they are not made to wait: this checks
-    the guard under the method lock itself. A second session waits instead
-    (`test_f1_payout_account_setup_race`).
+    The minted link is never handed out; the call runs once more from the
+    rows as they are (F1 F-C2): away, FR cannot use the DE account; away and
+    back, the newer DE version gets a link of its own.
     """
     from apps.finance.payout_accounts import ensure_account
 
@@ -1835,16 +1861,23 @@ def test_f1_a_link_minted_while_the_preference_changed_is_never_handed_out(
 
     gateway = connect_gateway(monkeypatch, HookedGateway(
         during="create_account_link", hook=meanwhile, create=snapshot(country="DE")))
-    refused = client.post(ONBOARDING, {}, format="json")
-    assert refused.status_code == 409, refused.data
-    assert refused.data["code"] == "payout_preference_changed"
-    assert "onboarding_url" not in refused.data and "connect.stripe.test" not in str(refused.data)
-    assert "create_account_link" in [name for name, _ in gateway.calls]
-    assert audit_actions(user, "payout_account.onboarding_link_issued") == issued
+    answered = client.post(ONBOARDING, {}, format="json")
+    minted = [name for name, _ in gateway.calls].count("create_account_link")
     version = eur_version(user)
     if change == "away":
+        assert answered.status_code == 409, answered.data
+        assert answered.data["code"] == "stripe_account_country_mismatch"
+        assert "onboarding_url" not in answered.data
+        assert "connect.stripe.test" not in str(answered.data)
+        assert minted == 1
+        assert audit_actions(user, "payout_account.onboarding_link_issued") == issued
         assert version.country == "FR" and version.stripe_account_id is None
     else:
+        assert answered.status_code == 201, answered.data
+        assert answered.data["method"]["version"] == str(version.public_reference)
+        assert minted == 2
+        assert audit_actions(user, "payout_account.onboarding_link_issued") == issued + [
+            "payout_account.onboarding_link_issued"]
         assert version.country == "DE" and version.stripe_account_id == account.pk
         assert PayoutMethodVersion.objects.filter(stripe_account=account).count() == 2
 
@@ -1853,10 +1886,9 @@ def test_f1_a_link_minted_while_the_preference_changed_is_never_handed_out(
 def test_f1_two_calls_for_one_declaration_bind_once_and_both_succeed(monkeypatch, configured_h4):
     """Round 4 should-fix: the second answer for the same account is not a conflict.
 
-    The inner call runs on the outer call's connection, inside its setup lock,
-    so it is not made to wait: this checks `_record_account`'s "already the
-    destination" answer itself. A second session waits for the first call and
-    then finds its account (`test_f1_payout_account_setup_race`).
+    The inner call runs while the outer call's request is on its way, sends
+    the same key and binds the account; the outer call then finds it already
+    the destination (`_record_account`). Real threads: `test_f1_setup_freeze`.
     """
     from apps.finance.payout_accounts import ensure_account
 
