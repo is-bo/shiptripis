@@ -924,6 +924,9 @@ def enqueue_fcm_for_event(
                 "token_fingerprints": [
                     device.token_fingerprint for device in batch
                 ],
+                # The worker sends to a device only while the sign-in that
+                # registered it is still the one bound to it (N1, N-F).
+                "session_ids": [str(device.session_id) for device in batch],
                 "title": title,
                 "body": body,
                 "android_channel_id": android_channel,

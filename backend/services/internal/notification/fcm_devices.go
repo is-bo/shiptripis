@@ -50,7 +50,7 @@ func (d PostgresDevices) StillBound(ctx context.Context, p FCMPayload) ([]bool, 
 	bound := make([]bool, len(p.DeviceIDs))
 	for index, id := range p.DeviceIDs {
 		row, ok := current[id]
-		bound[index] = ok && row.fingerprint == p.TokenFingerprints[index]
+		bound[index] = ok && row.fingerprint == p.TokenFingerprints[index] && row.session == p.SessionIDs[index]
 	}
 	return bound, nil
 }
