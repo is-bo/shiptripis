@@ -5,7 +5,7 @@ This is a new domain, not a migration of `apps.verification`. The legacy
 pickup was verified, and published its plaintext over the Redis bus to *both*
 parties -- which for a delivery code meant straight to the traveler. It also
 locked itself before `Match`, inverting the global financial lock order. L1A
-removed that service and its routes; the legacy table stays as history only.
+removed that service and its routes, and L1 its table.
 See `docs/PHASE4_HANDOVER_DISPUTES.md` for the full audit.
 
 Two invariants shape everything below:

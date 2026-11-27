@@ -121,7 +121,7 @@ Other statuses:
 | Ledger | Append-only money journal. Entry kinds: customer payment, deposit credit, deal funding, boost allocation, refund, payout, correction. |
 | Payout | What the traveler receives. Statuses below. |
 | Payout method | How a traveler is paid: Stripe connected account or manual settlement. Status `setup_required`, `pending_review`, `ready`, `needs_attention`, `unavailable`, `disabled`. |
-| Hold | Money locked for a deal (sender's funds in escrow until release or refund). Old wallet model: `open`, `released`, `reversed`. Also "payout hold" = finance blocks a payout manually. |
+| Hold | Money locked for a deal (sender's funds in escrow until release or refund). Also "payout hold" = finance blocks a payout manually. |
 | Protection window | The 48 h after delivery confirmation before the payout can be released. |
 | Reconciliation | Checking Wassla's records match what Stripe/Chargily say, and fixing differences. Runs as background jobs (provider reconcile, refund reconcile, payout reconcile). |
 | Commission | Wassla fee charged on top of the reward (25% seeded, rounded up to a cent). |
@@ -172,7 +172,6 @@ Stripe disbursement (the bank leg of a Stripe payout): `planned`, `committed`, `
 - Professional transporters and courier handoff: not in the app.
 - Kaba / ProductRequest (traveler buys a product): retired in V1. The old model still sits in code but is not an active feature.
 - Sea legs: coded but off by default.
-- Old wallet, payments and verification modules (DZD wallet, mock payment intents, match-based handover codes) are not routed in the API; the active money system is the finance module.
 - Dynamic surge pricing: none. The suggested price has only a fixed urgency add-on for tight deadlines (see the pricing file).
 - Vehicle or transport proof for drive legs: none. Only flight and ferry legs need a ticket proof.
 - Staff screen to read chat messages: none.

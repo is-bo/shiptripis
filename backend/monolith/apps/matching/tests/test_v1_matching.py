@@ -39,10 +39,7 @@ from apps.matching.v1_services import (
     create_sender_offer,
 )
 from apps.parcels.models import DeliveryRequest, ParcelRequest
-from apps.payments.models import PaymentIntent
 from apps.trips.models import Airport, Journey, JourneyLeg, JourneyLegProof
-from apps.verification.models import HandoverCode
-from apps.wallet.models import Hold
 
 
 def _user(email: str) -> User:
@@ -363,7 +360,7 @@ class V1OfferDealTests(APITestCase):
         )
         handover = _client(self.sender).post(
             f"/api/matches/{offer.match_id}/handover/issue",
-            {"kind": HandoverCode.Kind.PICKUP},
+            {"kind": "pickup"},
             format="json",
         )
         chat = _client(self.sender).post(
@@ -383,9 +380,6 @@ class V1OfferDealTests(APITestCase):
         assert deal.status == Deal.Status.PAYMENT_REQUIRED
         assert deal.funded_at is None
         assert ChatMessage.objects.count() == 0
-        assert PaymentIntent.objects.count() == 0
-        assert HandoverCode.objects.count() == 0
-        assert Hold.objects.count() == 0
         offer.match.refresh_from_db()
         assert offer.match.status == Match.Status.ACCEPTED
 
