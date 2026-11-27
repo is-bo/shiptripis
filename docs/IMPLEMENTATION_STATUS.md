@@ -14,6 +14,24 @@
   recipient's email. "Own-card labels" closed with no case. Detail:
   `docs/PHASE_PV_IMAGE_METADATA_AND_NAMES.md`.
 
+## Wassla: the old payments, wallet and handover-code tables are dropped (L1, 2026-11-27)
+
+- Loop-end plan 7.1, decision D4. Server only, no route, payload or app change. Nothing deployed.
+- One migration in each of `apps.payments`, `apps.wallet` and `apps.verification` drops their eight
+  tables; the apps stay as empty shells so the migration runs on existing databases. Their view-only
+  Django admin pages and `core/historical_admin.py` are gone. The chat rule loses its pre-Deal branch
+  (only a `Trip` match could reach it, and nothing creates one), proven by a rule test over every Deal
+  state that passed before and after. Chat tests now run on funded V1 deals. `schema.sql` loses only
+  the eight tables and their objects. Detail: `docs/PHASE_L1_DEAD_APP_TABLES.md`.
+
+## Wassla: stale repository files removed (H1, 2026-11-27)
+
+- Files and documents only. No product code, no behaviour change, nothing deployed.
+- Removed: `TASKS.md`, the progress report PDF and its script, the root `package.json` pair, the
+  code-graph and editor-agent configuration, `docs/superpowers/` and two finished Astra prompts.
+  `ARCHITECTURE.md` and `PRODUCT.md` were corrected in place, `README.md` replaced, three broken
+  links fixed. Each file's evidence and the files kept: `docs/PHASE_H1_REPO_FILES.md`.
+
 ## Wassla: the bell names the ticket decision (N2, 2026-11-26)
 
 - Phone test 2 (plan 1.5): the owner's flight ticket was approved but the bell row only read

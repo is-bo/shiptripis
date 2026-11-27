@@ -13,23 +13,15 @@ from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from apps.chat.models import ChatMessage
-from apps.chat.tests.test_chat import (
-    _accepted_offer,
-    _client,
-    _make_match,
-    _pay,
-    _user,
-)
-from apps.matching.models import Match
-from apps.trips.models import Airport
+from apps.chat.tests.test_chat import _client, _funded_thread, _user
+from apps.core.tests.business_settings_seed import seed_business_settings
+from apps.deals.models import Deal
 
 
 class ChatLiveHistoryTests(APITestCase):
     def setUp(self):
-        self.sender = _user("live-history-sender@example.com", "1")
-        self.traveler = _user("live-history-traveler@example.com", "2")
-        self.match = _make_match(self.sender, self.traveler)
-        _pay(_accepted_offer(self.match, self.traveler), self.sender)
+        scenario, self.match = _funded_thread(self.client, "live-history")
+        self.sender, self.traveler = scenario.sender, scenario.traveler
         self.url = f"/api/matches/{self.match.id}/chat/messages"
 
     def _messages(self, count: int) -> list[ChatMessage]:
@@ -122,8 +114,7 @@ class ChatLiveHistoryTests(APITestCase):
         assert messages[3].read_at is None  # not returned yet
 
     def test_closed_funded_history_remains_readable(self):
-        self.match.status = Match.Status.CANCELLED
-        self.match.save(update_fields=["status"])
+        Deal.objects.filter(match=self.match).update(status=Deal.Status.CANCELLED)
         message = ChatMessage.objects.create(
             match=self.match, sender=self.traveler, body="history"
         )
@@ -157,14 +148,10 @@ class ChatLiveHistoryTests(APITestCase):
 class ChatCommitOrderingTests(TransactionTestCase):
     @skipUnlessDBFeature("has_select_for_update")
     def test_concurrent_sends_cannot_commit_past_an_uncommitted_cursor(self):
-        for code in ("ALG", "CDG"):
-            Airport.objects.get_or_create(
-                iata=code, defaults={"city": code, "name": code, "country": "DZ"},
-            )
-        sender = _user("commit-sender@example.com", "4")
-        traveler = _user("commit-traveler@example.com", "5")
-        match = _make_match(sender, traveler)
-        _pay(_accepted_offer(match, traveler), sender)
+        # TransactionTestCase truncates tables; re-seed the active revision.
+        seed_business_settings()
+        scenario, match = _funded_thread(self.client, "commit")
+        sender, traveler = scenario.sender, scenario.traveler
         url = f"/api/matches/{match.pk}/chat/messages"
         original = ChatMessage.objects.create
         first_inserted, second_started, second_inserted, release = (
