@@ -1,5 +1,21 @@
 # Waçla V1 Implementation Status
 
+## Wassla: the phone's session record and core (S1-A, 2026-11-27)
+
+- Loop-end plan 5.4, rules S-1, S-2, S-3, S-5 and S-6. Phone only, nothing deployed. S1-B continues
+  on the same branch and pull request.
+- One record in secure storage (`session.record`): the current sign-in (`sid`, account snapshot,
+  tokens) or none, and the ended sign-ins the server has not confirmed. `SessionCore`, created in
+  `main()`, is its one writer: one queue, one write per transition, storage before memory. The
+  Android activity is `singleTask`.
+- One sign-in attempt at a time, reserved before any await; no step from one member to another.
+  One exit, `end(sid, reason)`, for a sign-out, a refused refresh token or a deleted account; a
+  429, 403, 404, 5xx, timeout or no network ends nothing. A record unreadable in the background
+  waits; unreadable in the foreground or unparseable, it is lost and the push token is deleted.
+- Every ended sign-in is posted to `POST /api/auth/sign-out` with its own refresh token until the
+  server answers 205 or 400 `sign_out_proof_invalid`. The account has one owner that reads
+  `/api/me`; the newest read wins. Detail and evidence: `docs/PHASE_S1A_SESSION_CORE.md`.
+
 ## Wassla: notifications on first open, sign-in sessions and who a push belongs to (N1, 2026-11-27)
 
 - Ismail's decision of 2026-11-26: the app asks for notification permission on its own, once, the
