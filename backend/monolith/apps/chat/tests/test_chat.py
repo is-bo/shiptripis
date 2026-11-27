@@ -247,7 +247,7 @@ class ChatThreadsTests(APITestCase):
         row = r.data["results"][0]
         assert row["match_id"] == match.id
         assert row["counterparty_id"] == self.traveler.id
-        assert row["counterparty_name"] == self.traveler.full_name
+        assert row["counterparty_name"] == "User"  # the first name of "User 2"
         assert row["route"] == "ALG → CDG"
         assert row["last_message"] == "on my way"
         assert row["unread_count"] == 1  # the traveler's message, unread
