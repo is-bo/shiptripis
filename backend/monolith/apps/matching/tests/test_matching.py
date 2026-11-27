@@ -205,11 +205,8 @@ class ChatEligibilityTests(APITestCase):
         self.outsider = self.scenario.outsider
         self.match = self.scenario.propose().match
 
-    def _accept_offer(self):
-        return self.scenario.accept()
-
     def _fund(self):
-        _fund(self.client, self._accept_offer())
+        _fund(self.client, self.scenario.accept())
 
     def test_unauth_rejected(self):
         c = APIClient()
@@ -235,7 +232,7 @@ class ChatEligibilityTests(APITestCase):
         assert r.data["reason"] == "no_accepted_offer"
 
     def test_accepted_offer_without_payment_blocked(self):
-        self._accept_offer()
+        self.scenario.accept()
         c = _client(self.sender)
         r = c.get(reverse("matches-chat-eligibility", args=[self.match.id]))
         assert r.status_code == 200
