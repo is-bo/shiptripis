@@ -23,7 +23,7 @@ from . import deletion, photos
 from .apple import AppleAuthError, AppleAuthUnavailable, verify_identity_token
 from .google import GoogleAuthError, GoogleAuthUnavailable, verify_id_token
 from .models import EmailVerificationCode, OAuthIdentity, PasswordResetCode, User
-from .sessions import SignInInterrupted, end_all_sessions, end_session, start_session
+from .sessions import SignInInterrupted, end_session, start_session, write_password
 from .serializers import (
     AccountDeletionSerializer,
     AppleSignInSerializer,
@@ -364,10 +364,9 @@ class PasswordResetConfirmView(APIView):
             # The code went to the address, so this proves the email (L18A,
             # item 5): the new password, the end of every older session and
             # the confirmed flag land together.
-            user.set_password(new_password)
+            write_password(user, new_password)
             user.is_email_verified = True
-            user.save(update_fields=("password", "is_email_verified"))
-            end_all_sessions(user)
+            user.save(update_fields=("is_email_verified",))
             from apps.notifications.outbox import enqueue_message
 
             enqueue_message(

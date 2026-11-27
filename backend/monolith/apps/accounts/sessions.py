@@ -95,6 +95,27 @@ def end_all_sessions(user) -> None:
         deactivate_all_push_devices(user=user)
 
 
+def write_password(user, raw_password: str | None) -> None:
+    """The one writer of a password; ``None`` makes it unusable.
+
+    On an existing account the new hash is saved and every sign-in ends, in
+    one transaction under the account lock (`end_all_sessions`): whoever held
+    the old password keeps nothing, and the hash is written by name, so no
+    other field goes with it. A new account, not saved yet, only gets the
+    hash; its creator saves the row.
+    """
+
+    if raw_password is None:
+        user.set_unusable_password()
+    else:
+        user.set_password(raw_password)
+    if user.pk is None:
+        return
+    with transaction.atomic():
+        end_all_sessions(user)
+        user.save(update_fields=("password",))
+
+
 class SessionRefreshToken(RefreshToken):
     """A refresh token that is valid only while its sign-in is live.
 
