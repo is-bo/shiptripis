@@ -613,22 +613,19 @@ def _claim_binding_sequence(
     *,
     operation: str,
     user_id: int,
-    session_id: UUID | None,
+    session_id: UUID,
     token_fingerprint: str = "",
-    refuse_stale: bool,
 ) -> bool:
     """Record ``sequence`` as the installation's newest operation.
 
     Runs inside the caller's transaction and holds the installation's row lock
     until it ends, so operations on one installation are applied in the order
-    the app numbered them. Raises :class:`PushBindingSuperseded` when
-    ``refuse_stale`` and a higher number was already applied, or when the same
-    number was already used for a different operation, account, sign-in or
-    token. Returns True for an exact repeat of the operation already recorded
-    at this number, which the caller acknowledges without changing anything.
-    A sign-out passes ``refuse_stale=False``: it is applied however late it
-    arrives, and it still advances the number so that the registration it
-    overtook is refused.
+    the app numbered them. Raises :class:`PushBindingSuperseded` when a higher
+    number was already applied, or when the same number was already used for
+    a different operation, account, sign-in or token. Returns True for an
+    exact repeat of the operation already recorded at this number, which the
+    caller acknowledges without changing anything. Callers check first, under
+    the account lock, that ``session_id`` is live.
     """
 
     identity = {
@@ -644,14 +641,11 @@ def _claim_binding_sequence(
     if created:
         return False
     if sequence < binding.sequence:
-        if refuse_stale:
-            raise PushBindingSuperseded(binding.sequence)
-        return False
+        raise PushBindingSuperseded(binding.sequence)
     if sequence == binding.sequence:
-        same = all(getattr(binding, field) == value for field, value in identity.items())
-        if refuse_stale and not same:
+        if any(getattr(binding, field) != value for field, value in identity.items()):
             raise PushBindingSuperseded(binding.sequence)
-        return same
+        return True
     binding.sequence = sequence
     for field, value in identity.items():
         setattr(binding, field, value)
@@ -696,7 +690,6 @@ def register_push_device(
                     user_id=user.pk,
                     session_id=session.pk,
                     token_fingerprint=fingerprint,
-                    refuse_stale=True,
                 )
                 if repeat:
                     current = PushDevice.objects.filter(
@@ -771,34 +764,16 @@ def _switch_off(devices) -> int:
     )
 
 
-def deactivate_session_push_devices(
-    *,
-    user,
-    session_id: UUID | None,
-    installation_id: UUID | None = None,
-    binding_sequence: int | None = None,
-) -> int:
-    """Switch off every device the sign-in ``session_id`` registered.
+def deactivate_session_push_devices(session) -> int:
+    """Switch off every device the sign-in ``session`` registered.
 
     Called by `apps.accounts.sessions.end_session` under the account lock, in
-    the transaction that ends the sign-in. With ``installation_id`` and
-    ``binding_sequence`` the sign-out is also recorded in the installation's
-    order, even when no device exists yet, so a registration numbered before it
-    is refused however it arrives.
+    the transaction that ends the sign-in. The installation's order is left
+    alone: a registration of the ended sign-in is refused because the sign-in
+    ended, and another sign-in's binding on the same phone stays on.
     """
 
-    if installation_id is not None and binding_sequence is not None:
-        _claim_binding_sequence(
-            installation_id,
-            binding_sequence,
-            operation=Operation.SIGN_OUT,
-            user_id=user.pk,
-            session_id=session_id,
-            refuse_stale=False,
-        )
-    if session_id is None:
-        return 0
-    return _switch_off(PushDevice.objects.filter(user=user, session_id=session_id))
+    return _switch_off(PushDevice.objects.filter(session=session))
 
 
 def unregister_push_device(
@@ -829,10 +804,9 @@ def unregister_push_device(
             _claim_binding_sequence(
                 installation_id,
                 binding_sequence,
-                operation=Operation.SIGN_OUT,
+                operation=Operation.UNREGISTER,
                 user_id=user.pk,
                 session_id=session.pk,
-                refuse_stale=True,
             )
         return bool(
             _switch_off(

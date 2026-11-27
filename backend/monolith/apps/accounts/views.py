@@ -18,7 +18,6 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.notifications.models import OutboundMessage
 from apps.notifications.outbox import cancel_message, enqueue_secret_message
-from apps.notifications.serializers import PushDeviceUnregisterSerializer
 
 from . import deletion, photos
 from .apple import AppleAuthError, AppleAuthUnavailable, verify_identity_token
@@ -45,6 +44,8 @@ GOOGLE_SIGN_IN_UNAVAILABLE = "google_sign_in_unavailable"
 APPLE_SIGN_IN_UNAVAILABLE = "apple_sign_in_unavailable"
 #: Every sign-in of the account ended twice while this one was being issued.
 SIGN_IN_INTERRUPTED = "sign_in_interrupted"
+#: A sign-out whose refresh token this server cannot verify as its own (400).
+SIGN_OUT_PROOF_INVALID = "sign_out_proof_invalid"
 
 
 def _tokens_for_user(user: User) -> dict[str, str]:
@@ -168,22 +169,19 @@ def _signed_claims(token: str) -> dict | None:
         return None
 
 
-def _proven_sign_in(request: Request) -> tuple[User, str | None] | None:
-    """The account and sign-in (``sid``) that ``request`` proves, if any.
+def _proven_sign_in(request: Request) -> tuple[int, str | None] | None:
+    """The account id and sign-in (``sid``) that ``request`` proves, if any.
 
     A valid access token proves its own sign-in, whatever refresh token comes
     with it: a concurrent refresh may have rotated the one the phone captured,
     and a refresh token of another account must not be touched. Without one,
     a refresh token proves its sign-in when this server signed it, even if a
     refresh already rotated it or it has expired: it still names the same
-    sign-in, and all that it can do here is end it. That is what lets a phone
-    whose own session expired (its refresh token refused as expired, or as
-    rotated by an answer that never arrived) still end the sign-in on the
-    server, as it does (`ApiClient`, `_AuthInterceptor._endSession`).
+    sign-in, and all that it can do here is end it.
     """
 
     if request.user.is_authenticated:
-        return request.user, request.auth.get("sid")
+        return request.user.pk, request.auth.get("sid")
     data = request.data if isinstance(request.data, dict) else {}
     token = data.get("refresh")
     if not isinstance(token, str) or not token:
@@ -193,22 +191,18 @@ def _proven_sign_in(request: Request) -> tuple[User, str | None] | None:
         claims.get(jwt_settings.TOKEN_TYPE_CLAIM) != RefreshToken.token_type
     ):
         return None
-    user = User.objects.filter(pk=claims.get(jwt_settings.USER_ID_CLAIM)).first()
-    if user is None:
-        return None
-    return user, claims.get("sid")
+    return claims.get(jwt_settings.USER_ID_CLAIM), claims.get("sid")
 
 
 class SignOutView(APIView):
     """End the sign-in the request proves, and every phone it registered.
 
-    Signing out must not leave a phone receiving the account's notifications,
-    so an expired access token, or a refresh token rotated meanwhile or
-    expired, still signs out (`_proven_sign_in`). Ending a sign-in that
-    already ended ends nothing more and answers the same. Which installation,
-    and its number, are best-effort extras that only order the sign-out
-    against the phone's own registrations: a body without them still signs
-    out.
+    205 whenever a token this server signed proves the sign-in, whatever else
+    is true of it: live, already ended, expired, rotated, or of an account
+    that no longer exists. After a 205 the sign-in is ended and its devices
+    are off; a repeat writes nothing. 400 `sign_out_proof_invalid` when no
+    token can be verified as ours. The phone's session core relies on exactly
+    these two answers to stop resending a sign-out (S1).
     """
 
     authentication_classes = (_AccessIfValid,)
@@ -218,18 +212,17 @@ class SignOutView(APIView):
         proven = _proven_sign_in(request)
         if proven is None:
             return Response(
-                {"detail": "No valid access or refresh token."},
-                status=status.HTTP_401_UNAUTHORIZED,
+                {
+                    "code": SIGN_OUT_PROOF_INVALID,
+                    "detail": "No access or refresh token of this server.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        user, session_id = proven
-        device = PushDeviceUnregisterSerializer(
-            data=request.data if isinstance(request.data, dict) else {}
-        )
-        end_session(
-            user,
-            session_id,
-            **(device.validated_data if device.is_valid() else {}),
-        )
+        user_id, session_id = proven
+        user = User.objects.filter(pk=user_id).first()
+        # A deleted account's sign-ins ended with it.
+        if user is not None:
+            end_session(user, session_id)
         return Response(status=status.HTTP_205_RESET_CONTENT)
 
 

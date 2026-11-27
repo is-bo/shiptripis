@@ -127,29 +127,29 @@ class PushDevice(models.Model):
 class PushInstallationBinding(models.Model):
     """The newest operation the app reported for one installation.
 
-    The app numbers every registration and every sign-out of an installation
+    The app numbers every registration and every unregister of an installation
     from one counter that only grows. A registration numbered below this one
-    was overtaken by a later registration or sign-out and is refused, so a
-    registration that was slow on the network can never rebind the phone to an
-    account that has since signed out or been replaced. The same number again is
-    accepted only as an exact repeat (same operation, account, sign-in and
-    token): two different operations sharing a number means the app's counter
-    was lost, and the app is told to catch up. The row exists apart from ``PushDevice``
-    because a sign-out can arrive before the registration it overtakes has
-    created a device.
+    was overtaken by a later operation and is refused, so a registration that
+    was slow on the network can never rebind the phone after the phone moved
+    on. The same number again is accepted only as an exact repeat (same
+    operation, account, sign-in and token): two different operations sharing a
+    number means the app's counter was lost, and the app is told to catch up.
+    The row exists apart from ``PushDevice`` because an unregister can arrive
+    before the registration it overtakes has created a device. A sign-out is
+    not recorded here: it ends the sign-in, and that alone refuses the
+    sign-in's later registrations (`apps.notifications.push`).
     """
 
     class Operation(models.TextChoices):
         REGISTER = "register", "Registration"
-        SIGN_OUT = "sign_out", "Sign-out"
+        UNREGISTER = "unregister", "Unregister"
 
     installation_id = models.UUIDField(primary_key=True)
     sequence = models.BigIntegerField()
-    operation = models.CharField(max_length=8, choices=Operation.choices)
+    operation = models.CharField(max_length=10, choices=Operation.choices)
     user_id = models.BigIntegerField()
-    # The sign-in that sent the operation; None for a sign-out whose sign-in
-    # had already ended.
-    session_id = models.UUIDField(null=True, blank=True)
+    # The sign-in that sent the operation, live when it was recorded.
+    session_id = models.UUIDField()
     token_fingerprint = models.CharField(max_length=64, blank=True, default="")
     updated_at = models.DateTimeField(auto_now=True)
 

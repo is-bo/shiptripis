@@ -19,8 +19,6 @@ on.
 
 from __future__ import annotations
 
-from uuid import UUID
-
 from django.db import transaction
 from django.utils import timezone
 from rest_framework_simplejwt.exceptions import TokenError
@@ -59,35 +57,23 @@ def start_session(user) -> SignInSession:
         return SignInSession.objects.create(user=user)
 
 
-def end_session(
-    user,
-    session_id,
-    *,
-    installation_id: UUID | None = None,
-    binding_sequence: int | None = None,
-) -> None:
+def end_session(user, session_id) -> None:
     """End ``user``'s sign-in ``session_id`` and switch off its push devices.
 
-    Every device the sign-in registered goes off, whichever installation the
-    sign-out names or fails to name, and a registration of the sign-in still
-    on its way is refused when it arrives, because it finds the sign-in ended.
-    With ``installation_id`` and ``binding_sequence`` the sign-out is also
-    recorded in the installation's order (`PushInstallationBinding`). Ending
-    a sign-in that already ended, or one of another account, ends nothing.
+    Every device the sign-in registered goes off, and a registration of the
+    sign-in still on its way is refused when it arrives, because it finds the
+    sign-in ended. A sign-in that is not live (ended already, or never
+    issued to ``user``) writes nothing: its devices went off when it ended.
     """
 
     with transaction.atomic():
         lock_account(user)
         session = SignInSession.live(user_id=user.pk, session_id=session_id)
-        if session is not None:
-            session.ended_at = timezone.now()
-            session.save(update_fields=("ended_at",))
-        deactivate_session_push_devices(
-            user=user,
-            session_id=session.pk if session is not None else None,
-            installation_id=installation_id,
-            binding_sequence=binding_sequence,
-        )
+        if session is None:
+            return
+        session.ended_at = timezone.now()
+        session.save(update_fields=("ended_at",))
+        deactivate_session_push_devices(session)
 
 
 def end_all_sessions(user) -> None:
