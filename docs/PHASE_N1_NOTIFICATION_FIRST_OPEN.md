@@ -120,12 +120,23 @@ that made them:
   concurrent refresh may have rotated it. A valid access token proves its own sign-in, whatever refresh
   token comes with it (one of another account is not touched: nothing is blacklisted any more, ending
   the sign-in already refuses every refresh token of it). An expired access token is no answer rather
-  than a 401 (`_AccessIfValid`), and the refresh token then proves its sign-in when it is signed by this
-  server, unexpired and of the refresh type, even if a refresh already rotated it: it still names the
-  same sign-in, and all it can do here is end it. With neither, 401. Ending a sign-in that already ended
+  than a 401 (`_AccessIfValid`), and the refresh token then proves its sign-in when this server signed
+  it and it is of the refresh type, even if a refresh already rotated it or it has expired
+  (`_signed_claims` checks the signature, not the expiry): it still names the same sign-in, and all it
+  can do here is end it. With neither, 401. Ending a sign-in that already ended
   answers 205 again. With an installation and a number it is also recorded in the
   installation's order, even before any device exists. A delayed sign-out of A cannot touch a binding a
   later sign-in made, and a sign-out numbered below a lost counter still ends its own devices.
+- **A session the app lets go of is ended on the server too (round 5, verification).** The Sign-out
+  button is not the only way the app drops a sign-in: when renewing it fails, `_AuthInterceptor` clears
+  the credentials and reports the session expired. The sign-in may still be live on the server, with
+  the phone switched on: the refresh token expired while the app went unopened (30 days), or a refresh
+  rotated it and the answer never arrived. So `_endSession` then sends the sign-out itself,
+  best-effort, with that refresh token alone (`_endSignInOnServer`): no bearer, since the stored
+  credentials may already be those of a sign-in made since, and no installation or number, since
+  ending the sign-in switches off all its devices and refuses its later registrations. A sign-in the
+  server had already ended answers 205 as before. Only a request that never reaches the server
+  (offline) leaves the phone on, which the best-effort contract below already states.
 - **Ending every sign-in** (`end_all_sessions`: a completed password reset, Google sign-in on an
   account whose email was never confirmed, account deletion) ends every live sign-in row of the account
   and switches all of its devices off in one transaction under the same lock. It no longer blacklists
@@ -192,6 +203,7 @@ that made them:
 - App: `mobile/lib/core/push/push_coordinator.dart`, `mobile/lib/core/session/token_store.dart`,
   `mobile/lib/app/route_transition_tracker.dart` (new, wired into the router),
   `mobile/lib/data/repositories.dart` and `auth_repository.dart` (the number on both requests),
+  `mobile/lib/core/api/api_client.dart` (round 5: the sign-out of a session the app lets go of),
   `mobile/lib/app/router.dart` (`/profile/notifications` is public),
   `mobile/lib/features/profile/profile_screen.dart` and `notification_settings_screen.dart` (guest),
   `mobile/lib/l10n/app_{en,fr,ar}.arb` and the regenerated `app_localizations*.dart`.
@@ -292,7 +304,10 @@ denial asked again from Profile and denied leads to Settings**.
 Round 5 (each fails with its fix removed, checked by mutation): **permission taken away during a token
 lookup sends nothing**; **a refreshed token the keystore cannot keep is registered all the same**; **a
 receipt that says the phone is off leaves Retry and the pending token**; **a guest whose push cannot
-start (both causes) is not promised the inbox**.
+start (both causes) is not promised the inbox**. Round 5, verification (`phase8ff4_session_test.dart`,
+each fails with its fix removed, checked by mutation): **a session whose renewal is refused is ended on
+the server by its refresh token alone**, **a sign-in made the moment it ends never lends that sign-out
+its bearer**, **a failing sign-out leaves the phone signed out all the same**.
 `k5_session_snapshot_test.dart`: counters serialize, survive logout, never lower.
 Server, round 4 (each fails with its fix removed): **an unnumbered sign-out before the first
 registration refuses it** (blocker 1), **a sign-out that names no installation still switches its
@@ -309,7 +324,10 @@ Google claim gets no sign-in, and only the owner's sign-in is live**, **a Google
 reset is checked again and signs in**, **an end before every check answers `sign_in_interrupted`**
 (blocker 1); in `test_push.py`, the phone's own sign-out request with **an expired access token**, with
 **a refresh token a concurrent refresh rotated**, with **both**, **a request proving no sign-in is
-refused and changes nothing**, **a repeated sign-out answers the same** (blocker 2), **another account's
+refused and changes nothing** (a refresh token signed with another key, expired or not, included),
+**a repeated sign-out answers the same**, and the app's own sign-out after its session expired: **an
+expired refresh token still ends its sign-in**, **a refresh token whose rotation was lost still ends
+its sign-in** (blocker 2), **another account's
 sign-out leaves this account able to refresh** (should-fix 1), **an unregister from an ended sign-in
 leaves the order alone**, **a late unregister leaves the newer registration on** (should-fix 2), **a
 repeat of a switched-off registration asks for a new number** (should-fix 8). Go: **a queued push none
@@ -364,6 +382,10 @@ cannot be captured on this machine.
   access token outlives its sign-out for up to its own lifetime (5 minutes, plus the 30 s leeway) on the
   HTTP endpoints and on a WebSocket it opened, but can no longer refresh, register a phone or keep a
   socket open past that.
+- Seen during the round-5 verification, outside N1 and left for a follow-up package: a renewal that
+  fails on the network (not refused) also signs the member out on the phone, as before N1 (the app now
+  at least ends that sign-in on the server when the network allows); and a ban ends none of the
+  member's sign-ins and switches off none of their phones.
 - 320 px right-to-left rendering of the guest screen was not captured (360 px was).
 - No iOS or Android native config changed, so there is no platform config script to run for this
   package.
@@ -392,7 +414,8 @@ Android 13+ phone, fresh install of a configured release build:
 7. Sign-out cleanup is best-effort (V1 spec): signed out while offline, the server never hears of it,
    so the phone keeps receiving that account's notifications until the same phone signs in again (its
    registration replaces the binding) or the account resets its password. Check only that signing out
-   online stops them, and that signing in again on the same phone moves them to the new sign-in.
+   online stops them, that a session the app reports as expired (online) stops them too, and that
+   signing in again on the same phone moves them to the new sign-in.
 
 iPhone, fresh install:
 

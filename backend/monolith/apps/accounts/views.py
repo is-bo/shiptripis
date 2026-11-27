@@ -1,5 +1,6 @@
 from collections.abc import Callable
 
+import jwt
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
@@ -11,9 +12,9 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.settings import api_settings as jwt_settings
-from rest_framework_simplejwt.tokens import RefreshToken, UntypedToken
+from rest_framework_simplejwt.state import token_backend
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.notifications.models import OutboundMessage
 from apps.notifications.outbox import cancel_message, enqueue_secret_message
@@ -143,43 +144,71 @@ class _AccessIfValid(JWTAuthentication):
             return None
 
 
+def _signed_claims(token: str) -> dict | None:
+    """The claims of ``token`` if this server signed it, expired or not.
+
+    SimpleJWT's own decode refuses an expired token, rightly for everything a
+    token grants. Proving which sign-in to end grants nothing, so only the
+    signature counts here (`_proven_sign_in`).
+    """
+
+    try:
+        return jwt.decode(
+            token,
+            token_backend.get_verifying_key(token),
+            algorithms=[token_backend.algorithm],
+            audience=token_backend.audience,
+            issuer=token_backend.issuer,
+            options={
+                "verify_aud": token_backend.audience is not None,
+                "verify_exp": False,
+            },
+        )
+    except jwt.PyJWTError:
+        return None
+
+
 def _proven_sign_in(request: Request) -> tuple[User, str | None] | None:
     """The account and sign-in (``sid``) that ``request`` proves, if any.
 
     A valid access token proves its own sign-in, whatever refresh token comes
     with it: a concurrent refresh may have rotated the one the phone captured,
     and a refresh token of another account must not be touched. Without one,
-    a refresh token proves its sign-in when it is signed by this server and
-    unexpired, even if a refresh already rotated it: it still names the same
-    sign-in, and all that it can do here is end it.
+    a refresh token proves its sign-in when this server signed it, even if a
+    refresh already rotated it or it has expired: it still names the same
+    sign-in, and all that it can do here is end it. That is what lets a phone
+    whose own session expired (its refresh token refused as expired, or as
+    rotated by an answer that never arrived) still end the sign-in on the
+    server, as it does (`ApiClient`, `_AuthInterceptor._endSession`).
     """
 
     if request.user.is_authenticated:
         return request.user, request.auth.get("sid")
-    token = request.data.get("refresh")
+    data = request.data if isinstance(request.data, dict) else {}
+    token = data.get("refresh")
     if not isinstance(token, str) or not token:
         return None
-    try:
-        refresh = UntypedToken(token)
-    except TokenError:
+    claims = _signed_claims(token)
+    if claims is None or (
+        claims.get(jwt_settings.TOKEN_TYPE_CLAIM) != RefreshToken.token_type
+    ):
         return None
-    if refresh.get(jwt_settings.TOKEN_TYPE_CLAIM) != RefreshToken.token_type:
-        return None
-    user = User.objects.filter(pk=refresh.get(jwt_settings.USER_ID_CLAIM)).first()
+    user = User.objects.filter(pk=claims.get(jwt_settings.USER_ID_CLAIM)).first()
     if user is None:
         return None
-    return user, refresh.get("sid")
+    return user, claims.get("sid")
 
 
 class SignOutView(APIView):
     """End the sign-in the request proves, and every phone it registered.
 
     Signing out must not leave a phone receiving the account's notifications,
-    so an expired access token or a refresh token rotated meanwhile still
-    signs out (`_proven_sign_in`). Ending a sign-in that already ended ends
-    nothing more and answers the same. Which installation, and its number,
-    are best-effort extras that only order the sign-out against the phone's
-    own registrations: a body without them still signs out.
+    so an expired access token, or a refresh token rotated meanwhile or
+    expired, still signs out (`_proven_sign_in`). Ending a sign-in that
+    already ended ends nothing more and answers the same. Which installation,
+    and its number, are best-effort extras that only order the sign-out
+    against the phone's own registrations: a body without them still signs
+    out.
     """
 
     authentication_classes = (_AccessIfValid,)
@@ -193,7 +222,9 @@ class SignOutView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
         user, session_id = proven
-        device = PushDeviceUnregisterSerializer(data=request.data)
+        device = PushDeviceUnregisterSerializer(
+            data=request.data if isinstance(request.data, dict) else {}
+        )
         end_session(
             user,
             session_id,

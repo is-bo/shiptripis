@@ -31,8 +31,9 @@
   second denial leads to Settings, guest denial copy without the inbox promise. Round 5 (Astra round 4,
   2026-11-27): a sign-in is issued under the account lock only if no reset, claim or deletion ended the
   account's sign-ins after its credentials were checked (`User.session_epoch`); a sign-out is proved by
-  a valid access token or, once that expired, by a signed refresh token even if rotated, and blacklists
-  nothing; a late or ended-sign-in unregister no longer moves the order or switches off a newer
+  a valid access token or, once that expired, by a refresh token this server signed even if rotated or
+  expired, and blacklists nothing; the app also sends it when it lets a session go because renewing
+  it failed, so an expired session no longer leaves the phone receiving the account's notifications; a late or ended-sign-in unregister no longer moves the order or switches off a newer
   registration; a repeat of a switched-off registration is refused as superseded. Before N1 but closed
   here: the Go sender checks each queued push's devices against the database right before sending,
   and a notification WebSocket closes when its token stops being valid. Phone: permission loss

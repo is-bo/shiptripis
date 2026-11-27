@@ -1163,7 +1163,8 @@ waits for sign-in, and the server applies a phone's registrations and sign-outs 
 the order the app numbered them. A registration needs the sign-in it comes from
 to be live; ending a sign-in (its sign-out, or a password reset ending all of
 them) switches off every device it registered. A sign-out succeeds with an
-expired access token or a refresh token rotated meanwhile, a sign-in whose
+expired access token or a refresh token rotated meanwhile or expired, the app
+sends one too when it lets a session go because renewing it failed, a sign-in whose
 credentials were checked before a reset is not issued, and a queued push or an
 open notification socket does not outlive the device or token it was meant for.
 Foreground push reconciles the inbox without showing a duplicate OS banner.

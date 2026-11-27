@@ -4,6 +4,7 @@ from datetime import timedelta
 from unittest.mock import patch
 from uuid import uuid4
 
+import jwt
 import redis
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -93,6 +94,23 @@ def _expired(access: str) -> str:
     token = AccessToken(access)
     token.set_exp(from_time=timezone.now() - timedelta(minutes=10))
     return str(token)
+
+
+def _expired_refresh(refresh: str) -> str:
+    """``refresh`` re-signed as if its lifetime ran out a day ago: the phone
+    left unopened longer than the refresh lifetime."""
+
+    token = RefreshToken(refresh)
+    token.set_exp(from_time=timezone.now() - token.lifetime - timedelta(days=1))
+    return str(token)
+
+
+def _signed_elsewhere(refresh: str) -> str:
+    """``refresh`` with the same claims, signed with a key this server does not
+    hold."""
+
+    claims = jwt.decode(refresh, options={"verify_signature": False})
+    return jwt.encode(claims, "a-key-this-server-does-not-hold", algorithm="HS256")
 
 
 class PushDeviceAPITests(TestCase):
@@ -520,6 +538,38 @@ class PushDeviceAPITests(TestCase):
         self.assertFalse(self._device().active)
         self.assertEqual(_refresh(rotated.data["refresh"]).status_code, 401)
 
+    # N1 round 5, the same family: the phone ends its session itself when the
+    # server refuses its refresh token, and then sends the sign-out with that
+    # refresh token alone (`_AuthInterceptor._endSession`): no bearer, no
+    # installation. The token may have expired (the phone was left unopened
+    # past the refresh lifetime) or been rotated by an answer that never
+    # arrived; either way it names the sign-in, which is still live, with its
+    # phone switched on.
+    def test_an_expired_refresh_token_still_ends_its_sign_in(self):
+        a = signed_in(self.user)
+        self.assertEqual(self._register(a, 1).status_code, 200)
+        expired = _expired_refresh(a["refresh"])
+        self.assertEqual(_refresh(expired).status_code, 401)
+
+        response = APIClient().post("/api/auth/sign-out", {"refresh": expired}, format="json")
+
+        self.assertEqual(response.status_code, 205)
+        self.assertFalse(self._device().active)
+        self.assertIsNone(SignInSession.live(user_id=self.user.pk, session_id=a["sid"]))
+
+    def test_a_refresh_token_whose_rotation_was_lost_still_ends_its_sign_in(self):
+        a = signed_in(self.user)
+        self.assertEqual(self._register(a, 1).status_code, 200)
+        lost = _refresh(a["refresh"])
+        self.assertEqual(lost.status_code, 200)
+        self.assertEqual(_refresh(a["refresh"]).status_code, 401)
+
+        response = APIClient().post("/api/auth/sign-out", {"refresh": a["refresh"]}, format="json")
+
+        self.assertEqual(response.status_code, 205)
+        self.assertFalse(self._device().active)
+        self.assertEqual(_refresh(lost.data["refresh"]).status_code, 401)
+
     def test_a_sign_out_that_proves_no_sign_in_is_refused(self):
         a = signed_in(self.user)
         self.assertEqual(self._register(a, 1).status_code, 200)
@@ -529,6 +579,9 @@ class PushDeviceAPITests(TestCase):
             (_expired(a["access"]), None),
             # An access token is not a refresh token, even a valid one.
             (None, a["access"]),
+            # Only this server's signature proves a sign-in, whatever its age.
+            (None, _signed_elsewhere(a["refresh"])),
+            (None, _signed_elsewhere(_expired_refresh(a["refresh"]))),
         ):
             response = self._phone_sign_out(access=access, refresh=refresh)
             self.assertEqual(response.status_code, 401)

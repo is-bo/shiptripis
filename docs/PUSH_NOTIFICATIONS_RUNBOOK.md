@@ -178,18 +178,21 @@ issued under that lock, and only if no reset, claim or deletion ended the
 account's sign-ins after its credentials were checked (`User.session_epoch`).
 
 A sign-out is proved by a valid access token, or, once that has expired, by a
-signed and unexpired refresh token of the sign-in, even one a concurrent refresh
-already rotated; with neither it is refused (401). A queued push is sent only to
+refresh token of the sign-in that this server signed, even one a concurrent
+refresh already rotated or one that has expired (ending the sign-in is all it can
+do); with neither it is refused (401). The app sends it from the Sign-out button
+and also when it lets a session go because renewing it failed (the refresh token
+expired, or a rotation's answer was lost), with that refresh token alone. A queued push is sent only to
 the devices still switched on for its recipient with the same token, checked
 against the database right before each send or retry (`DeviceRegistry`); when the
 database cannot answer, the entry stays pending for the sweeper. A notification
 WebSocket closes when the access token that opened it stops being valid (its
 expiry plus the 30 s leeway), and the app reconnects with a fresh token.
 
-Sign-out cleanup stays best-effort: a sign-out made offline never reaches the
-server, so that phone keeps receiving the account's notifications until it signs
-in again (its registration replaces the binding) or the account's sessions are
-ended.
+Sign-out cleanup stays best-effort: a sign-out made offline (from the button or
+after a session the app let go of) never reaches the server, so that phone keeps
+receiving the account's notifications until it signs in again (its registration
+replaces the binding) or the account's sessions are ended.
 
 The permission state and ShipTrip notification-type preferences are separate.
 Preferences control Messages and Marketplace delivery across the account;

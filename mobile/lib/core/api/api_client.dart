@@ -558,6 +558,12 @@ class _AuthInterceptor extends Interceptor {
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
+    // The sign-out of a sign-in this phone already let go of
+    // (`_endSignInOnServer`): its refresh token is the whole proof, and the
+    // credentials stored now, if any, belong to whoever signed in since.
+    if (options.extra[_endsReleasedSignIn] == true) {
+      return handler.next(options);
+    }
     if (!_isAuthEndpoint(options.path) && !_isGuestEndpoint(options.path)) {
       final existingIdentity = options.extra['st.identity_generation'];
       final identityGeneration = existingIdentity is int
@@ -589,7 +595,11 @@ class _AuthInterceptor extends Interceptor {
   static bool wasSentAsGuest(RequestOptions request) =>
       request.extra[_sentAsGuest] == true;
 
-  static bool _isSignOut(String path) => path.contains('/api/auth/sign-out');
+  static const _signOutPath = '/api/auth/sign-out';
+
+  static bool _isSignOut(String path) => path.contains(_signOutPath);
+
+  static const _endsReleasedSignIn = 'st.ends_released_sign_in';
 
   @override
   Future<void> onResponse(
@@ -752,7 +762,30 @@ class _AuthInterceptor extends Interceptor {
       return;
     }
     if (await _tokens.clearIfIdentityCurrent(expectedIdentityGeneration)) {
+      if (expectedRefresh != null) {
+        unawaited(_endSignInOnServer(expectedRefresh));
+      }
       _onExpired?.call();
+    }
+  }
+
+  /// Ends on the server, best-effort, the sign-in this phone has just let go
+  /// of because renewing it failed. It may still be live there, with this
+  /// phone's push device switched on: the refresh token expired while the app
+  /// went unopened, a refresh rotated it and the answer never arrived, or the
+  /// renewal never got through. The server takes this refresh token, whatever
+  /// its age, as proof of which sign-in ends, so the request carries no bearer
+  /// (`onRequest`). Like the Sign-out button's own request, a failure here
+  /// leaves the phone signed out all the same.
+  Future<void> _endSignInOnServer(String refresh) async {
+    try {
+      await _dio.post<void>(
+        _signOutPath,
+        data: {'refresh': refresh},
+        options: Options(extra: {_endsReleasedSignIn: true}),
+      );
+    } on Object {
+      // Nothing to recover: the phone is already signed out.
     }
   }
 }
