@@ -24,7 +24,8 @@ build/
 *.log
 
 # AI
-.claude
+.claude/*
+!.claude/skills/
 .agentbridge/
 docs/claude-sessions/*.jsonl
 graphify-out/
