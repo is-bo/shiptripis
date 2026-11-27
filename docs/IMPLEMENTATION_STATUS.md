@@ -62,7 +62,8 @@
   live, so the findings about rows, URLs and events left by code before G1 are declared not
   applicable and nothing is built for them. A success whose amount or currency cannot be accepted
   stays final for its checkout but is not accounted for (`UNVERIFIED_PAYMENT`): its settle job and the
-  staff reconciliation read the provider until a verified answer applies it or staff resolve it. A
+  staff reconciliation read the provider until a verified answer applies it or staff resolve it, and
+  whichever path records the refusal arms that job in the same transaction. A
   close asked for while the settle job runs is never deferred past. A confirmed collecting checkout
   is recorded as settling; Chargily's `processing` is settling and only its exact `livemode` literals
   are read. The guest-link guard counts any payable checkout, a guest tap that finds the link paid

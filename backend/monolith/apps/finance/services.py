@@ -65,7 +65,6 @@ from .money import (
 from .models import (
     LIVE_CHECKOUT,
     UNVERIFIED_PAYMENT,
-    UNVERIFIED_PAYMENT_CODES,
     GuestPaymentLink,
     LedgerAccount,
     LedgerTransaction,
@@ -2093,6 +2092,40 @@ def _payment_unverified(attempt_id: int) -> bool:
     return PaymentAttempt.objects.filter(UNVERIFIED_PAYMENT, pk=attempt_id).exists()
 
 
+def _hold_unverified_payment(
+    attempt: PaymentAttempt,
+    order: PaymentOrder,
+    *,
+    code: str,
+    message: str | None = None,
+) -> str:
+    """Fail a locked attempt whose reported success cannot be accepted (G1).
+
+    Money may have moved, so nothing is applied and nothing is forgotten: the
+    payment is unaccounted for (`UNVERIFIED_PAYMENT`) until a verified report
+    applies it or staff resolve it. Its settle job, which reads the provider
+    meanwhile, is armed here, in the transaction that records the state,
+    whichever path found it: an event, a tap, the expiry or the job itself.
+    Only on the way in, so the job's own later reads keep their backoff.
+    """
+
+    already_unverified = _payment_unverified(attempt.pk)
+    attempt.status = PaymentAttempt.Status.FAILED
+    attempt.failure_code = code
+    fields = ["status", "failure_code", "updated_at"]
+    if message is not None:
+        attempt.failure_message = message[:255]
+        fields.append("failure_message")
+    attempt.save(update_fields=fields)
+    _enqueue_payment_failed_email(attempt=attempt, order=order)
+    logger.error(
+        "finance.%s attempt=%s provider=%s", code, attempt.pk, attempt.provider
+    )
+    if not already_unverified:
+        _arm_checkout_settle(attempt.pk)
+    return code
+
+
 def _record_checkout_final(attempt_id: int) -> None:
     """Record that a provider confirmed this checkout takes no further payment."""
 
@@ -2495,10 +2528,6 @@ def process_provider_event(*, event_id: int) -> str:
         guest_email=durable_event.guest_email,
         failure_code=durable_event.failure_code,
     )
-    if note in UNVERIFIED_PAYMENT_CODES:
-        # Money may have moved that this report cannot account for: its
-        # provider is read now, and again until a verified answer does.
-        _arm_checkout_settle(attempt.pk)
     _finish_event(record.pk, PaymentProviderEvent.ProcessingResult.APPLIED, note)
     return note
 
@@ -2701,53 +2730,22 @@ def reconcile_attempt(
     # would mean trusting the outcome label alone, which is exactly the
     # tampering surface the amount check exists to close.
     if provider_amount_minor is None:
-        attempt.status = PaymentAttempt.Status.FAILED
-        attempt.failure_code = "amount_unverifiable"
-        attempt.failure_message = "The provider reported no amount for a success."
-        attempt.save(
-            update_fields=["status", "failure_code", "failure_message", "updated_at"]
+        return _hold_unverified_payment(
+            attempt,
+            order,
+            code="amount_unverifiable",
+            message="The provider reported no amount for a success.",
         )
-        _enqueue_payment_failed_email(attempt=attempt, order=order)
-        logger.error(
-            "finance.amount_unverifiable attempt=%s provider=%s",
-            attempt.pk,
-            attempt.provider,
+    expected = int(attempt.provider_amount_minor)
+    if int(provider_amount_minor) != expected:
+        return _hold_unverified_payment(
+            attempt,
+            order,
+            code="amount_mismatch",
+            message=f"Provider reported {provider_amount_minor}, expected {expected}.",
         )
-        return "amount_unverifiable"
-    if provider_amount_minor is not None:
-        expected = int(attempt.provider_amount_minor)
-        if int(provider_amount_minor) != expected:
-            attempt.status = PaymentAttempt.Status.FAILED
-            attempt.failure_code = "amount_mismatch"
-            attempt.failure_message = (
-                f"Provider reported {provider_amount_minor}, expected {expected}."
-            )[:255]
-            attempt.save(
-                update_fields=[
-                    "status",
-                    "failure_code",
-                    "failure_message",
-                    "updated_at",
-                ]
-            )
-            _enqueue_payment_failed_email(attempt=attempt, order=order)
-            logger.error(
-                "finance.amount_mismatch attempt=%s provider=%s",
-                attempt.pk,
-                attempt.provider,
-            )
-            return "amount_mismatch"
     if provider_currency and provider_currency.upper() != attempt.payment_currency:
-        attempt.status = PaymentAttempt.Status.FAILED
-        attempt.failure_code = "currency_mismatch"
-        attempt.save(update_fields=["status", "failure_code", "updated_at"])
-        _enqueue_payment_failed_email(attempt=attempt, order=order)
-        logger.error(
-            "finance.currency_mismatch attempt=%s provider=%s",
-            attempt.pk,
-            attempt.provider,
-        )
-        return "currency_mismatch"
+        return _hold_unverified_payment(attempt, order, code="currency_mismatch")
 
     now = timezone.now()
     # Money that the obligation cannot absorb is recorded honestly and refunded,

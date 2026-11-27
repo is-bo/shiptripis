@@ -1997,6 +1997,56 @@ class OpenCheckoutTests(GuestPaymentTestCase):
             assert jobs.run_job(self.settle_job(own)) == "checkout_final"
         fetch.assert_not_called()
 
+    def test_a_payment_any_path_finds_unaccounted_is_read_until_it_is(self):
+        """Not only an event: here the expiry is first to hear of the payment,
+        and its amount is wrong, while the checkout's settle job had run out on
+        a provider outage. The reads start again, in the transaction that
+        records the failure, until a verified answer applies it (G1, seventh
+        pass)."""
+
+        own = self.owner_starts().attempt
+        settle = self.settle_job(own)
+        ScheduledJob.objects.filter(pk=settle.pk).update(
+            status=ScheduledJob.Status.FAILED,
+            attempts=CHECKOUT_JOB_ATTEMPTS,
+            completed_at=timezone.now(),
+        )
+        expected = int(own.provider_amount_minor)
+        MockGateway.mark(own.provider_session_id, "succeeded")
+        real_fetch = MockGateway.fetch_attempt
+
+        def wrong_amount(gateway, **kwargs):
+            return replace(real_fetch(gateway, **kwargs), amount_minor=expected + 1)
+
+        with mock.patch.object(MockGateway, "fetch_attempt", new=wrong_amount):
+            assert self.expire(own) == "payment_unverified"
+            own.refresh_from_db()
+            assert own.failure_code == "amount_mismatch"
+            assert own.checkout_final_at is not None
+            settle.refresh_from_db()
+            assert settle.status == ScheduledJob.Status.PENDING
+            assert settle.attempts == 0
+            assert settle.run_at <= timezone.now()
+
+            # The job's own read, claimed as the worker claims it, finds it
+            # still wrong: retried with backoff, not armed again at once.
+            [claimed] = [
+                job
+                for job in jobs.claim_due_jobs(limit=50)
+                if job.key == settle.key
+            ]
+            assert jobs.run_job(claimed) == "failed"
+            settle.refresh_from_db()
+            assert settle.status == ScheduledJob.Status.PENDING
+            assert settle.last_error_code == "payment_unverified"
+            assert settle.run_at > timezone.now()
+
+        assert jobs.run_job(settle) == "applied"
+        own.refresh_from_db()
+        assert own.status == PaymentAttempt.Status.SUCCEEDED
+        self.order.refresh_from_db()
+        assert self.order.status == PaymentOrder.Status.PAID
+
     def test_a_close_asked_for_while_the_settle_job_runs_is_not_deferred_past(self):
         """The order is cancelled while its settle job is between reading the
         provider and deferring to the checkout's expiry: the job is due again

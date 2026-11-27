@@ -925,15 +925,20 @@ also what the finance attention queue shows. While it holds:
   through `reconcile_attempt` with the amount and currency checks unchanged, so only a verified
   answer applies the payment (or lands it unapplied and refunded when the order no longer wants
   it). Otherwise it answers `payment_unverified`.
-- The provider event that recorded the failure arms the settle job at once. On `payment_unverified`
-  the job retries with the normal backoff (32 tries, at most six hours apart). It is not satisfied,
-  and a failed one is not archived, while the payment is unaccounted for. The sweep does not re-arm
-  it, since its checkout is not live: once its tries run out, the attempt stays in the attention
-  queue for a person.
+- Whichever path records the failure arms the settle job at once, in the same transaction: an
+  event, a tap or the expiry that reads the provider first, or the settle job's own read. The one
+  place is `reconcile_attempt`, through `_hold_unverified_payment`, which the three refusals share.
+  It arms only on the way into the state, so the job's later reads of the same refusal keep their
+  backoff instead of being made due again at once. On `payment_unverified` the job retries with the
+  normal backoff (32 tries, at most six hours apart). It is not satisfied, and a failed one is not
+  archived, while the payment is unaccounted for. The sweep does not re-arm it, since its checkout
+  is not live: once its tries run out, the attempt stays in the attention queue for a person.
 - The staff action queues the same job, which reads the provider at any time.
 - A staff resolution (`resolve_payment_attention`) ends the reads.
 
 *Check:* `test_a_success_whose_amount_cannot_be_accepted_is_read_until_it_is_accounted_for`,
+`test_a_payment_any_path_finds_unaccounted_is_read_until_it_is` (the expiry finds it after the
+settle job ran out; the job's own claimed read then backs off),
 `test_staff_reconciliation_reads_the_provider_for_a_payment_it_could_not_accept`,
 `test_a_settle_job_that_ran_out_on_an_unaccounted_payment_is_not_archived`,
 `test_a_payment_staff_resolved_is_no_longer_read`.
@@ -983,9 +988,11 @@ also what the finance attention queue shows. While it holds:
 The sweep's claim is qualified: it arms at most 100 live checkouts per job-loop cycle, so with more
 than 100 missing settle jobs, the rest are armed in the following cycles.
 
-**Each new test fails with its fix removed** (16 server mutations, 2 app): the final-but-unverified
+**Each new test fails with its fix removed** (17 server mutations, 2 app): the final-but-unverified
 read in `settle_checkout`; the settle job kept and not archived while unverified; the staff
-resolution ending the reads; the event arming the job; the job retrying on `payment_unverified`; the
+resolution ending the reads; the recorded failure arming the job, whichever path found it; arming
+only on the way in (armed on every refusal, the job's own read is due again at once); the job
+retrying on `payment_unverified`; the
 running job's `run_at`, and its floor at now; `_next_run_at` on deferral; the re-read after the provider call; collecting
 recorded as settling; Chargily's `processing`; the exact livemode literals; the guest-link guard;
 the guest page's paid branch; `resume_provider`; a live checkout on an ended attempt shown as busy;
