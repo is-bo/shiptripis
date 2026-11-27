@@ -7,129 +7,100 @@ needs is in this repository. Nothing here depends on an earlier conversation.
 **Read `CLAUDE.md` first** (the rules), then this file, then the board
 (`docs/WASSLA_L_SERIES_PROGRESS.md`).
 
-## 0. Current status (2026-11-26) — read this before section 1
+## 0. Current status (2026-11-27, about 11:20 UTC) — read this before section 1
 
-**A coordinator running in the cloud reads `docs/handoff/COORDINATOR.md` first**: the session setup
-(cloud coordinator, cloud builders, a local operator on Ismail's PC for the server and Astra),
-Ismail's reply format, and the two Astra runs still going.
+**A coordinator on a new account reads `docs/handoff/COORDINATOR.md` first**: the workflow (the
+coordinator only coordinates, one builder per package at the plan's model and effort, Astra reviews
+every package, Ismail runs Astra), the escalation and anti-loop triage rules, the merge rule and
+Ismail's reply format. Sections 1 to 11 below date from 2026-11-15 and still hold for rules and
+background; this section overrides them where they differ. Server access details are never in this
+public repository: they live in Ismail's uncommitted `CLAUDE.local.md` on his PC.
 
-Written by the lead session on 2026-11-26 so a session on another account can continue. Sections 1
-to 11 below date from 2026-11-15 and still hold for rules and background; this section overrides
-them where they differ. Server access details are never in this public repository: they live in
-Ismail's local, uncommitted `CLAUDE.local.md` on his PC.
+### 0.1 Where everything stopped (2026-11-27)
+Ismail ran out of usage on his account and **stopped all four builders at about 11:20 UTC**. Each
+builder was told to push its work in progress to its PR branch and write a status file
+**`docs/handoff/status/<PKG>.md` on that PR branch** (P3B, F1, G1, N1): what is done, what is half
+done, the next step, and the findings still open. **Read that file first** when resuming a package,
+then `git log` on the branch, then the latest Astra result. If a status file is missing, the builder
+stopped before writing it: work from the last commit, the phase doc and the latest Astra result.
 
-### 0.1 How work runs now (Ismail's rules, latest first)
-- **Lead session** coordinates, reviews, merges and operates; it does not write product code.
-  Builders are Claude Sonnet/Opus agents, one package per worktree, branch and pull request.
-- **Planner:** normally a Claude Opus 5.5 extra-high agent (`CLAUDE.md` "Models"). For the phone
-  test 2 plan and for package C1, Ismail chose **Astra 6.2 (OpenAI) at extra-high** instead.
-- **Reviews:** every package gets an independent second pass by **Astra 6.2 at high effort**. The
-  lead runs it itself through the Codex CLI, read-only, and verifies each finding before sending it
-  back to the builder:
-  `codex exec -m gpt-6.2-astra -s read-only -c model_reasoning_effort=high --output-last-message OUT.md - < PROMPT.md`
-  Prompt templates used so far are in `docs/handoff/astra/` (update the head SHA before reuse).
-  The Codex CLI must be recent (`npm install -g @openai/codex@latest`; 0.163 refused 6.2). Do not
-  ration Astra; if Codex hits its usage limit, tell Ismail (he holds reset credits) and rerun after.
-- **Never deploy, restart the server or build the app without Ismail's explicit OK.** The app is
-  built only after all packages below are merged (one deploy, one Android test build at the end).
-- Every Astra review result is posted as a comment on its pull request; read those comments for the
-  exact open findings.
+**Final heads at the stop (11:24 UTC). These override the table below where they differ.**
 
-### 0.2 Live server
-Release `5ee8cd2` (deployed 2026-11-23). Nothing below is deployed. Payments in TEST mode
-(Chargily and Stripe on), Stripe Connect off, payout profiles off, FCM push off.
-
-### 0.3 Packages (phone test 2 plan `docs/WASSLA_PHONE_TEST_2_PLAN.md` + 2026-11-24 fix plan)
-Board: `docs/WASSLA_L_SERIES_PROGRESS.md`, table "Fixes after the phone tests".
-
-| Package | PR | State on 2026-11-26 | Next action |
-|---|---|---|---|
-| P1, P2, P4, P3A, P3C, M1 | #60 #62 #61 #64 #65 #68 | merged | — |
-| N2 bell names the ticket decision | #70 | merged (`ec24abc`), Astra approved | — |
-| P3B profile photos in the app | #66 | Round 7 **finished and pushed** (2026-11-27): head `a286b34`, all 12 CI checks green (including `Android — compile and Gradle unit tests`). Answers Astra round 6 (3 blockers, 6 should-fixes) by fixing the cause: one `MemberScope` (account + authentication + credentials) captured once when an action starts and checked once when it commits; the photo writes also name their account and the request refuses another account's bearer; `MainActivity` is `singleTask`. | Astra round-7 review, high: prompt `docs/handoff/astra/p3b-review-round7.md` (head already set), result to `docs/handoff/astra/results/p3b-astra-round7-result.md`. Approve and CI green: gate and merge. Reject: a new builder round (Claude Sonnet, high). |
-| G1 guest checkout without CSRF dependency | #67 | Round 5 **finished and pushed** (2026-11-26): fixes `a0b48be` on top of `1643afc`. No force-push, `main` not merged in (docs only). Answers both round-4 blockers (provider events bind to their own attempt by the attempt id in the checkout metadata, rechecked under the lock; order cancellation and closure to collection close issued checkouts at the provider through a durable `checkout_close` job) and all 8 should-fixes. Migration `finance 0036` now also adds the job kind (no SQL). Local: changed-path finance files 389 passed, app format and analyze clean; 14 server mutations and one app mutation each fail their tests. **CI all 11 checks green on `a0b48be`**, Schema drift included. | Astra round-5 review, high: prompt `docs/handoff/astra/g1-review.md` (head already set), result to `docs/handoff/astra/results/g1-astra-round5-result.md`. Approve and CI green: gate and merge. Reject: new Opus extra-high builder round. |
-| F1 payout setup availability, server | #69 | Round 3 **finished and pushed** (2026-11-26): fix `ee1e477`, prompt `cb80430` (PR head), rebased on `main` `7ce265f`. CI all 11 checks green on `cb80430`. | Astra round-3 review, high: prompt `docs/handoff/astra/f1-review-round3.md`, result to `docs/handoff/astra/results/f1-astra-round3-result.md`. |
-| N1 notification prompt on first open | #71 | Round 4 **finished and pushed** (2026-11-27), builder switched to Claude Opus (Ismail, 2026-11-26): code `139a206` and `227d8aa` (the refresh reads its token once; the K7 speed-budget test mints through a real sign-in), write-up and Astra prompt in the commit after it (PR head), `main` merged in (docs only). Answers Astra round 3 (`docs/handoff/astra/results/n1-astra-round3-result.md`: 4 blockers, 5 should-fixes, 1 nit) by replacing the mechanism instead of patching a fourth variant: every sign-in is a server row (`SignInSession`, migration `accounts.0008`) named by the `sid` of all its tokens, rotation included; a refresh and a push registration need it live, under the account lock that sign-out and reset also take. `PushAccountRevocation`, the issue-time cutoff and the outstanding-token blacklist loop are gone. Phone: newest-attempt check after every wait, retryable catch-up failure, Profile request needs its screen on top, Android upgrade second denial leads to Settings, guest copy. Offline sign-out documented as best-effort (should-fix 5, Astra's option 1). Every blocker and should-fix has a test that fails with its fix removed (mutation-checked). Local: 662 server tests (notifications, accounts, staff/claims, ticket copy) and the whole phone suite (1,717) passed. Heads up: migration `notifications.0009` deletes push devices that name no sign-in, and tokens issued before this change no longer refresh, so every tester signs in once more after deploy. | Astra round-4 review, high: prompt `docs/handoff/astra/n1-review.md` on the PR branch (round-4 section, head set to `227d8aa`), result to `docs/handoff/astra/results/n1-astra-round4-result.md`. Do not merge before it approves and every CI check is green. |
-| C1 pay only in the traveler's currency | — | **New, owner decision Q5 (plan section 6).** Astra extra-high writing the plan (prompt `docs/handoff/astra/c1-plan.md`). | Bring Astra's questions to Ismail, then build after F1 (both touch `payout_snapshots.py`). |
-| F2 payout pages on the phone | — | not started | After F1 and P3B (and C1's contract). |
-| M2 route/date failures on the phone | — | not started | After P3B. |
-| A1 route alert offer (after empty search and after posting) | — | not started | After P3B. |
-| M3 other departure cities, browse only | — | not started | After A1 and M2. |
-
-### 0.6 Exact pickup point (Ismail stopped all Claude work on 2026-11-26, about 10:00 Lagos)
-
-**Nothing was lost.** Each unfinished builder's work is on a `wip/` branch on GitHub, committed as is
-with a commit titled "WIP (unfinished, do not merge)". That branch is rebased on `main` as it was at
-the time, so it differs from its PR branch; the PR branches were left exactly as reviewed. The open
-findings for each round are in the latest Astra comment on each PR. The table below also lists the
-extra instructions the lead gave each builder on top of those findings.
-
-**How to resume a package** (one fresh builder agent per package, at the model and effort below, in
-its own worktree):
-1. Check out the `wip/` branch, then read the latest Astra comment on the PR and the phase doc.
-2. See what the WIP commit already covers: `git show --stat` on it, then its diff.
-3. Finish every finding, then reword or squash away the WIP commit.
-4. Run the full suites the package needs.
-5. Update the PR with `git push --force-with-lease origin HEAD:claude/<branch>`.
-6. Re-run Astra with the prompt in `docs/handoff/astra/` (update the head SHA first).
-7. Merge only after Astra approves and CI is green, with the gate comment on the PR.
-
-| Package | Builder | Saved work | What it covers (from the builder's last words) | Extra lead instructions still binding |
+| Package | Branch | Final head | State | Exact next step |
 |---|---|---|---|---|
-| G1 #67 round 5 | Claude Opus, extra high | **Done 2026-11-26**: fixes `a0b48be` pushed to the PR branch on top of `1643afc`. The `wip/` branch can be deleted after G1 merges. | Both round-4 blockers and all 8 should-fixes: event binding by attempt id with a lock-time checkout recheck, order cancellation and closure closing checkouts at the provider (`checkout_close` job), Stripe delayed-payment failure read from the payment intent, 32-run close budget, receipts-off stored event, explicit technical admin fields, credential errors keep the recovery key, claim dated after the locks, provider expiry caps the attempt, owner screen waits on a settling payment. Detail: phase doc, "Fifth-pass review". | **B:** never leave a superseded attempt payable. Ask the provider to close the old session (Stripe Checkout Session expire, Chargily expire), and supersede only after the provider confirms. Otherwise answer a neutral, translated "a payment is already being made, try again later" conflict. Never hold the DB lock across a slow provider call in a way that can deadlock. The same rule applies when the same payer switches rail or amount. **A:** prefer removing the raw URI and Referer from proxy error logs over regexes. **C:** recover with the original idempotency key and the exact original parameters. If B needs a product or money decision, stop and ask Ismail. |
-| F1 #69 round 2 | Claude Opus, extra high | Done 2026-11-26. Rounds 2 and 3 are on the PR branch. Delete `wip/f1-payout-availability` after F1 merges. | Edits in `core/financial_locks.py` (the per-traveler funding/preference lock), `payout_snapshots`, `payout_profiles`, `payout_profile_api`, `payout_mobile` and `payout_accounts`. When stopped it was writing "the account lookup helpers used by both the creation path and the read model". The round-2 tests are not written yet. | **Finding 1:** a stable per-traveler lock in the canonical lock order (never invert the order used in `services.py` and `payout_snapshots.py`), plus a two-connection PostgreSQL real-thread test. **Finding 6:** check the real Algérie Poste CCP number format, and tighten validation if a 1-digit minimum is wrong. The projection must always hide at least one digit. If any fix changes a money rule rather than enforcing the existing one, stop and ask Ismail. |
-| N1 #71 round 2 | Claude Sonnet, high | Done 2026-11-26. Rounds 2 and 3 are on the PR branch. Delete `wip/n1-notification-first-open` after N1 merges. | The server part of finding 1 is started: `notifications/models.py`, `push.py`, the serializers and views, `accounts/views.py`, tests, and a new migration `0009_push_installation_binding.py`. When stopped it was "updating existing tests and adding new ones". Mobile findings 2–6 are not done yet. | The server change for finding 1 is allowed inside N1, limited to the device-registration path. It needs Django tests (a delayed A registration after logout and after B registers; check the final owner and active flag) and `task check-drift` for the migration. Retake the guest screenshots honestly, through the real guest route. |
-| P3B #66 | Claude Sonnet, high | none needed: round 7 is pushed (head `a286b34`) | Round 7 replaces the per-action reads of the account and the generation with one `MemberScope` (`beginAction`, `isCurrent`); photo writes name their account and the interceptor checks the bearer's `user_id`; `singleTask`; the pick gate belongs to its activity. 25 Kotlin tests run under Gradle in CI. | `AppDelegate.swift` was never compiled; nothing ran on a device. Device checks are in the phase doc ("Handoff", "Round six", "Round seven"). |
+| P3B #66 | `claude/p3b-profile-photos-app` | `778da3a` | Round 8 **WIP**, CI has not run on it | Read `docs/handoff/status/P3B.md` on the branch and finish round 8. The round-8 Astra prompt draft was **lost** (it was never committed): rewrite it as `docs/handoff/astra/p3b-review-round8.md` from the round-7 prompt, stating the three triage rules. |
+| F1 #69 | `claude/f1-payout-availability` | `7b5a5aa` | Round 5 **done**; prompt `docs/handoff/astra/f1-review-round5.md` (commit `ef04fd3`); CI was running at the stop | Check that CI is green on `7b5a5aa`, set the head SHA in the prompt if needed, then give Ismail the prompt. |
+| G1 #67 | `claude/g1-guest-checkout-csrf` | `6933306` | Round 7 **WIP** | Read `docs/handoff/status/G1.md`, finish, get CI green. The round-7 Astra prompt draft is committed on `main` at `docs/handoff/astra/drafts/g1-review-r7.md` (fill `NEWHEAD`, `NEWSHORT`, `CHECKS7`, then move it into `docs/handoff/astra/g1-review.md`). The PR body draft was lost: rewrite the PR description from the phase doc's seventh-pass section. |
+| N1 #71 | `claude/n1-notification-first-open` | `d8e53f6` | Round 5 code **done**; Astra prompt not written yet | Get CI green, then write the round-5 section of `docs/handoff/astra/n1-review.md` (head SHA, triage rules) and give it to Ismail. |
 
-**Astra runs still going at the stop.** They run on Ismail's PC through the Codex CLI, and the
-results are files on that PC.
-- **The C1 plan** (Astra extra high).
-  - Output file: `C:\Users\URES\AppData\Local\Temp\claude\83ae47049b838ea9\7b73354f-ab9f-4bb7-9fdc-63036aaf1e66\scratchpad\plans\c1-plan.md`. Its log, `c1-astra-plan-log.txt`, is in the same folder.
-  - The lead will also copy it to `D:\Code\Shiptrip\.astra-results\c1-plan.md` if it finishes while the lead session is still open.
-  - If both are empty or missing, re-run `docs/handoff/astra/c1-plan.md` at `model_reasoning_effort=xhigh`.
-  - Then bring Astra's questions to Ismail in plain words before any C1 build. C1 is built after F1 merges, by Claude Opus extra high.
-- **The P3B round-4 review** (Astra high).
-  - Output file: `D:\Code\Shiptrip\.astra-results\p3b-astra-round4-result.md`.
-  - Prompt: `docs/handoff/astra/p3b-review-round4.md`.
-  - Finished Astra results are committed to `docs/handoff/astra/results/`, the folder a cloud session can read.
+All four were **rejected in the latest Astra round**, and their next fix round had started:
 
-**Order after that:**
-1. Merge P3B, G1, F1 and N1 as each one passes.
-2. Then C1 (server), F2 (phone payouts, consuming F1 and C1), M2, A1 and M3. Each is a planned package in `docs/WASSLA_PHONE_TEST_2_PLAN.md`, and each gets an Astra review.
-3. Update the board and this section after every merge.
-4. Then section 0.4, with Ismail's OK at each step.
+| Package | PR | Branch | Builder (model, effort) | Last Astra verdict | Round in progress at the stop | Resume |
+|---|---|---|---|---|---|---|
+| P3B profile photos in the app | #66 | `claude/p3b-profile-photos-app` | Claude Sonnet, high | Round 7 on `a286b34`: **reject** (result on the PR comment; commit to `docs/handoff/astra/results/p3b-astra-round7-result.md` if absent) | Round 8 (last pushed head before it: `a286b34`) | Finish round 8 on the in-scope findings only. The round-7 wrong-account writes outside photos (KYC, cheque, account deletion, sign-out, public profile and discovery) are **out of scope**: follow-up package, section 0.8. Escalation: one more reject moves P3B to Opus extra high. |
+| F1 payout setup availability, server | #69 | `claude/f1-payout-availability` | Claude Opus, extra high | Round 4 on `c559318`: **reject** (`docs/handoff/astra/results/f1-astra-round4-result.md` on the PR branch) | Round 5: fix `bd74c3a` and Astra prompt `ef04fd3` **already pushed** (`docs/handoff/astra/f1-review-round5.md`) | Check CI on the PR head, then give Ismail the round-5 prompt to run. |
+| G1 guest checkout without CSRF dependency | #67 | `claude/g1-guest-checkout-csrf` | Claude Opus, extra high | Round 6 on `4e4c0ea`: **reject** (`docs/handoff/astra/results/g1-astra-round6-result.md` on `main`) | Round 7 (last pushed head before it: `4e4c0ea`) | Finish round 7. The round-6 items about rows or URLs written by older code are **N/A** (no live data); fix the rest at the root. Then a round-7 prompt in `docs/handoff/astra/g1-review.md`. |
+| N1 notification prompt on first open | #71 | `claude/n1-notification-first-open` | **Claude Opus, extra high** (moved from Sonnet by the escalation rule) | Round 4 on `227d8aa`: **reject** (`docs/handoff/astra/results/n1-astra-round4-result.md` on the PR branch) | Round 5: first commit `0cd1330` pushed (sign-in issued under the account lock, sign-out proved by either token) | Finish round 5, which also covers the FCM queued job (revalidate owner, sign-in and token before each send) and WebSocket expiry. Then the round-5 section of `docs/handoff/astra/n1-review.md`. Testers must sign in again after deploy. |
 
-### 0.7 Astra results after the Codex reset (local operator log, 2026-11-26)
-The local operator on Ismail's PC runs Astra 6.2 at high effort, read-only, and pushes each result here.
+The old `wip/g1-…`, `wip/f1-…` and `wip/n1-…` branches from 2026-11-26 are superseded by the PR
+branches; delete each after its package merges.
 
-| Package | Head reviewed | Verdict | Result file |
-|---|---|---|---|
-| C1 plan (extra high) | — | Plan complete, with questions for Ismail | `docs/handoff/astra/results/c1-plan.md` |
-| P3B round 7 | `a286b34` | awaiting review (run by Ismail) | prompt `docs/handoff/astra/p3b-review-round7.md` |
-| P3B round 6 | `ead30e2` | **Reject** (run by Ismail): 3 blockers (a refresh during the A-to-B switch saves A's snapshot under B's generation, the removal dialog confirmed after a switch deletes B's photo, a second Android window shares the bearer with its own generation), 6 should-fixes | `docs/handoff/astra/results/p3b-astra-round6-result.md` |
-| P3B round 5 | `f4394f1` | **Reject** (run by Ismail): 2 blockers (a restored KYC image can still reach a Profile pick, and a fresh pick during an A-to-B switch pairs A with B's generation), 5 should-fixes | `docs/handoff/astra/results/p3b-astra-round5-result.md` |
-| P3B round 4 | `c8b4e68` | **Reject**: 5 of 13 fixed, 8 partly fixed; 3 new blockers (KYC picker ownership, uncertain tickets returned to the parcel picker, retry during an account switch) | `docs/handoff/astra/results/p3b-astra-round4-result.md` |
-| G1 round 5 | `a0b48be` | **Reject** (run by Ismail): 3 blockers (the metadata fallback accepts a missing order reference and PaymentIntent events skip the session check, a close that finds collection re-arms no reconciliation, live sessions inherited from the old main stay payable), 7 should-fixes | `docs/handoff/astra/results/g1-astra-round5-result.md` |
-| G1 round 4 | `1643afc` | **Reject** (run by Ismail): 2 blockers (a delayed expired webhook is bound to the newest handleless attempt, and order cancellation leaves an issued checkout payable), 8 should-fixes | `docs/handoff/astra/results/g1-astra-round4-result.md` |
-| G1 round 3 | `d99c838` | **Reject**: A, D, E and F fixed, B and C partly fixed; 3 new blockers (an expiry job leaves a Stripe URL payable, recovery republishes a URL on a terminal attempt, a recovery race supersedes without closing) | `docs/handoff/astra/results/g1-astra-round3-result.md` |
-| N1 round 3 | `13b7ea4` | **Reject** (run by Ismail; accepts the declined old-app blocker): 4 blockers (an unnumbered sign-out before first registration, the same-second `iat` cutoff, a rotated session that survives reset, an exact-repeat check that ignores `sid`), 5 should-fixes, 1 nit | `docs/handoff/astra/results/n1-astra-round3-result.md` |
-| N1 round 2 | `49ae6d8` | **Reject** (run by Ismail on a second Codex account): 6 blockers. Logout can leave the old account receiving pushes (old-app compatibility, out-of-order logout and registration, stale logout after a counter reset, equal sequence numbers, a racing installation ID, password reset) | `docs/handoff/astra/results/n1-astra-round2-result.md` |
-| F1 round 3 | `cb80430` | **Reject** (run by Ismail): 3 blockers (an explicit stale `country=DE` replaces a newer FR declaration, a late timeout reopens a failed key and recovery binds the wrong account, a crashed intent sends its first POST for a closed country), 6 should-fixes, 1 nit | `docs/handoff/astra/results/f1-astra-round3-result.md` |
-| F1 round 2 | `8d1a1cd` | **Reject** (run by Ismail): 8 of 10 fixed, 2 partly fixed; 1 blocker (a stale Stripe onboarding overwrites a newer payout-country declaration) | `docs/handoff/astra/results/f1-astra-round2-result.md` |
+### 0.2 How to resume a package
+1. Start one fresh cloud builder for it, at the model and effort in the table above (never another).
+2. Tell it: read `CLAUDE.md`, `docs/handoff/COORDINATOR.md`, this section, `docs/handoff/status/<PKG>.md`
+   on its branch, the phase doc and the latest Astra result; check out the PR branch; finish the round.
+3. It runs the targeted tests locally and pushes; CI runs the whole suites.
+4. It writes or updates the Astra prompt (head SHA set, the three triage rules of COORDINATOR.md
+   section 3 stated), and pushes.
+5. Give Ismail the prompt; he runs Astra at high and pastes the result back; the builder commits it.
+6. Approve and all checks green: gate comment, squash-merge, board and this section updated.
 
-### 0.4 After every package is merged (each step needs Ismail's OK)
+### 0.3 Merged already
+P1 #60, P2 #62, P4 #61, P3A #64, P3C #65, M1 #68, N2 #70 (`ec24abc`). Earlier: the whole L-series,
+EGS #53, STORE fixes #54.
+
+### 0.4 Next packages, in order (each planned in `docs/WASSLA_PHONE_TEST_2_PLAN.md`, each reviewed by Astra)
+1. **C1, pay only in the traveler's currency** (server). Starts **after G1 and F1 merge** (shared
+   code in `payout_snapshots.py`). Builder: Claude Opus, extra high. The plan is
+   `docs/handoff/astra/results/c1-plan.md`; Ismail's answers are recorded in its section 3 and in
+   project memory: accept Astra's answers 1, 2, 3, 5 and 6; **Q4 changed**: when dinar payment is
+   switched off, the traveler does not see the dinar option at all; **Q7 dropped**: no users, no
+   old-deal check. The plan is complete; no rerun.
+2. **F2, payout pages on the phone**, consuming F1 and C1.
+3. **M2**, route/date failures on the phone (after P3B).
+4. **A1**, route alert offer after an empty search and after posting (after P3B).
+5. **M3**, other departure cities, browse only (after A1 and M2).
+
+**Open question for Ismail:** switching payouts on (operation O4) after F1 merges was asked and
+never answered. Ask again when F1 merges; do nothing until he says yes.
+
+### 0.5 Live server
+Release `5ee8cd2` (deployed 2026-11-23). Nothing above is deployed. Payments in TEST mode (Chargily
+and Stripe on), Stripe Connect off, payout profiles off, FCM push off.
+
+### 0.6 After every package is merged (each step needs Ismail's OK)
 1. Deploy the reviewed `main` SHA to the VPS (`infra/vps/README.md`), then O2 (guest checkout check).
 2. Build a `release` Android APK with the GitHub "Build Android" workflow, give it to Ismail on his
    PC, then delete the artifact and the run from GitHub (his rule). Run the device checks listed in
-   the P3B and N1 phase docs.
+   the P3B and N1 phase docs (`AppDelegate.swift` was never compiled; nothing ran on a device).
 3. Operations O3 (FCM push on), O4 (private payout bucket, payout profiles on, DZD rehearsal),
    O5 (France-only Stripe Connect test), O6 (route alerts), monitor and systemd timers.
 
-### 0.5 Before launch (not code packages)
+### 0.7 Before launch (not code packages)
 Remove the demo data on the live database, rotate the three Backblaze keys, real Stripe and
 Connect, Google Play and Apple accounts and the Data safety form, publish the Google consent
 screen, an uptime monitor, and the older findings (parcel photo GPS metadata, full name on journey
 detail, own-card labels).
+
+### 0.8 Follow-up packages (out-of-scope findings, not yet planned)
+- **Wrong-account writes outside profile photos** (from P3B round 7): KYC upload, cheque, account
+  deletion, sign-out, public profile and discovery can act for the previous account during an
+  account switch. Plan it as one package after P3B merges, reusing P3B's `MemberScope`.
+
+### 0.9 Astra history
+Every round's result is in `docs/handoff/astra/results/` (on the PR branch until merge) and as a
+comment on the pull request. Rounds so far: P3B 7, G1 6, F1 4, N1 4, all rejected; N2 approved; the
+C1 plan complete.
 
 ## 1. Start here
 
