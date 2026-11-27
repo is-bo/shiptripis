@@ -36,7 +36,8 @@ shiptripis/
 │       ├── internal/             # one package per binary
 │       └── pkg/                  # auth, config, db, health, logger,
 │                                 # metrics, redisbus, retry, storage, wsproto
-├── tools/                        # CI checks (static web, geography catalogue)
+├── tools/                        # CI and release checks, geography catalogue,
+│                                 # admin preview scripts
 └── docs/                         # specification, runbooks, phase reports
 ```
 
@@ -183,7 +184,7 @@ it, which `TestSubscribeChannelsMatchDjango` enforces.
 
 The notification service subscribes to every channel. If it holds a socket for
 a target user it pushes to that socket and writes a **delivery receipt** to
-Redis: `SET delivered:<event_id> 1 EX 60`.
+Redis: `SET delivered:<event_id>:<user_id> 1 EX 60`.
 
 ### Streams — FCM queue (durable, single-consumer)
 
@@ -201,7 +202,7 @@ Stream config:
 Worker loop:
 1. `XREADGROUP` on `notif:fcm` for the `notif-fcm-workers` group
 2. Wait 2 seconds (gives the WebSocket hub time to deliver and write its receipt)
-3. Check `EXISTS delivered:<event_id>` — if 1, `XACK` and skip FCM
+3. Check `EXISTS delivered:<event_id>:<user_id>` — if 1, `XACK` and skip FCM
 4. Else check `EXISTS presence:<user_id>` — if 1, sleep another 2s and re-check delivery flag
 5. If still no delivery: call FCM HTTP API, then `XACK`
 6. **`XAUTOCLAIM`** sweeper every 30s reclaims messages idle > 60s in the PEL (handles worker crashes)
@@ -245,7 +246,7 @@ Decision tree per outbound notification:
               |
               +---> FCM worker picks up stream entry.
                     Wait 2s.
-                    delivered:<event_id> exists? → XACK, done.
+                    delivered:<event_id>:<user_id> exists? → XACK, done.
                     presence:<user_id> exists?   → wait 2s, recheck delivery.
                     Still no delivery → POST to FCM, XACK.
 ```
@@ -292,16 +293,20 @@ were never built.
 | `trips` | Journey and JourneyLeg (V1); the legacy Trip and Airport tables stay as history |
 | `locations` | Canonical Place catalogue and preferred Locations |
 | `parcels` | Delivery requests (V1) and parcel media; ProductRequest rows are history |
+| `discovery` | Public listings of requests and journeys, interest signals, route and trip-fit alerts, public profiles |
+| `routing` | Provider-neutral route and geocoding boundary |
 | `matching` | Compatibility, find-travelers, quotes, Match and Offer negotiation (sender proposes first) |
 | `deals` | Funded delivery lifecycle, recipients, arrival, cancellation |
 | `finance` | EUR payment orders and attempts (Stripe, Chargily), settlement, payouts |
 | `handover` | Deal-scoped pickup and delivery codes |
 | `disputes` | Disputes, which freeze payout |
+| `problems` | Problem reports and schedule changes beside the deal; they never write `Deal.status` |
 | `ratings` | Post-delivery ratings |
 | `boosts` | Paid visibility boosts on requests |
 | `notifications` | In-app inbox, push device registration, FCM stream, transactional email outbox |
 | `chat` | Deal chat persistence and REST API; Go relays new messages to sockets |
 | `admin_panel` | The operations console and the admin API |
+| `admin_helper` | The staff AI helper: read tools, audited change actions and its knowledge skill |
 | `payments`, `wallet`, `verification` | Pre-V1 DZD payment, wallet and match-handover tables, kept as history. No API; view-only in the Django admin |
 
 Django **never stores binary bytes**. All photos and documents live in object

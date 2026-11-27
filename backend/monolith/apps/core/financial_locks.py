@@ -77,7 +77,7 @@ to every service that locks one of these rows directly (`apps.finance`,
 
 * Handover confirmation locks Deal then codes, never codes then Deal. The
   legacy `apps.verification` path, which did the opposite (`HandoverCode`
-  before `Match`), was removed in L1A; only its history table remains.
+  before `Match`), was removed in L1A and its table in L1.
 * Dispute opening and protection expiry are the two writers that race for the
   same money. Both enter through `lock_deal_aggregate` and then take `Dispute`
   and `Payout` in this order, so one of them always blocks on the Deal row and

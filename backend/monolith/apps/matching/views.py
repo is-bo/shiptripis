@@ -352,8 +352,7 @@ class OfferDeclineView(APIView):
 class MatchChatEligibilityView(APIView):
     """Whether the caller may open chat for this match.
 
-    Chat is gated on funding for the match's accepted offer: V1 checks the
-    Deal's ``funded_at`` and legacy matches check a succeeded PaymentIntent.
+    Chat is gated on funding: the match's Deal must have ``funded_at``.
     No funding, no chat. This protects both parties (no pre-payment harassment
     funnel) and matches our user-privacy obligation -- counterparty PII flows
     only after both have committed money + acceptance.

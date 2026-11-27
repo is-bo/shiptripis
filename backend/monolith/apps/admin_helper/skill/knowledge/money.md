@@ -204,8 +204,8 @@ Roles: Ops, Support, Finance, Trust / Verification, Super Admin (all codes).
 <!-- src: finance/operations.py, admin_panel/staff_actions.py FINANCE_JOB_KINDS, console_views.py payment_detail, console_forms.py, finance_dashboard_labels.py -->
 
 ## Is there a wallet?
-No. The old wallet and withdrawal tables and the old payment intent tables are history only (view-only in the Django admin, API removed). All V1 money uses orders, attempts, refunds, ledger and payouts. Do not tell users they have a wallet balance.
-<!-- src: wallet/models.py, payments/models.py docstrings -->
+No. All money uses orders, attempts, refunds, ledger and payouts. Do not tell users they have a wallet balance.
+<!-- src: finance/models.py -->
 
 ## Not covered here
 - Live values of settings (current rate, provider switches): the code only has the shipped defaults; the live values are on the Settings page.
