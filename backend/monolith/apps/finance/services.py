@@ -41,7 +41,7 @@ from datetime import datetime, timedelta
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
-from django.db.models import CharField, Exists, OuterRef, Sum, Value
+from django.db.models import CharField, Exists, OuterRef, Q, Sum, Value
 from django.db.models.functions import Cast, Concat
 from django.utils import timezone
 
@@ -64,6 +64,8 @@ from .money import (
 )
 from .models import (
     LIVE_CHECKOUT,
+    UNVERIFIED_PAYMENT,
+    UNVERIFIED_PAYMENT_CODES,
     GuestPaymentLink,
     LedgerAccount,
     LedgerTransaction,
@@ -142,7 +144,7 @@ CHECKOUT_COLLECTING_POLL = timedelta(minutes=5)
 #: (G1).
 FINAL_CHECKOUT_OUTCOMES = frozenset({"succeeded", "failed", "expired", "cancelled"})
 
-#: What a screen may offer for an order's next checkout tap (`checkout_state`).
+#: What a screen may offer for an order's next checkout tap (`next_checkout`).
 CHECKOUT_STATES = frozenset(
     {"ready", "resumable", "guest_paying", "in_progress", "settling"}
 )
@@ -1717,7 +1719,7 @@ def _hands_back(
     live, unexpired and not being closed. A guest never is: nothing a link
     holder sends tells the one who opened it from another. The one rule for
     `_checkout_step` and for what the member's screen offers
-    (`checkout_state`).
+    (`next_checkout`).
     """
 
     return (
@@ -1734,53 +1736,79 @@ def _hands_back(
     )
 
 
-def checkout_state(
+@dataclass(frozen=True, slots=True)
+class NextCheckout:
+    """What the next checkout tap on an order meets (`next_checkout`, G1)."""
+
+    #: One of `CHECKOUT_STATES`.
+    state: str
+    #: The rail of the checkout handed back, when `state` is "resumable".
+    provider: str = ""
+
+
+def next_checkout(
     order: PaymentOrder,
     *,
     available: frozenset[str] | set[str],
     guest: bool,
     at: datetime | None = None,
-) -> str:
+) -> NextCheckout:
     """What the next checkout tap on `order` meets, for the screen offering it (G1).
 
-    One of `CHECKOUT_STATES`. "in_progress": a payment made through one of
-    its checkouts is settling, or a request is opening its checkout now, and
-    the tap would be told to try again. For the owner, "settling" says the
-    first of those apart when the owner paid; "resumable": their own checkout
-    is open and handed back to them (`_hands_back`) on a rail still
-    available; "guest_paying": a link holder's payment is settling, or the
-    checkout they opened can still be paid and a new one would replace it.
-    Otherwise "ready". A guest is never handed an open checkout, so meets
-    only "in_progress" or "ready". Read without a lock: the tap
-    decides under the order lock, so this keeps a screen from offering what
-    the server would refuse, and never grants anything.
+    "in_progress": the tap would be told a payment is under way, because a
+    payment is being made or settling through one of the order's checkouts
+    (its attempt `processing`, as recorded once its provider says so), a
+    checkout of an attempt that ended may still take a payment, or a request
+    is opening a checkout now. For the owner,
+    "settling" says their own settling payment apart, and "guest_paying" any
+    of those that is a link holder's, or a link holder's checkout that can
+    still be paid and that a new one would replace; "resumable" hands back
+    their own open checkout (`_hands_back`) on a rail still available, and
+    names that rail. Otherwise "ready". A guest is never handed an open
+    checkout, so meets only "in_progress" or "ready". Read without a lock:
+    the tap decides under the order lock, so this keeps a screen from
+    offering what the server would refuse, and never grants anything.
     """
 
     at = at or timezone.now()
+    attempts = list(order.attempts.all())
+
+    def live(attempt: PaymentAttempt) -> bool:
+        return (
+            bool(attempt.provider_session_id)
+            and attempt.checkout_final_at is None
+            and attempt.status != PaymentAttempt.Status.SUCCEEDED
+        )
+
+    busy = [
+        attempt
+        for attempt in attempts
+        if attempt.status == PaymentAttempt.Status.PROCESSING
+        or (live(attempt) and attempt.status not in PaymentAttempt.OPEN_STATUSES)
+    ]
+    if busy:
+        if guest:
+            return NextCheckout("in_progress")
+        if any(attempt.guest_link_id for attempt in busy):
+            return NextCheckout("guest_paying")
+        if any(attempt.status == PaymentAttempt.Status.PROCESSING for attempt in busy):
+            return NextCheckout("settling")
+        return NextCheckout("in_progress")
     open_attempts = [
         attempt
-        for attempt in order.attempts.all()
+        for attempt in attempts
         if attempt.status in PaymentAttempt.OPEN_STATUSES
     ]
-    settling = [
-        attempt
-        for attempt in open_attempts
-        if attempt.status == PaymentAttempt.Status.PROCESSING
-    ]
-    if settling:
-        if guest:
-            return "in_progress"
-        return "guest_paying" if settling[0].guest_link_id else "settling"
     if not open_attempts:
-        return "ready"
+        return NextCheckout("ready")
     open_attempt = max(open_attempts, key=lambda attempt: attempt.pk)
     if not open_attempt.provider_session_id:
         claimed = open_attempt.opening_until is not None and (
             open_attempt.opening_until > at
         )
-        return "in_progress" if claimed else "ready"
+        return NextCheckout("in_progress" if claimed else "ready")
     if guest:
-        return "ready"
+        return NextCheckout("ready")
     if open_attempt.provider in available and _hands_back(
         open_attempt,
         actor_id=order.owner_id,
@@ -1788,15 +1816,14 @@ def checkout_state(
         amount_eur_cents=order.outstanding_eur_cents,
         at=at,
     ):
-        return "resumable"
+        return NextCheckout("resumable", provider=open_attempt.provider)
     if (
         open_attempt.guest_link_id is not None
-        and open_attempt.checkout_final_at is None
-        and open_attempt.close_requested_at is None
+        and live(open_attempt)
         and (open_attempt.expires_at is None or open_attempt.expires_at > at)
     ):
-        return "guest_paying"
-    return "ready"
+        return NextCheckout("guest_paying")
+    return NextCheckout("ready")
 
 
 def _record_close_intent(attempt: PaymentAttempt, *, at: datetime) -> None:
@@ -1983,6 +2010,13 @@ def settle_checkout(*, attempt_id: int) -> str:
     confirmation makes it final, and an attempt whose time is up then ends as
     expired. The attempt's status is changed only by those facts.
 
+    A checkout that took a payment whose amount or currency could not be
+    accepted is final, yet the payment is not accounted for: its provider is
+    read again until a verified report applies it (or lands it unapplied and
+    refunded), and "payment_unverified" is answered meanwhile. Whether the
+    checkout can collect and whether its payment is accounted for are two
+    facts, kept apart.
+
     Answers one of `LIVE_CHECKOUT_NOTES` while the checkout may still take a
     payment, else "checkout_final" or the note of the outcome it recorded.
     Raises `ProviderError` when the provider answers nothing usable.
@@ -1994,10 +2028,9 @@ def settle_checkout(*, attempt_id: int) -> str:
     if not attempt.provider_session_id:
         # Never stored, so never handed out: nobody can pay through it.
         return "checkout_final"
-    if (
-        attempt.checkout_final_at is not None
-        or attempt.status == PaymentAttempt.Status.SUCCEEDED
-    ):
+    if attempt.status == PaymentAttempt.Status.SUCCEEDED:
+        return "checkout_final"
+    if attempt.checkout_final_at is not None and not _payment_unverified(attempt_id):
         return "checkout_final"
     require_object_mode(attempt.provider_mode)
     gateway = get_gateway(attempt.provider)
@@ -2012,16 +2045,24 @@ def settle_checkout(*, attempt_id: int) -> str:
             "The provider answered for another or unknown payment mode."
         )
     if snapshot.outcome in FINAL_CHECKOUT_OUTCOMES:
-        return reconcile_attempt(
+        note = reconcile_attempt(
             attempt_id=attempt_id,
             outcome=snapshot.outcome,
             provider_payment_id=snapshot.provider_payment_id,
             provider_amount_minor=snapshot.amount_minor,
             provider_currency=snapshot.currency,
         )
+        return "payment_unverified" if _payment_unverified(attempt_id) else note
+    if attempt.checkout_final_at is not None:
+        # Final with a payment unaccounted for, and its provider reports no
+        # outcome to account for it with: a person's to resolve.
+        return "payment_unverified"
     if snapshot.outcome == "processing":
         reconcile_attempt(attempt_id=attempt_id, outcome="processing")
         return "checkout_settling"
+    # Read again after the provider call: a close asked for meanwhile, by a
+    # request or an order that stopped collecting, is never deferred past.
+    attempt.refresh_from_db(fields=["status", "close_requested_at", "expires_at"])
     if (
         attempt.status
         in (PaymentAttempt.Status.CREATED, PaymentAttempt.Status.CHECKOUT_PENDING)
@@ -2033,7 +2074,10 @@ def settle_checkout(*, attempt_id: int) -> str:
         gateway.close_checkout(provider_session_id=attempt.provider_session_id)
         != CHECKOUT_CLOSED
     ):
-        # A payment is being made through it: read it again shortly.
+        # Its provider says a payment is being made through it. Recorded as
+        # settling, the provider's word kept, so every path and screen waits
+        # for that payment's own outcome; read again shortly.
+        reconcile_attempt(attempt_id=attempt_id, outcome="processing")
         return "checkout_collecting"
     _record_checkout_final(attempt_id)
     if attempt.expires_at is not None and attempt.expires_at <= timezone.now():
@@ -2041,6 +2085,12 @@ def settle_checkout(*, attempt_id: int) -> str:
         # waiting on it ends (one that ended already is left as it is).
         return reconcile_attempt(attempt_id=attempt_id, outcome="expired")
     return "checkout_final"
+
+
+def _payment_unverified(attempt_id: int) -> bool:
+    """Whether a payment reported through this attempt is not accounted for (G1)."""
+
+    return PaymentAttempt.objects.filter(UNVERIFIED_PAYMENT, pk=attempt_id).exists()
 
 
 def _record_checkout_final(attempt_id: int) -> None:
@@ -2058,43 +2108,60 @@ def _arm_checkout_settle(attempt_id: int, *, run_at: datetime | None = None) -> 
     The settle job (`provider_reconcile`) is the one durable obligation that
     drives a checkout to a fate its provider confirms, and it completes only
     once that fate is known. So it is armed again here whatever an earlier
-    run left it as: finished, failed after its retries, or cancelled (G1).
+    run left it as: finished, failed after its retries, or cancelled. A run
+    in progress is due again by `run_at` once it ends, whatever it answers
+    (G1).
     """
 
     run_at = run_at or timezone.now()
-    job, created = ScheduledJob.objects.get_or_create(
-        key=f"provider_reconcile:{attempt_id}",
-        defaults={
-            "kind": ScheduledJob.Kind.PROVIDER_RECONCILE,
-            "run_at": run_at,
-            "payload": {"attempt_id": attempt_id},
-            "max_attempts": CHECKOUT_JOB_ATTEMPTS,
-        },
-    )
-    if created or job.status == ScheduledJob.Status.RUNNING:
-        return
-    now = timezone.now()
-    if job.status == ScheduledJob.Status.PENDING:
-        ScheduledJob.objects.filter(
-            pk=job.pk, status=ScheduledJob.Status.PENDING, run_at__gt=run_at
-        ).update(run_at=run_at, updated_at=now)
-        return
-    ScheduledJob.objects.filter(pk=job.pk).exclude(
-        status__in=(ScheduledJob.Status.PENDING, ScheduledJob.Status.RUNNING)
-    ).update(
-        status=ScheduledJob.Status.PENDING,
-        run_at=run_at,
-        attempts=0,
-        max_attempts=CHECKOUT_JOB_ATTEMPTS,
-        locked_at=None,
-        locked_by="",
-        completed_at=None,
-        resolution="",
-        resolved_at=None,
-        resolved_by=None,
-        resolution_reason="",
-        updated_at=now,
-    )
+    with transaction.atomic():
+        job, created = ScheduledJob.objects.get_or_create(
+            key=f"provider_reconcile:{attempt_id}",
+            defaults={
+                "kind": ScheduledJob.Kind.PROVIDER_RECONCILE,
+                "run_at": run_at,
+                "payload": {"attempt_id": attempt_id},
+                "max_attempts": CHECKOUT_JOB_ATTEMPTS,
+            },
+        )
+        if created:
+            return
+        # Read under the job's row lock, taken after any other: a run cannot
+        # end, nor the job be claimed, between this read and the write below.
+        job = ScheduledJob.objects.select_for_update(no_key=True).get(pk=job.pk)
+        now = timezone.now()
+        if job.status == ScheduledJob.Status.RUNNING:
+            # Asked again while it runs, perhaps on facts the run read before:
+            # whatever the run then answers, it is due again by then
+            # (`jobs._next_run_at`). Later than its claim, so the run's end
+            # tells this request apart.
+            due = max(run_at, now)
+            if job.locked_at is not None and job.run_at > job.locked_at:
+                due = min(due, job.run_at)
+            ScheduledJob.objects.filter(pk=job.pk).update(run_at=due, updated_at=now)
+            return
+        if job.status == ScheduledJob.Status.PENDING:
+            if job.run_at > run_at:
+                ScheduledJob.objects.filter(pk=job.pk).update(
+                    run_at=run_at, updated_at=now
+                )
+            return
+        # Finished, failed after its retries, or cancelled: pending again,
+        # with its full budget.
+        ScheduledJob.objects.filter(pk=job.pk).update(
+            status=ScheduledJob.Status.PENDING,
+            run_at=run_at,
+            attempts=0,
+            max_attempts=CHECKOUT_JOB_ATTEMPTS,
+            locked_at=None,
+            locked_by="",
+            completed_at=None,
+            resolution="",
+            resolved_at=None,
+            resolved_by=None,
+            resolution_reason="",
+            updated_at=now,
+        )
 
 
 def arm_live_checkouts(*, limit: int = 100) -> int:
@@ -2102,8 +2169,8 @@ def arm_live_checkouts(*, limit: int = 100) -> int:
 
     Run by the job loop. A live checkout's settle job completes only once the
     checkout is final, so one left without a pending job has lost it: its
-    retries ran out while the provider confirmed nothing, or it was issued by
-    code that never armed one. Returns how many were armed.
+    retries ran out while the provider confirmed nothing. Returns how many
+    were armed.
     """
 
     pending = ScheduledJob.objects.filter(
@@ -2381,7 +2448,9 @@ def process_provider_event(*, event_id: int) -> str:
         return note
 
     durable_event = _provider_event_from_record(record)
-    attempt = record.attempt or _match_attempt(durable_event)
+    # Bound again on every run, by the stored ids alone: nothing written with
+    # the record decides which attempt it touches (G1).
+    attempt = _match_attempt(durable_event)
     if attempt is None:
         if durable_event.outcome == "succeeded":
             # Not ours by any id we stored, yet money moved: kept, retried and
@@ -2426,6 +2495,10 @@ def process_provider_event(*, event_id: int) -> str:
         guest_email=durable_event.guest_email,
         failure_code=durable_event.failure_code,
     )
+    if note in UNVERIFIED_PAYMENT_CODES:
+        # Money may have moved that this report cannot account for: its
+        # provider is read now, and again until a verified answer does.
+        _arm_checkout_settle(attempt.pk)
     _finish_event(record.pk, PaymentProviderEvent.ProcessingResult.APPLIED, note)
     return note
 
@@ -3570,13 +3643,17 @@ class GuestLinkStatus:
 
 
 def _guest_checkout_open(*, order_id: int, link_id: int) -> bool:
-    """A payer holding this link is partway through a hosted checkout."""
+    """A payer holding this link is partway through a hosted checkout.
 
-    return PaymentAttempt.objects.filter(
-        order_id=order_id,
-        guest_link_id=link_id,
-        status__in=PaymentAttempt.OPEN_STATUSES,
-    ).exists()
+    An open attempt, or a checkout opened through the link that may still take
+    a payment whatever its attempt's status (`LIVE_CHECKOUT`, G1).
+    """
+
+    return (
+        PaymentAttempt.objects.filter(order_id=order_id, guest_link_id=link_id)
+        .filter(Q(status__in=PaymentAttempt.OPEN_STATUSES) | LIVE_CHECKOUT)
+        .exists()
+    )
 
 
 def guest_link_status(*, order_id: int, actor_id: int) -> GuestLinkStatus:
@@ -3876,11 +3953,11 @@ def guest_payment_view(link: GuestPaymentLink, *, policy: Phase3Policy) -> dict:
         # "in_progress" while a tap would be told a payment is under way, so
         # the page offers to check again rather than a button the server
         # would refuse (G1). Nothing about who is paying.
-        "checkout_state": checkout_state(
+        "checkout_state": next_checkout(
             order,
             available={row["provider"] for row in providers},
             guest=True,
-        ),
+        ).state,
     }
 
 

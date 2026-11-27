@@ -520,6 +520,7 @@ class PaymentOrder {
     this.chargilyQuote,
     this.settlement,
     this.checkoutState = CheckoutState.ready,
+    this.resumeProvider,
     this.isReducedProjection = false,
   });
 
@@ -566,6 +567,13 @@ class PaymentOrder {
         ? null
         : PaymentSettlement.fromJson(readObject(json['settlement'])!),
     checkoutState: CheckoutState.parse(json['checkout_state']),
+    resumeProvider: json['resume_provider'] == null
+        ? null
+        : readEnum(
+            json['resume_provider'],
+            PaymentProviderId.values,
+            fallback: PaymentProviderId.unknown,
+          ),
     isReducedProjection: isReducedProjection,
   );
 
@@ -609,6 +617,11 @@ class PaymentOrder {
   /// What the next tap on this order's payment meets. Present while something
   /// is still owed; [CheckoutState.ready] otherwise.
   final CheckoutState checkoutState;
+
+  /// The rail "continue" opens again, while [checkoutState] is
+  /// [CheckoutState.resumable]. The server names it, so a summary that carries
+  /// no attempt history continues on the right rail (G1).
+  final PaymentProviderId? resumeProvider;
 
   /// True for the traveller's cut-down view of a Deal's balance order: status
   /// and outstanding only, no attempts and no payer detail.

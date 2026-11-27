@@ -13,7 +13,13 @@ from django.utils import timezone
 
 from apps.notifications.models import OutboundMessage
 
-from .models import PaymentAttempt, PaymentRefund, ScheduledJob
+from .models import (
+    UNVERIFIED_PAYMENT,
+    UNVERIFIED_PAYMENT_CODES,
+    PaymentAttempt,
+    PaymentRefund,
+    ScheduledJob,
+)
 from .services import schedule_job
 
 
@@ -24,14 +30,6 @@ class FinanceOperationsError(RuntimeError):
         super().__init__(message)
         if code:
             self.code = code
-
-
-# A normal provider-declared decline/failure moved no money and is historical,
-# not an operator queue item.  These codes mean a success was reported but the
-# amount/currency could not be safely accepted, so a person must investigate.
-ATTENTION_FAILURE_CODES = frozenset(
-    {"amount_unverifiable", "amount_mismatch", "currency_mismatch"}
-)
 
 
 def _reactivate_completed_job(job: ScheduledJob) -> ScheduledJob:
@@ -99,10 +97,7 @@ def payment_attention_queryset(
         .filter(operational_resolution="")
         .filter(
             Q(is_unapplied=True, has_settled_unapplied_refund=False)
-            | Q(
-                status=PaymentAttempt.Status.FAILED,
-                failure_code__in=ATTENTION_FAILURE_CODES,
-            )
+            | UNVERIFIED_PAYMENT
         )
     )
 
@@ -306,7 +301,7 @@ def resolve_payment_attention(
             )
     elif not (
         attempt.status == PaymentAttempt.Status.FAILED
-        and attempt.failure_code in ATTENTION_FAILURE_CODES
+        and attempt.failure_code in UNVERIFIED_PAYMENT_CODES
     ):
         raise FinanceOperationsError(
             "This attempt is historical and is not in the finance attention queue.",

@@ -412,8 +412,8 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
   }
 
   /// The server, not the order's history, decides whether a checkout may be
-  /// handed out again, so continuing asks it on the same rail (G1).
-  Future<void> _resume(PaymentAttempt attempt) => _checkout(attempt.provider);
+  /// handed out again, so continuing asks it on the rail it named (G1).
+  Future<void> _resume(PaymentProviderId provider) => _checkout(provider);
 
   Future<void> _open(String? checkoutUrl) async {
     final uri = checkoutUrl == null ? null : Uri.tryParse(checkoutUrl);
@@ -520,6 +520,9 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
     }
     if (error.code.isProviderUnavailable) {
       ref.invalidate(paymentProvidersProvider);
+      // The order's own word on what a tap meets may name that rail too
+      // ("continue"): read it again so the refused rail is not offered (G1).
+      unawaited(_readOrder());
     }
   }
 
@@ -633,7 +636,7 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
     // What the next tap meets is the server's to say (G1): a rail or a
     // "continue" it would refuse is never offered.
     final state = order?.checkoutState ?? CheckoutState.ready;
-    final resumable = order?.latestAttempt;
+    final resumable = order?.resumeProvider;
     if (order != null && state == CheckoutState.guestPaying) {
       // Somebody the Sender sent the link to is paying: on the provider's
       // page, or settling. That session is theirs: offering "continue your

@@ -73,6 +73,7 @@ Map<String, dynamic> _order({
   int? requestId,
   bool withProviders = false,
   String checkoutState = 'ready',
+  String? resumeProvider,
 }) => {
   'public_reference': 'ord_7',
   'purpose': purpose,
@@ -108,6 +109,7 @@ Map<String, dynamic> _order({
       : <Object>[],
   // Served with the rails, while something is still owed (G1).
   if (withProviders) 'checkout_state': checkoutState,
+  if (withProviders) 'resume_provider': resumeProvider,
   'settlement': {
     'is_settled': status == 'paid',
     'purpose': purpose,
@@ -789,6 +791,7 @@ void main() {
         attempts: [_attempt(status: 'checkout_pending')],
         // The payer's own checkout is open: the server hands it back.
         checkoutState: 'resumable',
+        resumeProvider: 'stripe',
       );
       return (backend, container);
     }

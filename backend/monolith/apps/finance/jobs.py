@@ -22,7 +22,9 @@ import socket
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from django.db import connection, transaction
+from django.db import connection, models, transaction
+from django.db.models import Case, F, Value, When
+from django.db.models.functions import Least
 from django.utils import timezone
 
 from apps.deals.models import Deal
@@ -31,6 +33,7 @@ from apps.parcels.models import DeliveryRequest, ParcelRequest
 
 from .models import (
     LIVE_CHECKOUT,
+    UNVERIFIED_PAYMENT,
     PaymentAttempt,
     PaymentOrder,
     PaymentProviderEvent,
@@ -332,6 +335,14 @@ def handle_provider_reconcile(payload: dict) -> str:
             "A payment is being made through the checkout.",
             code="checkout_collecting",
             delay=CHECKOUT_COLLECTING_POLL,
+        )
+    if note == "payment_unverified":
+        # Money its provider reported is neither applied nor refunded: read
+        # again, with backoff, until a verified report accounts for it or staff
+        # resolve it.
+        raise RetryableJobError(
+            "A payment the provider reported is not accounted for yet.",
+            code="payment_unverified",
         )
     return note
 
@@ -809,6 +820,22 @@ def _retry_delay(attempts: int) -> timedelta:
     return timedelta(seconds=min(60 * (2 ** max(0, attempts - 1)), 6 * 3_600))
 
 
+def _next_run_at(proposed: datetime):
+    """When a job that ran and must run again is next due.
+
+    A running job's `run_at` is no later than its claim, unless it was asked
+    while running to run again (`services._arm_checkout_settle`): that sooner
+    time is kept, so a request made during the run is never pushed back by the
+    run's own deferral or retry (G1).
+    """
+
+    return Case(
+        When(run_at__gt=F("locked_at"), then=Least(F("run_at"), Value(proposed))),
+        default=Value(proposed),
+        output_field=models.DateTimeField(),
+    )
+
+
 def claim_due_jobs(*, limit: int, at: datetime | None = None) -> list[ScheduledJob]:
     """Atomically take up to `limit` due jobs for this worker."""
 
@@ -857,8 +884,11 @@ def _already_satisfied_reason(job: ScheduledJob) -> str:
                 if attempt.status not in PaymentAttempt.OPEN_STATUSES
                 else ""
             )
-        # Only a checkout that can take no payment ends its settle job (G1).
-        if PaymentAttempt.objects.filter(LIVE_CHECKOUT, pk=attempt.pk).exists():
+        # Only a checkout that can take no payment, and whose reported payment
+        # is accounted for, ends its settle job (G1).
+        if PaymentAttempt.objects.filter(
+            LIVE_CHECKOUT | UNVERIFIED_PAYMENT, pk=attempt.pk
+        ).exists():
             return ""
         if attempt.provider_session_id:
             return "checkout_final"
@@ -996,7 +1026,7 @@ def run_job(job: ScheduledJob) -> str:
         delay = max(exc.delay, timedelta(seconds=30))
         ScheduledJob.objects.filter(pk=job.pk).update(
             status=ScheduledJob.Status.PENDING,
-            run_at=now + delay,
+            run_at=_next_run_at(now + delay),
             last_attempt_at=now,
             last_error_code="",
             last_error="",
@@ -1056,7 +1086,7 @@ def run_job(job: ScheduledJob) -> str:
             last_attempt_at=now,
             last_error_code=error_code,
             last_error=safe_message,
-            run_at=now + _retry_delay(attempts),
+            run_at=_next_run_at(now + _retry_delay(attempts)),
             locked_at=None,
             locked_by="",
             completed_at=now if failed_permanently else None,

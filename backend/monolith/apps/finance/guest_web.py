@@ -381,7 +381,7 @@ def _in_progress(
     Neither a dead link nor an outage, and the same for every holder of the
     link, whatever they sent. The page offers to send the same choices again.
     Shown on opening the page as well while the server would answer a tap so
-    (`checkout_state`), so no payer is offered a button it would refuse; that
+    (`next_checkout`), so no payer is offered a button it would refuse; that
     page offers to look again (`reload`), as nothing was chosen yet.
     """
 
@@ -545,7 +545,13 @@ def guest_payment_page(request: HttpRequest, token: str) -> HttpResponse:
                 return _in_progress(request, lang, provider=chosen, email=email)
             except FinanceError:
                 # Includes a link revoked, replaced or expired since it was read
-                # above: checkout reads it again under the order lock.
+                # above: checkout reads it again under the order lock. That
+                # includes a link this very tap found paid, by recording a
+                # payment its checkout had already taken: then the page says
+                # so, as it does when the link is opened again (G1).
+                completed = _completed_link(token)
+                if completed is not None:
+                    return _page(request, lang, {"payable": False, "already_paid": True})
                 # The token is never echoed into a log line; the order is named
                 # by its own id, which is not derivable from anything the payer
                 # holds.

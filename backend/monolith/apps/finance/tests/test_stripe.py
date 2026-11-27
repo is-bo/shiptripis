@@ -542,6 +542,8 @@ class StripeWebhookParsingTests(TestCase):
         event = self._parse(body)
 
         assert event.outcome == "ignored"
+        # The decline's own code is still read, for the record of the event.
+        assert event.failure_code == "card_declined"
 
     def test_a_delayed_payment_method_is_reported_as_processing(self):
         """SEPA and bank transfer complete the session before the money lands."""

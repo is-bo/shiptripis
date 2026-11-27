@@ -87,7 +87,9 @@ _STATUS_OUTCOMES = {
     "cancelled": "cancelled",
     "expired": "expired",
     "pending": "ignored",
-    "processing": "ignored",
+    # The payer has submitted and Chargily is settling it: a payment is being
+    # made through this checkout, which only its own outcome ends (G1).
+    "processing": "processing",
 }
 
 
@@ -498,9 +500,9 @@ _SENSITIVE_KEYS = frozenset(
     }
 )
 
-#: How Chargily writes `livemode`: a boolean on a checkout, and the string
-#: "true" or "false" at the top of a webhook event.
-_LIVEMODE_VALUES = {True: True, False: False, "true": True, "false": False}
+#: How Chargily writes `livemode` at the top of a webhook event, exactly: a
+#: checkout carries a boolean.
+_LIVEMODE_LITERALS = {"true": True, "false": False}
 
 
 def _with_boolean_livemode(payload: dict) -> dict:
@@ -508,16 +510,16 @@ def _with_boolean_livemode(payload: dict) -> dict:
 
     Applied to a body only once it is authenticated (a verified signature, or
     Chargily's own API), so the mode checks read one type from every provider
-    (G1). A value that is neither stays as it is, and those checks refuse it.
+    (G1). Only the exact literals "true" and "false" are read: any other value,
+    another case or padding included, stays as it is, and those checks refuse
+    it.
     """
 
     for target in (payload, payload.get("data")):
         if isinstance(target, dict) and "livemode" in target:
             value = target["livemode"]
-            if isinstance(value, str):
-                value = value.strip().lower()
-            if isinstance(value, (bool, str)) and value in _LIVEMODE_VALUES:
-                target["livemode"] = _LIVEMODE_VALUES[value]
+            if isinstance(value, str) and value in _LIVEMODE_LITERALS:
+                target["livemode"] = _LIVEMODE_LITERALS[value]
     return payload
 
 

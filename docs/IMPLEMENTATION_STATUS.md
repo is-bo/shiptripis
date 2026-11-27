@@ -58,6 +58,15 @@
   Chargily states its 30-minute expiry, its string `livemode` reads as a boolean, and no hosted URL
   is stored. The server tells each screen what its next tap meets (`checkout_state`), and the app's
   payment section and guest screen follow it.
+- Seventh pass (Astra 6.2, one blocker and seven should-fix findings in scope). The app has never been
+  live, so the findings about rows, URLs and events left by code before G1 are declared not
+  applicable and nothing is built for them. A success whose amount or currency cannot be accepted
+  stays final for its checkout but is not accounted for (`UNVERIFIED_PAYMENT`): its settle job and the
+  staff reconciliation read the provider until a verified answer applies it or staff resolve it. A
+  close asked for while the settle job runs is never deferred past. A confirmed collecting checkout
+  is recorded as settling; Chargily's `processing` is settling and only its exact `livemode` literals
+  are read. The guest-link guard counts any payable checkout, a guest tap that finds the link paid
+  shows the paid page, and the owner's order names the rail Continue opens (`resume_provider`).
 
 ## Wassla: the bell names the ticket decision (N2, 2026-11-26)
 

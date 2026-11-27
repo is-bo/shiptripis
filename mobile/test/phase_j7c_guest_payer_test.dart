@@ -42,6 +42,7 @@ Map<String, dynamic> _order({
   List<Map<String, dynamic>> attempts = const [],
   List<Map<String, dynamic>>? providers,
   String checkoutState = 'ready',
+  String? resumeProvider,
 }) => {
   'public_reference': _ref,
   'status': status,
@@ -56,6 +57,7 @@ Map<String, dynamic> _order({
   'refunds': const <Map<String, dynamic>>[],
   'providers': providers ?? const <Map<String, dynamic>>[],
   'checkout_state': checkoutState,
+  'resume_provider': resumeProvider,
 };
 
 Map<String, dynamic> _link(
@@ -912,6 +914,7 @@ void main() {
             attempts: [ownCheckout()],
             providers: [rail('chargily', guest: false)],
             checkoutState: 'resumable',
+            resumeProvider: 'chargily',
           ),
         ),
       );
@@ -919,6 +922,120 @@ void main() {
       expect(find.text(l.paymentContinueAction), findsOneWidget);
       expect(find.text(l.paymentChooseProvider), findsNothing);
     });
+
+    // A posting deposit's summary carries no attempt history: "continue"
+    // opens the rail the server names, not whatever the history would say.
+    testWidgets('a summary with no history continues on the rail it names', (
+      tester,
+    ) async {
+      final backend = providersBackend()
+        ..on(
+          'POST',
+          '/api/payments/orders/$_ref/checkout',
+          const FakeResponse(409, {
+            'code': 'checkout_in_progress',
+            'detail': 'A payment for this order is already under way.',
+          }),
+        )
+        ..on(
+          'GET',
+          _orderPath,
+          FakeResponse(200, _order(checkoutState: 'in_progress')),
+        );
+      await pumpApp(
+        tester,
+        Scaffold(
+          body: SingleChildScrollView(
+            child: CheckoutSection(
+              orderReference: _ref,
+              order: PaymentOrder.fromJson(
+                _order(
+                  purpose: 'posting_deposit',
+                  outstanding: 500,
+                  providers: [rail('stripe', guest: false)],
+                  checkoutState: 'resumable',
+                  resumeProvider: 'stripe',
+                ),
+              ),
+              onSettled: () {},
+            ),
+          ),
+        ),
+        container: containerFor(backend),
+      );
+      await tester.pumpAndSettle();
+      final l = L.of(tester.element(find.byType(CheckoutSection)));
+
+      expect(find.text(l.paymentContinueAction), findsOneWidget);
+      expect(find.text(l.paymentChooseProvider), findsNothing);
+
+      await tester.tap(find.text(l.paymentContinueAction));
+      await tester.pumpAndSettle();
+      final sent = backend.to('POST', '/api/payments/orders/$_ref/checkout');
+      expect(sent, hasLength(1));
+      expect((sent.single.body as Map)['provider'], 'stripe');
+    });
+
+    // The rail can be switched off while the screen is open. The refusal
+    // re-reads the order, so "continue" is not offered on it again.
+    testWidgets(
+      'a rail refused while the screen is open is not offered again',
+      (tester) async {
+        final backend = providersBackend()
+          ..on(
+            'POST',
+            '/api/payments/orders/$_ref/checkout',
+            const FakeResponse(503, {
+              'code': 'provider_disabled',
+              'detail': 'This payment method is not available.',
+            }),
+          )
+          ..on(
+            'GET',
+            _orderPath,
+            FakeResponse(
+              200,
+              _order(
+                attempts: [ownCheckout()],
+                providers: [
+                  {...rail('chargily', guest: false), 'available': false},
+                  rail('stripe', guest: true),
+                ],
+              ),
+            ),
+          );
+        await pumpApp(
+          tester,
+          Scaffold(
+            body: SingleChildScrollView(
+              child: CheckoutSection(
+                orderReference: _ref,
+                order: PaymentOrder.fromJson(
+                  _order(
+                    attempts: [ownCheckout()],
+                    providers: [rail('chargily', guest: false)],
+                    checkoutState: 'resumable',
+                    resumeProvider: 'chargily',
+                  ),
+                ),
+                onSettled: () {},
+              ),
+            ),
+          ),
+          container: containerFor(backend),
+        );
+        await tester.pumpAndSettle();
+        final l = L.of(tester.element(find.byType(CheckoutSection)));
+        expect(find.text(l.paymentContinueAction), findsOneWidget);
+
+        await tester.tap(find.text(l.paymentContinueAction));
+        await tester.pumpAndSettle();
+
+        expect(backend.to('GET', _orderPath), isNotEmpty);
+        expect(find.text(l.paymentContinueAction), findsNothing);
+        expect(find.text(l.paymentChooseProvider), findsOneWidget);
+      },
+    );
   });
 
   // -------------------------------------------------------------------------

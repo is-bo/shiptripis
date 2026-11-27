@@ -332,6 +332,57 @@ class ChargilyCheckoutTests(TestCase):
         with override_settings(SHIPTRIP_ENVIRONMENT="production"):
             assert event_mode_allowed(event.payload) is False
 
+    def test_only_the_exact_mode_literals_are_read(self):
+        """Chargily writes "true" or "false". Another case or padding is not
+        one of them, so it is left for the strict mode check to refuse (G1,
+        seventh pass)."""
+
+        for written in (" FALSE ", "False", "TRUE", "true "):
+            with self.subTest(written=written):
+                body = json.dumps(
+                    {
+                        "id": "01event",
+                        "livemode": written,
+                        "type": "checkout.paid",
+                        "data": {"id": "01checkout", "status": "paid"},
+                    },
+                    separators=(",", ":"),
+                ).encode("utf-8")
+
+                event = _gateway().parse_webhook(
+                    raw_body=body, headers={"signature": chargily_signature(body)}
+                )
+
+                assert event.payload["livemode"] == written
+                with override_settings(SHIPTRIP_ENVIRONMENT="production"):
+                    assert event_mode_allowed(event.payload) is False
+
+    def test_a_checkout_chargily_is_settling_is_reported_as_settling(self):
+        """`processing`: the payer submitted and Chargily is settling it, so a
+        payment is being made through the checkout (G1, seventh pass)."""
+
+        gateway = _gateway(
+            [
+                _FakeResponse(
+                    200,
+                    {
+                        "id": "01checkout",
+                        "status": "processing",
+                        "amount": 6_250,
+                        "currency": "dzd",
+                        "livemode": False,
+                    },
+                )
+            ]
+        )
+
+        snapshot = gateway.fetch_attempt(
+            provider_session_id="01checkout", provider_payment_id=""
+        )
+
+        assert snapshot.outcome == "processing"
+        assert snapshot.raw["livemode"] is False
+
     def test_a_paid_label_over_an_unpaid_object_is_not_trusted(self):
         body = json.dumps(
             {

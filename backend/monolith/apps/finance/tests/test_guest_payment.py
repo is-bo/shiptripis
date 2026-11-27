@@ -12,11 +12,12 @@ from __future__ import annotations
 import json
 import secrets
 from copy import deepcopy
+from dataclasses import replace
 from datetime import timedelta
 from unittest import mock
 
 from django.db.models import F
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -37,7 +38,9 @@ from apps.finance.models import (
 from apps.finance import views as finance_views
 from apps.finance.operations import (
     FinanceOperationsError,
+    payment_attention_queryset,
     queue_payment_reconciliation,
+    resolve_payment_attention,
 )
 from apps.finance.providers import (
     ProviderCheckoutRejected,
@@ -53,6 +56,7 @@ from apps.finance.services import (
     CHECKOUT_RECOVERY_LIMIT,
     CheckoutInProgress,
     FinanceError,
+    GuestCheckoutInProgress,
     GuestLinkInvalid,
     NotAuthorized,
     cancel_order,
@@ -1058,8 +1062,9 @@ class OpenCheckoutTests(GuestPaymentTestCase):
 
     def test_a_payment_being_made_holds_off_expiry_and_is_followed_to_its_end(self):
         """Open at its provider, which refuses to close it because a payment
-        is being made through it: nothing ends or replaces it, and its settle
-        job, due shortly, records the payment with no webhook at all."""
+        is being made through it: that is recorded as settling, so nothing
+        ends or replaces it and every screen waits, and its settle job, due
+        shortly, records the payment with no webhook at all."""
 
         first = self.start().attempt
         with mock.patch.object(
@@ -1068,11 +1073,13 @@ class OpenCheckoutTests(GuestPaymentTestCase):
             for who in (self.start, self.owner_starts):
                 with self.subTest(who.__name__), self.assertRaises(CheckoutInProgress):
                     who()
-            assert self.expire(first) == "attempt_collecting"
+            assert self.expire(first) == "attempt_settling"
+        assert self.owner_state() == "guest_paying"
+        assert self.guest_state() == "in_progress"
 
         kept = self.attempts().get()
         assert kept.pk == first.pk
-        assert kept.status == PaymentAttempt.Status.CHECKOUT_PENDING
+        assert kept.status == PaymentAttempt.Status.PROCESSING
         assert kept.close_requested_at is not None
         assert kept.checkout_final_at is None
         self.assert_only_payable(kept)
@@ -1664,17 +1671,20 @@ class OpenCheckoutTests(GuestPaymentTestCase):
 
     # --- sixth pass: one settle routine, one settle job, a sweep -------------
 
-    def leave_as_old_code_did(self, attempt, **fields):
-        """As code from before G1 left an attempt: ended here, never closed
-        at its provider, and with no job left to follow it."""
+    def leave_unclosed(self, attempt, **fields):
+        """An attempt ended here without its provider confirming the close,
+        and with no job left to follow it: the state every path that ends an
+        attempt must never rely on being absent."""
 
         PaymentAttempt.objects.filter(pk=attempt.pk).update(**fields)
         ScheduledJob.objects.filter(payload__attempt_id=attempt.pk).delete()
 
-    def test_a_checkout_old_code_ended_is_closed_before_any_other_opens(self):
+    def test_a_checkout_whose_attempt_ended_unclosed_is_closed_before_any_other_opens(
+        self,
+    ):
         """Live is the provider's fact, never the attempt's status: a
-        checkout ended here by older code, or by any path that did not close
-        it, is closed at its provider before the order opens another."""
+        checkout whose attempt ended by any path that did not close it is
+        closed at its provider before the order opens another."""
 
         for status, code in (
             (PaymentAttempt.Status.CANCELLED, "superseded"),
@@ -1682,7 +1692,7 @@ class OpenCheckoutTests(GuestPaymentTestCase):
         ):
             with self.subTest(status):
                 old = self.owner_starts().attempt
-                self.leave_as_old_code_did(old, status=status, failure_code=code)
+                self.leave_unclosed(old, status=status, failure_code=code)
                 assert MockGateway.is_payable(old.provider_session_id)
 
                 # Its provider cannot confirm it closed: nothing opens
@@ -1711,7 +1721,7 @@ class OpenCheckoutTests(GuestPaymentTestCase):
 
     def test_the_job_loop_arms_every_live_checkout_left_without_a_settle_job(self):
         old = self.owner_starts().attempt
-        self.leave_as_old_code_did(
+        self.leave_unclosed(
             old, status=PaymentAttempt.Status.CANCELLED, failure_code="superseded"
         )
 
@@ -1865,6 +1875,287 @@ class OpenCheckoutTests(GuestPaymentTestCase):
         assert COPY["en"]["in_progress_title"] in content
         assert 'name="provider"' not in content
         assert 'method="get"' in content
+
+    # --- seventh pass ---------------------------------------------------------
+
+    def report_success(self, attempt, *, event_id, amount):
+        body = mock_event_body(
+            event_id=event_id,
+            outcome="succeeded",
+            session_id=attempt.provider_session_id,
+            amount=amount,
+            currency=attempt.payment_currency,
+            event_type="checkout.succeeded",
+        )
+        assert deliver_mock_webhook(self.client, body).status_code == 200
+
+    def settle_job(self, attempt):
+        return ScheduledJob.objects.get(key=f"provider_reconcile:{attempt.pk}")
+
+    def test_a_success_whose_amount_cannot_be_accepted_is_read_until_it_is_accounted_for(self):
+        """A reported success with the wrong amount: it took a payment, so its
+        checkout takes no other, but the payment is not accounted for. Its
+        settle job reads the provider at once and again, never applying an
+        unverified figure, until a verified answer applies it (G1, seventh
+        pass)."""
+
+        own = self.owner_starts().attempt
+        expected = int(own.provider_amount_minor)
+        self.report_success(own, event_id="evt_wrong_amount", amount=expected + 1)
+
+        own.refresh_from_db()
+        assert own.status == PaymentAttempt.Status.FAILED
+        assert own.failure_code == "amount_mismatch"
+        assert own.checkout_final_at is not None
+        settle = self.settle_job(own)
+        assert settle.status == ScheduledJob.Status.PENDING
+        assert settle.run_at <= timezone.now()
+
+        real_fetch = MockGateway.fetch_attempt
+
+        def still_wrong(gateway, **kwargs):
+            snapshot = real_fetch(gateway, **kwargs)
+            return replace(snapshot, amount_minor=expected + 1)
+
+        with mock.patch.object(MockGateway, "fetch_attempt", new=still_wrong):
+            assert jobs.run_job(settle) == "failed"
+        settle.refresh_from_db()
+        assert settle.status == ScheduledJob.Status.PENDING
+        assert settle.last_error_code == "payment_unverified"
+        assert jobs._already_satisfied_reason(settle) == ""
+        own.refresh_from_db()
+        assert own.status == PaymentAttempt.Status.FAILED
+        self.order.refresh_from_db()
+        assert self.order.status != PaymentOrder.Status.PAID
+        # Not live, so the sweep leaves it to its own job.
+        assert services.arm_live_checkouts() == 0
+
+        MockGateway.mark(own.provider_session_id, "succeeded")
+        assert jobs.run_job(settle) == "applied"
+        settle.refresh_from_db()
+        assert settle.status == ScheduledJob.Status.SUCCEEDED
+        own.refresh_from_db()
+        assert own.status == PaymentAttempt.Status.SUCCEEDED
+        self.order.refresh_from_db()
+        assert self.order.status == PaymentOrder.Status.PAID
+
+    def test_staff_reconciliation_reads_the_provider_for_a_payment_it_could_not_accept(self):
+        """A success reported with no amount is kept for a person. The staff
+        action reads the provider for it, even though its checkout is final,
+        and a verified answer applies it (G1, seventh pass)."""
+
+        own = self.owner_starts().attempt
+        self.report_success(own, event_id="evt_no_amount", amount=None)
+        own.refresh_from_db()
+        assert own.failure_code == "amount_unverifiable"
+        assert own.checkout_final_at is not None
+
+        job, kind = queue_payment_reconciliation(attempt_id=own.pk)
+        assert kind == "provider_reconciliation"
+        MockGateway.mark(own.provider_session_id, "succeeded")
+        assert jobs.run_job(job) == "applied"
+        own.refresh_from_db()
+        assert own.status == PaymentAttempt.Status.SUCCEEDED
+        self.order.refresh_from_db()
+        assert self.order.status == PaymentOrder.Status.PAID
+
+    def test_a_settle_job_that_ran_out_on_an_unaccounted_payment_is_not_archived(self):
+        """Its reads stop after the job's tries, but the payment is not
+        accounted for: the failed job stays in the staff queue beside the
+        attempt, never archived as if its checkout's fate were all it
+        followed (G1, seventh pass)."""
+
+        own = self.owner_starts().attempt
+        self.report_success(own, event_id="evt_no_amount_ran_out", amount=None)
+        settle = self.settle_job(own)
+        ScheduledJob.objects.filter(pk=settle.pk).update(
+            status=ScheduledJob.Status.FAILED,
+            attempts=CHECKOUT_JOB_ATTEMPTS,
+            completed_at=timezone.now(),
+        )
+
+        assert jobs.resolve_satisfied_failed_jobs() == 0
+        settle.refresh_from_db()
+        assert settle.resolution == ""
+        assert payment_attention_queryset().filter(pk=own.pk).exists()
+
+    def test_a_payment_staff_resolved_is_no_longer_read(self):
+        own = self.owner_starts().attempt
+        self.report_success(
+            own,
+            event_id="evt_wrong_currency_amount",
+            amount=int(own.provider_amount_minor) + 1,
+        )
+        resolve_payment_attention(
+            attempt_id=own.pk,
+            actor_id=self.scenario.sender.pk,
+            resolution=PaymentAttempt.OperationalResolution.RESOLVED,
+            reason="Refunded by hand at the provider.",
+        )
+
+        with mock.patch.object(MockGateway, "fetch_attempt") as fetch:
+            assert jobs.run_job(self.settle_job(own)) == "checkout_final"
+        fetch.assert_not_called()
+
+    def test_a_close_asked_for_while_the_settle_job_runs_is_not_deferred_past(self):
+        """The order is cancelled while its settle job is between reading the
+        provider and deferring to the checkout's expiry: the job is due again
+        at once, and closes the checkout (G1, seventh pass)."""
+
+        own = self.owner_starts().attempt
+        ScheduledJob.objects.filter(key=f"provider_reconcile:{own.pk}").update(
+            run_at=timezone.now() - timedelta(seconds=1)
+        )
+        [claimed] = [
+            job
+            for job in jobs.claim_due_jobs(limit=50)
+            if job.key == f"provider_reconcile:{own.pk}"
+        ]
+        real_settle = services.settle_checkout
+
+        def cancelled_once_it_decided(*, attempt_id):
+            note = real_settle(attempt_id=attempt_id)
+            assert note == "checkout_open"
+            cancel_order(order_id=self.order.pk, reason="g1 test")
+            return note
+
+        with mock.patch.object(
+            services, "settle_checkout", new=cancelled_once_it_decided
+        ):
+            assert jobs.run_job(claimed) == "deferred"
+        settle = self.settle_job(own)
+        assert settle.status == ScheduledJob.Status.PENDING
+        assert settle.run_at <= timezone.now()
+        assert MockGateway.is_payable(own.provider_session_id)
+
+        assert jobs.run_job(settle) == "checkout_final"
+        own.refresh_from_db()
+        assert own.checkout_final_at is not None
+        assert not MockGateway.is_payable(own.provider_session_id)
+
+    def test_a_close_dated_before_the_jobs_claim_still_brings_its_next_read_forward(
+        self,
+    ):
+        """An order closure dates its request when it starts, which can be
+        before the settle job's claim when the two overlap. The run still
+        treats it as asked during the run (G1, seventh pass)."""
+
+        own = self.owner_starts().attempt
+        started = timezone.now() - timedelta(seconds=5)
+        ScheduledJob.objects.filter(key=f"provider_reconcile:{own.pk}").update(
+            run_at=started
+        )
+        [claimed] = [
+            job
+            for job in jobs.claim_due_jobs(limit=50)
+            if job.key == f"provider_reconcile:{own.pk}"
+        ]
+        real_settle = services.settle_checkout
+
+        def asked_with_an_earlier_date(*, attempt_id):
+            note = real_settle(attempt_id=attempt_id)
+            assert note == "checkout_open"
+            services._arm_checkout_settle(attempt_id, run_at=started)
+            return note
+
+        with mock.patch.object(
+            services, "settle_checkout", new=asked_with_an_earlier_date
+        ):
+            assert jobs.run_job(claimed) == "deferred"
+        settle = self.settle_job(own)
+        assert settle.status == ScheduledJob.Status.PENDING
+        assert settle.run_at <= timezone.now()
+
+    def test_a_cancellation_during_the_providers_answer_is_read_before_deferring(self):
+        own = self.owner_starts().attempt
+        real_fetch = MockGateway.fetch_attempt
+
+        def cancelled_meanwhile(gateway, **kwargs):
+            snapshot = real_fetch(gateway, **kwargs)
+            cancel_order(order_id=self.order.pk, reason="g1 test")
+            return snapshot
+
+        with mock.patch.object(MockGateway, "fetch_attempt", new=cancelled_meanwhile):
+            assert services.settle_checkout(attempt_id=own.pk) == "checkout_final"
+        assert not MockGateway.is_payable(own.provider_session_id)
+
+    def test_a_link_whose_ended_attempt_can_still_be_paid_is_not_revoked(self):
+        """Revoking or replacing the link is refused while any checkout opened
+        through it may still take a payment, whatever its attempt's status
+        (G1, seventh pass)."""
+
+        guest = self.start().attempt
+        PaymentAttempt.objects.filter(pk=guest.pk).update(
+            status=PaymentAttempt.Status.CANCELLED
+        )
+        with self.assertRaises(GuestCheckoutInProgress):
+            revoke_guest_link(order_id=self.order.pk, actor_id=self.scenario.sender.pk)
+        with self.assertRaises(GuestCheckoutInProgress):
+            create_guest_link(order_id=self.order.pk, actor_id=self.scenario.sender.pk)
+
+        PaymentAttempt.objects.filter(pk=guest.pk).update(
+            checkout_final_at=timezone.now()
+        )
+        assert revoke_guest_link(
+            order_id=self.order.pk, actor_id=self.scenario.sender.pk
+        )
+
+    def test_a_tap_on_the_page_that_finds_the_payment_made_says_it_is_paid(self):
+        """Paid at the provider before its webhook: the next holder's tap
+        records it, and the page says the payment is complete, as it does
+        when the link is opened again (G1, seventh pass)."""
+
+        first = self.start().attempt
+        MockGateway.mark(first.provider_session_id, "succeeded")
+
+        page = Client().post(
+            f"/pay/guest/{self.token}?lang=en",
+            {"provider": "mock", "lang": "en"},
+            secure=True,
+        )
+
+        from apps.finance.guest_web import COPY
+
+        assert page.status_code == 200
+        assert COPY["en"]["paid_title"] in page.content.decode()
+        self.order.refresh_from_db()
+        assert self.order.status == PaymentOrder.Status.PAID
+
+    def test_a_checkout_an_ended_attempt_left_payable_is_waited_for_on_every_screen(
+        self,
+    ):
+        """An attempt can end before its provider confirms its checkout
+        closed. The next tap settles that checkout first and may be told a
+        payment is under way, so no screen offers Pay or the rails meanwhile,
+        and the owner is told whose it is (G1, seventh pass)."""
+
+        own = self.owner_starts().attempt
+        self.leave_unclosed(
+            own, status=PaymentAttempt.Status.CANCELLED, failure_code="superseded"
+        )
+        assert self.owner_state() == "in_progress"
+        assert self.guest_state() == "in_progress"
+        assert services.settle_checkout(attempt_id=own.pk) == "checkout_final"
+        assert self.owner_state() == "ready"
+
+        guest = self.start().attempt
+        self.leave_unclosed(
+            guest, status=PaymentAttempt.Status.CANCELLED, failure_code="superseded"
+        )
+        assert self.owner_state() == "guest_paying"
+        assert self.guest_state() == "in_progress"
+
+    def test_the_owner_is_told_which_rail_continue_opens(self):
+        """Resumable carries its rail, so a summary with no attempt history
+        still offers Continue on the right one (G1, seventh pass)."""
+
+        owner = self.client_for(self.scenario.sender)
+        detail = reverse("finance-order-detail", args=[str(self.order.public_reference)])
+        assert owner.get(detail).data["resume_provider"] is None
+        self.owner_starts()
+        response = owner.get(detail)
+        assert response.data["checkout_state"] == "resumable"
+        assert response.data["resume_provider"] == "mock"
 
 
 @override_settings(

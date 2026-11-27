@@ -331,6 +331,19 @@ LIVE_CHECKOUT = (
     & ~Q(status="succeeded")
 )
 
+#: A success its provider reported whose amount or currency could not be
+#: accepted: money may have moved, so it is neither applied nor forgotten. It
+#: stays a person's to decide until a verified report accounts for it or staff
+#: resolve it (`operational_resolution`), whatever its checkout can still take.
+UNVERIFIED_PAYMENT_CODES = frozenset(
+    {"amount_unverifiable", "amount_mismatch", "currency_mismatch"}
+)
+UNVERIFIED_PAYMENT = (
+    Q(status="failed")
+    & Q(failure_code__in=UNVERIFIED_PAYMENT_CODES)
+    & Q(operational_resolution="")
+)
+
 
 class PaymentAttempt(models.Model):
     """One provider attempt against a PaymentOrder.

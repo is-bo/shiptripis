@@ -71,12 +71,12 @@ from .services import (
     GuestLinkInvalid,
     NotAuthorized,
     chargily_display,
-    checkout_state,
     create_guest_link,
     ensure_posting_deposit_order,
     deposit_quote_payload,
     guest_link_status,
     guest_payment_view,
+    next_checkout,
     provider_options,
     request_refund,
     resolve_guest_link,
@@ -162,12 +162,15 @@ def _with_payment_options(payload: dict, order: PaymentOrder) -> dict:
         policy, amount_eur_cents=order.outstanding_eur_cents
     )
     # What the owner's next tap meets, so the section never offers a rail or
-    # a "continue" the server would refuse (G1).
-    payload["checkout_state"] = checkout_state(
+    # a "continue" the server would refuse, and the rail a "continue" opens
+    # again, which a summary without attempt history could not tell (G1).
+    upcoming = next_checkout(
         order,
         available={row["provider"] for row in payload["providers"] if row["available"]},
         guest=False,
     )
+    payload["checkout_state"] = upcoming.state
+    payload["resume_provider"] = upcoming.provider or None
     if policy.providers.chargily_enabled:
         payload["chargily_quote"] = chargily_display(
             amount_eur_cents=order.outstanding_eur_cents, policy=policy
