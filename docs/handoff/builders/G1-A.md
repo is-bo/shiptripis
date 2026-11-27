@@ -1,183 +1,134 @@
-# Builder brief G1-A: payment state and money
+# Brief G1-A: held payments and finality
 
-**Builder:** Claude Opus, extra-high effort. One builder at a time on the branch.
-**Start only when** the lead says the plan is approved and gives you Ismail's answers to D1 to D9.
-**Plan:** `docs/handoff/LOOP_END_PLAN.md` at commit `e66bb5b`, on branch
-`claude/project-thread-mb20d4`. Read it with `git fetch origin claude/project-thread-mb20d4` and
-`git show e66bb5b:docs/handoff/LOOP_END_PLAN.md`. If the lead names a later commit, use that one.
-Where this brief and the plan differ, the plan wins, and you tell the lead.
+**Builder:** Claude Opus, extra-high effort.
+**Branch:** `claude/g1-guest-checkout-csrf`, pull request #67. Last reviewed head: `57684cb`
+(rejected, round 7). First merge `origin/main` into the branch. G1-B and G1-C follow you on the
+same branch, one builder at a time.
+**Starts:** when the lead gives you Ismail's answers to the plan's decisions (D2 is yours).
+**Read first:** `CLAUDE.md`; `docs/handoff/builders/README.md`; the plan
+(`docs/handoff/LOOP_END_PLAN.md`) sections 3, 4 and 5.2 and the G1 rows of Appendix A; on your
+branch `docs/handoff/status/G1.md` and the G1 phase document; `docs/ADMIN_OPERATIONS.md`.
 
 ## 1. Your job
 
-Rebuild family G-D on the G1 branch: every reported payment is accounted for before the order
-collects again. You own the server's state and money rules. Two briefs follow you on the same
-branch: G1-B (jobs) and G1-C (the gate function and the screens).
+Close rule G-D: every reported payment is accounted for before the order collects again. Three
+facts are kept apart: can this checkout still collect (finality), did the provider report a
+payment (evidence), and what became of the money (disposition).
 
-## 2. Branch and order
+## 2. What the code does today (checked at `57684cb`)
 
-- Branch `claude/g1-guest-checkout-csrf`, pull request #67. Last reviewed head: `57684cb`
-  (rejected, round 7).
-- First merge `origin/main` into the branch with a merge commit.
-- You can run beside F1, N1, P3B-A and S1-A. G1-B starts when your work is pushed and green.
-- The pull request is reviewed once, after G1-C.
+Paths are under `backend/monolith/apps/finance/`.
 
-## 3. Read first
+- The gate `_checkout_step` (`services.py`) checks `LIVE_CHECKOUT` and never
+  `UNVERIFIED_PAYMENT`.
+- `_record_checkout_final` sets `checkout_final_at` without a terminal status.
+- `reconcile_attempt` accepts a success with an empty currency, applies a late success to a
+  failed attempt without reading `operational_resolution`, and saves `checkout_final_at` in an
+  earlier statement than the status.
+- The console's `payment_resolve` view (`admin_panel/console_views.py`) calls
+  `resolve_payment_attention` (`operations.py`) and writes the audit row. The form
+  (`PaymentAttentionResolutionForm`) offers "resolved", "dismissed" and "superseded".
 
-1. `CLAUDE.md`.
-2. The plan: sections 3 and 4 (rules R5 and R8 are yours), sections 6.1 to 6.3 (G-D1 to G-D6) and
-   6.5, the G1 rows of Appendix A, and item 2 of Appendix B.
-3. On your branch: `docs/handoff/status/G1.md`, `docs/PHASE_G1_GUEST_CHECKOUT_CSRF.md` and
-   `docs/ADMIN_OPERATIONS.md`. Astra's round-7 report is restated in Appendix A; ask the lead for
-   the original.
+## 3. What you build
 
-## 4. What you build
-
-Paths are under `backend/monolith/`. Keep three facts apart everywhere: can this checkout still
-collect, did the provider report a payment, and what became of the money.
-
-**G-D1. Final means terminal** (`apps/finance/services.py`, `apps/finance/providers/`).
-`checkout_final_at` is written by `reconcile_attempt` only, in the same UPDATE statement as the
-terminal status. `close_checkout` returns how the provider says the checkout ended (closed unpaid,
-failed, expired, cancelled, or a payment under way), and `settle_checkout` passes that outcome on.
-Add the check constraint
+**G-D1. Final means terminal.** `checkout_final_at` is written by one function,
+`reconcile_attempt`, in the same UPDATE as the terminal status. `_record_checkout_final` goes.
+`close_checkout` returns how the provider says the checkout ended (closed unpaid, failed, expired,
+cancelled, or a payment under way), and `settle_checkout` passes that on. A check constraint:
 `checkout_final_at IS NULL OR status IN ('succeeded','failed','expired','cancelled')`.
 
-**G-D2. "Verified" has one meaning.** A reported payment is verified only when the provider's
-answer states an amount that is a whole number of minor units and equals the expected one, and a
-currency that equals the expected one. A missing amount, a missing currency, a fractional amount
-or a mismatch is not verified. One function decides it; `reconcile_attempt` and the staff action
-both call it.
-**[Guess]** Both providers state a currency in a success answer, or in the read that follows.
-Check `providers/stripe.py` and `providers/chargily.py`. If one never does, stop and ask.
+**G-D2. "Verified" has one meaning.** One function. A reported payment is verified only when the
+provider's answer states an amount that is a whole number of minor units and equals the expected
+one, and a currency that equals the expected one. Anything missing, fractional or different is
+not verified. **[Guess]** Both providers state a currency in a success answer, or in the read
+that follows it; then the hold heals by itself.
 
-**G-D3. Three predicates, stated once** (`apps/finance/models.py`).
+**G-D3. Three predicates, stated once, in `models.py`.**
 
-- `LIVE_CHECKOUT`: can still collect (as today).
-- `HELD_PAYMENT`: a reported debit with no disposition. It is today's `UNVERIFIED_PAYMENT` with one
-  more failure code, `paid_after_disposition`.
-- `OUTSTANDING`: either of the two.
+- `LIVE_CHECKOUT`: can still collect.
+- `HELD_PAYMENT`: a reported payment that is not verified, or that arrived after staff closed
+  the item, and that has no disposition. This is today's `UNVERIFIED_PAYMENT` with one more
+  failure code, `paid_after_disposition`.
+- `OUTSTANDING`: `LIVE_CHECKOUT` or `HELD_PAYMENT`. The gate, `settle_checkout`'s early return,
+  the sweep and `_already_satisfied_reason` read this one.
 
-The finance queue (`payment_attention_queryset` in `apps/finance/operations.py`) keeps its rule:
-held, or unapplied with a refund not complete. The unapplied-payment and refund path does not
-change.
+The finance queue keeps its rule: held, or unapplied with a refund not complete.
 
-**G-D4. The gate refuses while a payment is held.** In `_checkout_step`, an order with a
-`HELD_PAYMENT` attempt opens and hands out no checkout. The answer is the stable code
-`payment_under_review` (409), translated. A hold sends no payment-failed email. The state the
-screens read says "under review"; G1-C draws it and later folds your check into the gate function.
+**G-D4. The gate refuses while a payment is held.** An order with a held attempt opens and hands
+out no checkout. The answer is the stable code `payment_under_review` (409), translated: a
+payment for this order is being checked, do not pay again. No surface says "nothing was charged"
+for a held attempt: not the app, not the guest page, not the payment-failed email (a hold sends
+none).
 
-**G-D5. A hold ends only by a disposition** (`operations.py` `resolve_payment_attention`;
-`apps/admin_panel/console_views.py` `payment_resolve`; `console_forms.py`
-`PaymentAttentionResolutionForm`). The four dispositions and their conditions are the table in
-plan section 6.3. For the two staff ones:
+**G-D5. A hold ends in one of five ways, and in no other.**
 
-- The provider read returns a typed answer: no payment and final; paid and verified; paid and not
-  verified; open; processing; unreadable. Open, processing and unreadable allow no disposition.
-- `no_debit` needs "no payment and final". `returned` needs a final checkout with a reported
-  payment, the provider's payment reference (equal to the one read, when the provider gave one)
-  and the evidence that the money went back.
-- The action reads the provider first, outside any transaction. Then one transaction locks the
-  attempt, checks that it is still held with the same code and reference, writes the disposition
-  (actor, reason, reference, evidence) and writes the audit row. The console view's transaction
-  wraps only that second step.
+| How | Who | Condition |
+|---|---|---|
+| Applied | Automatic | A verified report, on a hold staff never closed. Credited once, by the existing path. |
+| Unapplied and refunded | Automatic | A verified report that the order cannot absorb. The existing path. |
+| Released | Automatic | The settle job's read of the provider says: the checkout is final and holds no successful payment. Only for a hold staff never closed. The attempt becomes an ordinary failed attempt. |
+| `no_debit` | Staff | Finance saw at the provider that no money was taken. A required reason. |
+| `returned` | Staff | Finance saw that the money went back. A required reason and the provider's payment reference, which must equal the one stored on the attempt when one is stored. |
+
+- The provider read in `settle_checkout` gives a typed answer: final with no payment; paid and
+  verified; paid and not verified; open; processing; unreadable. Open, processing and unreadable
+  change nothing.
+- The staff action makes no provider call. It is one transaction: lock the attempt, check it is
+  still held with the same failure code, write the disposition with actor, reason and reference,
+  write the audit row.
 - The form offers `no_debit` and `returned` for a held payment. "Resolved", "dismissed" and
   "superseded" stay for the other kinds of item.
-- Schema: two new `operational_resolution` choices, and one new column for the provider payment
-  that a `returned` disposition accounted for.
+- The reference of a `returned` disposition is kept on the attempt. Use a column the attempt
+  already has for the provider's payment id. Add one column only if none can hold it.
 
-**G-D6. Automatic paths obey the disposition** (`reconcile_attempt`, under the attempt row lock).
-For an attempt staff closed: a report of the payment that a `returned` disposition accounted for
-changes nothing. Any other reported success puts the attempt back on hold with
-`paid_after_disposition`, clears the disposition (the audit log keeps it) and records the event,
-once, whichever path saw it. That hold is never applied automatically. Only `returned` closes it.
+**G-D6. Automatic paths obey the disposition.** In `reconcile_attempt`, under the attempt's row
+lock, for an attempt staff closed:
 
-## 5. What you remove
+- a report of the payment that a `returned` disposition names changes nothing;
+- any other reported success puts the attempt back on hold with `paid_after_disposition`, clears
+  the disposition (the audit log keeps it) and records the event, once, whichever path saw it;
+- a hold with that code is never applied or released automatically. Only `returned` closes it.
 
-`_record_checkout_final`. The gate's "final but open" branch. The "resolved, dismissed,
-superseded" choices for a held payment. The acceptance of an empty currency in
-`reconcile_attempt`.
+The staff action and `reconcile_attempt` take the same row lock, so the second sees the first.
 
-## 6. What is not yours
+## 4. What you remove
 
-- `apps/finance/jobs.py` and how jobs are armed (G1-B). Use the arming that exists.
-- The gate function and every screen (G1-C). You add one check to `_checkout_step` and one code.
-- Guest link expiry, the Chargily create idempotency, the payout preflight (follow-ups and C1).
-- Closed families G-A, G-B and G-C: their tests stay green and their code stays as it is.
+`_record_checkout_final`; the gate's "final but open" branch; the "resolved", "dismissed" and
+"superseded" choices for a held payment; every second statement of the three predicates.
 
-## 7. Tests
+## 5. What is not yours
 
-Red first: round-7 blocker 1 (an unverified payment does not stop a new checkout), blocker 3
-(staff resolve while a read is in progress, and the late success is applied) and should-fix 1
-(a close that learns "failed" leaves the attempt final and `processing`).
+Jobs and the sweep (G1-B). The gate function and the screens (G1-C): you add the
+`payment_under_review` answer and its strings, G1-C draws the state. The payout preflight (C1).
 
-Start the state table of plan section 6.5 as data, and generate tests from it. Your part:
+## 6. Tests
 
-- states S5 to S11, with every money event: each webhook variant (verified; no amount; no
-  currency; fractional amount; mismatch; failed), each staff disposition on each typed provider
-  answer, staff reconcile, the order paid by another attempt;
-- for each: the next state, the answer, the ledger effect and the finance queue;
-- both orders of webhook against staff disposition, and of a provider read against staff
-  disposition, with real threads;
-- late evidence: a success seen only by a provider read after each disposition; the same report
-  twice; the unapplied-refund queue unchanged.
+Red first: round-7 blocker 1, blocker 3 and the Chargily should-fix (plan Appendix A).
+
+Write the cases as a table of data and generate the tests from it.
+
+- **Attempt states:** opening; never opened; open and payable; closing; settling; ended locally
+  with the provider not confirmed; paid; ended and confirmed; held; closed by staff as
+  `no_debit`; closed as `returned`; held again after a disposition.
+- **Events:** a tap by the member who opened it; a tap by another member or a guest; a webhook
+  (paid and verified, paid with no amount, with no currency, with a fractional amount, with a
+  mismatch, failed); the settle read, for each typed answer; a close confirmed unpaid, refused
+  because a payment is under way, or reporting a failure; expiry; each staff disposition; the
+  order stops collecting; the order is paid by another attempt.
+- For every state and every event that can reach it: the next state, the answer, the ledger
+  effect and the finance queue.
+- **Both orders of:** webhook and staff disposition; settle read and staff disposition; tap and
+  webhook.
+- **Late evidence:** a success seen only by a provider read, after each disposition; the same
+  report twice; a `returned` reference that does not match.
 
 Mechanical checks: the check constraint; `checkout_final_at` assigned in one function; the three
-predicates stated once; a test gateway that fails if it is called inside a transaction.
+predicates stated once; the test gateway fails when it is called inside a transaction.
 
-## 8. Done when
+## 7. Done when
 
-1. The three findings above are tests, red before and green after.
-2. Your rows of the state table pass. G1-B and G1-C extend the same table.
-3. The migration is generated, `task check-drift` is clean and the contract is committed.
-4. `docs/ADMIN_OPERATIONS.md` says how Finance uses the two dispositions. The disposition form has
-   360 px screenshots in English and Arabic. New strings exist in three languages.
-5. CI is green on your head, and the status file tells G1-B where the predicates and the settle
-   handler stand.
-
-## Rules, the same for every builder
-
-1. Build what this brief names and nothing else. Add no lock, counter, generation, flag, column,
-   job kind or retry loop that the plan does not name. If one seems needed, stop and ask.
-2. Red first. Reproduce each finding listed under "Tests" as a failing test before you fix it. A
-   failing test must tell the bad outcome apart from a correct serial execution.
-3. Group tests by family, in files named after the invariant. Never skip, delete or weaken a test.
-   A test of a mechanism you delete is rewritten to the new rule, and the pull request lists it
-   with the reason.
-4. Remove what you replace in the same pull request. The tests of the closed families stay green.
-5. The server enforces every rule. The app never fakes a result. Every user-facing string exists
-   in English, French and Arabic.
-6. After a migration, run `task check-drift` in `backend/` and commit the regenerated contract.
-7. Push only to your branch, with ordinary pushes: no force push, no rebase of pushed commits. The
-   whole suites and the Android build run in GitHub CI on the branch. While you fix, re-run locally
-   only the tests that failed. The work is ready only when every CI check is green, "Schema drift"
-   included.
-8. Never deploy, never restart or change a server, never build the app for a device. The
-   repository is public: no server address, account email, key, token or password in a file, a
-   commit, the pull request or a comment.
-9. Do not edit `HANDOFF.md`, the plan, or files that belong to another brief. Do not merge. Write
-   nothing on GitHub except the pull request description.
-10. No model name in a commit, a pull request or a document. Do not use the word "partner".
-
-## Stop and ask the lead when
-
-- a fix needs a mechanism the plan does not name;
-- the code cannot do what the plan says, or the plan and the code disagree about a fact;
-- a change would alter a money, code or matching result in a way the plan does not state;
-- something marked **[Guess]** turns out to be wrong;
-- the only way forward would weaken a test.
-
-Say what you found, with file and line, and what you would do. Then wait. The lead takes it to the
-planner. Do not patch around it.
-
-## What you hand back
-
-- The branch pushed, CI green on its head, and that head's commit id.
-- The evidence table: one row per finding under "Tests", with the finding, the report it came
-  from, the red test and the commit where it fails, the green test, and device evidence where this
-  brief asks for it.
-- The inventory of writers and callers of each mechanism you built: who writes the field, who
-  calls the function.
-- The tests you removed or rewrote, each with its reason.
-- What you saw outside this brief, as a note for a follow-up. Do not fix it.
-- `docs/handoff/status/G1.md` on the branch, rewritten to say where the work stands,
-  and what G1-B needs to know.
+1. The three findings are tests, red before and green after, and the table passes.
+2. The migration is generated, `task check-drift` is clean, the contract is committed.
+3. `payment_under_review` and the staff form's strings exist in three languages.
+4. `docs/ADMIN_OPERATIONS.md` says how Finance uses the two dispositions.
+5. `docs/handoff/status/G1.md` tells G1-B where things stand. CI is green on your last commit.

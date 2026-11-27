@@ -1,52 +1,72 @@
-# Builder briefs for the loop-end plan
+# Builder briefs
 
-These eleven briefs split `docs/handoff/LOOP_END_PLAN.md` (revision 2, commit `e66bb5b`) into
-pieces that one builder can hold in its head. Each brief can be handed over as it is.
+One file per brief. The lead hands a brief to a builder as it is. The order, the branches and the
+model and effort of each brief are in section 9 of the plan, `docs/handoff/LOOP_END_PLAN.md`.
 
-**Not valid yet.** A brief may be handed over only when Astra's re-check of the plan says
-"approve" and Ismail has answered D1 to D9 (plan section 2). If an answer changes a brief, the
-planner changes the brief first.
+The plan and these briefs are on `main` once the lead has copied them there. Until then they are
+on branch `claude/project-thread-mb20d4` (`git fetch origin claude/project-thread-mb20d4`).
 
-## Order, effort and who can run together
+A builder reads, in this order: `CLAUDE.md`, this file, its brief, and the plan sections its brief
+names. Where a brief and the plan differ, the brief wins for details and the plan for rules, and
+the builder tells the lead.
 
-Every builder is Claude Opus.
+## Rules, the same for every builder
 
-| Brief | Effort | Branch | Starts when |
-|---|---|---|---|
-| `F1.md` | Extra high | `claude/f1-payout-availability` (#69) | The plan is approved |
-| `G1-A.md` | Extra high | `claude/g1-guest-checkout-csrf` (#67) | The plan is approved |
-| `N1.md` | Extra high | `claude/n1-notification-first-open` (#71) | The plan is approved |
-| `P3B-A.md` | High | `claude/p3b-profile-photos-app` (#66) | The plan is approved |
-| `S1-A.md` | Extra high | new, from the N1 branch | The plan is approved |
-| `G1-B.md` | Extra high | the G1 branch | G1-A is pushed and green |
-| `G1-C.md` | Extra high | the G1 branch | G1-B is pushed and green |
-| `S1-B.md` | Extra high | the S1 branch | S1-A is pushed and green |
-| `P3B-B.md` | Extra high | the P3B branch | N1 and S1 are merged, and P3B-A is green |
-| `P3B-C.md` | High | the P3B branch | P3B-B is pushed and green |
-| `F1b.md` | Extra high | new, from `main` | F1 is merged |
+1. **Ponytail.** Work as the section "Working style: ponytail" of `CLAUDE.md` says: the smallest
+   change that fully solves the problem, with what the codebase already has. In money, payout,
+   codes, sign-in, staff authority, matching and location code there is no `shortcut:`.
+2. **Build what your brief names and nothing else.** Add no lock, counter, flag, column, job kind,
+   retry loop, helper class or option that the brief does not name. If one seems needed, stop and
+   ask.
+3. **Red first.** Reproduce each finding your brief lists as a failing test before you fix it. A
+   failing test must tell the bad outcome apart from a correct serial execution.
+4. **Tests.** Test every case the brief lists. Group tests by rule, in files named after the rule,
+   not after a review round. Never skip or weaken a test. A test goes only together with the code
+   it tested, and the pull request lists it with the surface it covered.
+5. **Remove what you replace**, in the same pull request. No commented-out code, no parameter for
+   later, no second copy of a rule.
+6. The server enforces every rule. The app never fakes a result. Every user-facing string exists
+   in English, French and Arabic. Each new or changed screen state has a screenshot in English and
+   in Arabic at 360 px.
+7. After a migration, run `task check-drift` in `backend/` and commit the regenerated contract.
+8. Push only to your branch, with ordinary pushes: no force push, no rebase of pushed commits. To
+   take in `main`, merge it. The whole suites and the Android build run in GitHub CI on the
+   branch. While you fix, re-run locally only the tests that failed. The work is ready only when
+   every CI check is green, "Schema drift" included.
+9. Never deploy, never restart or change a server, never build the app for a device. The
+   repository is public: no server address, account email, key, token or password in a file, a
+   commit, the pull request or a comment.
+10. Do not edit `HANDOFF.md`, the plan, or files that belong to another brief. Do not merge. Write
+    nothing on GitHub except the pull request description.
+11. No model name in a commit, a pull request or a document. Do not use the word "partner". The
+    requirements document of 11 November is "the cahier des charges".
+12. **Documents.** Write `docs/PHASE_<id>_<NAME>.md`: the final design in at most 150 lines, with
+    the evidence table. Add a dated entry at the top of `docs/IMPLEMENTATION_STATUS.md`. Round
+    history stays in git.
+13. **Before you hand back**, run `/ponytail-review` on your whole change against `main`. Fix what
+    it finds. A finding whose fix needs something your brief does not name is reported, not fixed.
 
-- **Five builders can run at once at the start:** F1, G1-A, N1, P3B-A and S1-A. They touch
-  different files.
-- **One builder per branch at a time.** The next brief on a branch starts from the previous one's
-  pushed, green head and its status file.
-- **Merge order:** F1 and G1 in either order (the second merges `main` in, regenerates the schema
-  contract, and the whole finance suite runs again), then C1. N1, then S1, then P3B. F1b after F1,
-  before payouts are switched on.
+## Stop and ask the lead when
 
-## How the lead hands a brief over
+- a fix needs a mechanism the brief does not name;
+- the code cannot do what the brief says, or the brief and the code disagree about a fact;
+- a change would alter a money, code or matching result in a way the brief does not state;
+- something marked **[Guess]** turns out to be wrong and the brief names no fallback;
+- the only way forward would weaken a test.
 
-1. Start a Claude Opus builder at the effort in the table.
-2. Tell it to read `CLAUDE.md`, then its brief, and give it Ismail's answers to D1 to D9.
-3. Until this branch is on `main`, the builder reads the brief and the plan with
-   `git fetch origin claude/project-thread-mb20d4` and
-   `git show origin/claude/project-thread-mb20d4:docs/handoff/builders/<brief>`.
-4. When a builder stops and asks, bring the question to the planner. Do not let the builder patch
-   around it.
-5. When the last brief on a branch is green, check its evidence table, write the Astra prompt as
-   plan section 3.6 says, and give it to Ismail at once. One prompt per pull request.
+Say what you found, with file and line, and what you would do. Then wait. The lead takes it to the
+planner. Do not patch around it.
 
-## What still needs Ismail at the time
+## What you hand back
 
-- The device kill test of S1 and the device check of P3B need a test build.
-- Every merge follows the usual rule: all CI checks green and Astra's approval.
-- Switching payouts on waits for F1b and for his OK when it runs.
+- The branch pushed, CI green on its head, and that head's commit id.
+- The evidence table: one row per finding or rule under "Tests", with the red test and the commit
+  where it fails, the green test, and device evidence where the brief asks for it.
+- For a brief that deletes: the inventory, with the search that shows each item is unused.
+- The tests you removed or rewrote, each with its reason.
+- The verdict of `/ponytail-review`, and what you did not fix, with the reason.
+- What you saw outside your brief, as a note for a follow-up. Do not fix it.
+- `docs/handoff/status/<BRIEF>.md` on the branch: where the work stands.
+
+End your reply to the lead with one or two lines: what you skipped or did not check, and any risk
+Ismail must know.
