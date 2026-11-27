@@ -144,7 +144,7 @@ Future<ProviderContainer> _signedIn(
   backend.on('GET', '/api/me', FakeResponse(200, meFixture()));
   final container = containerFor(backend);
   addTearDown(container.dispose);
-  await tester.runAsync(() => launch(container));
+  await launchPumped(tester, container);
   return container;
 }
 

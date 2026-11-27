@@ -25,6 +25,7 @@ import 'package:shiptrip/core/push/notification_socket.dart';
 import 'package:shiptrip/core/push/push_coordinator.dart';
 import 'package:shiptrip/core/push/push_messaging.dart';
 import 'package:shiptrip/core/session/session.dart';
+import 'package:shiptrip/core/session/session_core.dart';
 import 'package:shiptrip/domain/account.dart';
 import 'package:shiptrip/domain/push.dart';
 import 'package:shiptrip/features/auth/sign_in_screen.dart';
@@ -1271,22 +1272,22 @@ void main() {
       expect(push.requests, 1);
     });
 
+    // The splash lasts only while the keystore has not answered: a stored
+    // sign-in opens on its own account, online or not.
     testWidgets('the splash is not a usable screen: no prompt until it ends', (
       tester,
     ) async {
-      var online = false;
       final backend = FakeBackend()
-        ..handle(
-          'GET',
-          '/api/me',
-          (r) => online ? FakeResponse(200, meFixture()) : _offline(r),
-        )
+        ..on('GET', '/api/me', FakeResponse(200, meFixture()))
         ..on(
           'POST',
           '/api/notifications/devices',
           const FakeResponse(201, {'id': 3, 'active': true}),
         )
         ..fallback = (_) => const FakeResponse(503, {'detail': 'unavailable'});
+      final storage = MemoryStorage({SessionCore.recordKey: signedInRecord()})
+        ..readGate = Completer<void>();
+      backend.session = coreFor(backend, storage: storage);
       final push = _FakePushMessaging();
       var homePainted = false;
       String? topAtRequest;
@@ -1302,15 +1303,11 @@ void main() {
         push: push,
       );
 
-      await _settle(tester, 20);
+      await _settle(tester, 30);
       expect(find.byType(SplashScreen), findsOneWidget);
-      expect(push.requests, 0);
+      expect(push.requests, 0, reason: 'the keystore has not answered yet');
 
-      await _settle(tester, 70);
-      expect(push.requests, 0, reason: 'still offline, still on the splash');
-
-      online = true;
-      await tester.tap(find.text('Try again'));
+      storage.readGate!.complete();
       await _settle(tester);
 
       expect(container.read(sessionProvider), isA<SessionSignedIn>());

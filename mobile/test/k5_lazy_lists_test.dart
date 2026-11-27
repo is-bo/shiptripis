@@ -116,7 +116,7 @@ Future<ProviderContainer> _signedIn(
     retry: (_, _) => null,
   );
   addTearDown(container.dispose);
-  await tester.runAsync(() => launch(container));
+  await launchPumped(tester, container);
   return container;
 }
 

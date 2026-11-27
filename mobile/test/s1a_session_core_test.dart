@@ -305,22 +305,17 @@ void main() {
       final storage = MemoryStorage();
       final backend = signedOutServer(() async => signInAnswer(sid: 'sid-b'));
       final container = _app(backend, storage);
-      await tester.runAsync(() => launch(container));
+      await launchPumped(tester, container);
 
       storage.writeError = _refused;
       Object? failure;
-      await tester.runAsync(() async {
-        try {
-          await container
-              .read(sessionProvider.notifier)
-              .signIn(email: 'a@x.com', password: 's');
-        } on Object catch (error) {
-          failure = error;
-        }
-        await _waitFor(
-          () => backend.to('POST', '/api/auth/sign-out').isNotEmpty,
-        );
-      });
+      unawaited(
+        container
+            .read(sessionProvider.notifier)
+            .signIn(email: 'a@x.com', password: 's')
+            .then<void>((_) {}, onError: (Object error) => failure = error),
+      );
+      await _settle(tester);
 
       expect(failure, isA<SessionNotSaved>());
       expect(container.read(sessionProvider), isA<SessionSignedOut>());
@@ -879,6 +874,89 @@ void main() {
       expect(container.read(accountProvider)?.fullName, 'After the write');
       final again = await _restart(backend, storage);
       expect(again.current?.account.fullName, 'After the write');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // The three findings of plan Appendix A, red on the rejected branches (the
+  // pull request shows those runs) and green here. N1 round-5 blocker 3, a
+  // 429 on the launch `/api/me`, is the S-3 case "429 with Retry-After on
+  // /api/me at launch keeps the member signed in" above.
+  group('the findings', () {
+    test('N1 r5 blocker 2: a sign-out overtaken by another sign-in still ends '
+        'the first sign-in on the server', () async {
+      final firstSend = Completer<FakeResponse>();
+      var sends = 0;
+      final storage = _phone();
+      final backend = FakeBackend()
+        ..on('GET', '/api/me', FakeResponse(200, meFixture()))
+        ..handle('POST', '/api/auth/sign-out', (_) {
+          // The first send is still on the network when B signs in.
+          return ++sends == 1 ? firstSend.future : const FakeResponse(205);
+        })
+        ..on(
+          'POST',
+          '/api/auth/sign-in',
+          signInAnswer(sid: 'sid-b', user: {...meFixture(), 'id': 99}),
+        );
+      final container = _app(backend, storage);
+      await launch(container);
+      final session = container.read(sessionProvider.notifier);
+
+      await session.signOut();
+      expect(await session.signIn(email: 'b@x.com', password: 's'), isTrue);
+      firstSend.complete(const FakeResponse(205));
+      await _waitFor(() => storage.record!.ended.isEmpty);
+
+      expect(
+        backend.to('POST', '/api/auth/sign-out').map((r) => r.body),
+        everyElement({'refresh': fakeToken('sid-a')}),
+      );
+      expect(backend.session.current?.sid, 'sid-b');
+      expect(backend.session.current?.refresh, fakeToken('sid-b'));
+    });
+
+    test('P3B r8 blocker 2: an interrupted sign-in save never leaves one '
+        'member on screen with another\'s bearer', () async {
+      final storage = MemoryStorage();
+      final backend = FakeBackend()
+        ..on('GET', '/api/me', FakeResponse(200, meFixture()))
+        ..on('GET', '/api/one', const FakeResponse(200, {'ok': true}))
+        ..on('POST', '/api/auth/sign-out', const FakeResponse(205))
+        ..handle(
+          'POST',
+          '/api/auth/sign-in',
+          (r) => r.body['email'] == 'b@x.com'
+              ? signInAnswer(sid: 'sid-b', user: {...meFixture(), 'id': 99})
+              : const FakeResponse(400, {'code': 'invalid_credentials'}),
+        );
+      final container = _app(backend, storage);
+      await launch(container);
+      final session = container.read(sessionProvider.notifier);
+      final api = container.read(apiClientProvider);
+
+      // B's record write is held, then refused; a third attempt meanwhile.
+      storage.writeGate = Completer<void>();
+      final b = session
+          .signIn(email: 'b@x.com', password: 's')
+          .then<Object?>((_) => null, onError: (Object e) => e);
+      await _waitFor(() => backend.to('POST', '/api/auth/sign-in').isNotEmpty);
+      expect(await session.signIn(email: 'c@x.com', password: 'x'), isFalse);
+      await api.getObject('/api/one');
+      storage.writeError = _refused;
+      storage.writeGate!.complete();
+      expect(await b, isA<SessionNotSaved>());
+      storage.writeError = null;
+      await api.getObject('/api/one');
+
+      expect(container.read(sessionProvider), isA<SessionSignedOut>());
+      expect(storage.record, isNull, reason: 'nothing half written');
+      expect(
+        backend.to('GET', '/api/one').map((r) => r.headers['Authorization']),
+        [null, null],
+        reason: 'signed out on screen, and no bearer on the wire',
+      );
+      expect(backend.to('POST', '/api/auth/sign-in'), hasLength(1));
     });
   });
 

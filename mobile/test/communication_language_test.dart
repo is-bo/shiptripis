@@ -42,7 +42,7 @@ import 'support/harness.dart';
 /// its signed-out placeholder and the assertions below measure the wrong
 /// thing.
 Future<void> _signIn(WidgetTester tester, ProviderContainer container) =>
-    tester.runAsync(() => launch(container));
+    launchPumped(tester, container);
 
 void main() {
   // -------------------------------------------------------------------------
@@ -699,13 +699,13 @@ void main() {
             ),
           }),
         );
-      // No stored credential: this is a first launch, so `restore()` must not
-      // go looking for a profile that does not exist yet.
+      // Nobody stored: a first launch, which reads no profile.
       final container = containerFor(
         backend,
         session: coreFor(backend, signedIn: false),
       );
       addTearDown(container.dispose);
+      await launch(container);
 
       await container
           .read(sessionProvider.notifier)

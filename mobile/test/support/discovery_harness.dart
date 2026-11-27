@@ -133,7 +133,7 @@ Future<ProviderContainer> pumpDiscovery(
 }) async {
   final container = discoveryContainer(backend, now: now);
   addTearDown(container.dispose);
-  await tester.runAsync(() => launch(container));
+  await launchPumped(tester, container);
   container.read(roleContextProvider.notifier).set(role);
   await pumpApp(
     tester,

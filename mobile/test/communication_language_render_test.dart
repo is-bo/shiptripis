@@ -32,7 +32,7 @@ Future<ProviderContainer> _signedIn(
 ) async {
   final container = containerFor(backend);
   addTearDown(container.dispose);
-  await tester.runAsync(() => launch(container));
+  await launchPumped(tester, container);
   return container;
 }
 

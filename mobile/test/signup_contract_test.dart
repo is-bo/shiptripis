@@ -47,6 +47,7 @@ void main() {
           session: coreFor(backend, signedIn: false),
         );
         addTearDown(container.dispose);
+        await launch(container);
 
         await container
             .read(sessionProvider.notifier)
@@ -78,6 +79,7 @@ void main() {
           session: coreFor(backend, signedIn: false),
         );
         addTearDown(container.dispose);
+        await launch(container);
 
         await container
             .read(sessionProvider.notifier)

@@ -42,7 +42,12 @@ void main() {
             _rating(accountId == 42 ? 'A private' : 'B private'),
           ]);
         })
-        ..on('POST', '/api/auth/sign-out', const FakeResponse(200, {}));
+        ..on('POST', '/api/auth/sign-out', const FakeResponse(205))
+        ..handle(
+          'POST',
+          '/api/auth/sign-in',
+          (_) => signInAnswer(user: {...meFixture(), 'id': accountId}),
+        );
       final container = containerFor(backend);
       addTearDown(container.dispose);
       await launch(container);
@@ -54,7 +59,9 @@ void main() {
       expect(container.read(receivedRatingsProvider).requireValue, isEmpty);
 
       accountId = 99;
-      await launch(container);
+      await container
+          .read(sessionProvider.notifier)
+          .signIn(email: 'next@example.com', password: 'secret');
       expect(container.read(accountProvider)?.id, 99);
       expect(
         container
@@ -79,7 +86,8 @@ void main() {
           ratingsCalls++;
           return FakeResponse(200, [_rating(comment)]);
         })
-        ..on('POST', '/api/auth/sign-out', const FakeResponse(200, {}));
+        ..on('POST', '/api/auth/sign-out', const FakeResponse(205))
+        ..on('POST', '/api/auth/sign-in', signInAnswer(sid: 'sid-a2'));
       final container = containerFor(backend);
       addTearDown(container.dispose);
       await launch(container);
@@ -90,7 +98,9 @@ void main() {
       await container.read(sessionProvider.notifier).signOut();
       expect(container.read(receivedRatingsProvider).requireValue, isEmpty);
       comment = 'A updated';
-      await launch(container);
+      await container
+          .read(sessionProvider.notifier)
+          .signIn(email: 'next@example.com', password: 'secret');
       expect(
         container
             .read(receivedRatingsProvider)
@@ -120,7 +130,12 @@ void main() {
           }
           return FakeResponse(200, [_rating('B private')]);
         })
-        ..on('POST', '/api/auth/sign-out', const FakeResponse(200, {}));
+        ..on('POST', '/api/auth/sign-out', const FakeResponse(205))
+        ..handle(
+          'POST',
+          '/api/auth/sign-in',
+          (_) => signInAnswer(user: {...meFixture(), 'id': accountId}),
+        );
       final container = containerFor(backend);
       addTearDown(container.dispose);
       await launch(container);
@@ -131,7 +146,9 @@ void main() {
       await container.read(sessionProvider.notifier).signOut();
       expect(container.read(receivedRatingsProvider).requireValue, isEmpty);
       accountId = 99;
-      await launch(container);
+      await container
+          .read(sessionProvider.notifier)
+          .signIn(email: 'next@example.com', password: 'secret');
       expect((await _ratingsReady(container)).single.comment, 'B private');
 
       oldResponse.complete(FakeResponse(200, [_rating('A late')]));

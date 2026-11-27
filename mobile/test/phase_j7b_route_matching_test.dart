@@ -152,7 +152,7 @@ Future<L> _pumpDetail(
   final backend = _detailBackend(request);
   final container = containerFor(backend);
   addTearDown(container.dispose);
-  await tester.runAsync(() => launch(container));
+  await launchPumped(tester, container);
   await pumpApp(
     tester,
     const RequestDetailScreen(requestId: 77),
@@ -193,7 +193,7 @@ Future<void> _pumpList(
     );
   final container = containerFor(backend);
   addTearDown(container.dispose);
-  await tester.runAsync(() => launch(container));
+  await launchPumped(tester, container);
   await pumpApp(tester, screen, container: container, locale: locale);
   await tester.pumpAndSettle();
 }

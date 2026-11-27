@@ -138,7 +138,7 @@ class _FormHarness {
       ],
     );
     addTearDown(container.dispose);
-    await tester.runAsync(() => launch(container));
+    await launchPumped(tester, container);
 
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(411, 869);

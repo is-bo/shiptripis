@@ -19,6 +19,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_test/flutter_test.dart' show WidgetTester;
 import 'package:shiptrip/core/api/api_client.dart';
 import 'package:shiptrip/core/session/session.dart';
 import 'package:shiptrip/core/session/session_core.dart';
@@ -179,14 +180,15 @@ class _FakeAdapter implements HttpClientAdapter {
 /// Secure storage that answers from memory, as a keystore would.
 ///
 /// [readError] and [writeError], while set, are thrown by every read or
-/// write: a keystore can refuse either. [writeGate], while set, holds every
-/// write until it completes.
+/// write: a keystore can refuse either. [readGate] and [writeGate], while
+/// set, hold every read or write until they complete.
 class MemoryStorage extends FlutterSecureStorage {
   MemoryStorage([Map<String, String>? values]) : values = {...?values};
 
   final Map<String, String> values;
   Object? readError;
   Object? writeError;
+  Completer<void>? readGate;
   Completer<void>? writeGate;
   int writes = 0;
 
@@ -200,6 +202,7 @@ class MemoryStorage extends FlutterSecureStorage {
     MacOsOptions? mOptions,
     WindowsOptions? wOptions,
   }) async {
+    await readGate?.future;
     final error = readError;
     if (error != null) throw error;
     return values[key];
@@ -372,11 +375,29 @@ ProviderContainer containerFor(
 }
 
 /// A launch, finished: the stored record read and the stored member's
-/// account confirmed by `/api/me`.
+/// account confirmed by `/api/me`. For a plain test, on real time; a widget
+/// test uses [launchPumped].
 Future<void> launch(ProviderContainer container) async {
   container.read(sessionProvider);
   await container.read(sessionCoreProvider).load();
   await container.read(sessionProvider.notifier).refreshAccount();
+}
+
+/// [launch] under a widget test's fake clock, before the first frame.
+///
+/// Not `tester.runAsync`: the core's queue would then end on a future of the
+/// real event loop, and the next write the test makes on the fake clock would
+/// wait on it for real time.
+Future<void> launchPumped(WidgetTester tester, ProviderContainer container) =>
+    _pumped(tester, launch(container));
+
+Future<void> _pumped(WidgetTester tester, Future<void> work) async {
+  var done = false;
+  final watched = work.whenComplete(() => done = true);
+  for (var i = 0; i < 100 && !done; i++) {
+    await tester.pump(const Duration(milliseconds: 10));
+  }
+  await watched;
 }
 
 /// The real [ApiClient] of [session] (by default the backend's), talking to

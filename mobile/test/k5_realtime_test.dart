@@ -24,6 +24,7 @@ import 'package:shiptrip/core/push/notification_socket.dart';
 import 'package:shiptrip/core/push/push_coordinator.dart';
 import 'package:shiptrip/core/push/push_messaging.dart';
 import 'package:shiptrip/core/session/session.dart';
+import 'package:shiptrip/core/session/session_core.dart';
 import 'package:shiptrip/domain/account.dart';
 
 import 'support/fake_api.dart';
@@ -73,20 +74,41 @@ class _Dialer {
   }
 }
 
+/// The session shown, moved by the test; the core beside it holds the same
+/// sign-in, so the sockets find its token.
 class _Session extends SessionController {
   _Session(this.account);
 
   Account account;
+  String sid = 'sid-a';
+
+  SessionCore get _core => ref.read(sessionCoreProvider);
 
   @override
-  SessionState build() => SessionSignedIn(account, sid: 'sid-a');
+  SessionState build() => SessionSignedIn(account, sid: sid);
 
-  void switchTo(Account next) {
+  /// Another account takes the phone: this sign-in ends, then the next one
+  /// starts from signed out.
+  Future<void> switchTo(Account next) async {
+    await signOutLocally();
     account = next;
-    state = SessionSignedIn(next, sid: 'sid-a');
+    sid = 'sid-${next.id}';
+    await _core.signedIn(
+      _core.reserve()!,
+      SignIn(
+        sid: sid,
+        account: next,
+        access: fakeToken(sid, 'access'),
+        refresh: fakeToken(sid),
+      ),
+    );
+    state = SessionSignedIn(next, sid: sid);
   }
 
-  void signOutLocally() => state = const SessionSignedOut();
+  Future<void> signOutLocally() async {
+    await _core.end(sid, EndReason.signedOut);
+    state = const SessionSignedOut();
+  }
 }
 
 /// Records profile refreshes, with a chosen age for the last account read.
@@ -167,7 +189,9 @@ Future<(ProviderContainer, _Session, int Function())> _mount(
   final tokens = FakeTokenStore();
   // A refused handshake re-reads `/api/me` to refresh the token.
   final backend = FakeBackend()
-    ..on('GET', '/api/me', FakeResponse(200, meFixture()));
+    ..on('GET', '/api/me', FakeResponse(200, meFixture()))
+    ..on('POST', '/api/auth/sign-out', const FakeResponse(205));
+  await backend.session.load();
   final container = ProviderContainer(
     overrides: [
       tokenStoreProvider.overrideWithValue(tokens),
@@ -334,8 +358,14 @@ void main() {
       final (_, session, _) = await _mount(tester, dialer);
       final first = List.of(dialer.all);
 
-      session.switchTo(
-        Account.fromJson({...meFixture(), 'id': 99, 'email': 'b@example.com'}),
+      unawaited(
+        session.switchTo(
+          Account.fromJson({
+            ...meFixture(),
+            'id': 99,
+            'email': 'b@example.com',
+          }),
+        ),
       );
       await _flush(tester);
 
@@ -348,7 +378,7 @@ void main() {
       final dialer = _Dialer();
       final (_, session, _) = await _mount(tester, dialer);
 
-      session.signOutLocally();
+      unawaited(session.signOutLocally());
       await _flush(tester);
       expect(dialer.open, isEmpty);
 
