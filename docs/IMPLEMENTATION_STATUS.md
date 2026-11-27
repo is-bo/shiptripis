@@ -1,5 +1,13 @@
 # Waçla V1 Implementation Status
 
+## Wassla: stale repository files removed (H1, 2026-11-27)
+
+- Files and documents only. No product code, no behaviour change, nothing deployed.
+- Removed: `TASKS.md`, the progress report PDF and its script, the root `package.json` pair, the
+  code-graph and editor-agent configuration, `docs/superpowers/` and two finished Astra prompts.
+  `ARCHITECTURE.md` and `PRODUCT.md` were corrected in place, `README.md` replaced, three broken
+  links fixed. Each file's evidence and the files kept: `docs/PHASE_H1_REPO_FILES.md`.
+
 ## Wassla: the bell names the ticket decision (N2, 2026-11-26)
 
 - Phone test 2 (plan 1.5): the owner's flight ticket was approved but the bell row only read
