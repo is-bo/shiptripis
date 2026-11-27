@@ -85,6 +85,7 @@ func samplePayload() FCMPayload {
 		Tokens:            []string{"tokA", "tokB"},
 		DeviceIDs:         []int64{101, 102},
 		TokenFingerprints: []string{"fpA", "fpB"},
+		SessionIDs:        []string{"sign-in-A", "sign-in-B"},
 		Title:             "hi",
 		Body:              "there",
 		AndroidChannelID:  "messages",
@@ -257,6 +258,9 @@ func TestTransientRetryPayload(t *testing.T) {
 	}
 	if len(payload.TokenFingerprints) != 1 || payload.TokenFingerprints[0] != "fpB" {
 		t.Fatalf("retry fingerprints = %v, want [fpB]", payload.TokenFingerprints)
+	}
+	if len(payload.SessionIDs) != 1 || payload.SessionIDs[0] != "sign-in-B" {
+		t.Fatalf("retry sign-ins = %v, want [sign-in-B]", payload.SessionIDs)
 	}
 	if _, err := subsetPayload(samplePayload(), []int{2}); err == nil {
 		t.Fatal("out-of-range retry index should fail")

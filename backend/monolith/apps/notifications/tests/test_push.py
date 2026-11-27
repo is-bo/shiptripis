@@ -599,6 +599,26 @@ class PushPublicationTests(TestCase):
         )
 
     @patch("apps.core.redis_bus.get_client")
+    def test_a_queued_push_names_the_sign_in_of_each_device(self, get_client):
+        # N-F: the worker's last check compares each device with the sign-in
+        # that registered it when the push was queued, so a device rebound to
+        # another sign-in meanwhile, even of the same member, is skipped.
+        recorder = _RedisRecorder()
+        get_client.return_value = recorder
+        user = _user("sign-in-named@example.com")
+        phone, tablet = self._device(user, "phone"), self._device(user, "tablet")
+
+        enqueue_fcm_for_event(
+            channel="offer.created", event_id="event-sign-in", payload={}, targets=[user.pk]
+        )
+
+        payload = json.loads(recorder.entries[0][1]["payload"])
+        self.assertEqual(payload["device_ids"], [phone.pk, tablet.pk])
+        self.assertEqual(
+            payload["session_ids"], [str(phone.session_id), str(tablet.session_id)]
+        )
+
+    @patch("apps.core.redis_bus.get_client")
     def test_localizes_per_user_and_uses_one_multicast_event(self, get_client):
         recorder = _RedisRecorder()
         get_client.return_value = recorder
