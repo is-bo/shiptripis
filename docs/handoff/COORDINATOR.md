@@ -67,7 +67,7 @@ it. The loop is:
 1. The builder writes the review prompt to `docs/handoff/astra/<pkg>-review*.md` on its PR branch,
    with the exact head SHA, and pushes.
 2. The coordinator gives Ismail the prompt file (attach it, or its path on the PR branch).
-3. **Ismail runs Astra himself**, usually in the cloud (Codex on a second account), and pastes the
+3. **Ismail runs Astra himself**, in the cloud (Codex on a second account) when the PC operator cannot (section 2b), and pastes the
    result back into the project chat.
 4. The builder commits the result verbatim to `docs/handoff/astra/results/<pkg>-astra-round<N>-result.md`
    on its PR branch, and the coordinator posts it as a comment on the pull request.
