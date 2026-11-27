@@ -63,8 +63,10 @@ from .money import (
     require_positive_cents,
 )
 from .models import (
+    HELD_PAYMENT,
     LIVE_CHECKOUT,
-    UNVERIFIED_PAYMENT,
+    OUTSTANDING,
+    PAID_AFTER_DISPOSITION,
     GuestPaymentLink,
     LedgerAccount,
     LedgerTransaction,
@@ -79,6 +81,7 @@ from .models import (
 from .policy import Phase3Policy, phase3_policy
 from .providers import (
     CHECKOUT_CLOSED,
+    CHECKOUT_COLLECTED,
     CheckoutRequest,
     ProviderCheckoutRejected,
     ProviderConfigurationInvalid,
@@ -223,6 +226,16 @@ class CheckoutInProgress(FinanceError):
     """
 
     code = "checkout_in_progress"
+
+
+class PaymentUnderReview(FinanceError):
+    """A payment for this order is being checked: do not pay again (G1).
+
+    Its provider reported a payment that is held until it is accounted for
+    (`HELD_PAYMENT`), so the order opens and hands out no checkout meanwhile.
+    """
+
+    code = "payment_under_review"
 
 
 class RefundNotPermitted(FinanceError):
@@ -1577,9 +1590,11 @@ def _checkout_step(
     the new one written here, or "settle" or "recover" an attempt at its
     provider once the lock is released.
 
-    Whether a checkout can still take a payment is the provider's fact, never
-    the attempt's status: a stored checkout is live until its provider
-    confirmed it final (`LIVE_CHECKOUT`). So a live checkout of another
+    While a payment of the order is held (`HELD_PAYMENT`) nothing is opened or
+    handed out: `PaymentUnderReview`. Whether a checkout can still take a
+    payment is the provider's fact, never the attempt's status: a stored
+    checkout is live until its provider confirmed it final (`LIVE_CHECKOUT`),
+    recorded with a terminal status. So a live checkout of another
     attempt, from whatever path or release left it, is settled before anything
     else, and the open attempt's own checkout is handed back only to the
     member who opened it, else settled. A checkout that is not live is
@@ -1605,6 +1620,11 @@ def _checkout_step(
             )
         if order.outstanding_eur_cents <= 0:
             raise NothingOutstanding("This order has nothing left to collect.")
+        outstanding = PaymentAttempt.objects.select_for_update(no_key=True).filter(
+            OUTSTANDING, order=order
+        )
+        if outstanding.filter(HELD_PAYMENT).exists():
+            raise PaymentUnderReview("A payment for this order is being checked.")
 
         amounts = _resolve_amounts(order=order, gateway=gateway, policy=policy)
         from .payout_snapshots import preflight
@@ -1627,12 +1647,9 @@ def _checkout_step(
             # outcome ends this attempt.
             raise CheckoutInProgress("A payment for this order is settling.")
 
-        others = PaymentAttempt.objects.select_for_update(no_key=True).filter(
-            LIVE_CHECKOUT, order=order
-        )
         if open_attempt is not None:
-            others = others.exclude(pk=open_attempt.pk)
-        other = others.order_by("pk").first()
+            outstanding = outstanding.exclude(pk=open_attempt.pk)
+        other = outstanding.order_by("pk").first()
         if other is not None:
             # Ended here, but its provider never confirmed it closed: a payer
             # may still hold its URL.
@@ -1641,19 +1658,18 @@ def _checkout_step(
 
         if open_attempt is not None:
             if open_attempt.provider_session_id:
-                if open_attempt.checkout_final_at is None:
-                    if guest_link is None and _hands_back(
-                        open_attempt,
-                        actor_id=actor_id,
-                        provider=provider,
-                        amount_eur_cents=amounts["amount_eur_cents"],
-                        at=now,
-                    ):
-                        return "reuse", open_attempt
-                    _record_close_intent(open_attempt, at=now)
-                    return "settle", open_attempt
-                # Its provider confirmed it takes no payment: replaced below.
-            elif refused != (open_attempt.pk, open_attempt.opening_until):
+                # Open, so not final: its checkout may still collect.
+                if guest_link is None and _hands_back(
+                    open_attempt,
+                    actor_id=actor_id,
+                    provider=provider,
+                    amount_eur_cents=amounts["amount_eur_cents"],
+                    at=now,
+                ):
+                    return "reuse", open_attempt
+                _record_close_intent(open_attempt, at=now)
+                return "settle", open_attempt
+            if refused != (open_attempt.pk, open_attempt.opening_until):
                 if (
                     open_attempt.opening_until is not None
                     and open_attempt.opening_until > now
@@ -1996,41 +2012,36 @@ def expire_checkout_attempt(*, attempt_id: int) -> str:
 
 
 def settle_checkout(*, attempt_id: int) -> str:
-    """Drive one stored checkout to a fate its provider confirms (G1).
+    """Drive one outstanding checkout to a fate its provider confirms (G1).
 
     The one place that decides what becomes of a checkout that may have been
-    handed out, whichever path asks: a checkout being replaced, the expiry
-    and settle jobs, an order that stopped collecting. No lock is held across
-    the provider calls. The provider is read first. A final outcome is
-    recorded through `reconcile_attempt`, so money paid through the checkout
-    always lands, applied or unapplied and refunded, and the checkout becomes
-    final. A checkout still open at its provider stays open while its attempt
-    may still be paid, and is closed otherwise; only the provider's
-    confirmation makes it final, and an attempt whose time is up then ends as
-    expired. The attempt's status is changed only by those facts.
+    handed out, or of a payment it reported that is held, whichever path
+    asks: a checkout being replaced, the expiry and settle jobs, an order
+    that stopped collecting. No lock is held across the provider calls.
 
-    A checkout that took a payment whose amount or currency could not be
-    accepted is final, yet the payment is not accounted for: its provider is
-    read again until a verified report applies it (or lands it unapplied and
-    refunded), and "payment_unverified" is answered meanwhile. Whether the
-    checkout can collect and whether its payment is accounted for are two
-    facts, kept apart.
+    Only an attempt still `OUTSTANDING` is read. The read's answer is one of
+    six: paid and verified, or paid and not verified, both recorded through
+    `reconcile_attempt`; final with no payment; open; processing; or
+    unreadable (`ProviderError` raised). For a held payment, final with no
+    payment releases it (`_release_hold`), and open, processing and
+    unreadable change nothing. For a live checkout, a final outcome is
+    recorded, processing is recorded as settling, and an open checkout stays
+    open while its attempt may still be paid. Otherwise it is closed, and how
+    its provider says it ended is recorded: only that word makes it final,
+    with a terminal status in the same write.
 
     Answers one of `LIVE_CHECKOUT_NOTES` while the checkout may still take a
-    payment, else "checkout_final" or the note of the outcome it recorded.
-    Raises `ProviderError` when the provider answers nothing usable.
+    payment, "payment_held" while a payment it reported is held, else
+    "checkout_final" or the note of the outcome it recorded.
     """
 
     from .mode_safety import event_mode_allowed, require_object_mode
 
+    if not PaymentAttempt.objects.filter(OUTSTANDING, pk=attempt_id).exists():
+        # It can take no payment, and any it reported is accounted for.
+        return "checkout_final"
+    held = _payment_held(attempt_id)
     attempt = PaymentAttempt.objects.get(pk=attempt_id)
-    if not attempt.provider_session_id:
-        # Never stored, so never handed out: nobody can pay through it.
-        return "checkout_final"
-    if attempt.status == PaymentAttempt.Status.SUCCEEDED:
-        return "checkout_final"
-    if attempt.checkout_final_at is not None and not _payment_unverified(attempt_id):
-        return "checkout_final"
     require_object_mode(attempt.provider_mode)
     gateway = get_gateway(attempt.provider)
     snapshot = gateway.fetch_attempt(
@@ -2043,96 +2054,175 @@ def settle_checkout(*, attempt_id: int) -> str:
         raise ProviderConfigurationInvalid(
             "The provider answered for another or unknown payment mode."
         )
-    if snapshot.outcome in FINAL_CHECKOUT_OUTCOMES:
+    if snapshot.outcome == "succeeded":
         note = reconcile_attempt(
             attempt_id=attempt_id,
-            outcome=snapshot.outcome,
+            outcome="succeeded",
             provider_payment_id=snapshot.provider_payment_id,
             provider_amount_minor=snapshot.amount_minor,
             provider_currency=snapshot.currency,
         )
-        return "payment_unverified" if _payment_unverified(attempt_id) else note
-    if attempt.checkout_final_at is not None:
-        # Final with a payment unaccounted for, and its provider reports no
-        # outcome to account for it with: a person's to resolve.
-        return "payment_unverified"
+        return "payment_held" if _payment_held(attempt_id) else note
+    if held:
+        if snapshot.outcome in FINAL_CHECKOUT_OUTCOMES:
+            return _release_hold(attempt_id, outcome=snapshot.outcome)
+        return "payment_held"
     if snapshot.outcome == "processing":
         reconcile_attempt(attempt_id=attempt_id, outcome="processing")
         return "checkout_settling"
-    # Read again after the provider call: a close asked for meanwhile, by a
-    # request or an order that stopped collecting, is never deferred past.
-    attempt.refresh_from_db(fields=["status", "close_requested_at", "expires_at"])
-    if (
-        attempt.status
-        in (PaymentAttempt.Status.CREATED, PaymentAttempt.Status.CHECKOUT_PENDING)
-        and attempt.close_requested_at is None
-        and (attempt.expires_at is None or attempt.expires_at > timezone.now())
-    ):
-        return "checkout_open"
-    if (
-        gateway.close_checkout(provider_session_id=attempt.provider_session_id)
-        != CHECKOUT_CLOSED
-    ):
-        # Its provider says a payment is being made through it. Recorded as
-        # settling, the provider's word kept, so every path and screen waits
-        # for that payment's own outcome; read again shortly.
-        reconcile_attempt(attempt_id=attempt_id, outcome="processing")
-        return "checkout_collecting"
-    _record_checkout_final(attempt_id)
-    if attempt.expires_at is not None and attempt.expires_at <= timezone.now():
-        # Its time is up and nobody can pay it any more: an attempt still
-        # waiting on it ends (one that ended already is left as it is).
-        return reconcile_attempt(attempt_id=attempt_id, outcome="expired")
-    return "checkout_final"
+    ended, failure_code = snapshot.outcome, ""
+    if ended not in FINAL_CHECKOUT_OUTCOMES:
+        # Read again after the provider call: a close asked for meanwhile, by
+        # a request or an order that stopped collecting, is never deferred past.
+        attempt.refresh_from_db(fields=["status", "close_requested_at", "expires_at"])
+        time_up = (
+            attempt.expires_at is not None and attempt.expires_at <= timezone.now()
+        )
+        if (
+            attempt.status
+            in (PaymentAttempt.Status.CREATED, PaymentAttempt.Status.CHECKOUT_PENDING)
+            and attempt.close_requested_at is None
+            and not time_up
+        ):
+            return "checkout_open"
+        ended = gateway.close_checkout(provider_session_id=attempt.provider_session_id)
+        if ended == CHECKOUT_COLLECTED:
+            # Its provider says a payment is being made through it. Recorded as
+            # settling, the provider's word kept, so every path and screen
+            # waits for that payment's own outcome; read again shortly.
+            reconcile_attempt(attempt_id=attempt_id, outcome="processing")
+            return "checkout_collecting"
+        if ended == CHECKOUT_CLOSED:
+            # Closed unpaid by this call: an attempt still waiting on it ends
+            # as its time or its replacement says.
+            ended = "expired" if time_up else "cancelled"
+        if ended == "cancelled" and attempt.close_requested_at is not None:
+            failure_code = "superseded"
+    note = reconcile_attempt(
+        attempt_id=attempt_id, outcome=ended, failure_code=failure_code
+    )
+    # One that had ended already keeps its status: now its checkout is final.
+    return "checkout_final" if note == "already_terminal" else note
 
 
-def _payment_unverified(attempt_id: int) -> bool:
-    """Whether a payment reported through this attempt is not accounted for (G1)."""
+def _payment_held(attempt_id: int) -> bool:
+    """Whether a payment reported through this attempt is held (G1)."""
 
-    return PaymentAttempt.objects.filter(UNVERIFIED_PAYMENT, pk=attempt_id).exists()
+    return PaymentAttempt.objects.filter(HELD_PAYMENT, pk=attempt_id).exists()
 
 
-def _hold_unverified_payment(
-    attempt: PaymentAttempt,
-    order: PaymentOrder,
-    *,
-    code: str,
-    message: str | None = None,
-) -> str:
-    """Fail a locked attempt whose reported success cannot be accepted (G1).
+def _unverified_reason(
+    attempt: PaymentAttempt, *, amount_minor, currency: str
+) -> tuple[str, str] | None:
+    """Why a reported payment is not verified, or None when it is (G1).
 
-    Money may have moved, so nothing is applied and nothing is forgotten: the
-    payment is unaccounted for (`UNVERIFIED_PAYMENT`) until a verified report
-    applies it or staff resolve it. Its settle job, which reads the provider
-    meanwhile, is armed here, in the transaction that records the state,
-    whichever path found it: an event, a tap, the expiry or the job itself.
-    Only on the way in, so the job's own later reads keep their backoff.
+    The one meaning of "verified": the provider states an amount that is a
+    whole number of minor units and equals what this attempt asked for, and a
+    currency equal to the attempt's. Anything missing, fractional or
+    different is not verified.
     """
 
-    already_unverified = _payment_unverified(attempt.pk)
+    expected = int(attempt.provider_amount_minor)
+    whole = type(amount_minor) is int or (
+        type(amount_minor) is float and amount_minor.is_integer()
+    )
+    if not whole:
+        return (
+            "amount_unverifiable",
+            f"The provider reported no whole amount ({amount_minor!r}).",
+        )
+    if int(amount_minor) != expected:
+        return (
+            "amount_mismatch",
+            f"Provider reported {int(amount_minor)}, expected {expected}.",
+        )
+    if str(currency or "").upper() != attempt.payment_currency:
+        return (
+            "currency_mismatch",
+            f"Provider reported {currency or 'no currency'}, "
+            f"expected {attempt.payment_currency}.",
+        )
+    return None
+
+
+def _hold_payment(
+    attempt: PaymentAttempt,
+    *,
+    code: str,
+    message: str,
+    provider_payment_id: str,
+    fields: list[str],
+) -> str:
+    """Hold a locked attempt's reported payment until it is accounted for (G1).
+
+    Money may have moved, so nothing is applied and nothing is forgotten: the
+    order takes no new payment (`HELD_PAYMENT`) until a verified report
+    applies it, its provider's read releases it, or staff record what became
+    of it. No email says the payment failed, and one queued earlier is
+    withdrawn. The reported payment's id is kept for staff to name. A success
+    after a disposition clears it (the audit log keeps it) and its payment's
+    id replaces the one stored. The settle job, which reads the provider
+    meanwhile, is armed in the transaction that records the hold, whichever
+    path found it, and only on the way in: the same report twice changes
+    nothing, and the job's own later reads keep their backoff.
+    """
+
+    if _payment_held(attempt.pk):
+        return attempt.failure_code
     attempt.status = PaymentAttempt.Status.FAILED
     attempt.failure_code = code
-    fields = ["status", "failure_code", "updated_at"]
-    if message is not None:
-        attempt.failure_message = message[:255]
-        fields.append("failure_message")
+    attempt.failure_message = message[:255]
+    fields = [*fields, "status", "failure_code", "failure_message", "updated_at"]
+    if code == PAID_AFTER_DISPOSITION:
+        attempt.provider_payment_id = provider_payment_id[:255]
+        attempt.operational_resolution = ""
+        attempt.operational_resolved_at = None
+        attempt.operational_resolved_by = None
+        attempt.operational_resolution_reason = ""
+        fields += [
+            "provider_payment_id",
+            "operational_resolution",
+            "operational_resolved_at",
+            "operational_resolved_by",
+            "operational_resolution_reason",
+        ]
+    elif provider_payment_id and not attempt.provider_payment_id:
+        attempt.provider_payment_id = provider_payment_id[:255]
+        fields.append("provider_payment_id")
     attempt.save(update_fields=fields)
-    _enqueue_payment_failed_email(attempt=attempt, order=order)
+    _cancel_payment_failed_emails(attempt=attempt)
     logger.error(
-        "finance.%s attempt=%s provider=%s", code, attempt.pk, attempt.provider
+        "finance.payment_held attempt=%s provider=%s code=%s",
+        attempt.pk,
+        attempt.provider,
+        code,
     )
-    if not already_unverified:
-        _arm_checkout_settle(attempt.pk)
+    _arm_checkout_settle(attempt.pk)
     return code
 
 
-def _record_checkout_final(attempt_id: int) -> None:
-    """Record that a provider confirmed this checkout takes no further payment."""
+@transaction.atomic
+def _release_hold(attempt_id: int, *, outcome: str) -> str:
+    """End a held payment whose provider's read says its checkout took none (G1).
 
-    now = timezone.now()
-    PaymentAttempt.objects.filter(pk=attempt_id, checkout_final_at__isnull=True).update(
-        checkout_final_at=now, updated_at=now
+    Under the attempt's row lock, which staff take to record a disposition:
+    only a hold staff never closed, and never one only staff may end
+    (`paid_after_disposition`). It becomes an ordinary failed attempt.
+    """
+
+    attempt = PaymentAttempt.objects.select_for_update(no_key=True).get(pk=attempt_id)
+    if not _payment_held(attempt_id):
+        return "checkout_final"
+    if attempt.failure_code == PAID_AFTER_DISPOSITION:
+        return "payment_held"
+    attempt.failure_code = outcome
+    attempt.failure_message = "Its provider reports no payment through this checkout."
+    attempt.save(update_fields=["failure_code", "failure_message", "updated_at"])
+    logger.warning(
+        "finance.payment_hold_released attempt=%s outcome=%s", attempt.pk, outcome
     )
+    _publish_payment_failed(attempt, attempt.order)
+    return "payment_released"
 
 
 def _arm_checkout_settle(attempt_id: int, *, run_at: datetime | None = None) -> None:
@@ -2621,6 +2711,27 @@ def _mark_event_retryable(event_id: int, exc: Exception) -> None:
     _schedule_event_processing(event_id, run_at=retry_at)
 
 
+def _publish_payment_failed(attempt: PaymentAttempt, order: PaymentOrder) -> None:
+    """Announce an attempt that ended without money on `payment.failed`.
+
+    Announcing it on `payment.captured` would let a client render success for
+    a payment that never happened.
+    """
+
+    _publish(
+        channels.PAYMENT_FAILED,
+        {
+            **payment_resources(order),
+            "order_reference": str(order.public_reference),
+            "attempt_id": attempt.pk,
+            "status": attempt.status,
+            "failure_code": attempt.failure_code,
+            "purpose": order.purpose,
+        },
+        targets=[order.owner_id],
+    )
+
+
 @transaction.atomic
 def reconcile_attempt(
     *,
@@ -2632,13 +2743,18 @@ def reconcile_attempt(
     guest_email: str = "",
     failure_code: str = "",
 ) -> str:
-    """Move one attempt to a terminal state and reconcile its order.
+    """Record a provider's word on one attempt, and reconcile its order.
 
-    Amount and currency are verified against what the server asked for. A
-    success whose provider amount does not match the attempt is not applied:
-    that is either a tampered redirect-driven forgery or a provider-side
-    mismatch, and in both cases silently funding a Deal would be the wrong
-    answer.
+    The one writer of `checkout_final_at`: a final outcome for a stored
+    checkout is written in the same UPDATE as the terminal status it is
+    recorded with (G1).
+
+    A reported success is applied only when it is verified
+    (`_unverified_reason`); otherwise it is held (`_hold_payment`). Under the
+    attempt's row lock, which staff take too, an automatic path obeys what
+    staff recorded: a success on an attempt they closed is never applied. A
+    report of the payment a `returned` disposition names changes nothing; any
+    other holds it again as `paid_after_disposition`, which only staff end.
     """
 
     # Read only immutable foreign keys first, then acquire the complete domain
@@ -2656,16 +2772,17 @@ def reconcile_attempt(
     require_object_mode(attempt.provider_mode)
     require_order_mode(order)
 
+    # Every caller reports an outcome of the provider's for this stored
+    # checkout, or how its provider confirmed it ended: it takes no further
+    # payment. Saved only with the terminal status below (G1).
+    final: list[str] = []
     if (
         outcome in FINAL_CHECKOUT_OUTCOMES
         and attempt.provider_session_id
         and attempt.checkout_final_at is None
     ):
-        # Every caller reports an outcome of the provider's for this stored
-        # checkout, or its close the provider confirmed: it takes no further
-        # payment (G1).
         attempt.checkout_final_at = timezone.now()
-        attempt.save(update_fields=["checkout_final_at", "updated_at"])
+        final = ["checkout_final_at"]
 
     # The provider's address replaces only one the guest gave at checkout: an
     # attempt opened with receipts off has none, and is never given one, so no
@@ -2695,9 +2812,11 @@ def reconcile_attempt(
             _recompute_order_money(order)
             return "already_succeeded"
         if outcome != "succeeded":
+            if final:
+                attempt.save(update_fields=[*final, "updated_at"])
             return "already_terminal"
         # A success arriving after we locally expired or cancelled the attempt
-        # is still real money. Fall through and apply it, possibly unapplied.
+        # is still real money: held or applied below, possibly unapplied.
 
     if outcome != "succeeded":
         attempt.status = {
@@ -2706,46 +2825,46 @@ def reconcile_attempt(
             "cancelled": PaymentAttempt.Status.CANCELLED,
         }.get(outcome, PaymentAttempt.Status.FAILED)
         attempt.failure_code = (failure_code or outcome)[:64]
-        attempt.save(update_fields=["status", "failure_code", "updated_at"])
+        attempt.save(update_fields=["status", "failure_code", "updated_at", *final])
         _recompute_order_money(order)
         _enqueue_payment_failed_email(attempt=attempt, order=order)
-        # An attempt that ended without money travels on `payment.failed`.
-        # Announcing a failure on `payment.captured` would let a client render
-        # success for a payment that never happened.
-        _publish(
-            channels.PAYMENT_FAILED,
-            {
-                **payment_resources(order),
-                "order_reference": str(order.public_reference),
-                "attempt_id": attempt.pk,
-                "status": attempt.status,
-                "failure_code": attempt.failure_code,
-                "purpose": order.purpose,
-            },
-            targets=[order.owner_id],
-        )
+        _publish_payment_failed(attempt, order)
         return f"attempt_{attempt.status}"
 
-    # A success has to state what was charged. Applying an unverifiable amount
-    # would mean trusting the outcome label alone, which is exactly the
-    # tampering surface the amount check exists to close.
-    if provider_amount_minor is None:
-        return _hold_unverified_payment(
+    if attempt.operational_resolution:
+        # Staff recorded what became of this payment (R5).
+        if (
+            attempt.operational_resolution
+            == PaymentAttempt.OperationalResolution.RETURNED
+            and provider_payment_id
+            and provider_payment_id[:255] == attempt.provider_payment_id
+        ):
+            return "payment_already_returned"
+        return _hold_payment(
             attempt,
-            order,
-            code="amount_unverifiable",
-            message="The provider reported no amount for a success.",
+            code=PAID_AFTER_DISPOSITION,
+            message="A payment was reported after staff closed this item.",
+            provider_payment_id=provider_payment_id,
+            fields=final,
         )
-    expected = int(attempt.provider_amount_minor)
-    if int(provider_amount_minor) != expected:
-        return _hold_unverified_payment(
+    if attempt.failure_code == PAID_AFTER_DISPOSITION:
+        # Held again after a disposition: only staff end it.
+        return "payment_held"
+    # A success has to state what was charged, verifiably. Applying anything
+    # less would mean trusting the outcome label alone, which is exactly the
+    # tampering surface this check exists to close.
+    unverified = _unverified_reason(
+        attempt, amount_minor=provider_amount_minor, currency=provider_currency
+    )
+    if unverified is not None:
+        code, message = unverified
+        return _hold_payment(
             attempt,
-            order,
-            code="amount_mismatch",
-            message=f"Provider reported {provider_amount_minor}, expected {expected}.",
+            code=code,
+            message=message,
+            provider_payment_id=provider_payment_id,
+            fields=final,
         )
-    if provider_currency and provider_currency.upper() != attempt.payment_currency:
-        return _hold_unverified_payment(attempt, order, code="currency_mismatch")
 
     now = timezone.now()
     # Money that the obligation cannot absorb is recorded honestly and refunded,
@@ -2765,6 +2884,7 @@ def reconcile_attempt(
             "is_unapplied",
             "provider_payment_id",
             "updated_at",
+            *final,
         ]
     )
     _cancel_payment_failed_emails(attempt=attempt)

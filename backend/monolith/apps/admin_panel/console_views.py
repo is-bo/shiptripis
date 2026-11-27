@@ -59,6 +59,8 @@ from apps.disputes.services import (
     preview_dispute_resolution,
 )
 from apps.finance.models import (
+    HELD_PAYMENT,
+    PAID_AFTER_DISPOSITION,
     LedgerEntry,
     LedgerTransaction,
     PaymentAttempt,
@@ -123,6 +125,7 @@ from .console_forms import (
     MarketplaceFeaturesForm,
     ManualRefundForm,
     PaymentAttentionResolutionForm,
+    PaymentDispositionForm,
     PaymentReconcileForm,
     PricingSettingsForm,
     ProviderSettingsForm,
@@ -2281,9 +2284,10 @@ def payment_detail(request, pk: int):
                 }
             )
         if is_actionable:
+            held = PaymentAttempt.objects.filter(HELD_PAYMENT, pk=attempt.pk).exists()
             actions.append(
                 {
-                    "label": "Resolve attention item",
+                    "label": "Close held payment" if held else "Resolve attention item",
                     "url": reverse("admin_console:payment-resolve", args=(attempt.pk,)),
                     "variant": "quiet",
                 }
@@ -2395,32 +2399,54 @@ def payment_reconcile(request, pk: int):
 @capability_required("reconcile_finance")
 def payment_resolve(request, pk: int):
     attempt = get_object_or_404(PaymentAttempt, pk=pk)
-    form = PaymentAttentionResolutionForm(request.POST or None)
+    held = PaymentAttempt.objects.filter(HELD_PAYMENT, pk=attempt.pk).exists()
+    if held:
+        form = PaymentDispositionForm(
+            request.POST or None,
+            initial={"failure_code": attempt.failure_code},
+            returned_only=attempt.failure_code == PAID_AFTER_DISPOSITION,
+        )
+    else:
+        form = PaymentAttentionResolutionForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         try:
+            # One transaction: the attempt's row lock, the decision and its
+            # audit row (G1).
             with transaction.atomic():
+                locked = PaymentAttempt.objects.select_for_update(no_key=True).get(
+                    pk=attempt.pk
+                )
                 before = {
-                    "status": attempt.status,
-                    "is_unapplied": attempt.is_unapplied,
-                    "operational_resolution": attempt.operational_resolution,
+                    "status": locked.status,
+                    "failure_code": locked.failure_code,
+                    "is_unapplied": locked.is_unapplied,
+                    "operational_resolution": locked.operational_resolution,
+                    "provider_payment_id": locked.provider_payment_id,
                 }
                 resolved = resolve_payment_attention(
                     attempt_id=attempt.pk,
                     actor_id=request.user.pk,
                     resolution=form.cleaned_data["resolution"],
                     reason=form.cleaned_data["reason"],
+                    failure_code=form.cleaned_data.get("failure_code", ""),
+                    provider_reference=form.cleaned_data.get("provider_reference", ""),
                 )
                 record_admin_action(
                     actor=request.user,
-                    action="payment.attention_resolved",
+                    action="payment.hold_closed" if held else "payment.attention_resolved",
                     target=resolved,
                     before=before,
-                    after={"operational_resolution": resolved.operational_resolution},
+                    after={
+                        "operational_resolution": resolved.operational_resolution,
+                        "provider_payment_id": resolved.provider_payment_id,
+                    },
                     reason=form.cleaned_data["reason"],
                 )
             messages.success(
                 request,
-                "The attention item was archived; financial history was retained.",
+                "The held payment was closed; the order can take a payment again."
+                if held
+                else "The attention item was archived; financial history was retained.",
             )
             return redirect("admin_console:payment-detail", pk=attempt.pk)
         except Exception as exc:
@@ -2429,13 +2455,17 @@ def payment_resolve(request, pk: int):
         request,
         "admin/console/action_form.html",
         {
-            "title": "Resolve payment attention item",
+            "title": "Close held payment" if held else "Resolve payment attention item",
             "description": (
-                "This changes only the operations queue. Unapplied money cannot "
-                "be dismissed until its full refund has succeeded."
+                "The provider reported this payment but it could not be verified, "
+                "so the order takes no payment until you record what became of "
+                "the money. Check at the provider first; this calls no provider."
+                if held
+                else "This changes only the operations queue. Unapplied money "
+                "cannot be dismissed until its full refund has succeeded."
             ),
             "form": form,
-            "submit_label": "Archive attention item",
+            "submit_label": "Record outcome" if held else "Archive attention item",
             "danger": True,
             "back_url": reverse("admin_console:payment-detail", args=(attempt.pk,)),
         },

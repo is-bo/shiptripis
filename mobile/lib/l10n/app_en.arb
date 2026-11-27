@@ -2122,6 +2122,8 @@
   "guestPayingNowBody": "They opened your payment link. This updates as soon as their payment goes through.",
   "paymentInProgressTitle": "A payment is already under way",
   "paymentInProgressBody": "Someone, perhaps you, is already paying this. Try again in a few minutes.",
+  "paymentUnderReviewTitle": "A payment is being checked",
+  "paymentUnderReviewBody": "A payment for this order is being checked, so don’t pay again. This updates once the check is done.",
   "guestPayPurposeDeposit": "Deposit for a delivery request",
   "guestPayPurposeDelivery": "Payment for a delivery",
   "guestPayPurposeBoost": "Extra reward for a delivery",

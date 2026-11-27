@@ -322,27 +322,40 @@ class PaymentOrder(models.Model):
         )
 
 
-#: A checkout that was stored, so may have been handed out, and that its
-#: provider has not confirmed can take no further payment, on an attempt that
-#: has not succeeded. It may still collect, whatever the attempt's status (G1).
+#: Can still collect: a checkout that was stored, so may have been handed out,
+#: and that its provider has not confirmed can take no further payment, on an
+#: attempt that has not succeeded. Whatever the attempt's status (G1).
 LIVE_CHECKOUT = (
     Q(checkout_final_at__isnull=True)
     & ~Q(provider_session_id="")
     & ~Q(status="succeeded")
 )
 
-#: A success its provider reported whose amount or currency could not be
-#: accepted: money may have moved, so it is neither applied nor forgotten. It
-#: stays a person's to decide until a verified report accounts for it or staff
-#: resolve it (`operational_resolution`), whatever its checkout can still take.
-UNVERIFIED_PAYMENT_CODES = frozenset(
-    {"amount_unverifiable", "amount_mismatch", "currency_mismatch"}
+#: A success reported after staff recorded a disposition: only staff end it,
+#: and only as `returned` (G1).
+PAID_AFTER_DISPOSITION = "paid_after_disposition"
+#: Codes of a held payment: its provider reported it, but its amount or
+#: currency could not be verified, or it arrived after staff closed the item.
+HELD_PAYMENT_CODES = frozenset(
+    {
+        "amount_unverifiable",
+        "amount_mismatch",
+        "currency_mismatch",
+        PAID_AFTER_DISPOSITION,
+    }
 )
-UNVERIFIED_PAYMENT = (
+#: A reported payment that is neither applied nor refunded, with no staff
+#: disposition: money may have moved, so the order takes no new payment until
+#: the hold ends (G1).
+HELD_PAYMENT = (
     Q(status="failed")
-    & Q(failure_code__in=UNVERIFIED_PAYMENT_CODES)
+    & Q(failure_code__in=HELD_PAYMENT_CODES)
     & Q(operational_resolution="")
 )
+
+#: What the order must still account for before it collects again: a checkout
+#: that can still collect, or a held payment (G1).
+OUTSTANDING = LIVE_CHECKOUT | HELD_PAYMENT
 
 
 class PaymentAttempt(models.Model):
@@ -371,6 +384,15 @@ class PaymentAttempt(models.Model):
         RESOLVED = "resolved", "Resolved"
         DISMISSED = "dismissed", "Dismissed"
         SUPERSEDED = "superseded", "Superseded"
+        # The two ways staff end a held payment (G1).
+        NO_DEBIT = "no_debit", "No money was taken"
+        RETURNED = "returned", "Money returned"
+
+    #: What staff may record for a held payment, and only for one.
+    HELD_DISPOSITIONS = (
+        OperationalResolution.NO_DEBIT,
+        OperationalResolution.RETURNED,
+    )
 
     #: Statuses in which the attempt may still become succeeded.
     OPEN_STATUSES = ("created", "checkout_pending", "processing")
@@ -487,8 +509,8 @@ class PaymentAttempt(models.Model):
         default="",
         db_index=True,
         help_text=(
-            "Operator attention state only. It never changes the provider or "
-            "financial outcome recorded above."
+            "Staff's decision on an attention item. For a held payment, what "
+            "became of the money; it never changes the provider's outcome."
         ),
     )
     operational_resolved_at = models.DateTimeField(null=True, blank=True)
@@ -552,6 +574,13 @@ class PaymentAttempt(models.Model):
             models.CheckConstraint(
                 condition=Q(amount_eur_cents__gt=0),
                 name="fin_attempt_amount_positive",
+            ),
+            # Final means terminal: only a provider's word recorded with a
+            # terminal status makes a checkout final (G1).
+            models.CheckConstraint(
+                condition=Q(checkout_final_at__isnull=True)
+                | Q(status__in=["succeeded", "failed", "expired", "cancelled"]),
+                name="fin_attempt_final_is_terminal",
             ),
             models.CheckConstraint(
                 condition=(

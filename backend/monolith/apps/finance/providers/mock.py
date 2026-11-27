@@ -21,6 +21,7 @@ import secrets
 from datetime import timedelta
 
 from django.conf import settings
+from django.db import connection
 from django.utils import timezone
 
 from .base import (
@@ -39,6 +40,17 @@ from .base import (
 )
 
 MOCK_WEBHOOK_SECRET = "mock-webhook-secret"
+
+
+def _outside_any_transaction() -> None:
+    """Refuse a provider call made inside a database transaction (plan R1).
+
+    Across a provider call the only lock is a row, and no transaction is open
+    during the call. A test's own wrapping transaction does not count.
+    """
+
+    if any(not block._from_testcase for block in connection.atomic_blocks):
+        raise AssertionError("A provider was called inside a database transaction.")
 
 
 def sign_mock_webhook(raw_body: bytes, *, secret: str = MOCK_WEBHOOK_SECRET) -> str:
@@ -182,6 +194,7 @@ class MockGateway:
         return cls._refund_calls.get(idempotency_key, 0)
 
     def create_checkout(self, request: CheckoutRequest) -> CheckoutResult:
+        _outside_any_transaction()
         existing = self._checkouts.get(request.idempotency_key)
         if existing is not None:
             # Like Stripe: a key replays its first answer only for the same
@@ -213,15 +226,18 @@ class MockGateway:
         return result
 
     def close_checkout(self, *, provider_session_id: str) -> str:
+        _outside_any_transaction()
         failure = self._close_failures.get(provider_session_id)
         if failure is not None:
             raise failure
         if provider_session_id not in self._sessions:
             raise ProviderError("No mock checkout to close.")
-        if self._outcomes.get(provider_session_id) in ("succeeded", "processing"):
+        outcome = self._outcomes.get(provider_session_id)
+        if outcome in ("succeeded", "processing"):
             return CHECKOUT_COLLECTED
         self._closed.add(provider_session_id)
-        return CHECKOUT_CLOSED
+        # Ended already, it says how; otherwise this call closed it (G1).
+        return outcome if outcome in ("failed", "expired", "cancelled") else CHECKOUT_CLOSED
 
     def fetch_attempt(
         self, *, provider_session_id: str, provider_payment_id: str
@@ -234,6 +250,7 @@ class MockGateway:
         the honest stand-in for the provider's own record.
         """
 
+        _outside_any_transaction()
         outcome = self._outcomes.get(provider_session_id, "ignored")
         snapshot = self._sessions.get(provider_session_id)
         return AttemptSnapshot(
@@ -244,6 +261,7 @@ class MockGateway:
         )
 
     def refund(self, request: RefundRequest) -> RefundResult:
+        _outside_any_transaction()
         if not request.provider_payment_id and not request.provider_session_id:
             raise ProviderError("A mock refund needs a provider handle.")
         self._refund_calls[request.idempotency_key] = (
@@ -287,7 +305,7 @@ class MockGateway:
             provider_payment_id=str(data.get("payment_id") or ""),
             reference=str(data.get("reference") or ""),
             amount_minor=data.get("amount"),
-            currency=str(data.get("currency") or "EUR").upper(),
+            currency=str(data.get("currency") or "").upper(),
             guest_email=str(data.get("guest_email") or ""),
             failure_code=str(data.get("failure_code") or ""),
             payload={"id": event["id"], "type": event.get("type")},

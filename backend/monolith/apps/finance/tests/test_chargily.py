@@ -434,9 +434,10 @@ class ChargilyCloseCheckoutTests(TestCase):
 
     def test_a_refused_expiry_is_answered_by_reading_the_checkout(self):
         cases = (
-            (400, "expired", CHECKOUT_CLOSED),
-            (403, "failed", CHECKOUT_CLOSED),
-            (403, "canceled", CHECKOUT_CLOSED),
+            # Ended before this call: the provider's own outcome, not "closed here".
+            (400, "expired", "expired"),
+            (403, "failed", "failed"),
+            (403, "canceled", "cancelled"),
             (403, "paid", CHECKOUT_COLLECTED),
             (403, "processing", CHECKOUT_COLLECTED),
         )

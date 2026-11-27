@@ -384,7 +384,8 @@ class StripeCloseCheckoutTests(TestCase):
         refused = _FakeResponse(
             400, {"error": {"message": "not open", "code": "checkout_session_not_open"}}
         )
-        for status, outcome in (("expired", CHECKOUT_CLOSED), ("complete", CHECKOUT_COLLECTED)):
+        # Expired before this call: the provider's own outcome, not "closed here".
+        for status, outcome in (("expired", "expired"), ("complete", CHECKOUT_COLLECTED)):
             with self.subTest(status):
                 gateway = _gateway(
                     [refused, _FakeResponse(200, {"id": "cs_test_1", "status": status})]

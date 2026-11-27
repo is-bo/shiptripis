@@ -398,7 +398,7 @@ class StripeGateway:
         )
 
     def close_checkout(self, *, provider_session_id: str) -> str:
-        """Expire an open Checkout Session, or learn why it cannot be expired.
+        """Expire an open Checkout Session, or learn how it ended instead.
 
         Stripe expires only an `open` session, and atomically: a payer cannot
         complete it afterwards. Any other refusal is answered by reading the
@@ -414,9 +414,12 @@ class StripeGateway:
             raise
         except ProviderError:
             body = self._request("GET", path, operation="checkout_fetch")
+            closed_here = False
+        else:
+            closed_here = True
         status = body.get("status", "")
         if status == "expired":
-            return CHECKOUT_CLOSED
+            return CHECKOUT_CLOSED if closed_here else "expired"
         if status == "complete":
             return CHECKOUT_COLLECTED
         raise ProviderError(

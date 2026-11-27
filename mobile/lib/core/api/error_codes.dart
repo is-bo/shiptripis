@@ -305,6 +305,11 @@ class ApiErrorCode {
   /// settling. The server never opens a second checkout beside it; the payer
   /// waits a few minutes and tries again (G1).
   static const checkoutInProgress = ApiErrorCode('checkout_in_progress');
+
+  /// A payment for this order is being checked: its provider reported one
+  /// that is held until it is accounted for. The order takes no new payment
+  /// meanwhile, so the payer must not pay again (G1).
+  static const paymentUnderReview = ApiErrorCode('payment_under_review');
   static const v1DealPaymentNotAvailable = ApiErrorCode(
     'v1_deal_payment_not_available',
   );

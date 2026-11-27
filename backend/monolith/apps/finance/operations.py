@@ -14,8 +14,8 @@ from django.utils import timezone
 from apps.notifications.models import OutboundMessage
 
 from .models import (
-    UNVERIFIED_PAYMENT,
-    UNVERIFIED_PAYMENT_CODES,
+    HELD_PAYMENT,
+    PAID_AFTER_DISPOSITION,
     PaymentAttempt,
     PaymentRefund,
     ScheduledJob,
@@ -97,7 +97,7 @@ def payment_attention_queryset(
         .filter(operational_resolution="")
         .filter(
             Q(is_unapplied=True, has_settled_unapplied_refund=False)
-            | UNVERIFIED_PAYMENT
+            | HELD_PAYMENT
         )
     )
 
@@ -268,9 +268,25 @@ def queue_payment_reconciliation(*, attempt_id: int) -> tuple[ScheduledJob, str]
 
 @transaction.atomic
 def resolve_payment_attention(
-    *, attempt_id: int, actor_id: int, resolution: str, reason: str
+    *,
+    attempt_id: int,
+    actor_id: int,
+    resolution: str,
+    reason: str,
+    failure_code: str = "",
+    provider_reference: str = "",
 ) -> PaymentAttempt:
-    """Resolve attention metadata only after real money is already safe."""
+    """Record staff's decision on a payment attention item. No provider call.
+
+    A held payment (`HELD_PAYMENT`) ends only as `no_debit` (Finance saw at the
+    provider that no money was taken) or `returned` (the money went back, named
+    by the provider's payment reference, which must equal the one stored when
+    one is). It must still be held with the `failure_code` staff saw, and one
+    held after a disposition ends only as `returned`. Under the attempt's row
+    lock, which the automatic paths take too, so each sees the other (G1).
+    Other items take the attention-only resolutions, once real money is safe.
+    The caller writes the audit row in the same transaction.
+    """
 
     reason = (reason or "").strip()
     if not reason:
@@ -282,30 +298,69 @@ def resolve_payment_attention(
             "Unsupported payment resolution.", code="invalid_payment_resolution"
         )
     attempt = PaymentAttempt.objects.select_for_update(no_key=True).get(pk=attempt_id)
-    if attempt.operational_resolution:
+    held = PaymentAttempt.objects.filter(HELD_PAYMENT, pk=attempt.pk).exists()
+    if held:
+        if attempt.failure_code != failure_code:
+            raise FinanceOperationsError(
+                "This payment changed since it was reviewed; review it again.",
+                code="payment_changed",
+            )
+        if resolution not in PaymentAttempt.HELD_DISPOSITIONS or (
+            failure_code == PAID_AFTER_DISPOSITION
+            and resolution != PaymentAttempt.OperationalResolution.RETURNED
+        ):
+            raise FinanceOperationsError(
+                "A held payment ends only as no money taken or money returned; "
+                "one paid after a decision only as money returned.",
+                code="invalid_payment_resolution",
+            )
+        if resolution == PaymentAttempt.OperationalResolution.RETURNED:
+            reference = (provider_reference or "").strip()[:255]
+            if not reference:
+                raise FinanceOperationsError(
+                    "Returned money needs the provider's payment reference.",
+                    code="provider_reference_required",
+                )
+            if attempt.provider_payment_id and reference != attempt.provider_payment_id:
+                raise FinanceOperationsError(
+                    "The reference does not match the payment the provider reported.",
+                    code="provider_reference_mismatch",
+                )
+            if (
+                PaymentAttempt.objects.filter(
+                    provider=attempt.provider, provider_payment_id=reference
+                )
+                .exclude(pk=attempt.pk)
+                .exists()
+            ):
+                raise FinanceOperationsError(
+                    "That reference belongs to another payment.",
+                    code="provider_reference_mismatch",
+                )
+            attempt.provider_payment_id = reference
+    elif resolution in PaymentAttempt.HELD_DISPOSITIONS:
+        raise FinanceOperationsError(
+            "Only a held payment can be closed this way.", code="payment_not_held"
+        )
+    elif attempt.operational_resolution:
         raise FinanceOperationsError(
             "This payment attention item is already resolved.",
             code="payment_already_resolved",
         )
-    if attempt.is_unapplied:
-        settled = PaymentRefund.objects.filter(
-            attempt=attempt,
-            reason=PaymentRefund.Reason.UNAPPLIED_PAYMENT,
-            status=PaymentRefund.Status.SUCCEEDED,
-            amount_eur_cents=attempt.amount_eur_cents,
-        ).exists()
-        if not settled:
-            raise FinanceOperationsError(
-                "Unapplied money cannot be dismissed before its full refund succeeds.",
-                code="unapplied_money_unsettled",
-            )
-    elif not (
-        attempt.status == PaymentAttempt.Status.FAILED
-        and attempt.failure_code in UNVERIFIED_PAYMENT_CODES
-    ):
+    elif not attempt.is_unapplied:
         raise FinanceOperationsError(
             "This attempt is historical and is not in the finance attention queue.",
             code="payment_not_actionable",
+        )
+    elif not PaymentRefund.objects.filter(
+        attempt=attempt,
+        reason=PaymentRefund.Reason.UNAPPLIED_PAYMENT,
+        status=PaymentRefund.Status.SUCCEEDED,
+        amount_eur_cents=attempt.amount_eur_cents,
+    ).exists():
+        raise FinanceOperationsError(
+            "Unapplied money cannot be dismissed before its full refund succeeds.",
+            code="unapplied_money_unsettled",
         )
     attempt.operational_resolution = resolution
     attempt.operational_resolved_at = timezone.now()
@@ -317,6 +372,7 @@ def resolve_payment_attention(
             "operational_resolved_at",
             "operational_resolved_by",
             "operational_resolution_reason",
+            "provider_payment_id",
             "updated_at",
         )
     )

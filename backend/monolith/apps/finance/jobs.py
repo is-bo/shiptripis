@@ -32,8 +32,7 @@ from apps.core.financial_locks import lock_request_graph
 from apps.parcels.models import DeliveryRequest, ParcelRequest
 
 from .models import (
-    LIVE_CHECKOUT,
-    UNVERIFIED_PAYMENT,
+    OUTSTANDING,
     PaymentAttempt,
     PaymentOrder,
     PaymentProviderEvent,
@@ -336,13 +335,13 @@ def handle_provider_reconcile(payload: dict) -> str:
             code="checkout_collecting",
             delay=CHECKOUT_COLLECTING_POLL,
         )
-    if note == "payment_unverified":
-        # Money its provider reported is neither applied nor refunded: read
-        # again, with backoff, until a verified report accounts for it or staff
-        # resolve it.
+    if note == "payment_held":
+        # Money its provider reported is held: read again, with backoff, until
+        # a verified report or the provider's read ends the hold, or staff
+        # record what became of it.
         raise RetryableJobError(
-            "A payment the provider reported is not accounted for yet.",
-            code="payment_unverified",
+            "A payment the provider reported is held.",
+            code="payment_held",
         )
     return note
 
@@ -886,9 +885,7 @@ def _already_satisfied_reason(job: ScheduledJob) -> str:
             )
         # Only a checkout that can take no payment, and whose reported payment
         # is accounted for, ends its settle job (G1).
-        if PaymentAttempt.objects.filter(
-            LIVE_CHECKOUT | UNVERIFIED_PAYMENT, pk=attempt.pk
-        ).exists():
+        if PaymentAttempt.objects.filter(OUTSTANDING, pk=attempt.pk).exists():
             return ""
         if attempt.provider_session_id:
             return "checkout_final"

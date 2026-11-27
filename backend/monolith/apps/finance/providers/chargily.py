@@ -367,7 +367,7 @@ class ChargilyGateway:
         )
 
     def close_checkout(self, *, provider_session_id: str) -> str:
-        """Expire a pending checkout, or learn why it cannot be expired.
+        """Expire a pending checkout, or learn how it ended instead.
 
         Chargily expires only a `pending` checkout (`POST
         /checkouts/{id}/expire`) and answers success only once it has. It
@@ -387,11 +387,12 @@ class ChargilyGateway:
             body = self._request("GET", path, operation="checkout_fetch")
         else:
             return CHECKOUT_CLOSED
-        status = str(body.get("status") or "").lower()
-        if status in {"expired", "failed", "canceled", "cancelled"}:
-            return CHECKOUT_CLOSED
-        if status in {"paid", "processing"}:
+        # How Chargily says it ended, in the outcome words a read uses (G1).
+        ended = _STATUS_OUTCOMES.get(str(body.get("status") or "").lower(), "ignored")
+        if ended in {"succeeded", "processing"}:
             return CHECKOUT_COLLECTED
+        if ended != "ignored":
+            return ended
         raise ProviderError(
             "Chargily did not confirm the checkout closed.",
             provider_code="checkout_open",

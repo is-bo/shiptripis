@@ -4163,6 +4163,14 @@ class LFr extends L {
       'Quelqu’un, peut-être vous, est déjà en train de payer. Réessayez dans quelques minutes.';
 
   @override
+  String get paymentUnderReviewTitle =>
+      'Un paiement est en cours de vérification';
+
+  @override
+  String get paymentUnderReviewBody =>
+      'Un paiement pour cette commande est en cours de vérification : ne payez pas une seconde fois. Cet écran se met à jour une fois la vérification terminée.';
+
+  @override
   String get guestPayPurposeDeposit => 'Acompte pour une demande de livraison';
 
   @override

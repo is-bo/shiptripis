@@ -1921,7 +1921,7 @@ class OpenCheckoutTests(GuestPaymentTestCase):
             assert jobs.run_job(settle) == "failed"
         settle.refresh_from_db()
         assert settle.status == ScheduledJob.Status.PENDING
-        assert settle.last_error_code == "payment_unverified"
+        assert settle.last_error_code == "payment_held"
         assert jobs._already_satisfied_reason(settle) == ""
         own.refresh_from_db()
         assert own.status == PaymentAttempt.Status.FAILED
@@ -1986,11 +1986,14 @@ class OpenCheckoutTests(GuestPaymentTestCase):
             event_id="evt_wrong_currency_amount",
             amount=int(own.provider_amount_minor) + 1,
         )
+        own.refresh_from_db()
         resolve_payment_attention(
             attempt_id=own.pk,
             actor_id=self.scenario.sender.pk,
-            resolution=PaymentAttempt.OperationalResolution.RESOLVED,
+            resolution=PaymentAttempt.OperationalResolution.RETURNED,
             reason="Refunded by hand at the provider.",
+            failure_code=own.failure_code,
+            provider_reference="pi_returned_by_hand",
         )
 
         with mock.patch.object(MockGateway, "fetch_attempt") as fetch:
@@ -2019,7 +2022,7 @@ class OpenCheckoutTests(GuestPaymentTestCase):
             return replace(real_fetch(gateway, **kwargs), amount_minor=expected + 1)
 
         with mock.patch.object(MockGateway, "fetch_attempt", new=wrong_amount):
-            assert self.expire(own) == "payment_unverified"
+            assert self.expire(own) == "payment_held"
             own.refresh_from_db()
             assert own.failure_code == "amount_mismatch"
             assert own.checkout_final_at is not None
@@ -2038,7 +2041,7 @@ class OpenCheckoutTests(GuestPaymentTestCase):
             assert jobs.run_job(claimed) == "failed"
             settle.refresh_from_db()
             assert settle.status == ScheduledJob.Status.PENDING
-            assert settle.last_error_code == "payment_unverified"
+            assert settle.last_error_code == "payment_held"
             assert settle.run_at > timezone.now()
 
         assert jobs.run_job(settle) == "applied"

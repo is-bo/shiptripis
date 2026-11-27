@@ -4129,6 +4129,13 @@ class LAr extends L {
       'يقوم أحدهم بالدفع الآن، وربما كنت أنت. أعد المحاولة بعد بضع دقائق.';
 
   @override
+  String get paymentUnderReviewTitle => 'يجري التحقق من دفعة';
+
+  @override
+  String get paymentUnderReviewBody =>
+      'يجري التحقق من دفعة لهذا الطلب، فلا تدفع مرة أخرى. ستُحدَّث هذه الصفحة عند انتهاء التحقق.';
+
+  @override
   String get guestPayPurposeDeposit => 'عربون لطلب توصيل';
 
   @override

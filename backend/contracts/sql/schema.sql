@@ -1817,6 +1817,7 @@ CREATE TABLE public.finance_payment_attempt (
     opening_until timestamp with time zone,
     checkout_final_at timestamp with time zone,
     CONSTRAINT fin_attempt_amount_positive CHECK ((amount_eur_cents > 0)),
+    CONSTRAINT fin_attempt_final_is_terminal CHECK (((checkout_final_at IS NULL) OR ((status)::text = ANY ((ARRAY['succeeded'::character varying, 'failed'::character varying, 'expired'::character varying, 'cancelled'::character varying])::text[])))),
     CONSTRAINT fin_attempt_fx_required_for_conversion CHECK ((((fx_rate_micros IS NULL) AND ((payment_currency)::text = 'EUR'::text)) OR ((NOT ((payment_currency)::text = 'EUR'::text)) AND (fx_rate_micros IS NOT NULL)))),
     CONSTRAINT fin_attempt_resolution_complete CHECK (((((operational_resolution)::text = ''::text) AND ((operational_resolution_reason)::text = ''::text) AND (operational_resolved_at IS NULL) AND (operational_resolved_by_id IS NULL)) OR ((NOT ((operational_resolution)::text = ''::text)) AND (operational_resolved_at IS NOT NULL) AND (NOT ((operational_resolution_reason)::text = ''::text))))),
     CONSTRAINT finance_payment_attempt_amount_eur_cents_check CHECK ((amount_eur_cents >= 0)),

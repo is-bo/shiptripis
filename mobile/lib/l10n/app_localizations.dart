@@ -7233,6 +7233,18 @@ abstract class L {
   /// **'Someone, perhaps you, is already paying this. Try again in a few minutes.'**
   String get paymentInProgressBody;
 
+  /// No description provided for @paymentUnderReviewTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'A payment is being checked'**
+  String get paymentUnderReviewTitle;
+
+  /// No description provided for @paymentUnderReviewBody.
+  ///
+  /// In en, this message translates to:
+  /// **'A payment for this order is being checked, so don’t pay again. This updates once the check is done.'**
+  String get paymentUnderReviewBody;
+
   /// No description provided for @guestPayPurposeDeposit.
   ///
   /// In en, this message translates to:
