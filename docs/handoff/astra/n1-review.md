@@ -1,11 +1,87 @@
 You are an independent second-pass reviewer. This review is read-only: do not write, commit or push code, and do not comment on GitHub. You may read files and run read-only git commands.
 
-Review pull request #71, "N1: ask for notifications once on first open", in this repository (is-bo/shiptripis), at head `227d8aa31f2cfdd60ad928c1fa50d71a862bf5b2` (round 4; round 3 was `b200577`, round 2 `5372776`, round 1 `6f1b858`). Use a three-dot diff against `origin/main`, and run `git fetch origin` first if the commit is missing.
+Review pull request #71, "N1: ask for notifications once on first open", in this repository (is-bo/shiptripis), at head `3e7fc1780878b3e017a9dd9f921a90774346142b` (round 5; round 4 was `227d8aa`, round 3 `b200577`, round 2 `5372776`, round 1 `6f1b858`). Use a three-dot diff against `origin/main`, and run `git fetch origin` first if the commit is missing.
 - The Flutter app is under `mobile/lib/`.
 - The rules are in `CLAUDE.md`, especially "Mobile rules" and the rule that strings must exist in EN/FR/MSA.
 - The package is section 4 "N1" of `docs/WASSLA_PHONE_TEST_2_PLAN.md`, and the finding is section 1.2.
 - The write-up is `docs/PHASE_N1_NOTIFICATION_FIRST_OPEN.md`.
 - The screenshots are in `docs/screenshots/n1/`.
+
+## Round 5
+Your round-4 result (`docs/handoff/astra/results/n1-astra-round4-result.md`, reject at `227d8aa`: 2 blockers,
+7 should-fixes, 1 nit) is answered by two code commits: `0cd1330` (the round) and `64a3283` (a
+verification pass that closed one more path of blocker 2's family). The pinned head `3e7fc17` is
+`64a3283` plus a merge of `main` that brought documentation only. **CI completed green on the pinned
+head, every check included ("Schema drift", Flutter, the Django shards and their "Every shard passed"
+step, and VPS readiness): https://github.com/is-bo/shiptripis/actions/runs/46016246273.** The one commit after it adds only this section. Each fix below has a
+test that fails with the fix removed (checked by mutation); the phase doc lists them under "Tests".
+
+**Review rules for this round (the owner's anti-loop rule, `docs/handoff/COORDINATOR.md` section 3).**
+1. **Legacy and upgrade findings are not applicable.** The app has never been live and has no users:
+   rows written by older code, old app versions, tokens or URLs issued before the change and migrations
+   of old data are out. Do not report them.
+2. **Out-of-scope findings go to a follow-up note, not into N1.** N1's scope is the first-open prompt and
+   what your rounds 1 to 4 pulled in: registering the phone to the right sign-in, and switching it off
+   when that sign-in ends. Report anything else in a separate table headed "Out of scope (follow-up)",
+   and do not let it decide the verdict.
+3. **Fixes go to the root cause.** If you find a new variant of a family already raised, say which family
+   and which part of the design still allows it, rather than the single case.
+
+**Blocker 1 (a sign-in issued after a reset, claim or deletion it should have been subject to).** The
+root: the credential check and the sign-in row were separate operations. Now `User.session_epoch`
+(folded into the still-unmerged `accounts.0008`) counts the account-wide ends. `end_all_sessions` moves
+it under `lock_account`, in the same transaction as the reset's new password, the claim's unusable
+password or the deletion. `start_session` creates the row only if, under that same lock, the epoch still
+equals the one the credential check read (`SignInInterrupted` otherwise), and `_sign_in`
+(`apps/accounts/views.py`) checks the credentials once more: an old password then fails (400), a
+provider identity that still owns the account signs in, and a second end in that instant answers `409
+sign_in_interrupted`. Check that **every** token issuer goes through `_tokens_for_user` -> `start_session`
+(password, Google, Apple, sign-up; we found no other in Django or Go) and that every account-wide end
+moves the epoch in the transaction that changes the credentials. Tests:
+`test_l18a_sessions.py::SignInDuringAnEndTests`, each across a real reset or claim.
+
+**Blocker 2 (the phone shows signed out while its server device stays on).** The root: the server
+switched a phone off only when a sign-out request reached it with a proof it accepted, and the app sent
+that request from one place only.
+- Server, `0cd1330`: `SignOutView` is `AllowAny` with `_AccessIfValid` (an expired access token is no
+  answer instead of a 401). `_proven_sign_in`: a valid access token proves its own `sid`, whatever
+  refresh token comes with it; otherwise a refresh token proves its `sid`. Nothing is blacklisted or
+  changed before the sign-in is known, and `end_session` is idempotent (205 again).
+- `64a3283`: the refresh token proves its sign-in when **this server signed it, whatever its age or
+  rotation** (`_signed_claims`: signature checked, expiry not). All it can do here is end the sign-in it
+  names, of the account it names; a token signed with another key is refused. And the app's other exit
+  now sends the sign-out too: when renewing a sign-in fails, `_AuthInterceptor._endSession`
+  (`mobile/lib/core/api/api_client.dart`) clears the credentials and then sends `POST /api/auth/sign-out
+  {refresh}`, best-effort, with **no bearer** (the stored credentials may already be those of a sign-in
+  made since). Before this, a refresh token that expired while the app went unopened (30 days), or one
+  rotated by an answer that never arrived, left the sign-in live and the phone on.
+- Still best-effort, by the V1 spec ("logout disables that installation best-effort") and as you
+  accepted in round 4: a sign-out that never reaches the server (offline) leaves the phone on until it
+  signs in again or the account's sign-ins end. Phase doc, device check 7; runbook.
+- Tests: `test_push.py` (expired access, rotated refresh, both, an expired refresh alone, a lost
+  rotation alone, nothing provable including another key's signature, a repeat);
+  `phase8ff4_session_test.dart`, group "a session the app lets go of" (ended on the server by its refresh
+  token alone; a sign-in made at that instant never lends it its bearer; a failing sign-out still signs
+  out).
+
+**Should-fixes and the nit, in your table's order.** Cross-account sign-out: ownership is known before
+anything changes, and the test also proves the other account can still refresh. Unregister:
+`unregister_push_device` checks liveness first and uses `refuse_stale=True` (a late lower number is 409
+and the newer registration stays on). Queued FCM job: the Go sender asks the database right before each
+send or retry which devices are still on for the recipient with the same token fingerprint
+(`DeviceRegistry`, `PostgresDevices` in `services/internal/notification/fcm_devices.go`, required by
+`NewConsumer`); none left drops the entry, a database error leaves it pending. Permission loss and the
+token refresh with a failing keystore write: `push_coordinator.dart`. Inactive receipt: an exact repeat
+whose device is off is refused as superseded, and the phone reads `active` from the receipt. WebSocket:
+`wsproto.Upgrade` closes the connection at the token's expiry plus the 30 s leeway, and the validator
+requires `exp`. Nit: guest copy when push cannot start (`pushPermissionUnavailableGuest`,
+`pushPermissionInitializationFailedGuest`, EN/FR/MSA) and the guest screenshots recaptured.
+
+**Already found outside N1 (on the follow-up list; do not report again):** a renewal that fails on the
+network (not refused) also signs the member out on the phone, as before N1; a ban ends none of the
+member's sign-ins and switches off none of their phones.
+
+Ismail pastes your result back; it is committed as `docs/handoff/astra/results/n1-astra-round5-result.md`.
 
 ## Round 4
 Your round-3 result (`docs/handoff/astra/results/n1-astra-round3-result.md`, 4 blockers, 5 should-fixes, 1
