@@ -1,10 +1,10 @@
 You are an independent second-pass reviewer. This review is read-only: do not write, commit or push code, and do not comment on GitHub. You may read files and run read-only git commands. Run `git fetch origin` first. If `git fetch` cannot write `.git/FETCH_HEAD`, say so and verify the SHAs through `git ls-remote origin`.
 
-This is the **eighth review** of pull request #66, "P3B profile photos in the app", in this repository (is-bo/shiptripis). The head to review is `7a4d3303e0ff47357c9211cadba87f0c0fea078e` (branch `origin/claude/p3b-profile-photos-app`). **All 12 CI checks are green on it**, including "Schema drift", the Django shards (with the new server tests), "Flutter — format, analyze, tests" and "Android — compile and Gradle unit tests". The head is a docs-only commit (a status file) on top of the round-8 code commit `778da3a`.
+This is the **eighth review** of pull request #66, "P3B profile photos in the app", in this repository (is-bo/shiptripis). The head to review is `7727b1926c8a40a725148cc383d9678f6be59475` (branch `origin/claude/p3b-profile-photos-app`; the branch tip may carry one more commit that only changes the pinned SHA in this prompt and `HANDOFF.md`). **All 12 CI checks are green on it**, including "Schema drift", the Django shards (with the new server tests), "Flutter — format, analyze, tests" and "Android — compile and Gradle unit tests". Since the round-8 code commit `778da3a` the branch only gained documents (the status file, a merge of `main` and this prompt); no code changed.
 
 - You rejected the previous head, `a286b34146e6f83e47a99d25270f75965d95c687`, with 5 blockers and 4 should-fixes. Your report is `docs/handoff/astra/results/p3b-astra-round7-result.md` on `main`.
 - The builder's answer is the "Round eight" section of `docs/PHASE_P3B_PROFILE_PHOTOS_APP.md` at the head, and `docs/handoff/status/P3B.md`.
-- Compare `a286b34..7a4d330` for this round, and `origin/main...7a4d330` (three dots) for the whole package.
+- Compare `a286b34..778da3a` (the code) and `778da3a..7727b19` (documents only) for this round, and `origin/main...7727b19` (three dots) for the whole package.
 - The rules are in `CLAUDE.md` ("Mobile rules"). The server contract is spec section 21 of `docs/WASSLA_DISCOVERY_PRO_SPEC.md` and `backend/monolith/apps/accounts/photos.py`.
 
 ## Review scope: three rules from the owner (read before you report)
