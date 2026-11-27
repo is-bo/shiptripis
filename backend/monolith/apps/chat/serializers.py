@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from apps.accounts.photos import public_photo
+from apps.matching.find_travelers import first_name
 
 from .models import ChatMessage, ChatMessageReport
 
@@ -108,7 +109,7 @@ class ChatThreadSerializer(serializers.Serializer):
         return self._counterparty(obj).id
 
     def get_counterparty_name(self, obj) -> str:
-        return self._counterparty(obj).full_name
+        return first_name(self._counterparty(obj).full_name)
 
     def get_counterparty_photo(self, obj) -> dict | None:
         return public_photo(self._counterparty(obj))

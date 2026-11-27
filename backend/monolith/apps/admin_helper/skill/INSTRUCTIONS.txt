@@ -1215,7 +1215,7 @@ Every request needs all of these (the server refuses otherwise):
 - Declared value: 0 to 100,000,000 EUR cents.
 - Sender's proposed reward for the traveler: 1 to 100,000,000 EUR cents. It is only the sender's intent, not a price; the agreed price is on the offer.
 - Title (max 160 characters), description (max 2000), category (documents, small_box, electronics, clothing, other).
-- One photo of the item (required). It is uploaded first, then used by the create call. JPEG, PNG or WebP only, max 10 MiB.
+- One photo of the item (required). It is uploaded first, then used by the create call. JPEG, PNG or WebP only, max 10 MiB. The server never keeps the uploaded file: it stores a new JPEG made from the pixels, upright, at most 2560 px on the longer side, with no hidden data (no location, camera or date). An animated image is refused.
 - Five declarations, all must be ticked: description accurate, item legal, no prohibited goods, declared value accurate, customs responsibilities understood. Refusal: "This safety declaration must be confirmed."
 Optional:
 - Length, width, height: 0.01 to 500 cm each, all three or none. Refusal: "Enter length, width and height together, or leave all three empty."
@@ -2303,7 +2303,7 @@ Related files: money.md (payout protection, how payouts are released, refunds), 
 ## What evidence can be added?
 - Who: either party, and staff with the evidence capability. Only while the dispute is active ("This dispute is no longer accepting evidence.").
 - Kinds: text statement (up to 4,000 characters), photo, video.
-- Limits (stored business settings; the item count shows read-only as "Dispute evidence limit" in the console Business settings "Lifecycle guardrails" table, with no form to change it): 20 items, 25 MiB (26,214,400 bytes) per file, types JPEG, PNG, WebP, MP4, MOV (QuickTime). Files are also checked against their real content.
+- Limits (stored business settings; the item count shows read-only as "Dispute evidence limit" in the console Business settings "Lifecycle guardrails" table, with no form to change it): 20 items, 25 MiB (26,214,400 bytes) per file, types JPEG, PNG, WebP, MP4, MOV (QuickTime). Files are also checked against their real content. A photo is stored as a new JPEG made from its pixels, upright, at most 2560 px on the longer side, with no hidden data (no location, camera or date); an animated image is refused. A video is stored as sent.
 - Evidence cannot be edited or removed. Files open only through a short-lived link (5 minutes).
 - Staff view of evidence files needs `view_evidence` and is audited.
 - Refusals: "That file type is not accepted as dispute evidence.", "That file is larger than the evidence size limit.", "This dispute already holds the maximum number of evidence items."
@@ -3154,7 +3154,7 @@ Journey statuses (field `status`):
 
 ## What is a ticket proof and how is it reviewed?
 - Needed for every `FLIGHT` and `SEA` leg. `DRIVE` legs need none. Nobody is exempt.
-- Upload: photo field, JPEG, PNG or WebP only, max 10 MiB. Kinds: `ticket`, `boarding_pass`, `booking_confirmation`. Upload only while the journey is `draft` or `pending_verification` (`journey_proof_upload_closed`: "Proof can only be added before journey publication.").
+- Upload: photo field, JPEG, PNG or WebP only, max 10 MiB. Kinds: `ticket`, `boarding_pass`, `booking_confirmation`. The server never keeps the uploaded file: it stores a new JPEG made from the pixels, upright, at most 2560 px on the longer side, with no hidden data (no location, camera or date). An animated image is refused. Upload only while the journey is `draft` or `pending_verification` (`journey_proof_upload_closed`: "Proof can only be added before journey publication.").
 - Errors: `proof_file_too_large` (413, "File exceeds 10 MiB."), `proof_media_type_unsupported` (415), `proof_not_required` (drive leg), `proof_kind_unknown`, `proof_storage_unavailable` (503). A retry with the same idempotency key does not create a duplicate.
 - Proof statuses: `pending`, `approved`, `rejected`. Per leg the app shows `proof_state`: `not_required`, `missing`, `pending`, `approved`, `rejected` (approved beats pending beats rejected).
 - Staff review in the console: Verification, Tickets tab (page "Verification", flight-proofs queue). Decisions: Approve, "Ask for a new upload", Reject. A reason (max 2,000 characters) is required for the last two and the traveler reads it exactly. "Ask for a new upload" stores the proof as `rejected` too; the audit records that a new upload was asked for. Needs `view_flight_proofs` to see and `review_flight_proofs` to decide. The traveler gets an email and an in-app update.

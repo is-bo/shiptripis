@@ -53,8 +53,10 @@ from apps.core.financial_locks import (
 )
 from apps.core.phase4_policy import DisputePolicy, phase4_policy
 from apps.core.storage import (
+    ImageRejected,
     ext_for_content_type,
     image_bytes_match_extension,
+    jpeg_without_metadata,
     make_key,
     put_object,
     storage_for,
@@ -954,6 +956,12 @@ def _store_evidence_file(
         if is_photo
         else _video_bytes_match_extension(body, ext)
     )
+    if matches and is_photo:
+        try:
+            body = jpeg_without_metadata(body)
+            ext, content_type = "jpg", "image/jpeg"
+        except ImageRejected:
+            matches = False
     if not body or not matches:
         raise DisputeError(
             "That file is not a valid image or video of the declared type.",

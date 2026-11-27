@@ -38,6 +38,7 @@ from apps.core.event_resources import deal_resources
 from apps.core.phase4_policy import HandoverPolicy, phase4_policy
 from apps.deals import lifecycle
 from apps.deals.models import Deal, DealEvent
+from apps.matching.find_travelers import first_name
 
 from .codes import (
     format_code,
@@ -368,7 +369,7 @@ def _arm_recipient_notification(
             "tracking_number": tracking.for_deal(deal),
             # Leave a missing name blank so the final renderer can translate
             # its own "Your sender" fallback in the snapshotted locale.
-            "sender_name": getattr(deal.sender, "full_name", ""),
+            "sender_name": first_name(getattr(deal.sender, "full_name", "")),
         },
         max_attempts=12,
     )

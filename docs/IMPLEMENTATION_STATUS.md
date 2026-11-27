@@ -1,5 +1,19 @@
 # Waçla V1 Implementation Status
 
+## Wassla: stored photos without metadata, names by audience (PV, 2026-11-27)
+
+- Older privacy findings of `HANDOFF.md` 0.7. Server only, no migration, no app change. Nothing
+  deployed.
+- Parcel item photos and attachments, ticket proofs and dispute photos are stored as a new JPEG
+  made from the pixels (`jpeg_without_metadata` in `apps/core/storage.py`, sharing the profile
+  photo's re-encoder): upright, transparency flattened, longer side at most 2560 px, no EXIF, GPS,
+  XMP, ICC or comment. An animated file is refused with each path's existing code. Dispute videos
+  and payout evidence are unchanged (payout evidence reaches only audited Finance staff).
+- Anyone but the member and staff now gets the first name only: `traveler_name` on journeys,
+  `sender_name`/`traveler_name` on proposals, `counterparty_name` in chat, the blocked list and the
+  recipient's email. "Own-card labels" closed with no case. Detail:
+  `docs/PHASE_PV_IMAGE_METADATA_AND_NAMES.md`.
+
 ## Wassla: the bell names the ticket decision (N2, 2026-11-26)
 
 - Phone test 2 (plan 1.5): the owner's flight ticket was approved but the bell row only read
