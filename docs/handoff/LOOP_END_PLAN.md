@@ -1,13 +1,14 @@
 # Wassla: plan to finish the open work and clean the code
 
 **Status:** revision 3, 27 November 2026. Written under the ponytail rules (`CLAUDE.md`, "Working
-style: ponytail"). Nothing here is built yet.
+style: ponytail"). Approved. Nothing here is built yet.
 **History:** revision 1 was commit `b295f3a`, revision 2 was `e66bb5b`. Astra reviewed revision 1
 and asked for changes. Ismail stopped Astra's re-check of revision 2 and asked for this revision:
 smaller mechanisms, every follow-up as a package, a cleanup of the whole code, and builders who
 work to it.
-**Next:** Ismail answers the five questions of section 2. Then the lead hands out the briefs in
-`docs/handoff/builders/`, in the order of section 9.
+**Decisions:** Ismail accepted all five recommended answers of section 2 on 27 November 2026.
+That includes D4: packages L1 to L4 may drop the old tables and columns.
+**Next:** the lead hands out the briefs in `docs/handoff/builders/`, in the order of section 9.
 
 Guesses are marked **[Guess]**. Everything else was checked against the code: `main` at `b4b838f`
 for the audit, and the four pull-request heads listed in section 1.
@@ -77,7 +78,8 @@ labels" is described nowhere in the repository.
 
 ## 2. Decisions for Ismail
 
-Five questions. Each has a recommendation. Everything else in this plan is technical and decided.
+Five questions, each with a recommendation. **Ismail accepted all five on 27 November 2026.**
+Everything else in this plan is technical and decided.
 
 | # | Question | Recommendation |
 |---|---|---|
