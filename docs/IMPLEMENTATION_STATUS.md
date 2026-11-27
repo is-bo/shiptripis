@@ -1,5 +1,16 @@
 # Waçla V1 Implementation Status
 
+## Wassla: P3B round seven, one identity per action (2026-11-27)
+
+- Astra rejected `ead30e2` (3 blockers, 6 should-fixes), each a new account-switch race. The app only;
+  nothing deployed. The cause is fixed instead of the instance: `SessionNotifier.beginAction()` captures one
+  `MemberScope` (account, authentication, credentials) when an action starts, the action carries it, and
+  `isCurrent` is asked once when it commits (pick, removal, photo write, profile read and update, the
+  confirmation dialog). The photo writes also name their account, and the request refuses a bearer issued to
+  another one; the activity is `singleTask`; the pick gate belongs to its activity; a refused second sign-in
+  leaves the member usable; avatar publication awaits and cleans up. Detail:
+  `docs/PHASE_P3B_PROFILE_PHOTOS_APP.md`, "Round seven".
+
 ## Wassla: P3B round six, a result is bound to its launch (2026-11-26)
 
 - Astra rejected `f4394f1` (2 blockers, 5 should-fixes). The app only; nothing deployed. A result the phone

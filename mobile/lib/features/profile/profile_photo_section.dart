@@ -23,6 +23,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../app/profile_photo_state.dart';
+import '../../core/session/session.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/images.dart';
 import '../../design/components/primitives.dart';
@@ -48,7 +49,14 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
   ProfilePhotoController get _controller =>
       ref.read(profilePhotoProvider.notifier);
 
+  /// The member this press is for, taken when the member first touches a
+  /// control and carried through every sheet and dialog after it: a choice made
+  /// in a sheet that another member's sign-in found open is not theirs.
+  MemberScope? _begin() => ref.read(sessionProvider.notifier).beginAction();
+
   Future<void> _choose() async {
+    final scope = _begin();
+    if (scope == null) return;
     final source = await showAppSheet<ImageSource>(
       context,
       builder: (sheetContext) {
@@ -71,12 +79,14 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
         );
       },
     );
-    if (source != null) await _pick(source);
+    if (source != null) await _pick(source, scope: scope);
   }
 
-  Future<void> _pick(ImageSource source) async {
+  Future<void> _pick(ImageSource source, {MemberScope? scope}) async {
     final l = L.of(context);
-    final saved = await _controller.pick(source);
+    final owner = scope ?? _begin();
+    if (owner == null) return;
+    final saved = await _controller.pick(source, owner);
     if (saved && mounted) AppSnack.success(context, l.profilePhotoUpdated);
   }
 
@@ -89,6 +99,10 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
   Future<void> _remove({required bool confirm}) async {
     final l = L.of(context);
     if (ref.read(profilePhotoProvider).busy) return;
+    // Before the dialog, not after it: the removal belongs to the member whose
+    // photo the dialog was opened over.
+    final scope = _begin();
+    if (scope == null) return;
     if (confirm) {
       final ok = await confirmAction(
         context,
@@ -99,11 +113,12 @@ class _ProfilePhotoSectionState extends ConsumerState<ProfilePhotoSection> {
       );
       if (!ok || !mounted) return;
     }
-    final error = await _controller.remove();
+    final removal = await _controller.remove(scope);
     if (!mounted) return;
+    final error = removal.error;
     if (error != null) {
       AppSnack.failure(context, error);
-    } else if (confirm) {
+    } else if (removal.isDone && confirm) {
       AppSnack.success(context, l.profilePhotoRemoved);
     }
   }

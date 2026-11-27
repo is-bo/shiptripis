@@ -120,6 +120,21 @@ enum ProfilePhotoFailure {
 
 enum ProfilePhotoPhase { idle, uploading, failed }
 
+/// How [ProfilePhotoController.remove] ended: it worked, the server refused
+/// ([error]), or it was not for the member who is signed in any more and
+/// nothing was sent or changed (the screen says nothing).
+@immutable
+class ProfilePhotoRemoval {
+  const ProfilePhotoRemoval.done() : error = null, isStale = false;
+  const ProfilePhotoRemoval.stale() : error = null, isStale = true;
+  const ProfilePhotoRemoval.failed(ApiException this.error) : isStale = false;
+
+  final ApiException? error;
+  final bool isStale;
+
+  bool get isDone => error == null && !isStale;
+}
+
 /// A prepared file waiting to go up, or that failed and can go up again.
 @immutable
 class PickedPhoto {
@@ -127,8 +142,7 @@ class PickedPhoto {
     required this.path,
     required this.contentType,
     required this.fileName,
-    required this.owner,
-    required this.identity,
+    required this.scope,
   });
 
   /// A JPEG (or whatever its bytes say it is) at a path used for this pick
@@ -139,10 +153,9 @@ class PickedPhoto {
   final String contentType;
   final String fileName;
 
-  /// The account and the credential generation the photo was made for: an
-  /// upload of it is sent only while both are still current.
-  final int? owner;
-  final int identity;
+  /// The member (account, authentication and credentials) the photo was made
+  /// for: an upload of it is sent only while that scope is still current.
+  final MemberScope scope;
 }
 
 @immutable
@@ -196,7 +209,7 @@ final profilePhotoProvider =
 /// What a press began under: the account, the credential generation and the
 /// operation. A step that finds any of the three changed is not live and
 /// writes nothing.
-typedef _Launch = ({int? owner, int identity, int epoch});
+typedef _Launch = ({MemberScope scope, int epoch});
 
 class ProfilePhotoController extends Notifier<ProfilePhotoState> {
   /// Every prepared file this controller made and has not yet deleted.
@@ -247,48 +260,26 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
     }
   }
 
-  /// What a press that starts now begins under, read at the press itself, before
-  /// any wait. The press takes a new epoch of its own, so that whatever an
-  /// earlier press left waiting can no longer reset what this one is doing.
-  ///
-  /// The account and the credential generation come from the **published
-  /// session** (it stores the generation with the account), never from the
-  /// token store: a sign-in moves the store's generation when it starts, while
-  /// the previous member is still published, and pairing that member with the
-  /// new generation would let a press through under the wrong one.
-  _Launch _launch() {
-    final session = ref.read(sessionProvider);
-    return session is SessionSignedIn
-        ? (
-            owner: session.account.id,
-            identity: session.identity,
-            epoch: ++_epoch,
-          )
-        : (
-            owner: null,
-            identity: ref.read(tokenStoreProvider).identityGeneration,
-            epoch: ++_epoch,
-          );
-  }
+  /// The launch of a press made under [scope] (captured when the member first
+  /// touched the control, before any sheet or dialog), in an epoch of its own,
+  /// so that whatever an earlier press left waiting can no longer reset what
+  /// this one is doing.
+  _Launch _launch(MemberScope scope) => (scope: scope, epoch: ++_epoch);
 
-  /// The launch of a retry: the account and credentials [photo] was prepared
-  /// under, in an epoch of its own.
+  /// The launch of a retry: the scope [photo] was prepared under, in an epoch
+  /// of its own.
   _Launch _launchFor(PickedPhoto photo) =>
-      (owner: photo.owner, identity: photo.identity, epoch: ++_epoch);
+      (scope: photo.scope, epoch: ++_epoch);
 
-  /// Still what [launch] began under, asked of the session and the token store
-  /// themselves at the moment of asking: a step that began for member A never
-  /// writes anything for member B, however late its answer comes, and a
-  /// sign-in whose tokens are saved before the account is published already
-  /// ends the step.
-  bool _live(_Launch launch) {
-    if (!ref.mounted || launch.epoch != _epoch) return false;
-    final session = ref.read(sessionProvider);
-    final published = session is SessionSignedIn ? session : null;
-    return published?.account.id == launch.owner &&
-        (published == null || published.identity == launch.identity) &&
-        ref.read(tokenStoreProvider).identityGeneration == launch.identity;
-  }
+  /// Still what [launch] began under, asked of the session at the moment of
+  /// asking (`SessionNotifier.isCurrent`: the account, the authentication and
+  /// the credentials, all of them): a step that began for member A never writes
+  /// anything for member B, however late its answer comes, and a sign-in whose
+  /// tokens are saved before the account is published already ends the step.
+  bool _live(_Launch launch) =>
+      ref.mounted &&
+      launch.epoch == _epoch &&
+      ref.read(sessionProvider.notifier).isCurrent(launch.scope);
 
   /// A step found itself no longer live. If it is still the operation that owns
   /// the state and the account is still the one it began for (a credential
@@ -298,7 +289,7 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
   /// one's, and a late step leaves it alone.
   void _abandon(_Launch launch) {
     if (!ref.mounted || launch.epoch != _epoch) return;
-    if (ref.read(accountProvider)?.id != launch.owner) return;
+    if (ref.read(accountProvider)?.id != launch.scope.accountId) return;
     _epoch++;
     _deleteOwned();
     state = const ProfilePhotoState();
@@ -306,13 +297,18 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
 
   /// Opens the camera or library, prepares what comes back, and uploads it.
   /// Returns true when the photo was saved.
-  Future<bool> pick(ImageSource source) async {
+  ///
+  /// [scope] is the member the press was made for, captured by the screen when
+  /// the member first touched the control (`SessionNotifier.beginAction`): a
+  /// sheet that stayed open while another member signed in does not carry its
+  /// choice over to them.
+  Future<bool> pick(ImageSource source, MemberScope scope) async {
     if (state.busy) return false;
+    final launch = _launch(scope);
+    if (!_live(launch)) return false;
     // Reserved before the first await: a second tap finds it taken, and only
-    // this call writes and clears the pick's marker. What the press began
-    // under is read here too.
+    // this call writes and clears the pick's marker.
     state = state.copyWith(picking: true);
-    final launch = _launch();
     XFile? picked;
     try {
       picked = await ref
@@ -385,10 +381,10 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
       await ref
           .read(sessionProvider.notifier)
           .uploadPhoto(
+            scope: launch.scope,
             filePath: photo.path,
             fileName: photo.fileName,
             contentType: photo.contentType,
-            expectedIdentity: launch.identity,
             onProgress: (sent, total) {
               if (_live(launch) && total > 0) {
                 state = state.copyWith(progress: sent / total);
@@ -474,37 +470,42 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
     if (photo != null) await _release(photo.path);
   }
 
-  /// Removes the photo, or dismisses the notice that Wassla removed it.
-  /// Returns the server's refusal, or null when it worked.
-  Future<ApiException?> remove() async {
-    if (state.busy) return null;
-    final launch = _launch();
-    // The same check as an upload: a press that no longer belongs to the
-    // published member, or that came during a sign-in, sends nothing.
-    if (!_live(launch)) return null;
+  /// Removes the photo, or dismisses the notice that Wassla removed it, for the
+  /// member [scope] names (captured by the screen when the member first pressed,
+  /// before any confirmation): a confirmation that was left open while another
+  /// member signed in removes nothing ([ProfilePhotoRemoval.stale]).
+  Future<ProfilePhotoRemoval> remove(MemberScope scope) async {
+    if (state.busy) return const ProfilePhotoRemoval.stale();
+    final launch = _launch(scope);
+    if (!_live(launch)) return const ProfilePhotoRemoval.stale();
     state = state.copyWith(removing: true);
     try {
-      await ref
-          .read(sessionProvider.notifier)
-          .removePhoto(expectedIdentity: launch.identity);
+      await ref.read(sessionProvider.notifier).removePhoto(scope: scope);
     } on ApiException catch (error) {
-      if (_live(launch)) state = state.copyWith(removing: false);
-      return error;
+      if (_live(launch)) {
+        state = state.copyWith(removing: false);
+        return ProfilePhotoRemoval.failed(error);
+      }
+      // The credentials moved while the request was out (a sign-in of the same
+      // member, say): it was refused or its answer is not theirs to apply.
+      // Only the operation that owns the state starts it over.
+      _abandon(launch);
+      return const ProfilePhotoRemoval.stale();
     }
     if (!_live(launch)) {
       _abandon(launch);
-      return null;
+      return const ProfilePhotoRemoval.stale();
     }
     // Whatever went wrong with an earlier replacement is obsolete now.
     final pending = state.picked;
     if (pending != null) await _drop(pending);
     if (!_live(launch)) {
       _abandon(launch);
-      return null;
+      return const ProfilePhotoRemoval.stale();
     }
     state = const ProfilePhotoState();
     _refreshOwnPhotoReads();
-    return null;
+    return const ProfilePhotoRemoval.done();
   }
 
   /// Prepares [sourcePath] and keeps the result as the pending photo; a pick
@@ -542,8 +543,7 @@ class ProfilePhotoController extends Notifier<ProfilePhotoState> {
         path: output,
         contentType: type,
         fileName: 'photo.${extensionFor(type)}',
-        owner: launch.owner,
-        identity: launch.identity,
+        scope: launch.scope,
       );
       final replaced = state.picked;
       state = state.copyWith(

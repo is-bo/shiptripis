@@ -338,3 +338,20 @@ class _IdleConnection implements NotificationSocketConnection {
     if (!_controller.isClosed) await _controller.close();
   }
 }
+
+/// The press of a pick, as a screen makes it: the member is captured first
+/// (`SessionNotifier.beginAction`), then the controller is asked. Nothing is
+/// asked when nobody can begin an action (not signed in, or a sign-in is
+/// replacing the published member).
+Future<bool> pickPhoto(ProviderContainer container, ImageSource source) async {
+  final scope = container.read(sessionProvider.notifier).beginAction();
+  if (scope == null) return false;
+  return container.read(profilePhotoProvider.notifier).pick(source, scope);
+}
+
+/// The press of a removal; see [pickPhoto]. Null when nothing could begin.
+Future<ProfilePhotoRemoval?> removeOwnPhoto(ProviderContainer container) async {
+  final scope = container.read(sessionProvider.notifier).beginAction();
+  if (scope == null) return null;
+  return container.read(profilePhotoProvider.notifier).remove(scope);
+}

@@ -157,6 +157,12 @@ class PickGuard {
         if (proceed != null && !proceed()) return null;
         await _announce('opened');
         try {
+          // Asked again: the announcement is a platform round trip, and a
+          // sign-out, an expiry or a newer press may have come while it was
+          // out. The picker never opens for a member who has gone, and the
+          // `finally` below ends the announced launch.
+          if (tokens.identityGeneration != identity) return null;
+          if (proceed != null && !proceed()) return null;
           picked = await open();
           // Judged the moment the picker answers: a long wait for the marker's
           // release must not carry the suspect window past its end.
@@ -249,9 +255,10 @@ class PickGuard {
     if (!_nativeLaunchGate) return;
     try {
       await _launchChannel.invokeMethod<void>(event);
-    } on MissingPluginException {
-      // No native side.
     } on Object {
+      // Android always has the handler (a missing one means this build has no
+      // gate, and a result it restored would reach the plugin), so a refusal
+      // of any kind stops the pick, never the ending of one.
       if (strict) throw const PickBlockedException();
     }
   }

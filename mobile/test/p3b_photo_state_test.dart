@@ -261,9 +261,7 @@ void main() {
       });
       expect(before!.card.person.photo?.version, 'v1');
 
-      await tester.runAsync(
-        () => rig.container.read(profilePhotoProvider.notifier).remove(),
-      );
+      await tester.runAsync(() => removeOwnPhoto(rig.container));
       final after = await tester.runAsync(
         () => rig.container.read(ownProfileProvider.future),
       );
@@ -306,9 +304,7 @@ void main() {
       expect(pictures(), findsOneWidget, reason: 'the warm cache paints it');
 
       // The member removes their photo from Profile.
-      await tester.runAsync(
-        () => container.read(profilePhotoProvider.notifier).remove(),
-      );
+      await tester.runAsync(() => removeOwnPhoto(container));
       await untilReached(tester, () => pictures().evaluate().isEmpty);
 
       expect(pictures(), findsNothing);
@@ -352,7 +348,7 @@ void main() {
           filePath: file,
           fileName: 'photo.jpg',
           contentType: 'image/jpeg',
-          expectedIdentity: rig.tokenStore.identityGeneration,
+          scope: rig.container.read(sessionProvider.notifier).beginAction()!,
         );
         // The older answer arrives last: it says v1.
         gate.complete(FakeResponse(200, meFixture(photo: photoActive('v1'))));
@@ -371,9 +367,7 @@ void main() {
         final refresh = session.refreshAccount();
         await Future<void>.delayed(const Duration(milliseconds: 30));
         await session.removePhoto(
-          expectedIdentity: rig.container
-              .read(tokenStoreProvider)
-              .identityGeneration,
+          scope: rig.container.read(sessionProvider.notifier).beginAction()!,
         );
         gate.complete(FakeResponse(200, meFixture(photo: photoActive('v1'))));
         await refresh;
@@ -391,9 +385,7 @@ void main() {
         final refresh = session.refreshAccount();
         await Future<void>.delayed(const Duration(milliseconds: 30));
         await session.removePhoto(
-          expectedIdentity: rig.container
-              .read(tokenStoreProvider)
-              .identityGeneration,
+          scope: rig.container.read(sessionProvider.notifier).beginAction()!,
         );
         gate.complete(
           FakeResponse(200, {
@@ -420,9 +412,7 @@ void main() {
       await tester.runAsync(() async {
         final session = rig.container.read(sessionProvider.notifier);
         await session.removePhoto(
-          expectedIdentity: rig.container
-              .read(tokenStoreProvider)
-              .identityGeneration,
+          scope: rig.container.read(sessionProvider.notifier).beginAction()!,
         );
         await session.refreshAccount();
       });
@@ -516,9 +506,7 @@ void main() {
       final rig = PhotoRig(backend, picker: pickerReturning(sourceFile()));
       await rig.start(tester);
       await tester.runAsync(
-        () => rig.container
-            .read(profilePhotoProvider.notifier)
-            .pick(ImageSource.gallery),
+        () => pickPhoto(rig.container, ImageSource.gallery),
       );
       expect(rig.container.read(profilePhotoProvider).picked, isNotNull);
 
@@ -573,10 +561,8 @@ void main() {
         );
       final rig = PhotoRig(backend, picker: pickerReturning(sourceFile()));
       await rig.start(tester);
-      final photo = rig.container.read(profilePhotoProvider.notifier);
-
       final first = await tester.runAsync(
-        () => photo.pick(ImageSource.gallery),
+        () => pickPhoto(rig.container, ImageSource.gallery),
       );
       expect(first, isFalse);
       final kept = rig.container.read(profilePhotoProvider);
@@ -584,7 +570,9 @@ void main() {
       expect(kept.picked, isNotNull);
       File(kept.picked!.path).deleteSync();
 
-      final again = await tester.runAsync(photo.upload);
+      final again = await tester.runAsync(
+        rig.container.read(profilePhotoProvider.notifier).upload,
+      );
 
       expect(again, isFalse);
       final after = rig.container.read(profilePhotoProvider);

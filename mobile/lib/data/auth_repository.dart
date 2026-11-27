@@ -11,6 +11,7 @@ import 'package:dio/dio.dart'
 import '../core/api/api_client.dart';
 import '../core/api/api_exception.dart';
 import '../core/api/error_codes.dart';
+import '../core/session/member_scope.dart';
 import '../core/session/token_store.dart';
 import '../domain/account.dart';
 import '../domain/communication_language.dart';
@@ -149,14 +150,15 @@ class AuthRepository {
     required String filePath,
     required String fileName,
     required String contentType,
-    required int expectedIdentity,
+    required MemberScope scope,
     void Function(int sent, int total)? onProgress,
     CancelToken? cancelToken,
   }) async {
     final body = await _api.upload(
       '/api/me/photo',
       method: 'PUT',
-      expectedIdentity: expectedIdentity,
+      expectedIdentity: scope.credentials,
+      expectedAccount: scope.accountId,
       form: FormData.fromMap({
         'photo': await MultipartFile.fromFile(
           filePath,
@@ -180,8 +182,11 @@ class AuthRepository {
 
   /// Removes the photo, or dismisses the notice that Wassla removed it. The
   /// server answers 204 either way, and also when there was nothing.
-  Future<void> removePhoto({required int expectedIdentity}) =>
-      _api.deleteVoid('/api/me/photo', expectedIdentity: expectedIdentity);
+  Future<void> removePhoto({required MemberScope scope}) => _api.deleteVoid(
+    '/api/me/photo',
+    expectedIdentity: scope.credentials,
+    expectedAccount: scope.accountId,
+  );
 
   /// What stands before deleting the account.
   Future<AccountDeletionCheck> deletionCheck() async =>
@@ -281,6 +286,20 @@ class AuthRepository {
       );
     }
 
+    // Read before anything is written: an answer that cannot be read must leave
+    // the stored credentials as they were (the session relies on a refusal here
+    // never having replaced them).
+    final Account account;
+    try {
+      account = Account.fromJson(Map<String, dynamic>.from(user));
+    } on Object {
+      throw ApiException(
+        kind: ApiFailureKind.malformed,
+        code: ApiErrorCode.unknown,
+        serverDetail: 'Authentication response carried an unreadable user.',
+      );
+    }
+
     final identity = expectedIdentityGeneration ?? _tokens.invalidateIdentity();
     final saved = await _tokens.saveAuthenticationIfCurrent(
       expectedIdentityGeneration: identity,
@@ -290,6 +309,6 @@ class AuthRepository {
     if (!saved) {
       throw StateError('The authenticated session changed.');
     }
-    return Account.fromJson(Map<String, dynamic>.from(user));
+    return account;
   }
 }

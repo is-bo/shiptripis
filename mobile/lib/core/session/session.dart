@@ -20,7 +20,10 @@ import '../../domain/person_photo.dart';
 import '../api/api_client.dart';
 import '../api/api_exception.dart';
 import '../api/error_codes.dart';
+import 'member_scope.dart';
 import 'token_store.dart';
+
+export 'member_scope.dart';
 
 // ---------------------------------------------------------------------------
 // State
@@ -217,6 +220,34 @@ class SessionController extends Notifier<SessionState> {
   AuthRepository get _auth => ref.read(authRepositoryProvider);
   TokenStore get _tokens => ref.read(tokenStoreProvider);
 
+  /// The scope of an action that starts now, or null when there is none to
+  /// begin: nobody is signed in, or the credentials have already moved on from
+  /// the account that is published (a sign-in is replacing it), so anything
+  /// begun now would pair one member with the next one's credentials.
+  MemberScope? beginAction() {
+    final now = state;
+    if (now is! SessionSignedIn || now.identity != _tokens.identityGeneration) {
+      return null;
+    }
+    return MemberScope(
+      accountId: now.account.id,
+      session: now.generation,
+      credentials: now.identity,
+    );
+  }
+
+  /// Whether [scope] is still the member who is signed in, on the same
+  /// authentication and the same credentials. The one check an action makes
+  /// when it commits.
+  bool isCurrent(MemberScope scope) {
+    final now = state;
+    return now is SessionSignedIn &&
+        now.account.id == scope.accountId &&
+        now.generation == scope.session &&
+        now.identity == scope.credentials &&
+        _tokens.identityGeneration == scope.credentials;
+  }
+
   /// Reads stored credentials and confirms them against the server.
   ///
   /// With a snapshot of the last server-confirmed profile, the user enters the
@@ -265,16 +296,21 @@ class SessionController extends Notifier<SessionState> {
         identity: identity,
       );
     }
-    await _confirm(generation: generation, cached: cached, attempt: 0);
+    await _confirm(
+      generation: generation,
+      identity: identity,
+      cached: cached,
+      attempt: 0,
+    );
   }
 
   /// Asks the server who the stored credentials belong to.
   Future<void> _confirm({
     required int generation,
+    required int identity,
     required Account? cached,
     required int attempt,
   }) async {
-    final identity = _tokens.identityGeneration;
     final photoWrites = _photoApplied;
     _markAccountRead();
     try {
@@ -317,6 +353,7 @@ class SessionController extends Notifier<SessionState> {
             unawaited(
               _confirm(
                 generation: generation,
+                identity: identity,
                 cached: cached,
                 attempt: attempt + 1,
               ),
@@ -430,7 +467,28 @@ class SessionController extends Notifier<SessionState> {
   ) async {
     final generation = ++_generation;
     final identity = _tokens.invalidateIdentity();
-    final account = await authenticate(identity);
+    final Account account;
+    try {
+      account = await authenticate(identity);
+    } on ApiException {
+      // The server or the network refused before any credential was written
+      // (the repository parses the answer before it saves), so whoever was
+      // signed in still is, on the credentials they had. This sign-in already
+      // moved the store's generation, so the member is published again under
+      // the generation they now hold; without that every action of theirs would
+      // find the credentials "changed" and refuse until the next sign-in.
+      final still = state;
+      if (generation == _generation &&
+          still is SessionSignedIn &&
+          _tokens.identityGeneration == identity) {
+        state = SessionSignedIn(
+          still.account,
+          generation: generation,
+          identity: identity,
+        );
+      }
+      rethrow;
+    }
     if (generation != _generation) return;
     await _adoptRoleContextFor(account);
     if (generation != _generation) return;
@@ -477,40 +535,39 @@ class SessionController extends Notifier<SessionState> {
   /// pressed the button (see `TokenStore.identityGeneration`): if a sign-in or
   /// sign-out has happened since, nothing is sent.
   Future<void> uploadPhoto({
+    required MemberScope scope,
     required String filePath,
     required String fileName,
     required String contentType,
-    required int expectedIdentity,
     void Function(int sent, int total)? onProgress,
   }) => _updatePhoto(
+    scope,
     () => _auth.uploadPhoto(
       filePath: filePath,
       fileName: fileName,
       contentType: contentType,
-      expectedIdentity: expectedIdentity,
+      scope: scope,
       onProgress: onProgress,
     ),
   );
 
   /// Removes the photo, or dismisses the notice that Wassla removed it.
   ///
-  /// [expectedIdentity] is as for [uploadPhoto]: nothing is sent when the
-  /// credentials changed since the press.
-  Future<void> removePhoto({required int expectedIdentity}) =>
-      _updatePhoto(() async {
-        await _auth.removePhoto(expectedIdentity: expectedIdentity);
+  /// [scope] is as for [uploadPhoto]: nothing is sent when it is no longer
+  /// current.
+  Future<void> removePhoto({required MemberScope scope}) =>
+      _updatePhoto(scope, () async {
+        await _auth.removePhoto(scope: scope);
         return null;
       });
 
-  Future<void> _updatePhoto(Future<OwnPhoto?> Function() change) async {
-    final current = state;
-    if (current is! SessionSignedIn) return;
-    final generation = _generation;
+  Future<void> _updatePhoto(
+    MemberScope scope,
+    Future<OwnPhoto?> Function() change,
+  ) async {
     final photo = await change();
     final now = state;
-    if (generation == _generation &&
-        now is SessionSignedIn &&
-        now.account.id == current.account.id) {
+    if (isCurrent(scope) && now is SessionSignedIn) {
       _photoApplied++;
       state = SessionSignedIn(
         now.account.withPhoto(photo),
@@ -540,24 +597,27 @@ class SessionController extends Notifier<SessionState> {
   /// The state moves only once the server has answered, and to the profile it
   /// returned, never to the value that was asked for.
   Future<void> _updateProfile(Future<Account> Function() update) async {
-    final current = state;
-    if (current is! SessionSignedIn) return;
-    final generation = _generation;
-    final identity = _tokens.identityGeneration;
+    final scope = beginAction();
+    if (scope == null) return;
     final photoWrites = _photoApplied;
     final answered = await update();
-    if (generation == _generation &&
-        state is SessionSignedIn &&
-        (state as SessionSignedIn).account.id == current.account.id &&
-        answered.id == current.account.id) {
+    if (isCurrent(scope) && answered.id == scope.accountId) {
       final account = _withNewestPhoto(answered, photoWrites);
-      state = SessionSignedIn(
-        account,
-        generation: current.generation,
-        identity: current.identity,
-      );
-      unawaited(_remember(account, identity));
+      _publishProfile(account);
+      unawaited(_remember(account, scope.credentials));
     }
+  }
+
+  /// Replaces the published profile of the member who is signed in, keeping the
+  /// authentication and the credentials it was published under.
+  void _publishProfile(Account account) {
+    final now = state;
+    if (now is! SessionSignedIn) return;
+    state = SessionSignedIn(
+      account,
+      generation: now.generation,
+      identity: now.identity,
+    );
   }
 
   /// Re-reads `/api/me`. Called after KYC submission, on resume, and whenever
@@ -570,25 +630,20 @@ class SessionController extends Notifier<SessionState> {
   /// Always a new read: a live KYC event lands here, and a read already in
   /// flight may predate it.
   Future<void> refreshAccount() async {
-    final current = state;
-    if (current is! SessionSignedIn) return;
-    final generation = _generation;
-    final identity = _tokens.identityGeneration;
+    // Begun only for the member who is published on the credentials they hold:
+    // during a sign-in the store has moved on while the previous member is still
+    // shown, and an answer to a read made then would be filed under the new
+    // credentials (and written to the launch snapshot as theirs).
+    final scope = beginAction();
+    if (scope == null) return;
     final photoWrites = _photoApplied;
     _markAccountRead();
     try {
       final answered = await _auth.me(fresh: true);
-      if (generation == _generation &&
-          state is SessionSignedIn &&
-          (state as SessionSignedIn).account.id == current.account.id &&
-          answered.id == current.account.id) {
+      if (isCurrent(scope) && answered.id == scope.accountId) {
         final account = _withNewestPhoto(answered, photoWrites);
-        state = SessionSignedIn(
-          account,
-          generation: current.generation,
-          identity: current.identity,
-        );
-        unawaited(_remember(account, identity));
+        _publishProfile(account);
+        unawaited(_remember(account, scope.credentials));
       }
     } on ApiException {
       // Keep the previous account.

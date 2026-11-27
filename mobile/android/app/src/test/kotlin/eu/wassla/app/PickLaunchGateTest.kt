@@ -7,44 +7,62 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PickLaunchGateTest {
+    private val activity = Any()
+    private val other = Any()
+
     @After
-    fun closeTheGate() = PickLaunchGate.reset()
+    fun closeTheGate() {
+        PickLaunchGate.closed(activity)
+        PickLaunchGate.closed(other)
+    }
 
     @Test
     fun aRestoredPickerResultIsDroppedWhenNoPickOfThisProcessIsOpen() {
-        PickLaunchGate.reset()
         for (code in PickLaunchGate.PICKER_REQUEST_CODES) {
-            assertFalse("request $code", PickLaunchGate.shouldForward(code))
+            assertFalse("request $code", PickLaunchGate.shouldForward(code, activity))
         }
     }
 
     @Test
-    fun aResultIsForwardedWhileAPickOpenedByThisProcessWaits() {
-        PickLaunchGate.opened()
+    fun aResultIsForwardedWhileAPickOpenedByThisActivityWaits() {
+        PickLaunchGate.opened(activity)
         for (code in PickLaunchGate.PICKER_REQUEST_CODES) {
-            assertTrue("request $code", PickLaunchGate.shouldForward(code))
+            assertTrue("request $code", PickLaunchGate.shouldForward(code, activity))
         }
     }
 
     @Test
     fun aResultAfterThePickAnsweredIsDropped() {
-        PickLaunchGate.opened()
-        PickLaunchGate.closed()
-        assertFalse(PickLaunchGate.shouldForward(2342))
+        PickLaunchGate.opened(activity)
+        PickLaunchGate.closed(activity)
+        assertFalse(PickLaunchGate.shouldForward(2342, activity))
     }
 
     @Test
-    fun aNewEngineKnowsOfNoOpenPick() {
-        PickLaunchGate.opened()
-        PickLaunchGate.reset()
-        assertFalse(PickLaunchGate.shouldForward(2343))
+    fun aResultAtAnActivityThatOpenedNoPickIsDroppedWhileAnotherHasOne() {
+        PickLaunchGate.opened(activity)
+        assertFalse(PickLaunchGate.shouldForward(2343, other))
+        assertTrue(PickLaunchGate.shouldForward(2343, activity))
+    }
+
+    @Test
+    fun anotherActivityEndingLeavesTheOpenPickAlone() {
+        PickLaunchGate.opened(activity)
+        PickLaunchGate.closed(other)
+        assertTrue(PickLaunchGate.shouldForward(2342, activity))
+    }
+
+    @Test
+    fun aPickEndsWithItsDestroyedActivity() {
+        PickLaunchGate.opened(activity)
+        PickLaunchGate.closed(activity)
+        assertFalse(PickLaunchGate.shouldForward(2346, activity))
     }
 
     @Test
     fun otherPluginsActivityResultsAreNeverHeld() {
-        PickLaunchGate.reset()
         for (code in listOf(0, 1, 9001, 40000, 2344, 2345, 2355)) {
-            assertTrue("request $code", PickLaunchGate.shouldForward(code))
+            assertTrue("request $code", PickLaunchGate.shouldForward(code, activity))
         }
     }
 

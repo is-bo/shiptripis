@@ -491,3 +491,49 @@ checks that the three photo test classes produced results. It passed, so `MainAc
 **Device checks owed.** With a build, kill the app while the camera or library is open, come back, and confirm
 the restored result is dropped (the log shows no copy) and that a Profile pick afterwards works; pick a 48 MP
 HEIC and one over 64 MP.
+
+## Round seven
+
+Astra 6.2 rejected head `ead30e2` (`docs/handoff/astra/results/p3b-astra-round6-result.md`): 3 blockers and 6
+should-fixes. Every round before had found one more way for an action of member A to land on member B while
+one replaced the other, so this round fixes the cause and not the instance.
+
+**The cause.** An action read "who am I" more than once, from places that move at different moments: the
+published account, the token store's generation, and the bearer in secure storage. Each fix closed one
+pairing and left the next.
+
+**The design.** `SessionNotifier.beginAction()` captures one immutable `MemberScope` (`member_scope.dart`):
+the account, the authentication it was published by (`SessionSignedIn.generation`) and the credentials it was
+published under (`SessionSignedIn.identity`). It answers null while nobody is signed in, **and while the
+credentials have already moved on from the published account** (a sign-in is replacing it). Every action
+(a pick, a removal, a photo write, a profile read, a profile update) takes the scope **once, when the
+member first touches the control**, carries it (a prepared photo keeps its own; a dialog keeps the one it was
+opened with), and `SessionNotifier.isCurrent(scope)` is the only question asked when it commits. Nothing
+re-reads the account or the generation from live state in between. For the two writes that send a bearer
+(`PUT` and `DELETE /api/me/photo`) the request also names the account (`ApiClient.upload` and `deleteVoid`
+take `expectedAccount`), and the request interceptor refuses to attach a bearer whose `user_id` claim
+(`bearer_account.dart`) is a different account: that is what the token store of another window cannot
+see.
+
+| Finding | Fix | Test |
+| --- | --- | --- |
+| **Blocker: a refresh during the A-to-B switch wrote A's snapshot under B's generation** (also `_updateProfile`) | `refreshAccount` and `_updateProfile` begin an action (refused while the credentials have moved on), check `isCurrent` on the answer, and remember the profile under the scope's credentials, never under whatever the store holds now | `p3b_photo_round7_test.dart` group 1: with B's credentials saved and the role-context write held, a refresh makes no request and writes no snapshot, a profile update is not sent, a read begun earlier and answering inside the interval is dropped, and the only snapshot that ends up stored is B's |
+| **Blocker: the removal dialog took the identity on confirm** | The screen takes the scope **before** the dialog (and before the camera/library sheet) and passes it through; `remove(scope)` answers `ProfilePhotoRemoval` (`done`, `stale` or `failed(error)`): a removal for a member who is gone sends nothing and the screen says nothing, instead of "Photo removed" | group 2: the real dialog opened over A, B signs in, the dialog is confirmed: no DELETE, no snack (fails if the scope is taken after the dialog); a stale removal is `stale`, not `done` |
+| **Blocker: a second Android task has its own token store but the same bearer** | `launchMode="singleTask"` (the template's `singleTop` with an empty task affinity allowed a second instance in another task): one activity, one engine, one generation for the device; and the bearer-account check above, so a write from a window that is out of date is refused instead of sent | group 3: a removal and an upload under a bearer of another account are refused and nothing is sent, the member's own bearer goes through, the claim reader, the manifest pin |
+| **Should-fix: the launch gate reset when a second activity started** | `PickLaunchGate` names the activity that opened the pick: another activity's start-up or closing leaves it alone, a result at an activity that opened none is not forwarded, and a pick ends with its destroyed activity | `PickLaunchGateTest.kt` (8 tests, JUnit by Gradle in CI) |
+| **Should-fix: the picker opened for a member who left during `opened`** | `PickGuard.run` rechecks the credentials and `proceed` right after the announcement, inside the `try` whose `finally` ends the launch; a handler the Android build lacks (or any refusal) stops the pick | group 5 (sign-out during the announcement, a caller that gave up, no native gate) |
+| **Should-fix: a failed overlapping sign-in left A refusing every action** | When a sign-in is refused by the server or the network (the repository now reads the answer **before** it saves anything), the member who was signed in is published again under the generation they hold | group 4 (a wrong password for B, then A picks a photo and it is sent) |
+| **Should-fix: an in-flight DELETE across a same-member sign-in kept the controls busy** | The stale branch of `remove` calls the epoch-checked `_abandon`, as the upload path does | group 4 (the controls are usable again, and the result is not "done") |
+| **Should-fix: a full disk could leave an untracked avatar file** | `AvatarCacheManager._publish` writes the file under its own name, **awaits** the record write (the stock `putFile` starts it without waiting), and deletes the file if either fails | `p3b_avatar_cache_test.dart`: a record the database refuses removes the file again, and a write the disk refuses leaves no record |
+| **Should-fix: the round-6 test pressed before B's answer** | Group 1 holds the role-context write after B's credentials are saved and presses there; the pre-answer case stays as it was | group 1 |
+| Round-3 finding 1 (partly): the gate's one Boolean | As the gate row above | |
+
+**Tests changed, and why.** Every photo test that called `ProfilePhotoController.pick(source)`,
+`remove()`, `SessionNotifier.uploadPhoto` or `removePhoto` now goes through the new signatures (a scope):
+`pickPhoto` and `removeOwnPhoto` in `test/support/photo_rig.dart` make the press the way a screen does, and the
+direct session calls take `beginAction()`. Their assertions are unchanged. No test was skipped, deleted or
+weakened.
+
+**Known limits.** `bearerAccountId` is read only to refuse; a bearer that is not a readable JWT is not refused
+by the app (the server still decides). The second-window case is closed by `singleTask` first and by the
+bearer check as a net; neither has run on a device.

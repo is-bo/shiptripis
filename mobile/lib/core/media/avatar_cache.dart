@@ -25,6 +25,7 @@ library;
 
 import 'dart:convert';
 import 'dart:io' show HttpException;
+import 'dart:math' show Random;
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
@@ -154,17 +155,54 @@ class AvatarCacheManager extends CacheManager {
       // same picture, so this response is dropped rather than stored twice.
       final existing = await getFileFromCache(version);
       if (existing != null) return existing;
-      final file = await putFile(
+      return _publish(
         url,
         bytes,
-        key: version,
-        fileExtension: extension.startsWith('.')
-            ? extension.substring(1)
-            : extension,
+        version,
+        extension.startsWith('.') ? extension.substring(1) : extension,
+        response.validTill,
       );
-      return FileInfo(file, FileSource.Online, response.validTill, url);
     });
   }
+
+  /// Writes [bytes] under a path of its own and records it, **awaiting both**,
+  /// and deletes the file again if either fails: a full disk (a partial write)
+  /// or a refused record leaves nothing behind that no record names, and never
+  /// answers success for a picture the cache cannot find again. (The stock
+  /// `putFile` starts the record write without waiting for it.)
+  Future<FileInfo> _publish(
+    String url,
+    Uint8List bytes,
+    String version,
+    String extension,
+    DateTime validTill,
+  ) async {
+    final name =
+        '${_random.nextInt(1 << 32).toRadixString(36)}'
+        '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}.$extension';
+    final file = await config.fileSystem.createFile(name);
+    try {
+      await file.writeAsBytes(bytes);
+      await store.putFile(
+        CacheObject(
+          url,
+          key: version,
+          relativePath: name,
+          validTill: validTill,
+        ),
+      );
+    } on Object {
+      try {
+        if (await file.exists()) await file.delete();
+      } on Object {
+        // Nothing more can be done for it.
+      }
+      rethrow;
+    }
+    return FileInfo(file, FileSource.Online, validTill, url);
+  }
+
+  static final _random = Random.secure();
 
   /// The whole body, or an error: a picture is a few tens of kilobytes, and one
   /// larger than [_maxBytes] is not a profile photo.

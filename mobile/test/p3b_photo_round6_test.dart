@@ -50,9 +50,6 @@ Future<void> _until(bool Function() condition) async {
 Future<Completer<T>> _gate<T>(WidgetTester tester) async =>
     (await tester.runAsync(() async => Completer<T>()))!;
 
-ProfilePhotoController _photo(PhotoRig rig) =>
-    rig.container.read(profilePhotoProvider.notifier);
-
 /// A guard that announces its launches, over a container of its own.
 ({PickGuard guard, FakeImagePicker picker}) _announcingGuard(
   FakeTokenStore tokens, {
@@ -424,8 +421,8 @@ void main() {
         await _until(() => backend.to('POST', '/api/auth/sign-in').isNotEmpty);
         expect(rig.account.id, 42, reason: 'A is still published');
 
-        final picked = await _photo(rig).pick(ImageSource.gallery);
-        final removed = await _photo(rig).remove();
+        final picked = await pickPhoto(rig.container, ImageSource.gallery);
+        final removed = await removeOwnPhoto(rig.container);
 
         expect(picked, isFalse);
         expect(removed, isNull);
@@ -456,7 +453,7 @@ void main() {
         await rig.container
             .read(sessionProvider.notifier)
             .signIn(email: 'b@example.test', password: 'password-b');
-        return _photo(rig).pick(ImageSource.gallery);
+        return pickPhoto(rig.container, ImageSource.gallery);
       });
 
       expect(saved, isTrue);
@@ -469,12 +466,12 @@ void main() {
       final rig = PhotoRig(backend);
       await rig.start(tester);
       final session = rig.container.read(sessionProvider.notifier);
-      final pressed = rig.tokenStore.identityGeneration;
+      final pressed = session.beginAction()!;
       rig.tokenStore.invalidateIdentity();
 
       await tester.runAsync(() async {
         await expectLater(
-          session.removePhoto(expectedIdentity: pressed),
+          session.removePhoto(scope: pressed),
           throwsA(isA<ApiException>()),
         );
       });

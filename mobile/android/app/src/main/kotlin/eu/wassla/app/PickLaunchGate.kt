@@ -1,10 +1,10 @@
 package eu.wassla.app
 
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Lets an `image_picker` result through to the plugin only when a pick that the
- * Dart side opened **in this process** is waiting for it.
+ * Dart side opened **in this process, from this activity** is waiting for it.
  *
  * The plugin cannot say which launch a result belongs to. When the phone ends
  * the app while the camera or library is open, Android brings it back and hands
@@ -17,9 +17,12 @@ import java.util.concurrent.atomic.AtomicBoolean
  * is about to open a picker ([opened]) and when the picker has answered
  * ([closed]), and a result for any of the plugin's request codes that arrives
  * while no such pick is open is dropped, so the plugin never starts a copy for
- * it. A new engine knows of no pick ([reset]): the pick that was open in the old
- * engine has no one waiting for it. The Dart side keeps its own tainted-pick
- * rules as a second line.
+ * it. The gate names the activity that opened the pick (its [owner]), so another
+ * activity's start-up, closing or results leave a pick that is open alone, and a
+ * result arriving at an activity that did not open one is never forwarded. A
+ * pick whose activity is destroyed ends with it ([closed]): nobody is waiting
+ * for it any more. The Dart side keeps its own tainted-pick rules as a second
+ * line.
  *
  * [PICKER_REQUEST_CODES] are the request codes of `image_picker_android`
  * 0.8.13+21; `test/p3b_photo_round6_test.dart` fails if the pinned plugin's
@@ -28,18 +31,20 @@ import java.util.concurrent.atomic.AtomicBoolean
 object PickLaunchGate {
     val PICKER_REQUEST_CODES: Set<Int> = setOf(2342, 2343, 2346, 2347, 2348, 2352, 2353)
 
-    private val open = AtomicBoolean(false)
+    private val openFor = AtomicReference<Any?>(null)
 
-    /** A pick of this process is about to open its picker. */
-    fun opened() = open.set(true)
+    /** A pick of [owner] is about to open its picker. */
+    fun opened(owner: Any) = openFor.set(owner)
 
-    /** The pick's picker answered, or never opened. */
-    fun closed() = open.set(false)
+    /**
+     * [owner]'s pick answered, never opened, or its activity is gone. Another
+     * owner's open pick is left alone.
+     */
+    fun closed(owner: Any) {
+        openFor.compareAndSet(owner, null)
+    }
 
-    /** A new engine: nothing is waiting for a result. */
-    fun reset() = open.set(false)
-
-    /** Whether the plugin may be given the result of [requestCode]. */
-    fun shouldForward(requestCode: Int): Boolean =
-        requestCode !in PICKER_REQUEST_CODES || open.get()
+    /** Whether the plugin of [owner] may be given the result of [requestCode]. */
+    fun shouldForward(requestCode: Int, owner: Any): Boolean =
+        requestCode !in PICKER_REQUEST_CODES || openFor.get() === owner
 }

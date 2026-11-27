@@ -394,7 +394,7 @@ void main() {
         await rig.start(tester);
 
         await tester.runAsync(() async {
-          final pick = _photo(rig).pick(ImageSource.camera);
+          final pick = pickPhoto(rig.container, ImageSource.camera);
           await reached.future;
           tokens.invalidateIdentity();
           hold.complete();
@@ -454,7 +454,7 @@ void main() {
         await rig.start(tester);
 
         await tester.runAsync(() async {
-          expect(await _photo(rig).pick(ImageSource.gallery), isFalse);
+          expect(await pickPhoto(rig.container, ImageSource.gallery), isFalse);
         });
         expect(
           rig.container.read(profilePhotoProvider).failure,
@@ -500,7 +500,7 @@ void main() {
       await rig.start(tester);
 
       await tester.runAsync(() async {
-        expect(await _photo(rig).pick(ImageSource.gallery), isFalse);
+        expect(await pickPhoto(rig.container, ImageSource.gallery), isFalse);
         expect(await _photo(rig).upload(), isTrue);
       });
 
@@ -516,7 +516,9 @@ void main() {
       final backend = FakeBackend()..on('PUT', _put, storageDown);
       final rig = PhotoRig(backend, picker: pickerReturning(sourceFile()));
       await rig.start(tester);
-      await tester.runAsync(() => _photo(rig).pick(ImageSource.gallery));
+      await tester.runAsync(
+        () => pickPhoto(rig.container, ImageSource.gallery),
+      );
 
       rig.tokenStore.invalidateIdentity();
       final again = await tester.runAsync(() => _photo(rig).upload());
@@ -555,11 +557,11 @@ void main() {
         await rig.start(tester);
 
         await tester.runAsync(() async {
-          final one = _photo(rig).pick(ImageSource.gallery);
+          final one = pickPhoto(rig.container, ImageSource.gallery);
           await _until(() => outputs.isNotEmpty);
           await _photo(rig).discard();
 
-          final two = _photo(rig).pick(ImageSource.gallery);
+          final two = pickPhoto(rig.container, ImageSource.gallery);
           await _until(() => outputs.length == 2);
 
           firstGate.complete();
@@ -596,7 +598,9 @@ void main() {
         preparer: preparerWriting(jpegBytes, outputs: outputs),
       );
       await rig.start(tester);
-      await tester.runAsync(() => _photo(rig).pick(ImageSource.gallery));
+      await tester.runAsync(
+        () => pickPhoto(rig.container, ImageSource.gallery),
+      );
       expect(rig.container.read(profilePhotoProvider).picked, isNotNull);
 
       Future<void>? deleting;

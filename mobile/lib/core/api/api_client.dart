@@ -29,6 +29,7 @@ import 'package:dio/dio.dart';
 import '../env/app_config.dart';
 import '../session/token_store.dart';
 import 'api_exception.dart';
+import 'bearer_account.dart';
 import 'error_codes.dart';
 
 /// Called when refresh has definitively failed and the session is over.
@@ -260,6 +261,7 @@ class ApiClient {
   Future<void> deleteVoid(
     String path, {
     int? expectedIdentity,
+    int? expectedAccount,
     CancelToken? cancelToken,
   }) async {
     if (expectedIdentity != null &&
@@ -270,7 +272,7 @@ class ApiClient {
       (identity) => _dio.delete<dynamic>(
         path,
         cancelToken: cancelToken,
-        options: _requestOptions(identity),
+        options: _requestOptions(identity, account: expectedAccount),
       ),
     );
   }
@@ -332,6 +334,7 @@ class ApiClient {
     required FormData form,
     String method = 'POST',
     int? expectedIdentity,
+    int? expectedAccount,
     void Function(int sent, int total)? onProgress,
     CancelToken? cancelToken,
   }) async {
@@ -340,7 +343,14 @@ class ApiClient {
       throw ApiException.from(_AuthInterceptor.sessionChanged());
     }
     return _expectObject(
-      await _upload(path, form, method, onProgress, cancelToken),
+      await _upload(
+        path,
+        form,
+        method,
+        onProgress,
+        cancelToken,
+        account: expectedAccount,
+      ),
       path,
     );
   }
@@ -353,8 +363,9 @@ class ApiClient {
     FormData form,
     String method,
     void Function(int sent, int total)? onProgress,
-    CancelToken? cancelToken,
-  ) => _write((identity) async {
+    CancelToken? cancelToken, {
+    int? account,
+  }) => _write((identity) async {
     try {
       return _decodeAfterStatus(
         await _dio.request<dynamic>(
@@ -368,6 +379,7 @@ class ApiClient {
             responseType: ResponseType.plain,
             extra: {
               'st.identity_generation': identity,
+              _AuthInterceptor.boundAccount: ?account,
               _AuthInterceptor.noReplay: true,
             },
             // An upload is bounded by bandwidth, not by server think-time.
@@ -536,8 +548,12 @@ class ApiClient {
     return out.isEmpty ? null : out;
   }
 
-  Options _requestOptions(int identityGeneration) =>
-      Options(extra: {'st.identity_generation': identityGeneration});
+  Options _requestOptions(int identityGeneration, {int? account}) => Options(
+    extra: {
+      'st.identity_generation': identityGeneration,
+      _AuthInterceptor.boundAccount: ?account,
+    },
+  );
 
   static final _random = Random();
 }
@@ -659,12 +675,27 @@ class _AuthInterceptor extends Interceptor {
       if (identityGeneration != _tokens.identityGeneration) {
         return handler.reject(sessionChanged(options));
       }
+      // A write that belongs to one member (a photo upload or removal) names
+      // the account it began for, and the bearer it is about to carry must be
+      // that account's. Another window of the app may have signed someone else
+      // in through the same secure storage, which this window's generation
+      // cannot see; the token itself says whose it is.
+      final bound = options.extra[boundAccount];
+      if (bound is int && access != null) {
+        final owner = bearerAccountId(access);
+        if (owner != null && owner != bound) {
+          return handler.reject(sessionChanged(options));
+        }
+      }
       if (access != null) options.headers['Authorization'] = 'Bearer $access';
     }
     handler.next(options);
   }
 
   static const _sentAsGuest = 'st.sent_as_guest';
+
+  /// The account a write began for; see [onRequest].
+  static const boundAccount = 'st.bound_account';
 
   /// Whether [request] went without a bearer because nobody was signed in.
   static bool wasSentAsGuest(RequestOptions request) =>

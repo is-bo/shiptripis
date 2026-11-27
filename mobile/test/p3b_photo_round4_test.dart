@@ -53,9 +53,6 @@ Future<void> _until(bool Function() condition) async {
 Future<Completer<T>> _gate<T>(WidgetTester tester) async =>
     (await tester.runAsync(() async => Completer<T>()))!;
 
-ProfilePhotoController _photo(PhotoRig rig) =>
-    rig.container.read(profilePhotoProvider.notifier);
-
 /// Secure storage in memory, with a write to one key that can be held.
 class _Storage extends FlutterSecureStorage {
   _Storage();
@@ -341,7 +338,7 @@ void main() {
       final file = sourceFile();
 
       await tester.runAsync(() async {
-        final pick = _photo(rig).pick(ImageSource.gallery);
+        final pick = pickPhoto(rig.container, ImageSource.gallery);
         await _until(() => rig.container.read(profilePhotoProvider).picking);
         rig.tokenStore.invalidateIdentity();
         expect(rig.account.id, 42, reason: 'the account has not moved yet');
@@ -378,7 +375,7 @@ void main() {
       await rig.start(tester);
 
       await tester.runAsync(() async {
-        final pick = _photo(rig).pick(ImageSource.gallery);
+        final pick = pickPhoto(rig.container, ImageSource.gallery);
         await _until(() => outputs.isNotEmpty);
         rig.tokenStore.invalidateIdentity();
         held.complete();
@@ -417,7 +414,7 @@ void main() {
         await rig.container
             .read(sessionProvider.notifier)
             .signIn(email: 'a@example.test', password: 'password-a');
-        return _photo(rig).pick(ImageSource.gallery);
+        return pickPhoto(rig.container, ImageSource.gallery);
       });
 
       expect(rig.tokenStore.identityGeneration, isNot(before));
@@ -451,7 +448,7 @@ void main() {
         await tester.runAsync(() async {
           await IOOverrides.runZoned(
             () async {
-              final pick = _photo(rig).pick(ImageSource.gallery);
+              final pick = pickPhoto(rig.container, ImageSource.gallery);
               // The server refused with a retryable answer; the flow is now
               // asking whether the file is still there.
               await _until(() => backend.to('PUT', _put).isNotEmpty);
@@ -509,7 +506,7 @@ void main() {
             filePath: file,
             fileName: 'photo.jpg',
             contentType: 'image/jpeg',
-            expectedIdentity: rig.tokenStore.identityGeneration,
+            scope: rig.container.read(sessionProvider.notifier).beginAction()!,
           );
         } on ApiException catch (error) {
           failure = error;
@@ -557,9 +554,9 @@ void main() {
           await _until(() => rig.container.read(accountProvider) != null);
           try {
             await session.removePhoto(
-              expectedIdentity: rig.container
-                  .read(tokenStoreProvider)
-                  .identityGeneration,
+              scope: rig.container
+                  .read(sessionProvider.notifier)
+                  .beginAction()!,
             );
           } on ApiException {
             // The server refused.

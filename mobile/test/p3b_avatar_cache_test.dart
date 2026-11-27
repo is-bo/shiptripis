@@ -78,17 +78,33 @@ class _Network extends FileService {
   }
 }
 
+/// A record store that refuses to write, as a database that is full or broken.
+class _RefusingRecords extends JsonCacheInfoRepository {
+  _RefusingRecords(super.file) : super.withFile();
+
+  @override
+  Future<dynamic> updateOrInsert(CacheObject cacheObject) =>
+      throw const FileSystemException('database is full');
+}
+
 class _Rig {
   _Rig._(this.directory, this.network, this.manager);
 
-  factory _Rig() {
+  /// [refuseRecords] makes the record store fail every write; [missingFolder]
+  /// points the pictures at a folder that is not there, so a write fails.
+  factory _Rig({bool refuseRecords = false, bool missingFolder = false}) {
     final directory = Directory.systemTemp.createTempSync('wassla-avatars');
     final network = _Network();
+    final recordFile = File(
+      '${directory.path}${Platform.pathSeparator}records.json',
+    );
     final manager = AvatarCacheManager.at(
-      records: JsonCacheInfoRepository.withFile(
-        File('${directory.path}${Platform.pathSeparator}records.json'),
+      records: refuseRecords
+          ? _RefusingRecords(recordFile)
+          : JsonCacheInfoRepository.withFile(recordFile),
+      fileSystem: _Folder(
+        missingFolder ? Directory('${directory.path}/not-there') : directory,
       ),
-      fileSystem: _Folder(directory),
       fileService: network,
     );
     return _Rig._(directory, network, manager);
@@ -356,6 +372,34 @@ void main() {
       expect(response, isA<FileInfo>());
       expect((response as FileInfo).file.readAsBytesSync(), tinyPng);
     });
+  });
+
+  group('a publication that fails leaves nothing behind', () {
+    List<File> pictures() => rig.directory
+        .listSync()
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.png'))
+        .toList();
+
+    test('a record the database refuses removes the file again', () async {
+      rig = _Rig(refuseRecords: true);
+
+      await expectLater(rig.load(_photo('a')), throwsA(anything));
+
+      expect(pictures(), isEmpty, reason: 'no file that no record names');
+    });
+
+    test(
+      'a write the disk refuses is an error, and no record is made',
+      () async {
+        rig = _Rig(missingFolder: true);
+
+        await expectLater(rig.load(_photo('a')), throwsA(anything));
+
+        expect(pictures(), isEmpty);
+        expect(await rig.manager.getFileFromCache('v1'), isNull);
+      },
+    );
   });
 
   group('the key an avatar load goes by', () {

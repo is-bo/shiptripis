@@ -77,7 +77,7 @@ void main() {
           filePath: file,
           fileName: 'photo.jpg',
           contentType: 'image/jpeg',
-          expectedIdentity: rig.tokenStore.identityGeneration,
+          scope: rig.container.read(sessionProvider.notifier).beginAction()!,
         );
         // The file is being read; another member's sign-in lands now.
         rig.tokenStore.invalidateIdentity();
@@ -156,7 +156,7 @@ void main() {
         await rig.start(tester);
 
         final picked = await tester.runAsync(() async {
-          final pick = _photo(rig).pick(ImageSource.gallery);
+          final pick = pickPhoto(rig.container, ImageSource.gallery);
           await Future<void>.delayed(const Duration(milliseconds: 60));
           // Account B signs in on this phone while A's photo is being prepared.
           await rig.container
@@ -196,7 +196,7 @@ void main() {
       await rig.start(tester);
 
       final saved = await tester.runAsync(() async {
-        final pick = _photo(rig).pick(ImageSource.gallery);
+        final pick = pickPhoto(rig.container, ImageSource.gallery);
         await _until(() => backend.to('PUT', _put).isNotEmpty);
         // A's request is on the wire. B signs in.
         await rig.container
@@ -256,7 +256,7 @@ void main() {
         await _until(
           () => backend.to('PUT', '/api/discovery/profile/me').isNotEmpty,
         );
-        await _photo(rig).remove();
+        await removeOwnPhoto(rig.container);
         held.complete(FakeResponse(200, ownProfile(photoFixture('v1'))));
         await write;
         return rig.container.read(ownProfileProvider.future);
@@ -329,7 +329,7 @@ void main() {
           filePath: file,
           fileName: 'photo.jpg',
           contentType: 'image/jpeg',
-          expectedIdentity: rig.tokenStore.identityGeneration,
+          scope: rig.container.read(sessionProvider.notifier).beginAction()!,
         );
         // The confirmation lands last, and says there is no photo.
         held.complete(
@@ -389,7 +389,7 @@ void main() {
       await rig.start(tester);
 
       final saved = await tester.runAsync(
-        () => _photo(rig).pick(ImageSource.gallery),
+        () => pickPhoto(rig.container, ImageSource.gallery),
       );
 
       expect(saved, isFalse);
@@ -414,7 +414,9 @@ void main() {
       final rig = PhotoRig(backend, picker: pickerReturning(sourceFile()));
       await rig.start(tester);
 
-      await tester.runAsync(() => _photo(rig).pick(ImageSource.gallery));
+      await tester.runAsync(
+        () => pickPhoto(rig.container, ImageSource.gallery),
+      );
 
       final state = rig.container.read(profilePhotoProvider);
       expect(state.failure, ProfilePhotoFailure.storageUnavailable);
@@ -461,7 +463,7 @@ void main() {
           };
           final first = await launch(tester, tokens, picker);
           await tester.runAsync(() async {
-            unawaited(_photo(first).pick(ImageSource.gallery));
+            unawaited(pickPhoto(first.container, ImageSource.gallery));
             await _until(() => picker.lost != null);
           });
           expect(tokens.pendingPick, startsWith('profilePhoto:'));
@@ -546,7 +548,7 @@ void main() {
         };
         final first = await launch(tester, tokens, picker);
         await tester.runAsync(() async {
-          unawaited(_photo(first).pick(ImageSource.gallery));
+          unawaited(pickPhoto(first.container, ImageSource.gallery));
           await _until(() => picker.lost != null);
         });
 
@@ -663,11 +665,9 @@ void main() {
         await tester.runAsync(() async {
           final open = Completer<XFile?>();
           picker.onPick = (_) => open.future;
-          final controller = _photo(rig);
-
-          final first = controller.pick(ImageSource.gallery);
+          final first = pickPhoto(rig.container, ImageSource.gallery);
           // The same press arriving twice, before anything has been awaited.
-          final second = controller.pick(ImageSource.camera);
+          final second = pickPhoto(rig.container, ImageSource.camera);
           expect(await second, isFalse);
 
           await _until(() => picker.picks.isNotEmpty);
@@ -734,8 +734,8 @@ void main() {
         final rig = await failing(tester, outputs: outputs);
 
         await tester.runAsync(() async {
-          await _photo(rig).pick(ImageSource.gallery);
-          await _photo(rig).pick(ImageSource.gallery);
+          await pickPhoto(rig.container, ImageSource.gallery);
+          await pickPhoto(rig.container, ImageSource.gallery);
         });
 
         expect(outputs, hasLength(2));
@@ -748,7 +748,7 @@ void main() {
         final rig = await failing(tester, outputs: outputs);
 
         await tester.runAsync(() async {
-          await _photo(rig).pick(ImageSource.gallery);
+          await pickPhoto(rig.container, ImageSource.gallery);
           await _photo(rig).discard();
         });
 
@@ -766,7 +766,9 @@ void main() {
         );
         await rig.start(tester);
 
-        await tester.runAsync(() => _photo(rig).pick(ImageSource.gallery));
+        await tester.runAsync(
+          () => pickPhoto(rig.container, ImageSource.gallery),
+        );
 
         expect(File(outputs.single).existsSync(), isFalse);
       });
@@ -779,8 +781,8 @@ void main() {
           rig.backend.on('DELETE', _put, const FakeResponse(204));
 
           await tester.runAsync(() async {
-            await _photo(rig).pick(ImageSource.gallery);
-            await _photo(rig).remove();
+            await pickPhoto(rig.container, ImageSource.gallery);
+            await removeOwnPhoto(rig.container);
           });
 
           expect(File(outputs.single).existsSync(), isFalse);
@@ -797,7 +799,7 @@ void main() {
         );
 
         await tester.runAsync(() async {
-          await _photo(rig).pick(ImageSource.gallery);
+          await pickPhoto(rig.container, ImageSource.gallery);
           expect(File(outputs.single).existsSync(), isTrue);
           await rig.container.read(sessionProvider.notifier).signOut();
         });
@@ -810,7 +812,9 @@ void main() {
         final outputs = <String>[];
         final rig = await failing(tester, outputs: outputs);
 
-        await tester.runAsync(() => _photo(rig).pick(ImageSource.gallery));
+        await tester.runAsync(
+          () => pickPhoto(rig.container, ImageSource.gallery),
+        );
         expect(File(outputs.single).existsSync(), isTrue);
         rig.container.dispose();
 
@@ -833,7 +837,7 @@ void main() {
         await rig.start(tester);
 
         await tester.runAsync(() async {
-          final pick = _photo(rig).pick(ImageSource.gallery);
+          final pick = pickPhoto(rig.container, ImageSource.gallery);
           await _until(() => backend.to('PUT', _put).isNotEmpty);
           await rig.container.read(sessionProvider.notifier).signOut();
           expect(

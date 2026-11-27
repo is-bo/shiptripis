@@ -106,16 +106,15 @@ class MainActivity : FlutterActivity() {
 
     /**
      * `wassla/pick_launch`: the Dart side says when a pick opens its picker and
-     * when it has answered (see [PickLaunchGate]). A new engine starts with no
-     * pick open.
+     * when it has answered (see [PickLaunchGate]). The pick belongs to this
+     * activity: another activity's start-up leaves it alone.
      */
     private fun configurePickLaunch(flutterEngine: FlutterEngine) {
-        PickLaunchGate.reset()
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "wassla/pick_launch")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
-                    "opened" -> PickLaunchGate.opened()
-                    "closed" -> PickLaunchGate.closed()
+                    "opened" -> PickLaunchGate.opened(this)
+                    "closed" -> PickLaunchGate.closed(this)
                     else -> {
                         result.notImplemented()
                         return@setMethodCallHandler
@@ -132,11 +131,12 @@ class MainActivity : FlutterActivity() {
      */
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        if (!PickLaunchGate.shouldForward(requestCode)) return
+        if (!PickLaunchGate.shouldForward(requestCode, this)) return
         @Suppress("DEPRECATION") super.onActivityResult(requestCode, resultCode, data)
     }
 
     override fun onDestroy() {
+        PickLaunchGate.closed(this)
         photoExecutor.shutdown()
         markerExecutor.shutdown()
         super.onDestroy()
