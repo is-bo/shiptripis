@@ -1,5 +1,18 @@
 # Waçla V1 Implementation Status
 
+## Wassla: onboarding serves one declaration, and payout setup reads eligibility on the locked row (F1 round 6, 2026-11-27)
+
+- Brief F1 rules F-C, F-F and F-G, with the owner's decision D3. No migration, no switch. Nothing
+  deployed. Design: `docs/PHASE_F1_PAYOUT_AVAILABILITY.md`.
+- The session advisory lock held across Stripe is removed. While a Stripe account is being created, a
+  change of the EUR country or of EUR on/off answers 409 `payout_setup_in_progress` (new, in English,
+  French and Arabic in the app); the read offers only `resume_eur_setup`. A call whose rows changed
+  runs once more, then answers `payout_preference_changed`.
+- Past the 23-hour replay window the recovery lists every account created around the request (all
+  pages); none found ends the creation and a fresh attempt follows. `stripe_account_unresolved` is gone.
+- One eligibility function (`member_refusal`) on the locked User row, also at the hosted-link handoff.
+  A payout GET computes each rail once inside one snapshot.
+
 ## Wassla: the old payments, wallet and handover-code tables are dropped (L1, 2026-11-27)
 
 - Loop-end plan 7.1, decision D4. Server only, no route, payload or app change. Nothing deployed.
