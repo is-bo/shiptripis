@@ -203,8 +203,18 @@ class TokenStore {
 
   /// Counts one more request, to be written *before* the system is asked: a
   /// prompt interrupted by the app being killed still counts as spent.
-  Future<int> recordPushPermissionRequest() =>
-      _addToCounter(_kPushPermissionRequests, 1);
+  ///
+  /// [afterDenial]: the system already holds a denial. An installation that
+  /// counted nothing was asked by an app from before the count, so that
+  /// earlier request is counted first and stays counted; taking this request
+  /// back ([releasePushPermissionRequest]) leaves it.
+  Future<int> recordPushPermissionRequest({bool afterDenial = false}) =>
+      _serializePhoneWrite(() async {
+        final current = await readPushPermissionRequests();
+        final next = afterDenial && current < 1 ? 2 : current + 1;
+        await _storage.write(key: _kPushPermissionRequests, value: '$next');
+        return next;
+      });
 
   /// Takes back a count whose system dialog never opened: the app left the
   /// screen between the count and the request, or the request itself failed.

@@ -13,16 +13,23 @@
   only Settings is left. A guest can reach the same controls from guest Profile. Registering the phone
   waits for sign-in.
 - Astra rounds 2 and 3 required a server change: registrations and sign-outs of one installation are
-  numbered by the app and ordered by the server (`PushInstallationBinding`, `PushAccountRevocation`,
-  migration `notifications.0009`), and every sign-in carries a session id (`sid`) so a sign-out ends
+  numbered by the app and ordered by the server (`PushInstallationBinding`, migration
+  `notifications.0009`), and every sign-in carries a session id (`sid`) so a sign-out ends
   only its own device, whatever number it carries, and a registration that spans a password reset is
   refused. A registration that was slow on the network can never rebind the phone to an account that
   has since signed out, been replaced or been reset. Round 3 also: one installation ID per phone, the
   prompt waits for the screen that was leaving, only the newest registration attempt may settle the
   state, an Android upgrade after a pre-N1 denial is not asked again, a first dialog swiped away keeps
   Enable. Spec and runbook updated; the currently installed app is not kept working (no users, by
-  CLAUDE.md). Detail, screenshots and the device checks still owed on real phones:
-  `docs/PHASE_N1_NOTIFICATION_FIRST_OPEN.md`.
+  CLAUDE.md). Round 4 (Astra round 3) fixes the root cause instead of another variant: every sign-in
+  is a `SignInSession` row (migration `accounts.0008`) named by the `sid` of all its tokens, refresh
+  rotation included; a refresh or a push registration needs it live, checked under the account lock
+  that sign-out and `end_all_sessions` also take. `PushAccountRevocation` and its issue-time check are
+  gone, and `end_all_sessions` no longer relies on SimpleJWT's outstanding-token list, which misses
+  rotated tokens. Phone: the newest-attempt check after every wait, a failed catch-up write leaves a
+  retryable failure, the Profile request needs its screen still on top, an Android upgrade user's
+  second denial leads to Settings, guest denial copy without the inbox promise. Detail, screenshots and
+  the device checks still owed on real phones: `docs/PHASE_N1_NOTIFICATION_FIRST_OPEN.md`.
 
 ## Wassla: the bell names the ticket decision (N2, 2026-11-26)
 

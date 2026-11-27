@@ -166,12 +166,19 @@ once, so one phone has one installation ID), and the server applies them in that
 order (`PushInstallationBinding`): a registration overtaken by a later one, or a
 number reused for a different request, is refused
 (`409 push_registration_superseded`); a stale sign-out still ends the device
-that belongs to its own sign-in. Every sign-in carries a session id (`sid`); a
-sign-out ends only the device registered under that sign-in, and a password
-reset (`end_all_sessions`) records a revocation time that refuses any
-registration made with an older token (`409 push_session_revoked`). A slow
-registration can therefore never rebind the phone to an account that signed out,
-was replaced or was reset.
+that belongs to its own sign-in. Every sign-in is a server row
+(`SignInSession`) named by the `sid` claim of each of its tokens, rotations
+included. A sign-out ends its sign-in and switches off every device that sign-in
+registered; a password reset (`end_all_sessions`) ends every sign-in of the
+account. A registration, and a refresh, from a sign-in that has ended is refused
+(`409 push_session_ended`, checked under the account row lock that ending a
+sign-in also takes). A slow registration can therefore never rebind the phone to
+an account that signed out, was replaced or was reset.
+
+Sign-out cleanup stays best-effort: a sign-out made offline never reaches the
+server, so that phone keeps receiving the account's notifications until it signs
+in again (its registration replaces the binding) or the account's sessions are
+ended.
 
 The permission state and ShipTrip notification-type preferences are separate.
 Preferences control Messages and Marketplace delivery across the account;

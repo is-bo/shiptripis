@@ -18,8 +18,6 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
-from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
-from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts import apple_revoke
 from apps.accounts.deletion import (
@@ -28,11 +26,12 @@ from apps.accounts.deletion import (
     BLOCKER_REQUESTS,
     DELETED_EMAIL_DOMAIN,
 )
-from apps.accounts.models import OAuthIdentity, User
+from apps.accounts.models import OAuthIdentity, SignInSession, User
 from apps.core.tests.l10_world import DRIVE, AcceptanceWorld, api
 from apps.discovery.models import PublicProfile
 from apps.discovery.tests.support import STATIC_STORES
 from apps.notifications.models import Notification, OutboundMessage, PushDevice
+from apps.notifications.tests.factories import push_device, signed_in
 
 DELETION = reverse("me-deletion")
 PASSWORD = "Correct-horse-42"
@@ -115,8 +114,8 @@ class AccountDeletionTests(AcceptanceWorld, TestCase):
         self.assertEqual(self.member.email, "leaving@example.com")
 
     def test_deleting_empties_the_account_and_ends_every_session(self):
-        refresh = RefreshToken.for_user(self.member)
-        PushDevice.objects.create(
+        session = signed_in(self.member)
+        push_device(
             user=self.member,
             installation_id="2b1f7f0e-5a0c-4d1e-9a51-3f7e5a7c9d10",
             platform="android",
@@ -151,8 +150,16 @@ class AccountDeletionTests(AcceptanceWorld, TestCase):
             (self.member.full_name, self.member.phone, self.member.wilaya), ("", "", "")
         )
         self.assertFalse(self.member.has_usable_password())
-        self.assertTrue(
-            BlacklistedToken.objects.filter(token__jti=refresh["jti"]).exists()
+        self.assertFalse(
+            SignInSession.objects.filter(
+                user=self.member, ended_at__isnull=True
+            ).exists()
+        )
+        self.assertEqual(
+            APIClient()
+            .post("/api/auth/refresh", {"refresh": session["refresh"]}, format="json")
+            .status_code,
+            401,
         )
         self.assertFalse(PushDevice.objects.filter(user=self.member).exists())
         self.assertFalse(Notification.objects.filter(recipient=self.member).exists())
@@ -162,17 +169,17 @@ class AccountDeletionTests(AcceptanceWorld, TestCase):
         self.assertEqual(sent.to_email, self.member.email)
 
     def test_the_old_session_and_password_no_longer_open_anything(self):
-        refresh = str(RefreshToken.for_user(self.member))
+        refresh = signed_in(self.member)["refresh"]
         self.assertEqual(self.delete(self.member, password=PASSWORD).status_code, 204)
 
         renewed = APIClient().post(reverse("auth-refresh"), {"refresh": refresh})
         self.assertEqual(renewed.status_code, 401)
-        signed_in = APIClient().post(
+        sign_in = APIClient().post(
             reverse("auth-sign-in"),
             {"email": "leaving@example.com", "password": PASSWORD},
             format="json",
         )
-        self.assertEqual(signed_in.status_code, 400)
+        self.assertEqual(sign_in.status_code, 400)
 
     def test_the_email_is_free_to_sign_up_again(self):
         self.assertEqual(self.delete(self.member, password=PASSWORD).status_code, 204)

@@ -146,7 +146,10 @@ class _NotificationSettingsScreenState
               )
             : _grantedNotice(runtime),
       PushPermission.deniedRequestable => _permissionAction(
-        message: l.pushPermissionDeniedRequestable,
+        // The in-app inbox is a member's: a guest is told only how to retry.
+        message: isGuest
+            ? l.pushPermissionDeniedRequestableGuest
+            : l.pushPermissionDeniedRequestable,
         label: l.pushEnableAction,
         onPressed: _requestPermission,
       ),
@@ -228,7 +231,14 @@ class _NotificationSettingsScreenState
     if (_requesting) return;
     setState(() => _requesting = true);
     try {
-      await ref.read(pushCoordinatorProvider.notifier).requestPermission();
+      // The dialog opens only while this screen is the one on top: a person
+      // who pressed Back while the request was being prepared is elsewhere.
+      await ref
+          .read(pushCoordinatorProvider.notifier)
+          .requestPermission(
+            onScreen: () =>
+                mounted && (ModalRoute.of(context)?.isCurrent ?? false),
+          );
     } on Object catch (error) {
       if (mounted) AppSnack.failure(context, error);
     } finally {

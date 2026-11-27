@@ -196,7 +196,10 @@ class FakeTokenStore extends TokenStore {
   Future<int> readPushPermissionRequests() async => _pushPermissionRequests;
 
   @override
-  Future<int> recordPushPermissionRequest() async => ++_pushPermissionRequests;
+  Future<int> recordPushPermissionRequest({bool afterDenial = false}) async =>
+      _pushPermissionRequests = afterDenial && _pushPermissionRequests < 1
+      ? 2
+      : _pushPermissionRequests + 1;
 
   @override
   Future<int> releasePushPermissionRequest() async => _pushPermissionRequests =

@@ -52,7 +52,7 @@ from apps.finance.models import Payout
 from apps.notifications.models import PushDevice
 from apps.notifications.push import enqueue_fcm_for_event
 
-from .l10_world import DRIVE, AcceptanceWorld, api
+from .l10_world import DRIVE, AcceptanceWorld
 
 KEYRING = {
     "PAYOUT_DATA_KEYRING": json.dumps({"l10": base64.b64encode(b"l" * 32).decode()}),
@@ -364,7 +364,9 @@ class AccountClaimTests(TestCase):
         )
         assert response.status_code == 201, response.data
         user = User.objects.get(email=email)
-        phone = api(user).post(
+        their_phone = APIClient()
+        their_phone.credentials(HTTP_AUTHORIZATION=f"Bearer {response.data['access']}")
+        phone = their_phone.post(
             reverse("notification-device-register"),
             {
                 "token": f"fcm-token-{uuid.uuid4().hex}",

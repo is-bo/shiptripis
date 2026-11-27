@@ -49,7 +49,7 @@ class _FakePushCoordinator extends PushCoordinator {
   PushRuntimeState build() => initial;
 
   @override
-  Future<PushPermission> requestPermission() async {
+  Future<PushPermission> requestPermission({bool Function()? onScreen}) async {
     requested = true;
     state = const PushRuntimeState(
       availability: PushAvailability.available,

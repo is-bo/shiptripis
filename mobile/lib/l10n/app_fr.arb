@@ -1005,6 +1005,7 @@
   "pushPermissionEnabledGuest": "Les notifications sont autorisées sur ce téléphone. Connectez-vous et Wassla commencera à vous en envoyer ici.",
   "pushGuestSignInNote": "Connectez-vous pour recevoir les notifications de votre compte et choisir lesquelles vous recevez.",
   "pushPermissionDeniedRequestable": "Les notifications sont toujours désactivées. Choisissez Activer les notifications pour les redemander à Android. La boîte de réception de l’application reste disponible dans tous les cas.",
+  "pushPermissionDeniedRequestableGuest": "Les notifications sont toujours désactivées. Choisissez Activer les notifications pour les redemander à Android.",
   "pushPermissionDenied": "Les notifications sont désactivées dans le système. Vous pouvez les activer dans les réglages.",
   "pushPermissionUnavailable": "Les notifications push ne sont pas configurées dans cette version. Les notifications dans l’application restent disponibles.",
   "pushPermissionInitializationFailed": "Les notifications push n’ont pas pu démarrer sur ce téléphone. Les notifications dans l’application restent disponibles ; rouvrez Wassla pour réessayer.",

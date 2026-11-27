@@ -3465,6 +3465,10 @@ class LEn extends L {
       'Notifications are still off. Choose Enable notifications to ask Android again. Your in-app inbox keeps working either way.';
 
   @override
+  String get pushPermissionDeniedRequestableGuest =>
+      'Notifications are still off. Choose Enable notifications to ask Android again.';
+
+  @override
   String get pushPermissionDenied =>
       'Notifications are off at system level. You can enable them in Settings.';
 

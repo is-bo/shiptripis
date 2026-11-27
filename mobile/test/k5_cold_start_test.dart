@@ -55,9 +55,11 @@ class _PushTokenStore extends FakeTokenStore {
   Future<void> writePendingPushToken(String? token) async {}
 
   @override
-  Future<int> recordPushPermissionRequest() async {
+  Future<int> recordPushPermissionRequest({bool afterDenial = false}) async {
     if (recordFails) throw StateError('keystore refused the write');
-    final count = await super.recordPushPermissionRequest();
+    final count = await super.recordPushPermissionRequest(
+      afterDenial: afterDenial,
+    );
     await recordGate?.future;
     return count;
   }
@@ -558,6 +560,47 @@ void main() {
       );
     });
 
+    testWidgets('the upgrade denial asked again from Profile and denied leads '
+        'to Settings', (tester) async {
+      // Astra round 3, should-fix 4. The pre-N1 denial is the system's first;
+      // the Profile request is its second, and Android reports the second
+      // denial as permanent. Counting only this installation's own request
+      // (one) read it as a first dialog swiped away and offered Enable again,
+      // which Android no longer shows.
+      final tokens = _PushTokenStore();
+      final push = _FakePushMessaging(
+        currentPermission: PushPermission.deniedRequestable,
+        requestResult: PushPermission.settingsRequired,
+      );
+      final container = await _coordinatorContainer(
+        tester,
+        devices(),
+        tokens,
+        push,
+      );
+      container.read(pushCoordinatorProvider);
+      await _settle(tester, 3);
+      expect(push.requests, 0);
+
+      await container
+          .read(pushCoordinatorProvider.notifier)
+          .requestPermission();
+
+      expect(push.requests, 1);
+      expect(await tokens.readPushPermissionRequests(), 2);
+      expect(
+        container.read(pushCoordinatorProvider).permission,
+        PushPermission.settingsRequired,
+      );
+      await background(tester);
+      await resume(tester);
+      expect(
+        container.read(pushCoordinatorProvider).permission,
+        PushPermission.settingsRequired,
+        reason: 'the next read agrees',
+      );
+    });
+
     testWidgets('a denial followed by dismissals still leaves Profile offering '
         'Enable', (tester) async {
       // Android keeps a permission it was dismissed on requestable: the dialog
@@ -813,7 +856,9 @@ void main() {
         container.read(pushCoordinatorProvider.notifier).requestPermission(),
       );
       await _settle(tester, 3);
-      expect(await tokens.readPushPermissionRequests(), 1);
+      // The requestable denial is the system's answer to an app from before
+      // the count: that request is counted along with this one (N1 round 4).
+      expect(await tokens.readPushPermissionRequests(), 2);
       expect(push.requests, 0, reason: 'the count is still being written');
 
       // The tap landed, then the shade came down while the keystore wrote.
@@ -821,7 +866,11 @@ void main() {
       tokens.recordGate!.complete();
       await _settle(tester, 3);
       expect(push.requests, 0, reason: 'nobody is looking at the app');
-      expect(await tokens.readPushPermissionRequests(), 0);
+      expect(
+        await tokens.readPushPermissionRequests(),
+        1,
+        reason: 'this request is taken back; the earlier one stays counted',
+      );
 
       // Pressed again once the app is back, it asks.
       tokens.recordGate = null;

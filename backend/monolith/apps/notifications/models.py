@@ -87,11 +87,15 @@ class PushDevice(models.Model):
     token = models.TextField()
     token_fingerprint = models.CharField(max_length=64, unique=True, editable=False)
     app_version = models.CharField(max_length=32, blank=True, default="")
-    # The sign-in (``sid`` claim) and the app's registration number that made
-    # this binding. A sign-out ends only the binding its own sign-in made, and
-    # the number says which registration of the installation is current.
-    session_id = models.CharField(max_length=32, blank=True, default="")
-    binding_sequence = models.BigIntegerField(default=0)
+    # The sign-in that registered this binding, and the app's number for that
+    # registration. Ending the sign-in switches the binding off, and the
+    # number says which registration of the installation is current.
+    session = models.ForeignKey(
+        "accounts.SignInSession",
+        on_delete=models.CASCADE,
+        related_name="push_devices",
+    )
+    binding_sequence = models.BigIntegerField()
     active = models.BooleanField(default=True, db_index=True)
     last_seen_at = models.DateTimeField(default=timezone.now, db_index=True)
     last_success_at = models.DateTimeField(null=True, blank=True)
@@ -128,9 +132,9 @@ class PushInstallationBinding(models.Model):
     was overtaken by a later registration or sign-out and is refused, so a
     registration that was slow on the network can never rebind the phone to an
     account that has since signed out or been replaced. The same number again is
-    accepted only as an exact repeat (same operation, account and token): two
-    different operations sharing a number means the app's counter was lost, and
-    the app is told to catch up. The row exists apart from ``PushDevice``
+    accepted only as an exact repeat (same operation, account, sign-in and
+    token): two different operations sharing a number means the app's counter
+    was lost, and the app is told to catch up. The row exists apart from ``PushDevice``
     because a sign-out can arrive before the registration it overtakes has
     created a device.
     """
@@ -143,6 +147,9 @@ class PushInstallationBinding(models.Model):
     sequence = models.BigIntegerField()
     operation = models.CharField(max_length=8, choices=Operation.choices)
     user_id = models.BigIntegerField()
+    # The sign-in that sent the operation; None for a sign-out whose sign-in
+    # had already ended.
+    session_id = models.UUIDField(null=True, blank=True)
     token_fingerprint = models.CharField(max_length=64, blank=True, default="")
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -151,29 +158,6 @@ class PushInstallationBinding(models.Model):
 
     def __str__(self) -> str:
         return f"PushInstallationBinding {self.installation_id} #{self.sequence}"
-
-
-class PushAccountRevocation(models.Model):
-    """When an account last had every sign-in ended (a password reset, L18A).
-
-    An access token issued before this moment must not register a phone: the
-    token outlives the sessions it came from, and a registration already on its
-    way would otherwise switch the phone back on after the revocation.
-    """
-
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        primary_key=True,
-        related_name="push_revocation",
-    )
-    revoked_at = models.DateTimeField()
-
-    class Meta:
-        db_table = "notification_push_account_revocation"
-
-    def __str__(self) -> str:
-        return f"PushAccountRevocation user={self.user_id} {self.revoked_at}"
 
 
 class NotificationPreference(models.Model):

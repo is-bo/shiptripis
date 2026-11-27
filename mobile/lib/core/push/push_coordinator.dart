@@ -167,21 +167,34 @@ class PushCoordinator extends Notifier<PushRuntimeState>
 
   /// Asks the operating system for notification permission. A call made while
   /// another request is in flight joins it rather than asking again.
-  Future<PushPermission> requestPermission() =>
-      _request ??= _askExplicitly().whenComplete(() => _request = null);
+  ///
+  /// [onScreen] says whether the screen that asked is still the one on top;
+  /// the dialog is requested only while it is.
+  Future<PushPermission> requestPermission({bool Function()? onScreen}) =>
+      _request ??= _askExplicitly(
+        onScreen ?? () => true,
+      ).whenComplete(() => _request = null);
 
-  /// What the person chose to ask for, from Profile: no screen or foreground
-  /// condition, because they are on the screen and pressed the button.
-  Future<PushPermission> _askExplicitly() async {
+  /// What the person chose to ask for, from Profile: no screen condition of
+  /// the first-open prompt, because they pressed the button.
+  Future<PushPermission> _askExplicitly(bool Function() onScreen) async {
     if (!await _messagingReady()) return PushPermission.unavailable;
+    // On Android a request from a requestable denial follows a denial the
+    // system already holds, which an app from before N1 may never have
+    // counted: the count then says two, so the next denial reads as the
+    // permanent one it is.
+    final afterDenial =
+        defaultTargetPlatform == TargetPlatform.android &&
+        state.permission == PushPermission.deniedRequestable;
     // A count that cannot be written must not stop a person who asked.
-    final recorded = await _recordSystemRequest();
+    final recorded = await _recordSystemRequest(afterDenial: afterDenial);
     // The write can outlast the tap: if the app left the foreground meanwhile
-    // (the shade, the switcher, another app) the dialog would open over
-    // something else, so it is not requested and the count is taken back.
-    if (!ref.mounted || !_foreground) {
+    // (the shade, the switcher, another app), or the person went Back, the
+    // dialog would open over something else, so it is not requested and the
+    // count is taken back.
+    if (!ref.mounted || !_foreground || !onScreen()) {
       if (recorded) await _releaseSystemRequest();
-      return state.permission;
+      return ref.mounted ? state.permission : PushPermission.unavailable;
     }
     return _askSystem(recorded: recorded);
   }
@@ -211,7 +224,9 @@ class PushCoordinator extends Notifier<PushRuntimeState>
   /// reading is therefore still a question the person can be asked again from
   /// Profile; a real denial reads as requestable after one request and
   /// permanent only after two. (A second swipe-away reads as permanent: Android
-  /// gives no way to tell it from two denials.)
+  /// gives no way to tell it from two denials.) A request made from a
+  /// requestable denial is counted as the second (see [_askExplicitly]), so
+  /// its denial is never mistaken for a first dismissal.
   Future<PushPermission> _withHistory(PushPermission reported) async {
     if (defaultTargetPlatform != TargetPlatform.android ||
         reported != PushPermission.settingsRequired) {
@@ -428,11 +443,11 @@ class PushCoordinator extends Notifier<PushRuntimeState>
   /// the window in which a dialog is counted but not yet shown is as short as it
   /// can be; an app killed inside it counts a prompt that never appeared, which
   /// is the safe side (Profile still asks on request).
-  Future<bool> _recordSystemRequest() async {
+  Future<bool> _recordSystemRequest({bool afterDenial = false}) async {
     try {
       _systemRequests = await ref
           .read(tokenStoreProvider)
-          .recordPushPermissionRequest();
+          .recordPushPermissionRequest(afterDenial: afterDenial);
       return true;
     } on Object {
       return false;
@@ -548,7 +563,8 @@ class PushCoordinator extends Notifier<PushRuntimeState>
     bool retried = false,
   }) async {
     final generation = expectedGeneration ?? _sessionGeneration;
-    if (!_messaging.available ||
+    if (generation != _sessionGeneration ||
+        !_messaging.available ||
         (state.permission != PushPermission.authorized &&
             state.permission != PushPermission.provisional) ||
         ref.read(sessionProvider) is! SessionSignedIn) {
@@ -561,35 +577,33 @@ class PushCoordinator extends Notifier<PushRuntimeState>
     }
     state = state.copyWith(registration: PushRegistrationState.pending);
     final attempt = ++_registrationAttempt;
+    // Whether this attempt was overtaken, checked after every wait: by another
+    // account (or none), or by a newer attempt of the same one, such as a token
+    // refresh. Only the newest attempt may number itself, reach the server, or
+    // settle the state, so an older token found late is never sent above a
+    // newer one, and an older outcome never hides a newer one.
+    bool overtaken() =>
+        !ref.mounted ||
+        generation != _sessionGeneration ||
+        attempt != _registrationAttempt ||
+        ref.read(sessionProvider) is! SessionSignedIn;
+    final store = ref.read(tokenStoreProvider);
     try {
-      final store = ref.read(tokenStoreProvider);
       final current = await _messaging.token();
-      if (generation != _sessionGeneration ||
-          ref.read(sessionProvider) is! SessionSignedIn) {
-        return;
-      }
+      if (overtaken()) return;
       final token = current ?? await store.readPendingPushToken();
-      if (generation != _sessionGeneration ||
-          ref.read(sessionProvider) is! SessionSignedIn) {
-        return;
-      }
+      if (overtaken()) return;
       if (token == null || token.isEmpty) {
         state = state.copyWith(registration: PushRegistrationState.failed);
         return;
       }
       final installationId = await store.readOrCreateInstallationId();
-      if (generation != _sessionGeneration ||
-          ref.read(sessionProvider) is! SessionSignedIn) {
-        return;
-      }
+      if (overtaken()) return;
       // Numbered as late as possible: a sign-out or a later registration takes
       // a higher number, and the server then refuses this one if it arrives
       // after them.
       final bindingSequence = await store.nextPushBindingSequence();
-      if (generation != _sessionGeneration ||
-          ref.read(sessionProvider) is! SessionSignedIn) {
-        return;
-      }
+      if (overtaken()) return;
       await ref
           .read(pushRepositoryProvider)
           .registerDevice(
@@ -601,45 +615,39 @@ class PushCoordinator extends Notifier<PushRuntimeState>
                 : 'android',
             appVersion: '',
           );
-      if (generation != _sessionGeneration ||
-          ref.read(sessionProvider) is! SessionSignedIn) {
-        return;
-      }
-      // Only the newest attempt may settle the state or consume the pending
-      // token: an older response arriving after a refresh's registration
-      // neither hides its failure nor undoes its success.
-      if (attempt != _registrationAttempt) return;
+      if (overtaken()) return;
       await store.writePendingPushToken(null);
-      if (generation != _sessionGeneration ||
-          attempt != _registrationAttempt ||
-          ref.read(sessionProvider) is! SessionSignedIn) {
-        return;
-      }
+      if (overtaken()) return;
       state = state.copyWith(registration: PushRegistrationState.registered);
     } on ApiException catch (error) {
-      if (generation != _sessionGeneration || attempt != _registrationAttempt) {
-        return;
-      }
-      if (error.code.raw == _registrationSuperseded) {
+      if (overtaken()) return;
+      final newest = error.code.raw == _registrationSuperseded
+          ? (error.extras['current_sequence'] as num?)?.toInt()
+          : null;
+      if (newest != null && !retried) {
         // A later registration or sign-out was applied first. This is the
         // latest attempt of the phone, so its own counter was behind the
         // server's: it catches up and the registration goes again, with a
-        // higher number.
-        final newest = (error.extras['current_sequence'] as num?)?.toInt();
-        if (newest != null && !retried) {
-          await ref.read(tokenStoreProvider).raisePushBindingSequence(newest);
-          return _syncRegistration(
-            expectedGeneration: generation,
-            force: true,
-            retried: true,
-          );
+        // higher number. A counter that cannot be written leaves a failure
+        // the Retry button and the next resume recover from.
+        try {
+          await store.raisePushBindingSequence(newest);
+        } on Object {
+          if (!overtaken()) {
+            state = state.copyWith(registration: PushRegistrationState.failed);
+          }
+          return;
         }
+        if (overtaken()) return;
+        return _syncRegistration(
+          expectedGeneration: generation,
+          force: true,
+          retried: true,
+        );
       }
       state = state.copyWith(registration: PushRegistrationState.failed);
     } on Object {
-      if (generation != _sessionGeneration || attempt != _registrationAttempt) {
-        return;
-      }
+      if (overtaken()) return;
       state = state.copyWith(registration: PushRegistrationState.failed);
     }
   }

@@ -1,5 +1,3 @@
-import logging
-from uuid import uuid4
 
 from django.db import transaction
 from django.utils import timezone
@@ -15,14 +13,13 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.notifications.models import OutboundMessage
 from apps.notifications.outbox import cancel_message, enqueue_secret_message
-from apps.notifications.push import unregister_push_device
 from apps.notifications.serializers import PushDeviceUnregisterSerializer
 
 from . import deletion, photos
 from .apple import AppleAuthError, AppleAuthUnavailable, verify_identity_token
 from .google import GoogleAuthError, GoogleAuthUnavailable, verify_id_token
 from .models import EmailVerificationCode, OAuthIdentity, PasswordResetCode, User
-from .sessions import end_all_sessions
+from .sessions import end_all_sessions, end_session, start_session
 from .serializers import (
     AccountDeletionSerializer,
     AppleSignInSerializer,
@@ -37,8 +34,6 @@ from .serializers import (
 )
 from .social import SocialSignInRefused, sign_in_with_identity
 
-logger = logging.getLogger(__name__)
-
 #: The answer to a provider sign-in that cannot be checked right now (503):
 #: the provider is not configured on this server, or could not be reached.
 GOOGLE_SIGN_IN_UNAVAILABLE = "google_sign_in_unavailable"
@@ -48,10 +43,9 @@ APPLE_SIGN_IN_UNAVAILABLE = "apple_sign_in_unavailable"
 def _tokens_for_user(user: User) -> dict[str, str]:
     refresh = RefreshToken.for_user(user)
     refresh["role"] = user.role
-    # One id for the whole sign-in: refresh rotation and the access tokens copy
-    # it, so a push registration can name the sign-in that made it and only that
-    # sign-in's sign-out switches it off.
-    refresh["sid"] = uuid4().hex
+    # The sign-in these tokens belong to. Refresh rotation and the access
+    # tokens copy it, so every token of the sign-in ends when it ends.
+    refresh["sid"] = start_session(user).pk.hex
     return {"access": str(refresh.access_token), "refresh": str(refresh)}
 
 
@@ -115,23 +109,16 @@ class SignOutView(APIView):
                 {"detail": "Invalid or expired refresh token."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        # Device cleanup is best-effort and must never trap a user in an
-        # account or weaken refresh-token validation: a body without a usable
-        # installation simply leaves the device alone. The sign-in that ends is
-        # the one the refresh token names, whatever number the app sent.
+        # The sign-in that ends is the one the refresh token names, and with it
+        # every phone it registered. Which installation, and its number, are
+        # best-effort extras that only order the sign-out against the phone's
+        # own registrations: a body without them still signs out.
         device = PushDeviceUnregisterSerializer(data=request.data)
-        if device.is_valid():
-            try:
-                unregister_push_device(
-                    user=request.user,
-                    session_id=refresh.get("sid", ""),
-                    **device.validated_data,
-                )
-            except Exception:
-                logger.warning(
-                    "push device cleanup failed during logout user_id=%s",
-                    request.user.pk,
-                )
+        end_session(
+            request.user,
+            refresh.get("sid"),
+            **(device.validated_data if device.is_valid() else {}),
+        )
         return Response(status=status.HTTP_205_RESET_CONTENT)
 
 

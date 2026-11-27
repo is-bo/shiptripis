@@ -2,8 +2,9 @@
 
 Anyone can sign up with someone else's address. The moment the address is
 proved (Google sign-in on an unconfirmed account, or a completed password
-reset), `end_all_sessions` revokes every refresh token and switches off every
-push device, the password is the prover's, and the email is confirmed.
+reset), `end_all_sessions` ends every sign-in, so no refresh token of them
+works again, and switches off every push device; the password is the
+prover's, and the email is confirmed.
 """
 
 from __future__ import annotations
@@ -14,6 +15,8 @@ from unittest.mock import patch
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
+from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts.models import PasswordResetCode, User
 from apps.accounts.sessions import end_all_sessions
@@ -53,6 +56,7 @@ class Account:
             installation_id=uuid.uuid4(),
             platform="android",
             binding_sequence=1,
+            session_id=RefreshToken(self.refresh)["sid"],
         )
 
     def refresh_works(self) -> bool:
@@ -190,3 +194,72 @@ class PasswordResetEndsSessionsTests(TestCase):
         assert account.device_active() is True
         assert account.password_works() is True
         assert User.objects.get(pk=account.user.pk).is_email_verified is False
+
+
+class RotatedSignInTests(TestCase):
+    """Astra N1 round 3, blocker 3: a sign-in survives its own rotations' end.
+
+    SimpleJWT 5.3.1 blacklists the refresh token it rotates but never puts the
+    new one on the account's outstanding list, so ending a sign-in by
+    blacklisting the account's outstanding tokens missed every rotated token.
+    Every rotation keeps the sign-in's ``sid``; the sign-in row decides.
+    """
+
+    def rotate(self, refresh: str) -> dict:
+        response = APIClient().post(REFRESH, {"refresh": refresh}, format="json")
+        assert response.status_code == 200, response.data
+        return response.data
+
+    def register(self, access: str):
+        phone = APIClient()
+        phone.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+        return phone.post(
+            reverse("notification-device-register"),
+            {
+                "token": f"fcm-token-{uuid.uuid4().hex}",
+                "installation_id": str(uuid.uuid4()),
+                "binding_sequence": 2,
+                "platform": "android",
+            },
+            format="json",
+        )
+
+    def test_a_reset_ends_a_sign_in_however_often_it_was_rotated(self):
+        account = Account("l18a-rotated@example.com")
+        rotated = self.rotate(self.rotate(account.refresh)["refresh"])
+        assert not OutstandingToken.objects.filter(
+            jti=RefreshToken(rotated["refresh"])["jti"]
+        ).exists(), "the library gap this guards against"
+
+        end_all_sessions(account.user)
+
+        response = APIClient().post(
+            REFRESH, {"refresh": rotated["refresh"]}, format="json"
+        )
+        assert response.status_code == 401
+        late = self.register(rotated["access"])
+        assert late.status_code == 409
+        assert late.data["code"] == "push_session_ended"
+        assert account.device_active() is False
+
+    def test_a_sign_out_ends_every_later_rotation_of_its_sign_in(self):
+        account = Account("l18a-rotated-sign-out@example.com")
+        first = self.rotate(account.refresh)
+        signed_out = APIClient()
+        signed_out.credentials(HTTP_AUTHORIZATION=f"Bearer {first['access']}")
+        assert (
+            signed_out.post(
+                reverse("auth-sign-out"), {"refresh": first["refresh"]}, format="json"
+            ).status_code
+            == 205
+        )
+
+        assert self.register(first["access"]).status_code == 409
+        assert account.device_active() is False
+
+    def test_a_rotated_sign_in_that_did_not_end_keeps_working(self):
+        account = Account("l18a-rotated-live@example.com")
+        rotated = self.rotate(self.rotate(account.refresh)["refresh"])
+
+        assert self.register(rotated["access"]).status_code == 200
+        assert self.rotate(rotated["refresh"])["access"]

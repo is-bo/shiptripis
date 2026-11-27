@@ -14,7 +14,7 @@ from rest_framework.views import APIView
 from .models import Notification, NotificationPreference
 from .push import (
     PushBindingSuperseded,
-    PushSessionRevoked,
+    PushSessionEnded,
     register_push_device,
     unregister_push_device,
 )
@@ -99,16 +99,10 @@ def unread_count(request: Request) -> Response:
     return Response({"unread": counts["active"], **counts})
 
 
-def _claim(request: Request, name: str, default):
-    """A claim of the access token that authenticated ``request``.
+def _session_id(request: Request):
+    """The sign-in (``sid`` claim) of the access token that authenticated ``request``."""
 
-    The sign-in id (``sid``) and issue time (``iat``) tie a push registration to
-    the sign-in that made it. A request authenticated without a token (a test
-    client) carries neither.
-    """
-
-    token = request.auth
-    return default if token is None else token.get(name, default)
+    return None if request.auth is None else request.auth.get("sid")
 
 
 class PushDeviceRegistrationView(APIView):
@@ -120,15 +114,14 @@ class PushDeviceRegistrationView(APIView):
         try:
             device = register_push_device(
                 user=request.user,
-                session_id=_claim(request, "sid", ""),
-                token_issued_at=_claim(request, "iat", None),
+                session_id=_session_id(request),
                 **serializer.validated_data,
             )
-        except PushSessionRevoked:
+        except PushSessionEnded:
             return Response(
                 {
-                    "code": "push_session_revoked",
-                    "detail": "Every sign-in of this account was ended after this one began.",
+                    "code": "push_session_ended",
+                    "detail": "The sign-in this request comes from has ended.",
                 },
                 status=status.HTTP_409_CONFLICT,
             )
@@ -152,7 +145,7 @@ class PushDeviceUnregisterView(APIView):
         serializer.is_valid(raise_exception=True)
         unregister_push_device(
             user=request.user,
-            session_id=_claim(request, "sid", ""),
+            session_id=_session_id(request),
             **serializer.validated_data,
         )
         return Response(status=status.HTTP_204_NO_CONTENT)

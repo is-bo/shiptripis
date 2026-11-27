@@ -3496,6 +3496,10 @@ class LFr extends L {
       'Les notifications sont toujours désactivées. Choisissez Activer les notifications pour les redemander à Android. La boîte de réception de l’application reste disponible dans tous les cas.';
 
   @override
+  String get pushPermissionDeniedRequestableGuest =>
+      'Les notifications sont toujours désactivées. Choisissez Activer les notifications pour les redemander à Android.';
+
+  @override
   String get pushPermissionDenied =>
       'Les notifications sont désactivées dans le système. Vous pouvez les activer dans les réglages.';
 

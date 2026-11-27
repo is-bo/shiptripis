@@ -1160,7 +1160,9 @@ Profile. It is never asked on the first frame, never again automatically after a
 dismissal or a denial, and Profile > Notifications stays the place to retry or to
 open system Settings, for a guest as well. Registering the phone to an account
 waits for sign-in, and the server applies a phone's registrations and sign-outs in
-the order the app numbered them.
+the order the app numbered them. A registration needs the sign-in it comes from
+to be live; ending a sign-in (its sign-out, or a password reset ending all of
+them) switches off every device it registered.
 Foreground push reconciles the inbox without showing a duplicate OS banner.
 
 Push display/data must never contain pickup or delivery codes, exact private

@@ -3471,6 +3471,10 @@ class LAr extends L {
       'لا تزال الإشعارات متوقفة. اختر تفعيل الإشعارات ليطلبها Android مرة أخرى. يبقى صندوق الإشعارات داخل التطبيق متاحًا في كل الأحوال.';
 
   @override
+  String get pushPermissionDeniedRequestableGuest =>
+      'لا تزال الإشعارات متوقفة. اختر تفعيل الإشعارات ليطلبها Android مرة أخرى.';
+
+  @override
   String get pushPermissionDenied =>
       'الإشعارات متوقفة على مستوى النظام. يمكنك تفعيلها من الإعدادات.';
 

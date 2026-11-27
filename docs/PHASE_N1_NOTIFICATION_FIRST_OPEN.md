@@ -81,7 +81,7 @@ not delayed (Firebase still starts after it, as in K5).
   `pushPermissionEnabledGuest`, `pushGuestSignInNote`. English, French and Modern Standard Arabic; the
   localizations are regenerated (`flutter gen-l10n`).
 
-### Registration order (Astra rounds 2 and 3)
+### Registration order (Astra rounds 2, 3 and 4)
 
 A registration already sent for account A could finish after A signed out or after B registered, and
 the server then bound the phone to A and set it active. N1's automatic grant makes that reachable.
@@ -95,30 +95,52 @@ that made them:
   a startup registration and a token-refresh registration on a new phone share one UUID (round 3).
 - `PushInstallationBinding` (table `notification_push_installation_binding`, migration
   `notifications.0009`) keeps the newest number per installation **with its operation, owner and token
-  fingerprint**. Registration and sign-out claim their number under a row lock in the same transaction
-  as the device change. A registration numbered below the stored one is refused: `409
-  push_registration_superseded` with `current_sequence`. The same number again is accepted only as an
-  exact repeat (same operation, owner and token); a collision (a different token, account or
-  operation) is refused (round 3).
-- **A sign-in has a session id.** Every access and refresh token pair carries `sid`, copied by
-  rotation. A device records the `sid` it was registered under, and a sign-out ends only the device
-  registered under its own sign-in, whatever number it carries. So a delayed sign-out of A still ends
-  A's device after B signed out first and advanced the counter, and cannot touch a newer binding of
-  someone else; and a sign-out sent with a number lower than the server's (a phone whose counter was
-  lost) still ends its own device rather than being skipped. A token with no `sid` (issued before this
-  change) falls back to ending the owner's active device. A sign-out that arrives before the
-  registration it overtakes is recorded even though no device exists yet, so that registration is
-  refused when it arrives.
-- **Account-wide revocation.** A completed password reset, and Google sign-in on an account whose email was
-  never confirmed (`end_all_sessions`), end every sign-in of the account. `deactivate_all_push_devices` locks the account row, records the time in
-  `PushAccountRevocation` and deactivates the devices; a registration locks the same row and refuses a
-  token issued before that time (`409 push_session_revoked`). A registration already underway when the
-  reset happens therefore cannot reactivate the device afterwards. (Tokens are compared by `iat` in
-  whole seconds, so a token issued in the same second as the revocation is refused too: the safe side.)
+  fingerprint, and the sign-in that sent it**. Registration and sign-out claim their number under a row
+  lock in the same transaction as the device change. A registration numbered below the stored one is
+  refused: `409 push_registration_superseded` with `current_sequence`. The same number again is an
+  exact repeat only for the same operation, owner, sign-in and token, and is acknowledged without
+  changing anything (a device the delivery feedback switched off stays off); any other use of the
+  number is a collision and is refused (rounds 3 and 4).
+- **A sign-in is a server row (round 4).** Every sign-in creates a `SignInSession` (table
+  `accounts_sign_in_session`, migration `accounts.0008`), and every token of it carries its id as
+  `sid`: the first pair and every pair a refresh rotates into. A refresh needs the sign-in to be live
+  (`SessionTokenRefreshSerializer` on `/api/auth/refresh`), a push registration needs it to be live,
+  and each device records the sign-in that registered it (`PushDevice.session`). Ending a sign-in is
+  one write, under the account row lock that registration also takes first: a registration either
+  commits before the end, and the end switches its device off, or runs after and is refused (`409
+  push_session_ended`). There is no time comparison and nothing to miss: a rotated token, a token from
+  the same second, an access token still in flight all name the same ended row.
+- **Sign-out** (`end_session`) ends the sign-in its refresh token names, if it is the authenticated
+  account's own, and switches off every device that sign-in registered, on whatever installation and
+  whether or not the body names one. With an installation and a number it is also recorded in the
+  installation's order, even before any device exists. A delayed sign-out of A cannot touch a binding a
+  later sign-in made, and a sign-out numbered below a lost counter still ends its own devices.
+- **Ending every sign-in** (`end_all_sessions`: a completed password reset, Google sign-in on an
+  account whose email was never confirmed, account deletion) ends every live sign-in row of the account
+  and switches all of its devices off in one transaction under the same lock. It no longer blacklists
+  the account's outstanding refresh tokens: SimpleJWT 5.3.1 never lists a rotated token there, which is
+  the round-3 blocker, and the sign-in row covers every rotation. `PushAccountRevocation` and its
+  issue-time check are gone.
+- A token that names no sign-in, or one that never existed, cannot refresh or register. Migration
+  `notifications.0009` deletes the push devices registered before sign-ins were recorded (they name
+  none); the app registers again after its next sign-in, which every phone needs since its old tokens
+  no longer refresh.
 - The app ignores a result when a later attempt of this phone owns the state: the check is made before
   clearing the pending token or showing success or failure, so neither response order of two
   registrations can hide a failure or undo a success. If it was the latest and the server was ahead,
-  the phone raises its counter to `current_sequence` and registers once more.
+  the phone raises its counter to `current_sequence` and registers once more. Round 4: the check runs
+  after **every** wait (the token lookup, the pending token, the installation ID, the number, the
+  request, the pending-token write), so an older attempt whose token lookup finishes after a refresh
+  never numbers itself, sends the obsolete token or reports a failure. A counter that cannot be raised
+  during the catch-up leaves a failure that Retry and resume recover from, and the retry starts only if
+  the attempt is still the newest for the same account.
+- **Profile, round 4.** The button's request is put to the system only while Notifications is still the
+  screen on top (`ModalRoute.isCurrent`, checked after the count write); Back pressed during the write
+  takes the count back. On Android a request started from a requestable denial counts the system's
+  earlier, uncounted request too (an app from before N1), so the count reads two and the next denial is
+  the permanent one Android reports; the first-dismissal rule (one request from `notDetermined`, read as
+  permanent) is unchanged. A guest who refused is told how to retry, without the in-app inbox promise,
+  which only a member has (new string `pushPermissionDeniedRequestableGuest` in EN, FR and MSA).
 - `POST /api/notifications/devices` requires `binding_sequence`. Sign-out and `.../unregister` accept
   it as optional: the phone sends the refresh-token revocation even if the counter or the installation
   ID cannot be prepared.
@@ -135,8 +157,9 @@ that made them:
   `mobile/lib/app/router.dart` (`/profile/notifications` is public),
   `mobile/lib/features/profile/profile_screen.dart` and `notification_settings_screen.dart` (guest),
   `mobile/lib/l10n/app_{en,fr,ar}.arb` and the regenerated `app_localizations*.dart`.
-- Server: `apps/notifications/{models,push,views,serializers}.py`, migration `0009`,
-  `apps/accounts/views.py` (the `sid` claim and sign-out), `backend/contracts/sql/schema.sql`.
+- Server: `apps/notifications/{models,push,views,serializers}.py`, migration `notifications.0009`,
+  `apps/accounts/{models,sessions,locks,views,urls}.py` and migration `accounts.0008` (the sign-in row,
+  the `sid` claim, the refresh check, sign-out), `backend/contracts/sql/schema.sql`.
 - Docs: `docs/SHIPTRIP_V1_SPEC.md`, `docs/PUSH_NOTIFICATIONS_RUNBOOK.md`, this file,
   `docs/IMPLEMENTATION_STATUS.md`.
 - Tests: `mobile/test/k5_cold_start_test.dart` (the first-open group, rewritten on a real mounted
@@ -144,8 +167,12 @@ that made them:
   `mobile/test/k5_session_snapshot_test.dart`, `mobile/test/handover_isolation_test.dart` (the pinned
   storage-key list gains the two non-secret counters; the check now also sees keys written through the
   counter helper), `mobile/test/support/push_router.dart` (new), `mobile/test/support/fake_api.dart`;
-  server: `apps/notifications/tests/test_push.py`, `apps/accounts/tests/test_l18a_sessions.py`,
-  `apps/core/tests/test_l10_staff_and_accounts.py`.
+  server: `apps/notifications/tests/test_push.py`, `apps/notifications/tests/factories.py` (new:
+  `signed_in` and `push_device` make sign-ins and devices the way the app does),
+  `apps/accounts/tests/test_l18a_sessions.py`, `apps/accounts/tests/test_store_account_deletion.py`,
+  `apps/core/tests/test_l10_staff_and_accounts.py`, and the device fixtures of
+  `apps/notifications/tests/test_l3a_ticket_copy.py` and
+  `apps/admin_panel/tests/test_l6a_verification_inbox.py` (a device now needs its sign-in).
 - Tests rewritten because the rule they pinned changed (stated here as plan 1.4 requires):
   - the two-denials-end-in-Settings test now says the system, not a count, decides (a denial and a
     dismissal keep Enable; a permanent refusal leads to Settings);
@@ -159,7 +186,16 @@ that made them:
     guest can recover from a refusal;
   - the notification screen tests that load account preferences now run signed in, because a guest
     sees the permission controls only;
-  - the first-open tests mount a real router, because the prompt waits for a painted screen.
+  - the first-open tests mount a real router, because the prompt waits for a painted screen;
+  - round 4: "the Profile button pressed as the app leaves is not asked and not counted" starts from
+    a requestable denial, which now counts the system's earlier request too: the count reads two while
+    it is written and one after it is taken back (it read one and zero);
+  - round 4: the account-deletion test asserted that the refresh token was blacklisted; the rule is that
+    every sign-in ends, so it now asserts the sign-in row ended and the refresh is refused (401), and its
+    neighbour uses a real sign-in instead of a token that names none;
+  - round 4: "a token without a sign-in id ends the owner's binding" pinned a fallback that no longer
+    exists; it is now "a token that names no sign-in cannot register"; the API tests that used
+    `force_authenticate` (no token, no sign-in) now register with a real sign-in's bearer token.
 
 ## Tests
 
@@ -193,8 +229,24 @@ failure neither hides it nor consumes the pending token (both response orders)**
 cannot be written still sends the sign-out (refresh token and installation ID, no number)**; **two
 registrations starting together on a new phone share one installation ID (the real `TokenStore`
 over mock secure storage)**.
+Round 4 (each fails with its fix removed, checked by mutation): **an older token lookup finishing after
+a refresh registration is never sent**; **an older lookup that finds no token does not report a failure
+over a newer registration**; **a counter that cannot catch up leaves a failure Retry recovers from**;
+**a catch-up overtaken by another account leaves that account's registration alone**; **Back pressed
+while the request is being counted opens no dialog over the previous screen** (the real app, guest
+route); **a guest who refused is not promised the inbox**; in `k5_cold_start_test.dart`, **the upgrade
+denial asked again from Profile and denied leads to Settings**.
 `k5_session_snapshot_test.dart`: counters serialize, survive logout, never lower.
-Server (`test_push.py`, real bearer tokens with `sid` and `iat`): a delayed registration after
+Server, round 4 (each fails with its fix removed): **an unnumbered sign-out before the first
+registration refuses it** (blocker 1), **a sign-out that names no installation still switches its
+devices off** (blocker 1), **a token stamped in the reset's own second is refused while a new sign-in in
+that second registers** (blocker 2), **a real sign-in rotated twice, then a reset: the rotated refresh
+is refused and its access token cannot register**, and the same after a sign-out
+(`test_l18a_sessions.py`, blocker 3), **the same number from an older sign-in of the same person
+collides, and the newer sign-in's sign-out still ends the device** (blocker 4), an acknowledged repeat
+changes nothing, a sign-in cannot be ended through another account, a token naming no sign-in cannot
+register.
+Server (`test_push.py`, real bearer tokens of real sign-ins): a delayed registration after
 sign-out, after a first-registration sign-out, after the next account registered (with and without a
 sign-out), a delayed sign-out after a new registration, an exact repeat, collisions (same number with a
 different token, account or operation), the number required to register, **A reg 1, B sign-out 4 first,
@@ -235,7 +287,8 @@ cannot be captured on this machine.
   transition to finish in the widget tests; the real dialog was not seen.
 - Windows left on purpose (documented in the runbook): a process killed between the count write and the
   native call counts a prompt that never appeared; a second swipe-away reads as a permanent denial; a
-  token issued in the same second as an account-wide revocation is refused.
+  an access token outlives its sign-out for up to its own lifetime (5 minutes) for every other endpoint,
+  but can no longer refresh or register a phone.
 - 320 px right-to-left rendering of the guest screen was not captured (360 px was).
 - No iOS or Android native config changed, so there is no platform config script to run for this
   package.
@@ -250,8 +303,7 @@ Android 13+ phone, fresh install of a configured release build:
 2. Tap Enable and swipe the dialog away without choosing: the screen still offers Enable (also after
    closing and reopening the app, and on a first dialog swiped away at launch). On a phone that already
    asked from Profile in an older build and was denied, install this build over it: no dialog at launch.
-   Sign out of an account while the app is offline, reconnect, and confirm the phone no longer receives
-   that account's notifications. Tap Enable and
+   Tap Enable and
    deny: the dialog appears again. After the system stops showing it the screen offers Open
    notification settings; turn them on and return: the screen reads allowed.
 3. Kill and reopen the app: no dialog. Kill the app while the dialog is open, then reopen: no second
@@ -262,6 +314,10 @@ Android 13+ phone, fresh install of a configured release build:
    enabled; the device appears for that account. Sign out, sign in as another account: the device
    belongs to the second account only, and is active.
 6. Android 12 or older: no dialog at any point.
+7. Sign-out cleanup is best-effort (V1 spec): signed out while offline, the server never hears of it,
+   so the phone keeps receiving that account's notifications until the same phone signs in again (its
+   registration replaces the binding) or the account resets its password. Check only that signing out
+   online stops them, and that signing in again on the same phone moves them to the new sign-in.
 
 iPhone, fresh install:
 

@@ -1,6 +1,8 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 
+from .sessions import SessionTokenRefreshSerializer
+
 from .views import (
     AccountDeletionView,
     AppleSignInView,
@@ -20,7 +22,11 @@ urlpatterns = [
     path("auth/sign-up", SignUpView.as_view(), name="auth-sign-up"),
     path("auth/sign-in", SignInView.as_view(), name="auth-sign-in"),
     path("auth/sign-out", SignOutView.as_view(), name="auth-sign-out"),
-    path("auth/refresh", TokenRefreshView.as_view(), name="auth-refresh"),
+    path(
+        "auth/refresh",
+        TokenRefreshView.as_view(serializer_class=SessionTokenRefreshSerializer),
+        name="auth-refresh",
+    ),
     path("auth/oauth/google", GoogleSignInView.as_view(), name="auth-oauth-google"),
     path("auth/oauth/apple", AppleSignInView.as_view(), name="auth-oauth-apple"),
     path(

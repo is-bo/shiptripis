@@ -6045,6 +6045,12 @@ abstract class L {
   /// **'Notifications are still off. Choose Enable notifications to ask Android again. Your in-app inbox keeps working either way.'**
   String get pushPermissionDeniedRequestable;
 
+  /// No description provided for @pushPermissionDeniedRequestableGuest.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications are still off. Choose Enable notifications to ask Android again.'**
+  String get pushPermissionDeniedRequestableGuest;
+
   /// No description provided for @pushPermissionDenied.
   ///
   /// In en, this message translates to:
