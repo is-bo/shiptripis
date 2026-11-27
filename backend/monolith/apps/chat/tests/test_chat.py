@@ -196,12 +196,15 @@ class ChatThreadsTests(APITestCase):
             match=match, sender=self.traveler, body="on my way"
         )
 
-        # Sender sees the traveler as counterparty.
+        self.traveler.full_name = "Yacine Bensalah"
+        self.traveler.save(update_fields=["full_name"])
+
+        # Sender sees the traveler as counterparty, by first name only.
         r = _client(self.sender).get(self._url())
         row = r.data["results"][0]
         assert row["match_id"] == match.id
         assert row["counterparty_id"] == self.traveler.id
-        assert row["counterparty_name"] == "User"  # the first name of "User 2"
+        assert row["counterparty_name"] == "Yacine"
         # V1 requests carry no city fields, so the label is empty (reported as a follow-up).
         assert row["route"] == ""
         assert row["last_message"] == "on my way"
