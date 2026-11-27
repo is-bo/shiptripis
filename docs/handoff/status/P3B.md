@@ -55,6 +55,10 @@ App (all in `mobile/`):
 - `dart format` and `flutter analyze --fatal-infos` were clean at the last run.
 
 ## What is half done / not verified
+**Update 2026-11-27 11:38 UTC: CI is green on head `778da3a`, all 12 checks** (Flutter format, analyze and the
+full suite; Django including the new server tests; Android; Schema drift; Go; the rest). So the two items below
+about the full suite and CI are now resolved; what remains is the Astra prompt, HANDOFF §0 and Astra's review.
+
 - **The full `flutter test` suite has not completed on the final code.** First full run: everything passed
   except 3 `egs_social_sign_in_test.dart` tests that hung (cause fixed since, and that file plus the round-8
   file pass: 62 tests). The second full run was stopped before it finished. Run the suite on GitHub CI.
