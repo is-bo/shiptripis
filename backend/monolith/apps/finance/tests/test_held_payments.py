@@ -9,16 +9,22 @@ plan names (G1-A).
 
 from __future__ import annotations
 
+import ast
 from contextlib import nullcontext
 from copy import deepcopy
 from dataclasses import replace
 from datetime import timedelta
+from pathlib import Path
 from unittest import mock
 
-from django.test import TestCase
+from django.db import IntegrityError, transaction
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.admin_panel.models import AdminAuditLog
+from apps.admin_panel.permissions import AdminRole, assign_admin_roles
+from apps.admin_panel.tests.two_step_helpers import staff_login
 from apps.core.business_settings import get_active_business_settings
 from apps.core.models import BusinessSettingsVersion
 from apps.finance import jobs
@@ -252,7 +258,7 @@ def _held_as(code):
     return {"status": "failed", "code": code, "final": True, "queue": True}
 
 
-def _unverified_report(code, *, held_answer=None):
+def _unverified_report(code):
     """A success the attempt cannot verify, reported by webhook."""
 
     return {
@@ -454,10 +460,8 @@ class _Interrupted(Exception):
     """The opening request is still out at the provider."""
 
 
-class AttemptTableTests(HeldPaymentTestCase):
-    """G1-A's table: generated from `TABLE`, one test per state and event."""
-
-    # States, each reached the way the product reaches it.
+class StatesAndEvents(HeldPaymentTestCase):
+    """The table's states, each reached the way the product reaches it, and its events."""
 
     def state_opening(self):
         with mock.patch.object(
@@ -654,8 +658,6 @@ class AttemptTableTests(HeldPaymentTestCase):
     def event_paid_by_other(self, attempt):
         return self.webhook(self.owner_taps().attempt)
 
-    # The check every generated test runs.
-
     def facts(self, attempt) -> dict:
         attempt.refresh_from_db()
         return {
@@ -665,6 +667,10 @@ class AttemptTableTests(HeldPaymentTestCase):
             "disposition": attempt.operational_resolution,
             "queue": payment_attention_queryset().filter(pk=attempt.pk).exists(),
         }
+
+
+class AttemptTableTests(StatesAndEvents):
+    """G1-A's table: generated from `TABLE`, one test per state and event."""
 
     def check(self, state, event, answer, changes):
         attempt = getattr(self, f"state_{state}")()
@@ -709,3 +715,330 @@ for _event, _cells in TABLE.items():
             f"test_{_state}__{_event}",
             _table_test(_state, _event, _answer, _changes),
         )
+
+
+class EitherOrderTests(StatesAndEvents):
+    """Both orders of the events that can race: each sees what the other did."""
+
+    def during_read(self, attempt, resolution, outcome, *, payment_id=None):
+        """Staff record `resolution` while the settle read of `outcome` is out."""
+
+        attempt.refresh_from_db()
+        snapshot = AttemptSnapshot(
+            outcome=outcome,
+            provider_payment_id=payment_id or attempt.provider_payment_id,
+            amount_minor=int(attempt.provider_amount_minor),
+            currency=attempt.payment_currency,
+        )
+
+        def staff_decide_during_the_read(gateway, **kwargs):
+            assert self.staff(attempt, resolution) == resolution
+            return snapshot
+
+        with mock.patch.object(
+            MockGateway, "fetch_attempt", new=staff_decide_during_the_read
+        ):
+            return settle_checkout(attempt_id=attempt.pk)
+
+    def test_a_disposition_then_a_verified_webhook_holds_it_again(self):
+        own = self.state_no_debit()
+        assert self.webhook(own) == PAID_AFTER_DISPOSITION
+        assert self.facts(own)["queue"] and self.payments(own) == 0
+
+    def test_a_verified_webhook_then_a_disposition_is_refused(self):
+        own = self.state_held()
+        assert self.webhook(own) == "applied"
+        for resolution in PaymentAttempt.HELD_DISPOSITIONS:
+            assert self.staff(own, resolution) == "payment_not_held"
+        assert self.payments(own) == 1
+
+    def test_money_returned_then_its_own_webhook_changes_nothing(self):
+        own = self.state_returned()
+        before = self.facts(own)
+        assert self.webhook(own) == "payment_already_returned"
+        assert self.facts(own) == before and self.payments(own) == 0
+
+    def test_a_read_then_a_disposition_is_refused(self):
+        own = self.state_held()
+        assert self.event_read_final(own) == "payment_released"
+        assert self.staff(own, "no_debit") == "payment_not_held"
+
+    def test_a_disposition_then_a_read_reads_nothing(self):
+        own = self.state_no_debit()
+        with mock.patch.object(MockGateway, "fetch_attempt") as fetch:
+            assert settle_checkout(attempt_id=own.pk) == "checkout_final"
+        fetch.assert_not_called()
+
+    def test_no_money_taken_during_a_read_of_no_payment_stands(self):
+        own = self.state_held()
+        assert self.during_read(own, "no_debit", "expired") == "checkout_final"
+        assert self.facts(own)["disposition"] == "no_debit"
+
+    def test_money_returned_during_a_read_of_that_payment_stands(self):
+        own = self.state_held()
+        assert (
+            self.during_read(own, "returned", "succeeded")
+            == "payment_already_returned"
+        )
+        assert self.facts(own)["disposition"] == "returned"
+        assert self.payments(own) == 0
+
+    def test_money_returned_during_a_read_of_another_payment_holds_it_again(self):
+        own = self.state_held()
+        answer = self.during_read(
+            own, "returned", "succeeded", payment_id="pi_a_second_payment"
+        )
+        assert answer == "payment_held"
+        assert self.facts(own) == dict(zip(FIELDS, STATES["held_again"]))
+        assert own.provider_payment_id == "pi_a_second_payment"
+        assert self.payments(own) == 0
+
+    def test_a_webhook_holding_a_payment_then_a_tap_is_refused(self):
+        own = self.state_open()
+        self.webhook(own, amount=None)
+        assert self.tap(self.guest_taps) == "payment_under_review"
+
+    def test_a_tap_whose_read_finds_an_unverified_payment_is_refused(self):
+        own = self.state_open()
+        MockGateway.mark(own.provider_session_id, "succeeded")
+        real_fetch = MockGateway.fetch_attempt
+
+        def unverifiable(gateway, **kwargs):
+            return replace(real_fetch(gateway, **kwargs), currency="")
+
+        with mock.patch.object(MockGateway, "fetch_attempt", new=unverifiable):
+            assert self.tap(self.guest_taps) == "payment_under_review"
+        assert self.facts(own) == {
+            **dict(zip(FIELDS, STATES["held"])),
+            "code": "currency_mismatch",
+        }
+        assert PaymentAttempt.objects.filter(order=self.order).count() == 1
+
+    def test_a_tap_handed_its_checkout_then_a_held_webhook_stops_the_next(self):
+        own = self.state_open()
+        assert self.tap(self.owner_taps) == "handed_back"
+        self.webhook(own, amount=int(own.provider_amount_minor) + 0.5)
+        assert self.tap(self.owner_taps) == "payment_under_review"
+
+
+class LateEvidenceTests(StatesAndEvents):
+    def test_the_same_event_twice_is_one_effect(self):
+        own = self.state_held()
+        before = self.facts(own)
+        held_report = mock_event_body(
+            event_id=f"evt_held_{own.pk}",
+            outcome="succeeded",
+            session_id=own.provider_session_id,
+            payment_id=f"{own.provider_session_id}_pi",
+            amount=int(own.provider_amount_minor) + 1,
+            currency=own.payment_currency,
+        )
+        assert deliver_mock_webhook(self.client, held_report).status_code == 200
+        assert self.facts(own) == before
+
+    def test_the_same_unverified_report_as_a_new_event_keeps_the_hold(self):
+        own = self.state_held()
+        before = self.facts(own)
+        settle_run_at = self.settle_job(own).run_at
+        assert self.event_webhook_mismatch(own) == "amount_mismatch"
+        assert self.facts(own) == before
+        # Not armed again: the job's own reads keep their backoff.
+        assert self.settle_job(own).run_at == settle_run_at
+
+    def test_the_same_verified_payment_twice_is_credited_once(self):
+        own = self.state_open()
+        assert self.webhook(own) == "applied"
+        self.report(own, event_id=f"evt_again_{own.pk}")
+        assert self.payments(own) == 1
+
+    def test_money_returned_needs_the_reference_the_provider_reported(self):
+        own = self.state_held()
+        for reference, code in (
+            ("", "provider_reference_required"),
+            ("pi_not_this_payment", "provider_reference_mismatch"),
+        ):
+            with self.subTest(reference or "none"):
+                with self.assertRaises(FinanceOperationsError) as caught:
+                    resolve_payment_attention(
+                        attempt_id=own.pk,
+                        actor_id=self.scenario.admin.pk,
+                        resolution="returned",
+                        reason="Refunded at the provider.",
+                        failure_code=own.failure_code,
+                        provider_reference=reference,
+                    )
+                assert caught.exception.code == code
+        assert self.facts(own)["disposition"] == ""
+
+    def test_money_returned_never_names_another_payment(self):
+        paid = self.state_paid()
+        paid.refresh_from_db()
+        second = build_scenario(prefix="held-second")
+        second.accept(reward_eur_cents=3_200)
+        self.order = second.balance_order()
+        self.owner = second.sender
+        own = self.owner_taps().attempt
+        # Reported with no payment id: none is stored for staff to match.
+        self.report(own, event_id=f"evt_held_{own.pk}", amount=None, payment_id="")
+        own.refresh_from_db()
+        assert own.provider_payment_id == ""
+        with self.assertRaises(FinanceOperationsError) as caught:
+            resolve_payment_attention(
+                attempt_id=own.pk,
+                actor_id=self.scenario.admin.pk,
+                resolution="returned",
+                reason="Refunded at the provider.",
+                failure_code=own.failure_code,
+                provider_reference=paid.provider_payment_id,
+            )
+        assert caught.exception.code == "provider_reference_mismatch"
+
+
+class MechanicalChecks(HeldPaymentTestCase):
+    SOURCE = Path(__file__).resolve().parents[2]
+
+    def sources(self):
+        for path in sorted(self.SOURCE.rglob("*.py")):
+            parts = path.relative_to(self.SOURCE).parts
+            if "tests" not in parts and "migrations" not in parts:
+                yield path
+
+    def test_a_final_checkout_has_a_terminal_status(self):
+        own = self.owner_taps().attempt
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            PaymentAttempt.objects.filter(pk=own.pk).update(
+                checkout_final_at=timezone.now()
+            )
+
+    def test_one_function_writes_the_final_time(self):
+        writers = set()
+        for path in self.sources():
+            tree = ast.parse(path.read_text())
+            for function in ast.walk(tree):
+                if not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                for node in ast.walk(function):
+                    targets = []
+                    if isinstance(node, (ast.Assign, ast.AugAssign, ast.AnnAssign)):
+                        targets = getattr(node, "targets", None) or [node.target]
+                    written = any(
+                        isinstance(t, ast.Attribute) and t.attr == "checkout_final_at"
+                        for t in targets
+                    ) or (
+                        isinstance(node, ast.Call)
+                        and any(k.arg == "checkout_final_at" for k in node.keywords)
+                    )
+                    if written:
+                        writers.add((path.relative_to(self.SOURCE).as_posix(), function.name))
+        assert writers == {("finance/services.py", "reconcile_attempt")}
+
+    def test_the_three_predicates_are_stated_once(self):
+        # The Python restatements in `next_checkout` and `_hands_back` are
+        # G1-C's to remove (one gate function).
+        for token in ("checkout_final_at__isnull", "HELD_PAYMENT_CODES", "UNVERIFIED_"):
+            with self.subTest(token):
+                found = {
+                    path.relative_to(self.SOURCE).as_posix()
+                    for path in self.sources()
+                    if token in path.read_text()
+                }
+                assert found <= {"finance/models.py"}, found
+
+    def test_the_test_gateway_refuses_a_call_inside_a_transaction(self):
+        gateway = MockGateway()
+        calls = {
+            "create_checkout": lambda: gateway.create_checkout(None),
+            "close_checkout": lambda: gateway.close_checkout(provider_session_id="x"),
+            "fetch_attempt": lambda: gateway.fetch_attempt(
+                provider_session_id="x", provider_payment_id=""
+            ),
+            "refund": lambda: gateway.refund(None),
+        }
+        for name, call in calls.items():
+            with self.subTest(name), self.assertRaises(AssertionError), transaction.atomic():
+                call()
+
+
+LOCAL_STATIC = override_settings(
+    STORAGES={
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+        },
+    }
+)
+
+
+@LOCAL_STATIC
+class HeldPaymentConsoleTests(StatesAndEvents):
+    """Finance closes a held payment from the console: one audited transaction."""
+
+    def setUp(self):
+        super().setUp()
+        assign_admin_roles(self.scenario.admin, (AdminRole.FINANCE,))
+        staff_login(self.client, self.scenario.admin)
+
+    def path(self, attempt):
+        return reverse("admin_console:payment-resolve", args=(attempt.pk,))
+
+    def post(self, attempt, **data):
+        attempt.refresh_from_db()
+        return self.client.post(
+            self.path(attempt),
+            {
+                "reason": "Seen at the provider: no charge.",
+                "failure_code": attempt.failure_code,
+                "confirm": "on",
+                **data,
+            },
+        )
+
+    def test_a_held_payment_offers_the_two_dispositions_only(self):
+        page = self.client.get(self.path(self.state_held())).content.decode()
+        assert "Close held payment" in page
+        for value in ("no_debit", "returned"):
+            assert f'value="{value}"' in page
+        for value in ("resolved", "dismissed", "superseded"):
+            assert f'value="{value}"' not in page
+
+    def test_no_money_taken_is_recorded_and_audited(self):
+        own = self.state_held()
+        response = self.post(own, resolution="no_debit")
+        assert response.status_code == 302
+        assert self.facts(own)["disposition"] == "no_debit"
+        log = AdminAuditLog.objects.get(action="payment.hold_closed")
+        assert (log.actor_id, log.target_id, log.reason) == (
+            self.scenario.admin.pk,
+            str(own.pk),
+            "Seen at the provider: no charge.",
+        )
+        assert log.before["failure"] == "amount_mismatch"
+        assert log.after["operational_resolution"] == "no_debit"
+
+    def test_a_payment_that_changed_since_it_was_reviewed_is_not_closed(self):
+        own = self.state_held()
+        page = self.post(own, resolution="no_debit", failure_code="amount_unverifiable")
+        assert page.status_code == 200
+        assert "(payment_changed)" in page.content.decode()
+        assert self.facts(own)["disposition"] == ""
+        assert not AdminAuditLog.objects.filter(action="payment.hold_closed").exists()
+
+    def test_money_returned_without_its_reference_is_refused(self):
+        own = self.state_held()
+        page = self.post(own, resolution="returned", provider_reference="")
+        assert page.status_code == 200
+        assert "(provider_reference_required)" in page.content.decode()
+        assert self.facts(own)["disposition"] == ""
+
+    def test_a_payment_held_again_ends_only_as_money_returned(self):
+        own = self.state_held_again()
+        page = self.client.get(self.path(own)).content.decode()
+        assert 'value="returned"' in page and 'value="no_debit"' not in page
+        assert self.post(own, resolution="no_debit").status_code == 200
+        response = self.post(
+            own,
+            resolution="returned",
+            provider_reference=f"{own.provider_session_id}_pi",
+        )
+        assert response.status_code == 302
+        assert self.facts(own)["disposition"] == "returned"

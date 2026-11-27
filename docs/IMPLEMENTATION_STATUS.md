@@ -1,5 +1,22 @@
 # Waçla V1 Implementation Status
 
+## Wassla: held payments and finality (G1-A, 2026-11-27)
+
+- Rule G-D of the loop-end plan, decision D2: every reported payment is accounted for before the
+  order collects again. A payment whose amount or currency cannot be verified is held; while it is,
+  the order opens and hands out no checkout (`payment_under_review`, 409, strings in English,
+  French and Arabic) and no surface sends "payment failed". Migration `finance 0037`. Nothing
+  deployed.
+- A hold ends when a verified report applies or refunds it, when the settle read finds the checkout
+  final with no payment, or when Finance closes it from the console as "No money was taken" or
+  "Money returned" (with the provider's reference), audited as `payment.hold_closed`. A payment
+  reported after that holds the order again (`paid_after_disposition`) and only "Money returned"
+  ends it. `docs/ADMIN_OPERATIONS.md` says how Finance uses the two.
+- `checkout_final_at` is written only with a terminal status, by `reconcile_attempt`, and a check
+  constraint keeps it so; a close reports how the provider says the checkout ended. The three
+  predicates live once in `finance/models.py`. Detail and evidence:
+  `docs/PHASE_G1A_HELD_PAYMENTS.md`.
+
 ## Wassla: guest checkout without a browser-session dependency (G1, 2026-11-25)
 
 - Phone test 2, finding 1.1: pressing "Pay" on a shared guest link answered "CSRF verification

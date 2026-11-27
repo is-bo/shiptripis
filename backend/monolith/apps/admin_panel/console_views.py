@@ -2418,7 +2418,8 @@ def payment_resolve(request, pk: int):
                 )
                 before = {
                     "status": locked.status,
-                    "failure_code": locked.failure_code,
+                    # Not "failure_code": the audit log redacts keys naming a code.
+                    "failure": locked.failure_code,
                     "is_unapplied": locked.is_unapplied,
                     "operational_resolution": locked.operational_resolution,
                     "provider_payment_id": locked.provider_payment_id,

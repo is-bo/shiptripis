@@ -174,17 +174,6 @@ class PaymentDispositionForm(ConsoleForm):
                 )
             ]
 
-    def clean(self):
-        cleaned = super().clean()
-        if (
-            cleaned.get("resolution") == PaymentAttempt.OperationalResolution.RETURNED
-            and not (cleaned.get("provider_reference") or "").strip()
-        ):
-            self.add_error(
-                "provider_reference", "Returned money needs the provider's reference."
-            )
-        return cleaned
-
 
 class ReviewDecisionForm(ConsoleForm):
     """The verification inbox's one decision form, for ID and for tickets (spec 13)."""
