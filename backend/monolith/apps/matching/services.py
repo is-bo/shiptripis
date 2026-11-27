@@ -5,21 +5,15 @@ message each other on this match". Both `MatchChatEligibilityView` (the
 pre-flight the mobile client + Go chat-service call) and the chat send view
 gate on it, so the rule can never drift between the check and the write.
 
-Two eras of match coexist here and they are gated differently:
-
-* **V1** matches carry a `journey_id` and settle through `apps.deals` +
-  `apps.finance`. Chat opens once the Deal is funded, per SHIPTRIP_V1_SPEC
-  §24, and closes to new messages once the Deal reaches a terminal state.
-* **Legacy** matches predate the Deal model and settle through the retired
-  `apps.payments.PaymentIntent`. Their rule is unchanged so historical threads
-  behave exactly as they did.
+The Deal is the authority: chat opens once it is funded, per SHIPTRIP_V1_SPEC
+§24, and closes to new messages once it reaches a terminal state.
 """
 
 from __future__ import annotations
 
 from apps.parcels.models import ParcelRequest
 
-from .models import Match, Offer
+from .models import Match
 
 # Stable reason codes — surfaced verbatim to callers (mobile + Go relay).
 REASON_OK = "ok"
@@ -67,10 +61,7 @@ def chat_eligibility(match: Match, user_id: int) -> tuple[bool, str]:
     if match.parcel.kind == ParcelRequest.Kind.PRODUCT:
         return False, REASON_PRODUCT_RETIRED
 
-    if match.journey_id is not None:
-        eligible, reason = _v1_chat_eligibility(match)
-    else:
-        eligible, reason = _legacy_chat_eligibility(match)
+    eligible, reason = _v1_chat_eligibility(match)
     if eligible and _parties_blocked(match):
         return False, REASON_BLOCKED
     return eligible, reason
@@ -119,31 +110,6 @@ def _v1_chat_eligibility(match: Match) -> tuple[bool, str]:
     return True, REASON_OK
 
 
-def _legacy_chat_eligibility(match: Match) -> tuple[bool, str]:
-    """Pre-Deal matches, gated on the retired PaymentIntent. Unchanged."""
-    if match.status in (Match.Status.CANCELLED, Match.Status.EXPIRED):
-        return False, REASON_MATCH_CLOSED
-
-    accepted = (
-        Offer.objects.filter(match_id=match.id, status=Offer.Status.ACCEPTED)
-        .only("id")
-        .first()
-    )
-    if accepted is None:
-        return False, REASON_NO_ACCEPTED_OFFER
-
-    # Lazy import: payments depends on matching, not vice versa.
-    from apps.payments.models import PaymentIntent
-
-    paid = PaymentIntent.objects.filter(
-        offer_id=accepted.id, status=PaymentIntent.Status.SUCCEEDED
-    ).exists()
-    if not paid:
-        return False, REASON_PAYMENT_PENDING
-
-    return True, REASON_OK
-
-
 def chat_history_visible(match: Match, user_id: int) -> tuple[bool, str]:
     """Whether `user_id` may READ this thread.
 
@@ -157,23 +123,6 @@ def chat_history_visible(match: Match, user_id: int) -> tuple[bool, str]:
 
     if match.parcel.kind == ParcelRequest.Kind.PRODUCT:
         return False, REASON_PRODUCT_RETIRED
-
-    if match.journey_id is None:
-        # Legacy: readable if money ever moved, regardless of closure.
-        accepted = (
-            Offer.objects.filter(match_id=match.id, status=Offer.Status.ACCEPTED)
-            .only("id")
-            .first()
-        )
-        if accepted is None:
-            return False, REASON_NO_ACCEPTED_OFFER
-
-        from apps.payments.models import PaymentIntent
-
-        paid = PaymentIntent.objects.filter(
-            offer_id=accepted.id, status=PaymentIntent.Status.SUCCEEDED
-        ).exists()
-        return (True, REASON_OK) if paid else (False, REASON_PAYMENT_PENDING)
 
     from apps.deals.models import Deal
 
