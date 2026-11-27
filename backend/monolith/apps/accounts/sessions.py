@@ -2,7 +2,7 @@
 
 Every sign-in is a `SignInSession` row, and every token it issues names that
 row in its ``sid`` claim, refresh rotation included. A refresh token of an
-ended sign-in is refused (`SessionTokenRefreshSerializer`), and so is a push
+ended sign-in is refused (`SessionRefreshToken`), and so is a push
 registration made with any token of it (`apps.notifications.push`). Ending a
 sign-in is therefore one write that no rotated or in-flight token can get
 around.
@@ -22,9 +22,10 @@ from uuid import UUID
 
 from django.db import transaction
 from django.utils import timezone
-from rest_framework_simplejwt.exceptions import InvalidToken
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.settings import api_settings
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.notifications.push import (
     deactivate_all_push_devices,
@@ -83,8 +84,8 @@ def end_all_sessions(user) -> None:
         deactivate_all_push_devices(user=user)
 
 
-class SessionTokenRefreshSerializer(TokenRefreshSerializer):
-    """The refresh, for a sign-in that is still live.
+class SessionRefreshToken(RefreshToken):
+    """A refresh token that is valid only while its sign-in is live.
 
     SimpleJWT checks the token's own blacklist entry only, and a token it
     rotated is not on the account's outstanding list, so ending a sign-in by
@@ -92,14 +93,19 @@ class SessionTokenRefreshSerializer(TokenRefreshSerializer):
     one thing every rotation of it shares.
     """
 
-    def validate(self, attrs):
-        refresh = self.token_class(attrs["refresh"])
+    def verify(self) -> None:
+        super().verify()
         if (
             SignInSession.live(
-                user_id=refresh.get(api_settings.USER_ID_CLAIM),
-                session_id=refresh.get("sid"),
+                user_id=self.get(api_settings.USER_ID_CLAIM),
+                session_id=self.get("sid"),
             )
             is None
         ):
-            raise InvalidToken("This sign-in has ended.")
-        return super().validate(attrs)
+            raise TokenError("This sign-in has ended.")
+
+
+class SessionTokenRefreshSerializer(TokenRefreshSerializer):
+    """The refresh, for a sign-in that is still live (`SessionRefreshToken`)."""
+
+    token_class = SessionRefreshToken

@@ -104,7 +104,8 @@ that made them:
 - **A sign-in is a server row (round 4).** Every sign-in creates a `SignInSession` (table
   `accounts_sign_in_session`, migration `accounts.0008`), and every token of it carries its id as
   `sid`: the first pair and every pair a refresh rotates into. A refresh needs the sign-in to be live
-  (`SessionTokenRefreshSerializer` on `/api/auth/refresh`), a push registration needs it to be live,
+  (`SessionRefreshToken`, the token class of `SessionTokenRefreshSerializer` on `/api/auth/refresh`: one
+  more query per refresh), a push registration needs it to be live,
   and each device records the sign-in that registered it (`PushDevice.session`). Ending a sign-in is
   one write, under the account row lock that registration also takes first: a registration either
   commits before the end, and the end switches its device off, or runs after and is refused (`409
@@ -195,7 +196,10 @@ that made them:
     neighbour uses a real sign-in instead of a token that names none;
   - round 4: "a token without a sign-in id ends the owner's binding" pinned a fallback that no longer
     exists; it is now "a token that names no sign-in cannot register"; the API tests that used
-    `force_authenticate` (no token, no sign-in) now register with a real sign-in's bearer token.
+    `force_authenticate` (no token, no sign-in) now register with a real sign-in's bearer token;
+  - round 4: the K7 speed-budget test minted its refresh tokens with no sign-in (now refused) and
+    counted the minting inside the measured queries; it mints through a real sign-in, outside the
+    counted region as its docstring always said, and the `auth.restore` ceiling (8) is unchanged.
 
 ## Tests
 
