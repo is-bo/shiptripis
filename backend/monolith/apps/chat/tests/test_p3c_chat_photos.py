@@ -29,7 +29,7 @@ from apps.matching.tests.test_v1_matching import _approve_kyc
 from apps.matching.tests.test_v1_matching import _user as _v1_user
 from apps.matching.v1_services import accept_offer
 
-from .test_chat import _accepted_offer, _client, _make_match, _pay, _user
+from .test_chat import _client, _funded_thread, _user
 
 #: The keys of a thread row before P3C.
 ROW_KEYS = {
@@ -82,10 +82,8 @@ def give_photo(user) -> ProfilePhoto:
 
 class ChatPhotoTests(TestCase):
     def setUp(self):
-        self.sender = _user("p3c-sender@example.com", "1")
-        self.traveler = _user("p3c-traveler@example.com", "2")
-        self.match = _make_match(self.sender, self.traveler)
-        _pay(_accepted_offer(self.match, self.traveler), self.sender)
+        scenario, self.match = _funded_thread(self.client, "p3c")
+        self.sender, self.traveler = scenario.sender, scenario.traveler
 
     def row(self, viewer) -> dict:
         # A fresh request loads the people and their photo rows afresh.

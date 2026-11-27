@@ -1,7 +1,7 @@
 """Tests for apps.chat — payment-gated 1:1 messaging on a Match.
 
 Covers:
-- send is blocked until the match's accepted offer has a succeeded payment
+- send is blocked until the match's Deal is funded
 - non-parties cannot send or read
 - send persists a ChatMessage and publishes chat.message.new with
   targets=[other_member] (fan-out is the Go relay's job)
@@ -11,19 +11,19 @@ Covers:
 
 from __future__ import annotations
 
-from datetime import timedelta
 from unittest.mock import patch
 
 from django.urls import reverse
-from django.utils import timezone
 from rest_framework.test import APIClient, APITestCase
 
 from apps.accounts.models import User
-from apps.matching.models import Match, Offer
-from apps.parcels.models import DeliveryRequest, ParcelRequest
-from apps.payments.models import PaymentIntent
-from apps.trips.models import Trip
 from apps.chat.models import ChatMessage
+from apps.deals.models import Deal
+from apps.deals.tests.phase4_factories import enable_mock_rail
+from apps.finance.models import PaymentOrder
+from apps.finance.tests.factories import build_scenario, pay_order_with_mock
+from apps.matching.models import Match
+from apps.parcels.tests.test_l11a_tracking_number import _second_deal
 
 
 def _user(email: str, suffix: str = "1") -> User:
@@ -43,65 +43,27 @@ def _client(user: User) -> APIClient:
     return c
 
 
-def _make_match(sender: User, traveler: User, *, status=Match.Status.ACCEPTED) -> Match:
-    parcel = DeliveryRequest.objects.create(
-        sender=sender,
-        kind=ParcelRequest.Kind.DELIVERY,
-        origin_id="ALG",
-        destination_id="CDG",
-        weight_kg=2,
-        item_type=ParcelRequest.ItemType.DOCUMENTS,
-        description="docs",
-        base_amount_dzd=4000,
-    )
-    trip = Trip.objects.create(
-        traveler=traveler,
-        origin_id="ALG",
-        destination_id="CDG",
-        departure_at=timezone.now() + timedelta(days=5),
-        capacity_kg=8,
-    )
-    return Match.objects.create(
-        parcel=parcel,
-        trip=trip,
-        sender=sender,
-        traveler=traveler,
-        status=status,
-    )
+def _fund(client, deal: Deal) -> Match:
+    """Pay the Deal's balance through the real test rail."""
+    enable_mock_rail()
+    order = PaymentOrder.objects.get(deal=deal, purpose=PaymentOrder.Purpose.DEAL_BALANCE)
+    pay_order_with_mock(client, order)
+    return deal.match
 
 
-def _accepted_offer(match: Match, traveler: User) -> Offer:
-    return Offer.objects.create(
-        match=match,
-        proposed_by=Offer.ProposedBy.TRAVELER,
-        proposer=traveler,
-        base_amount_dzd=4000,
-        commission_dzd=1000,
-        total_dzd=5000,
-        economics_version=Offer.EconomicsVersion.LEGACY_DZD,
-        currency=Offer.Currency.DZD,
-        status=Offer.Status.ACCEPTED,
-    )
-
-
-def _pay(offer: Offer, payer: User) -> PaymentIntent:
-    return PaymentIntent.objects.create(
-        offer=offer,
-        payer=payer,
-        provider="mock",
-        provider_intent_id=f"pi_mock_{offer.id}",
-        amount_minor=offer.total_dzd,
-        currency="DZD",
-        status=PaymentIntent.Status.SUCCEEDED,
-    )
+def _funded_thread(client, prefix: str):
+    """A new sender and traveler with one funded Deal: (scenario, match)."""
+    scenario = build_scenario(prefix=prefix)
+    return scenario, _fund(client, scenario.accept())
 
 
 class ChatSendTests(APITestCase):
     def setUp(self):
-        self.sender = _user("chatsender@example.com", "1")
-        self.traveler = _user("chattraveler@example.com", "2")
-        self.match = _make_match(self.sender, self.traveler)
-        self.offer = _accepted_offer(self.match, self.traveler)
+        self.scenario = build_scenario(prefix="chat-send")
+        self.sender = self.scenario.sender
+        self.traveler = self.scenario.traveler
+        self.deal = self.scenario.accept()
+        self.match = self.deal.match
 
     def _send_url(self):
         return reverse("chat-messages", args=[self.match.id])
@@ -114,14 +76,14 @@ class ChatSendTests(APITestCase):
         assert ChatMessage.objects.count() == 0
 
     def test_non_party_cannot_send(self):
-        _pay(self.offer, self.sender)
+        _fund(self.client, self.deal)
         intruder = _user("intruder-chat@example.com", "3")
         r = _client(intruder).post(self._send_url(), {"body": "hi"}, format="json")
         assert r.status_code == 403
         assert ChatMessage.objects.count() == 0
 
     def test_send_persists_and_publishes_to_other_party(self):
-        _pay(self.offer, self.sender)
+        _fund(self.client, self.deal)
         with patch("apps.chat.views.redis_bus.publish_after_commit") as pub:
             r = _client(self.sender).post(
                 self._send_url(), {"body": "on my way"}, format="json"
@@ -145,7 +107,7 @@ class ChatSendTests(APITestCase):
         assert args[1]["body"] == "on my way"
 
     def test_traveler_sends_targets_sender(self):
-        _pay(self.offer, self.sender)
+        _fund(self.client, self.deal)
         with patch("apps.chat.views.redis_bus.publish_after_commit") as pub:
             r = _client(self.traveler).post(
                 self._send_url(), {"body": "great"}, format="json"
@@ -155,14 +117,13 @@ class ChatSendTests(APITestCase):
         assert kwargs["targets"] == [self.sender.id, self.traveler.id]
 
     def test_empty_body_rejected(self):
-        _pay(self.offer, self.sender)
+        _fund(self.client, self.deal)
         r = _client(self.sender).post(self._send_url(), {"body": "   "}, format="json")
         assert r.status_code == 400
 
-    def test_send_blocked_when_match_cancelled(self):
-        _pay(self.offer, self.sender)
-        self.match.status = Match.Status.CANCELLED
-        self.match.save(update_fields=["status"])
+    def test_send_blocked_when_deal_cancelled(self):
+        _fund(self.client, self.deal)
+        Deal.objects.filter(pk=self.deal.pk).update(status=Deal.Status.CANCELLED)
         r = _client(self.sender).post(self._send_url(), {"body": "hi"}, format="json")
         assert r.status_code == 402
         assert r.data["reason"] == "match_closed"
@@ -170,11 +131,8 @@ class ChatSendTests(APITestCase):
 
 class ChatListTests(APITestCase):
     def setUp(self):
-        self.sender = _user("chatsender2@example.com", "4")
-        self.traveler = _user("chattraveler2@example.com", "5")
-        self.match = _make_match(self.sender, self.traveler)
-        self.offer = _accepted_offer(self.match, self.traveler)
-        _pay(self.offer, self.sender)
+        scenario, self.match = _funded_thread(self.client, "chat-list")
+        self.sender, self.traveler = scenario.sender, scenario.traveler
 
     def _url(self):
         return reverse("chat-messages", args=[self.match.id])
@@ -214,20 +172,18 @@ class ChatThreadsTests(APITestCase):
     counterparty name, route, last-message snippet, and viewer unread count."""
 
     def setUp(self):
-        self.sender = _user("threadsender@example.com", "7")
-        self.traveler = _user("threadtraveler@example.com", "8")
+        self.scenario = build_scenario(prefix="chat-threads")
+        self.sender = self.scenario.sender
+        self.traveler = self.scenario.traveler
 
     def _url(self):
         return reverse("chat-threads")
 
     def test_lists_only_paid_matches(self):
         # Paid match — should appear.
-        paid = _make_match(self.sender, self.traveler)
-        paid_offer = _accepted_offer(paid, self.traveler)
-        _pay(paid_offer, self.sender)
+        paid = _fund(self.client, self.scenario.accept())
         # Accepted-but-unpaid match — should NOT appear.
-        unpaid = _make_match(self.sender, self.traveler)
-        _accepted_offer(unpaid, self.traveler)
+        _second_deal(self.scenario)
 
         r = _client(self.sender).get(self._url())
         assert r.status_code == 200, r.data
@@ -235,9 +191,7 @@ class ChatThreadsTests(APITestCase):
         assert ids == [paid.id]
 
     def test_thread_row_shape_and_counterparty(self):
-        match = _make_match(self.sender, self.traveler)
-        offer = _accepted_offer(match, self.traveler)
-        _pay(offer, self.sender)
+        match = _fund(self.client, self.scenario.accept())
         ChatMessage.objects.create(
             match=match, sender=self.traveler, body="on my way"
         )
@@ -248,7 +202,8 @@ class ChatThreadsTests(APITestCase):
         assert row["match_id"] == match.id
         assert row["counterparty_id"] == self.traveler.id
         assert row["counterparty_name"] == self.traveler.full_name
-        assert row["route"] == "ALG → CDG"
+        # V1 requests carry no city fields, so the label is empty (reported as a follow-up).
+        assert row["route"] == ""
         assert row["last_message"] == "on my way"
         assert row["unread_count"] == 1  # the traveler's message, unread
 
@@ -260,9 +215,7 @@ class ChatThreadsTests(APITestCase):
         assert row2["unread_count"] == 0
 
     def test_empty_thread_still_listed(self):
-        match = _make_match(self.sender, self.traveler)
-        offer = _accepted_offer(match, self.traveler)
-        _pay(offer, self.sender)
+        match = _fund(self.client, self.scenario.accept())
         r = _client(self.sender).get(self._url())
         row = r.data["results"][0]
         assert row["match_id"] == match.id
@@ -270,10 +223,8 @@ class ChatThreadsTests(APITestCase):
         assert row["unread_count"] == 0
 
     def test_ordered_by_recent_activity(self):
-        older = _make_match(self.sender, self.traveler)
-        _pay(_accepted_offer(older, self.traveler), self.sender)
-        newer = _make_match(self.sender, self.traveler)
-        _pay(_accepted_offer(newer, self.traveler), self.sender)
+        older = _fund(self.client, self.scenario.accept())
+        newer = _fund(self.client, _second_deal(self.scenario))
         # Give `older` the most recent message → it should sort first.
         ChatMessage.objects.create(match=older, sender=self.sender, body="hi")
 
@@ -283,9 +234,7 @@ class ChatThreadsTests(APITestCase):
         assert set(ids) == {older.id, newer.id}
 
     def test_non_party_sees_nothing(self):
-        match = _make_match(self.sender, self.traveler)
-        _pay(_accepted_offer(match, self.traveler), self.sender)
-        intruder = _user("threadintruder@example.com", "9")
-        r = _client(intruder).get(self._url())
+        _fund(self.client, self.scenario.accept())
+        r = _client(self.scenario.outsider).get(self._url())
         assert r.status_code == 200
         assert r.data["results"] == []

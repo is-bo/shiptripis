@@ -459,6 +459,13 @@ func itFCMEntry(t *testing.T, eventID string, userID int64, tokens []string) map
 			}
 			return ids
 		}(),
+		SessionIDs: func() []string {
+			sessions := make([]string, len(tokens))
+			for i := range tokens {
+				sessions[i] = fmt.Sprintf("sign-in-%d", i+1)
+			}
+			return sessions
+		}(),
 		Title: "New offer",
 		Body:  "A traveler made you an offer",
 		Data:  map[string]string{"match_id": "77"},

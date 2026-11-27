@@ -25,6 +25,7 @@ type fcmFakeStream struct {
 	claimStarts []string
 	acked       []string
 	added       []string
+	addedFields []map[string]any
 }
 
 type fcmFakeRead struct {
@@ -76,10 +77,11 @@ func (f *fcmFakeStream) XAck(_ context.Context, _, _ string, ids ...string) erro
 	return nil
 }
 
-func (f *fcmFakeStream) XAddCapped(_ context.Context, stream string, _ int64, _ map[string]any) (string, error) {
+func (f *fcmFakeStream) XAddCapped(_ context.Context, stream string, _ int64, fields map[string]any) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.added = append(f.added, stream)
+	f.addedFields = append(f.addedFields, fields)
 	return "9-0", nil
 }
 
@@ -118,7 +120,8 @@ func fcmEntry(t *testing.T, id, eventID string) redisbus.StreamMessage {
 	t.Helper()
 	raw, err := json.Marshal(FCMPayload{
 		EventID: eventID, UserID: 7, Tokens: []string{"token"}, DeviceIDs: []int64{1},
-		TokenFingerprints: []string{strings.Repeat("a", 64)}, Title: "t", Body: "b",
+		TokenFingerprints: []string{strings.Repeat("a", 64)}, SessionIDs: []string{"sign-in-1"},
+		Title: "t", Body: "b",
 	})
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
@@ -131,8 +134,8 @@ func fcmEntry(t *testing.T, id, eventID string) redisbus.StreamMessage {
 // fcmBoundDevices answers that every device is still its recipient's.
 type fcmBoundDevices struct{}
 
-func (fcmBoundDevices) StillBound(_ context.Context, _ int64, ids []int64, _ []string) ([]bool, error) {
-	bound := make([]bool, len(ids))
+func (fcmBoundDevices) StillBound(_ context.Context, p FCMPayload) ([]bool, error) {
+	bound := make([]bool, len(p.DeviceIDs))
 	for i := range bound {
 		bound[i] = true
 	}
@@ -140,23 +143,25 @@ func (fcmBoundDevices) StillBound(_ context.Context, _ int64, ids []int64, _ []s
 }
 
 // fcmScriptedDevices answers from a fixed set of still-bound device ids, or
-// with err; it records the users it was asked about.
+// with err; it records the users and payloads it was asked about.
 type fcmScriptedDevices struct {
-	mu    sync.Mutex
-	bound map[int64]bool
-	err   error
-	asked []int64
+	mu       sync.Mutex
+	bound    map[int64]bool
+	err      error
+	asked    []int64
+	payloads []FCMPayload
 }
 
-func (d *fcmScriptedDevices) StillBound(_ context.Context, userID int64, ids []int64, _ []string) ([]bool, error) {
+func (d *fcmScriptedDevices) StillBound(_ context.Context, p FCMPayload) ([]bool, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.asked = append(d.asked, userID)
+	d.asked = append(d.asked, p.UserID)
+	d.payloads = append(d.payloads, p)
 	if d.err != nil {
 		return nil, d.err
 	}
-	answer := make([]bool, len(ids))
-	for i, id := range ids {
+	answer := make([]bool, len(p.DeviceIDs))
+	for i, id := range p.DeviceIDs {
 		answer[i] = d.bound[id]
 	}
 	return answer, nil

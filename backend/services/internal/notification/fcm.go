@@ -25,7 +25,8 @@ import (
 //  3. Check that per-recipient key — if set, the user got the WS push and
 //     FCM would be a duplicate. XAck and move on.
 //  4. Keep only the phones still switched on for the recipient with the
-//     same token (DeviceRegistry); with none left, XAck and drop.
+//     same token and the same sign-in (DeviceRegistry); with none left,
+//     XAck and drop. A partial retry is checked again the same way.
 //  5. Send to those via the configured Firebase Admin client. On
 //     success, XAck. On failure, leave in the PEL so the sweeper retries.
 //
@@ -102,14 +103,17 @@ type ConsumerConfig struct {
 // names still belong to its recipient.
 //
 // A push is queued with the raw tokens of the recipient's devices as they
-// were then. A sign-out, an account switch on the phone or a token rotation
-// can switch a device off or hand it to another account while the entry
-// waits in the stream (the delivery grace, a retry, a reclaim), and sending
-// it anyway would put account A's notification on a phone B now holds.
+// were then, and the sign-in that registered each. A sign-out, an account
+// switch on the phone or a token rotation can switch a device off or hand it
+// to another sign-in while the entry waits in the stream (the delivery grace,
+// a retry, a reclaim), and sending it anyway would put account A's
+// notification on a phone B now holds, or on a sign-in of A's that never
+// received it.
 type DeviceRegistry interface {
-	// StillBound reports, for each device, whether it is still switched on
-	// for userID with the token fingerprint the push was queued with.
-	StillBound(ctx context.Context, userID int64, deviceIDs []int64, fingerprints []string) ([]bool, error)
+	// StillBound reports, for each device of p, whether it is still switched
+	// on for p.UserID with the token fingerprint and the sign-in p was
+	// queued with.
+	StillBound(ctx context.Context, p FCMPayload) ([]bool, error)
 }
 
 // Default timings — tracked here so changes are diff-reviewable.
@@ -579,10 +583,13 @@ type FCMPayload struct {
 	Tokens            []string `json:"tokens"`
 	DeviceIDs         []int64  `json:"device_ids"`
 	TokenFingerprints []string `json:"token_fingerprints"`
-	Title             string   `json:"title"`
-	Body              string   `json:"body"`
-	AndroidChannelID  string   `json:"android_channel_id,omitempty"`
-	CollapseKey       string   `json:"collapse_key,omitempty"`
+	// SessionIDs names, per device, the sign-in that registered it
+	// (accounts_sign_in_session.id) when the push was queued.
+	SessionIDs       []string `json:"session_ids"`
+	Title            string   `json:"title"`
+	Body             string   `json:"body"`
+	AndroidChannelID string   `json:"android_channel_id,omitempty"`
+	CollapseKey      string   `json:"collapse_key,omitempty"`
 	// Data is the FCM `data` payload — opaque key/value pairs the app
 	// uses for in-app routing (e.g. open the right chat thread).
 	Data map[string]string `json:"data,omitempty"`
@@ -611,6 +618,9 @@ func decodePayload(values map[string]any) (FCMPayload, error) {
 	}
 	if len(p.TokenFingerprints) != len(p.Tokens) {
 		return FCMPayload{}, errors.New("token_fingerprints must align with tokens")
+	}
+	if len(p.SessionIDs) != len(p.Tokens) {
+		return FCMPayload{}, errors.New("session_ids must align with tokens")
 	}
 	if len(p.Tokens) > 500 {
 		return FCMPayload{}, errors.New("token batch exceeds FCM multicast limit")
@@ -660,7 +670,7 @@ type SendResult struct {
 // without the check is exactly what it exists to prevent. A payload left with
 // no tokens means none of its devices is the recipient's any more.
 func (c *Consumer) stillBound(ctx context.Context, eventID string, p FCMPayload) (FCMPayload, bool) {
-	bound, err := c.devices.StillBound(ctx, p.UserID, p.DeviceIDs, p.TokenFingerprints)
+	bound, err := c.devices.StillBound(ctx, p)
 	if err == nil && len(bound) != len(p.DeviceIDs) {
 		err = fmt.Errorf("registry answered %d devices for %d", len(bound), len(p.DeviceIDs))
 	}
@@ -679,7 +689,7 @@ func (c *Consumer) stillBound(ctx context.Context, eventID string, p FCMPayload)
 	case len(p.Tokens):
 		return p, true
 	case 0:
-		p.Tokens, p.DeviceIDs, p.TokenFingerprints = nil, nil, nil
+		p.Tokens, p.DeviceIDs, p.TokenFingerprints, p.SessionIDs = nil, nil, nil, nil
 		return p, true
 	}
 	narrowed, err := subsetPayload(p, keep)
@@ -697,6 +707,7 @@ func subsetPayload(p FCMPayload, indexes []int) (FCMPayload, error) {
 	subset.Tokens = make([]string, 0, len(indexes))
 	subset.DeviceIDs = make([]int64, 0, len(indexes))
 	subset.TokenFingerprints = make([]string, 0, len(indexes))
+	subset.SessionIDs = make([]string, 0, len(indexes))
 	seen := make(map[int]struct{}, len(indexes))
 	for _, index := range indexes {
 		if index < 0 || index >= len(p.Tokens) || index >= len(p.DeviceIDs) {
@@ -709,6 +720,7 @@ func subsetPayload(p FCMPayload, indexes []int) (FCMPayload, error) {
 		subset.Tokens = append(subset.Tokens, p.Tokens[index])
 		subset.DeviceIDs = append(subset.DeviceIDs, p.DeviceIDs[index])
 		subset.TokenFingerprints = append(subset.TokenFingerprints, p.TokenFingerprints[index])
+		subset.SessionIDs = append(subset.SessionIDs, p.SessionIDs[index])
 	}
 	if len(subset.Tokens) == 0 {
 		return FCMPayload{}, errors.New("empty token subset")

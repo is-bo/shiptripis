@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"regexp"
 	"strings"
@@ -42,6 +43,7 @@ func fcmTwoDeviceEntry(t *testing.T, id string) redisbus.StreamMessage {
 		Tokens:            []string{"token-a", "token-b"},
 		DeviceIDs:         []int64{1, 2},
 		TokenFingerprints: []string{strings.Repeat("a", 64), strings.Repeat("b", 64)},
+		SessionIDs:        []string{"sign-in-a", "sign-in-b"},
 		Title:             "t", Body: "b",
 	})
 	if err != nil {
@@ -125,14 +127,76 @@ func TestStillBoundQueryMatchesTheSchema(t *testing.T) {
 	if table == nil {
 		t.Fatal("schema.sql has no notification_push_device table")
 	}
-	for _, column := range []string{"id bigint", "user_id bigint", "active boolean", "token_fingerprint character varying"} {
+	for _, column := range []string{"id bigint", "user_id bigint", "active boolean", "token_fingerprint character varying", "session_id uuid"} {
 		if !strings.Contains(string(table[1]), "    "+column) {
 			t.Errorf("notification_push_device has no %q column", column)
 		}
 	}
-	for _, name := range []string{"notification_push_device", "user_id", "active", "token_fingerprint", "id = ANY"} {
+	for _, name := range []string{"notification_push_device", "user_id", "active", "token_fingerprint", "session_id", "id = ANY"} {
 		if !strings.Contains(stillBoundQuery, name) {
 			t.Errorf("stillBoundQuery does not name %q", name)
 		}
+	}
+}
+
+// fcmRetryOnceSender fails device 2 transiently on its first send, the
+// partial failure the worker re-enqueues as a retry, and records each send.
+type fcmRetryOnceSender struct {
+	mu   sync.Mutex
+	sent []FCMPayload
+}
+
+func (s *fcmRetryOnceSender) Send(_ context.Context, p FCMPayload) (SendResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sent = append(s.sent, p)
+	if len(s.sent) == 1 {
+		return SendResult{SuccessfulDeviceIDs: p.DeviceIDs[:1], SuccessfulTokenFingerprints: p.TokenFingerprints[:1], RetryTokenIndexes: []int{1}}, nil
+	}
+	return SendResult{SuccessfulDeviceIDs: p.DeviceIDs, SuccessfulTokenFingerprints: p.TokenFingerprints}, nil
+}
+
+// N1, N-F: a retry is checked again before it is sent, with the sign-in the
+// push was queued for. Device 2 is rebound to another sign-in between the
+// first send and the retry, so the retry is dropped.
+func TestFCMChecksARetryAgainWithItsSignIn(t *testing.T) {
+	rdb := &fcmFakeStream{}
+	sender := &fcmRetryOnceSender{}
+	devices := &fcmScriptedDevices{bound: map[int64]bool{1: true, 2: true}}
+	c := fcmTestConsumerWith(rdb, sender, devices)
+	c.retryBase, c.retryCeiling = time.Millisecond, time.Millisecond
+
+	c.handle(context.Background(), fcmTwoDeviceEntry(t, sid(1)), time.Now())
+	var retry map[string]any
+	for _, fields := range rdb.addedFields {
+		if _, ok := fields["attempt"]; ok {
+			retry = fields
+		}
+	}
+	if retry == nil {
+		t.Fatal("the transient failure was not re-enqueued")
+	}
+	values := make(map[string]any, len(retry))
+	for key, value := range retry {
+		values[key] = fmt.Sprint(value) // as Redis returns every field
+	}
+	devices.mu.Lock()
+	devices.bound[2] = false
+	devices.mu.Unlock()
+
+	c.handle(context.Background(), redisbus.StreamMessage{ID: sid(2), Values: values}, time.Now())
+
+	if len(sender.sent) != 1 {
+		t.Fatalf("sent %d pushes, want only the first", len(sender.sent))
+	}
+	if len(devices.payloads) != 2 {
+		t.Fatalf("checked the phones %d times, want 2", len(devices.payloads))
+	}
+	if got := devices.payloads[1]; len(got.DeviceIDs) != 1 || got.DeviceIDs[0] != 2 ||
+		len(got.SessionIDs) != 1 || got.SessionIDs[0] != "sign-in-b" {
+		t.Fatalf("the retry was checked as %+v, want device 2 with sign-in-b", got)
+	}
+	if _, _, acked := rdb.snapshot(); len(acked) != 2 || acked[1] != sid(2) {
+		t.Fatalf("acked %v, want the dropped retry acked too", acked)
 	}
 }

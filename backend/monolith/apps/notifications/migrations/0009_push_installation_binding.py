@@ -31,13 +31,13 @@ class Migration(migrations.Migration):
                     models.CharField(
                         choices=[
                             ("register", "Registration"),
-                            ("sign_out", "Sign-out"),
+                            ("unregister", "Unregister"),
                         ],
-                        max_length=8,
+                        max_length=10,
                     ),
                 ),
                 ("user_id", models.BigIntegerField()),
-                ("session_id", models.UUIDField(blank=True, null=True)),
+                ("session_id", models.UUIDField()),
                 (
                     "token_fingerprint",
                     models.CharField(blank=True, default="", max_length=64),

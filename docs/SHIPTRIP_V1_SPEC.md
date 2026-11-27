@@ -1159,14 +1159,16 @@ the 2026-11-26 phone test; it replaces the earlier rule of asking only from
 Profile. It is never asked on the first frame, never again automatically after a
 dismissal or a denial, and Profile > Notifications stays the place to retry or to
 open system Settings, for a guest as well. Registering the phone to an account
-waits for sign-in, and the server applies a phone's registrations and sign-outs in
-the order the app numbered them. A registration needs the sign-in it comes from
-to be live; ending a sign-in (its sign-out, or a password reset ending all of
-them) switches off every device it registered. A sign-out succeeds with an
-expired access token or a refresh token rotated meanwhile or expired, the app
-sends one too when it lets a session go because renewing it failed, a sign-in whose
-credentials were checked before a reset is not issued, and a queued push or an
-open notification socket does not outlive the device or token it was meant for.
+waits for sign-in, and the server applies a phone's registrations in the order
+the app numbered them. A registration needs the sign-in it comes from to be
+live; ending a sign-in (its sign-out, or a password change ending all of them)
+switches off every device it registered. A sign-out proved by a refresh token
+this server signed succeeds whatever the token's age or rotation and whether or
+not its sign-in already ended, and a proof the server cannot verify is refused
+with a stable code; the app sends one too when it lets a session go because
+renewing it failed. A sign-in whose credentials were checked before a reset is
+not issued, and a queued push or an open notification socket does not outlive
+the device, token or sign-in it was meant for.
 Foreground push reconciles the inbox without showing a duplicate OS banner.
 
 Push display/data must never contain pickup or delivery codes, exact private

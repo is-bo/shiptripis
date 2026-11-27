@@ -6,8 +6,9 @@ depends on. Where the two disagree, the spec wins.
 
 ## What it is
 
-A peer-to-peer parcel-delivery marketplace on the EU ↔ Algeria corridor. A
-sender pays a traveler who already has spare luggage or boot capacity to carry
+A peer-to-peer parcel-delivery marketplace between Algeria, France, Spain and
+Germany, aimed since 2026-11-13 at fast delivery: urgent parcels, mostly on
+flights and drives made the same day. A sender pays a traveler who already has spare luggage or boot capacity to carry
 a parcel along a route they were taking anyway. V1 is delivery only.
 
 ## Platform
@@ -15,7 +16,7 @@ a parcel along a route they were taking anyway. V1 is delivery only.
 `adaptive` — one Flutter codebase shipping to Android and iOS hardware.
 Material 3 governs structure and components on both; iOS additionally receives
 its OS guarantees (safe-area insets, live edge-swipe back, Reduce Motion,
-correct sheet dismissal). There is no web or desktop surface in V1.
+correct sheet dismissal). There is no web or desktop app in V1; the public site is static pages.
 
 ## People
 
@@ -99,6 +100,6 @@ layout must not overflow when they do.
 
 ## Non-goals for V1
 
-Admin dashboard, landing site, provider production activation, app-store
-submission, Kaba/ProductRequest, traveler-initiated offers, in-app wallet
+Professional transporters, the manifest dashboard, custody history and courier
+handoff (parked), Kaba/ProductRequest, traveler-initiated offers, in-app wallet
 top-ups.

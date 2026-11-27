@@ -1,46 +1,41 @@
 # Waçla V1 Implementation Status
 
-## Wassla: ask for notifications once on first open (N1, 2026-11-26)
+## Wassla: notifications on first open, sign-in sessions and who a push belongs to (N1, 2026-11-27)
 
-- Phone test 2 (plan 1.2): Ismail decided the app asks for notification permission on its own, once,
-  the first time it is opened, including for a guest, instead of only from Profile > Notifications.
-  Nothing deployed.
-- The app-wide push coordinator asks after a painted, usable screen (not the splash, sign-in, the guest
-  payment screen or a notification still opening), with the app resumed and Firebase started. Startup,
-  resume and the Profile button share one request. A per-installation request count (kept through
-  logout, taken back when the system was never reached) keeps Android 13+ from asking twice, including
-  after a killed dialog. No automatic retry; Profile recovers, and the system, not a count, says when
-  only Settings is left. A guest can reach the same controls from guest Profile. Registering the phone
-  waits for sign-in.
-- Astra rounds 2 and 3 required a server change: registrations and sign-outs of one installation are
-  numbered by the app and ordered by the server (`PushInstallationBinding`, migration
-  `notifications.0009`), and every sign-in carries a session id (`sid`) so a sign-out ends
-  only its own device, whatever number it carries, and a registration that spans a password reset is
-  refused. A registration that was slow on the network can never rebind the phone to an account that
-  has since signed out, been replaced or been reset. Round 3 also: one installation ID per phone, the
-  prompt waits for the screen that was leaving, only the newest registration attempt may settle the
-  state, an Android upgrade after a pre-N1 denial is not asked again, a first dialog swiped away keeps
-  Enable. Spec and runbook updated; the currently installed app is not kept working (no users, by
-  CLAUDE.md). Round 4 (Astra round 3) fixes the root cause instead of another variant: every sign-in
-  is a `SignInSession` row (migration `accounts.0008`) named by the `sid` of all its tokens, refresh
-  rotation included; a refresh or a push registration needs it live, checked under the account lock
-  that sign-out and `end_all_sessions` also take. `PushAccountRevocation` and its issue-time check are
-  gone, and `end_all_sessions` no longer relies on SimpleJWT's outstanding-token list, which misses
-  rotated tokens. Phone: the newest-attempt check after every wait, a failed catch-up write leaves a
-  retryable failure, the Profile request needs its screen still on top, an Android upgrade user's
-  second denial leads to Settings, guest denial copy without the inbox promise. Round 5 (Astra round 4,
-  2026-11-27): a sign-in is issued under the account lock only if no reset, claim or deletion ended the
-  account's sign-ins after its credentials were checked (`User.session_epoch`); a sign-out is proved by
-  a valid access token or, once that expired, by a refresh token this server signed even if rotated or
-  expired, and blacklists nothing; the app also sends it when it lets a session go because renewing
-  it failed, so an expired session no longer leaves the phone receiving the account's notifications; a late or ended-sign-in unregister no longer moves the order or switches off a newer
-  registration; a repeat of a switched-off registration is refused as superseded. Before N1 but closed
-  here: the Go sender checks each queued push's devices against the database right before sending,
-  and a notification WebSocket closes when its token stops being valid. Phone: permission loss
-  overtakes an in-flight registration, a token refresh registers even if the keystore refuses the
-  copy, an inactive receipt leaves Retry, guest copy without the inbox promise when push cannot start.
-  Detail, screenshots and the device checks still owed on real phones:
+- Ismail's decision of 2026-11-26: the app asks for notification permission on its own, once, the
+  first time it is opened on a usable screen, a guest included; Profile > Notifications recovers.
+  Registering the phone waits for sign-in. Nothing deployed.
+- Every sign-in is a `SignInSession` row named by the `sid` of all its tokens (migration
+  `accounts.0008`); a refresh and a push registration need it live, under the account lock. A
+  phone's registrations are numbered and ordered by the server (`PushInstallationBinding`, migration
+  `notifications.0009`); a sign-out records nothing there and switches off only its own sign-in's
+  devices.
+- `POST /api/auth/sign-out` answers 205 for any proof this server signed (live, ended, expired,
+  rotated, deleted account; a repeat writes nothing) and `400 sign_out_proof_invalid` otherwise.
+- One credential writer, `write_password`, ends every sign-in of an existing account; every save of
+  a loaded user names its fields (a test-time guard in `conftest.py` and a scan enforce both). The
+  technical admin saves only what its form changed, and staff rights are read only there (D5).
+- A queued push carries each device's sign-in; the Go worker checks user, device, token and sign-in
+  against the row right before each send and retry. Detail and evidence:
   `docs/PHASE_N1_NOTIFICATION_FIRST_OPEN.md`.
+
+## Wassla: the old payments, wallet and handover-code tables are dropped (L1, 2026-11-27)
+
+- Loop-end plan 7.1, decision D4. Server only, no route, payload or app change. Nothing deployed.
+- One migration in each of `apps.payments`, `apps.wallet` and `apps.verification` drops their eight
+  tables; the apps stay as empty shells so the migration runs on existing databases. Their view-only
+  Django admin pages and `core/historical_admin.py` are gone. The chat rule loses its pre-Deal branch
+  (only a `Trip` match could reach it, and nothing creates one), proven by a rule test over every Deal
+  state that passed before and after. Chat tests now run on funded V1 deals. `schema.sql` loses only
+  the eight tables and their objects. Detail: `docs/PHASE_L1_DEAD_APP_TABLES.md`.
+
+## Wassla: stale repository files removed (H1, 2026-11-27)
+
+- Files and documents only. No product code, no behaviour change, nothing deployed.
+- Removed: `TASKS.md`, the progress report PDF and its script, the root `package.json` pair, the
+  code-graph and editor-agent configuration, `docs/superpowers/` and two finished Astra prompts.
+  `ARCHITECTURE.md` and `PRODUCT.md` were corrected in place, `README.md` replaced, three broken
+  links fixed. Each file's evidence and the files kept: `docs/PHASE_H1_REPO_FILES.md`.
 
 ## Wassla: the bell names the ticket decision (N2, 2026-11-26)
 
