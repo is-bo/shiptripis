@@ -28,7 +28,7 @@ stopped before writing it: work from the last commit, the phase doc and the late
 
 | Package | Branch | Final head | State | Exact next step |
 |---|---|---|---|---|
-| P3B #66 | `claude/p3b-profile-photos-app` | `778da3a` | Round 8 **WIP**, CI has not run on it | Read `docs/handoff/status/P3B.md` on the branch and finish round 8. The round-8 Astra prompt draft was **lost** (it was never committed): rewrite it as `docs/handoff/astra/p3b-review-round8.md` from the round-7 prompt, stating the three triage rules. |
+| P3B #66 | `claude/p3b-profile-photos-app` | `7a4d330` | Round 8 **code done**, all 12 CI checks green (code `778da3a`, then a docs-only status commit) | Give Ismail the Astra prompt `docs/handoff/astra/p3b-review-round8.md` (head pinned to `7a4d330`; copy at `/mnt/project-files/astra/P3B-round8.md`). Next: commit his Astra result to `docs/handoff/astra/results/p3b-astra-round8-result.md`, triage, then gate or round 9 (Opus extra high if rejected again). |
 | F1 #69 | `claude/f1-payout-availability` | `7b5a5aa` | Round 5 **done**; prompt `docs/handoff/astra/f1-review-round5.md` (commit `ef04fd3`); CI was running at the stop | Check that CI is green on `7b5a5aa`, set the head SHA in the prompt if needed, then give Ismail the prompt. |
 | G1 #67 | `claude/g1-guest-checkout-csrf` | `6933306` | Round 7 **WIP** | Read `docs/handoff/status/G1.md`, finish, get CI green. The round-7 Astra prompt draft is committed on `main` at `docs/handoff/astra/drafts/g1-review-r7.md` (fill `NEWHEAD`, `NEWSHORT`, `CHECKS7`, then move it into `docs/handoff/astra/g1-review.md`). The PR body draft was lost: rewrite the PR description from the phase doc's seventh-pass section. |
 | N1 #71 | `claude/n1-notification-first-open` | `d8e53f6` | Round 5 code **done**; Astra prompt not written yet | Get CI green, then write the round-5 section of `docs/handoff/astra/n1-review.md` (head SHA, triage rules) and give it to Ismail. |
@@ -37,7 +37,7 @@ All four were **rejected in the latest Astra round**, and their next fix round h
 
 | Package | PR | Branch | Builder (model, effort) | Last Astra verdict | Round in progress at the stop | Resume |
 |---|---|---|---|---|---|---|
-| P3B profile photos in the app | #66 | `claude/p3b-profile-photos-app` | Claude Sonnet, high | Round 7 on `a286b34`: **reject** (result on the PR comment; commit to `docs/handoff/astra/results/p3b-astra-round7-result.md` if absent) | Round 8 (last pushed head before it: `a286b34`) | Finish round 8 on the in-scope findings only. The round-7 wrong-account writes outside photos (KYC, cheque, account deletion, sign-out, public profile and discovery) are **out of scope**: follow-up package, section 0.8. Escalation: one more reject moves P3B to Opus extra high. |
+| P3B profile photos in the app | #66 | `claude/p3b-profile-photos-app` | Claude Sonnet, high | Round 7 on `a286b34`: **reject** (result on the PR comment; commit to `docs/handoff/astra/results/p3b-astra-round7-result.md` if absent) | Round 8 done at `7a4d330`, awaiting Astra (last Astra-reviewed head: `a286b34`) | Wait for Astra round 8. In scope were the Dismiss press and the overtaken sign-in (root causes: a press and a failed-sign-in recovery read "who is this" from the displayed state; now bound to the member the control was drawn for and to the owner of the stored credentials). Before: finish round 8 on the in-scope findings only. The round-7 wrong-account writes outside photos (KYC, cheque, account deletion, sign-out, public profile and discovery) are **out of scope**: follow-up package, section 0.8. Escalation: one more reject moves P3B to Opus extra high. |
 | F1 payout setup availability, server | #69 | `claude/f1-payout-availability` | Claude Opus, extra high | Round 4 on `c559318`: **reject** (`docs/handoff/astra/results/f1-astra-round4-result.md` on the PR branch) | Round 5: fix `bd74c3a` and Astra prompt `ef04fd3` **already pushed** (`docs/handoff/astra/f1-review-round5.md`) | Check CI on the PR head, then give Ismail the round-5 prompt to run. |
 | G1 guest checkout without CSRF dependency | #67 | `claude/g1-guest-checkout-csrf` | Claude Opus, extra high | Round 6 on `4e4c0ea`: **reject** (`docs/handoff/astra/results/g1-astra-round6-result.md` on `main`) | Round 7 (last pushed head before it: `4e4c0ea`) | Finish round 7. The round-6 items about rows or URLs written by older code are **N/A** (no live data); fix the rest at the root. Then a round-7 prompt in `docs/handoff/astra/g1-review.md`. |
 | N1 notification prompt on first open | #71 | `claude/n1-notification-first-open` | **Claude Opus, extra high** (moved from Sonnet by the escalation rule) | Round 4 on `227d8aa`: **reject** (`docs/handoff/astra/results/n1-astra-round4-result.md` on the PR branch) | Round 5: first commit `0cd1330` pushed (sign-in issued under the account lock, sign-out proved by either token) | Finish round 5, which also covers the FCM queued job (revalidate owner, sign-in and token before each send) and WebSocket expiry. Then the round-5 section of `docs/handoff/astra/n1-review.md`. Testers must sign in again after deploy. |
@@ -93,9 +93,18 @@ screen, an uptime monitor, and the older findings (parcel photo GPS metadata, fu
 detail, own-card labels).
 
 ### 0.8 Follow-up packages (out-of-scope findings, not yet planned)
-- **Wrong-account writes outside profile photos** (from P3B round 7): KYC upload, cheque, account
-  deletion, sign-out, public profile and discovery can act for the previous account during an
-  account switch. Plan it as one package after P3B merges, reusing P3B's `MemberScope`.
+- **Wrong-account writes outside profile photos** (from P3B round 7 on `a286b34`, result file
+  `docs/handoff/astra/results/p3b-astra-round7-result.md`; detail in
+  `docs/handoff/WRONG_ACCOUNT_WRITES_FOLLOWUP.md` on the P3B branch until it merges). Three of the five
+  round-7 blockers are outside the photo package and are **not** fixed in #66:
+  1. **Public profile and discovery**: Home opt-in and the route editor can write A's choices to B
+     (`discovery_state.dart:277`, `public_profile_screen.dart:64`).
+  2. **KYC and the payout cheque form**: A's selected ID, selfie, cheque file and bank fields can be
+     submitted under B (`kyc_screen.dart:145`, upload near `:2257`, cheque upload near `:162`).
+  3. **Account deletion and sign-out**: A's dialog can delete or sign out B (`delete_account_screen.dart:69`,
+     the profile sign-out dialog).
+
+  Plan them as one package after P3B merges, reusing P3B's `MemberScope`.
 
 ### 0.9 Astra history
 Every round's result is in `docs/handoff/astra/results/` (on the PR branch until merge) and as a
