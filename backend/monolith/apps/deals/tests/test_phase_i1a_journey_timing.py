@@ -323,8 +323,9 @@ class PayoutReleaseGateTests(TestCase):
         # The handler agrees: it defers to the gate rather than consuming its
         # retry budget every few minutes for four days.
         from apps.finance.jobs import run_job
+        from apps.finance.tests.factories import claim
 
-        outcome = run_job(job)
+        outcome = run_job(claim(job))
         job.refresh_from_db()
         assert outcome == "deferred"
         assert job.attempts == 0

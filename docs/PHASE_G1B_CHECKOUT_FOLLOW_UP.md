@@ -65,12 +65,32 @@ the settle job after a close intent (`_settle_before_checkout` twice, `handle_at
 
 ## Rewritten tests
 
-Tests that ran `run_job` on a job nobody claimed now claim it first (`tests/factories.claim`):
-under R4 a run that holds no claim writes nothing.
+Under R4 a run that holds no claim writes nothing, so a test that called `run_job` on a job nobody
+claimed now claims it first (`finance/tests/factories.claim`, which stamps the claim as the worker
+does). No assertion changed in these:
+
+- `finance/tests/test_guest_payment.py`: `test_a_payment_being_made_holds_off_expiry_and_is_followed_to_its_end`,
+  `test_cancelling_the_order_closes_the_checkout_a_payer_holds`,
+  `test_a_cancelled_orders_checkout_that_took_a_payment_refunds_it`,
+  `test_closing_the_order_to_collection_closes_its_checkout_too`,
+  `test_an_order_closed_while_a_checkout_opens_has_nothing_to_close`,
+  `test_a_payment_settling_outlives_its_orders_cancellation`,
+  `test_a_close_asked_for_while_the_settle_job_runs_is_not_deferred_past`,
+  `test_a_success_whose_amount_cannot_be_accepted_is_read_until_it_is_accounted_for`,
+  `test_a_payment_any_path_finds_unaccounted_is_read_until_it_is`,
+  `test_a_payment_staff_resolved_is_no_longer_read`,
+  `test_staff_reconciliation_reads_the_provider_for_a_payment_it_could_not_accept`.
+- `finance/tests/test_phase8fh3_execution.py`: `TestWorker.test_a_deferred_wait_does_not_consume_the_retry_budget`,
+  `TestWorker.test_an_unresolved_operation_is_terminal_not_retried`.
+- `deals/tests/test_phase_i1a_journey_timing.py`: `PayoutReleaseGateTests.test_the_release_job_is_rescheduled_to_the_floor_not_retried_blindly`.
+- `trips/tests/test_l5a_progress.py`: `ReminderHandlerTests.test_the_job_runner_executes_a_stored_reminder`.
+
+Rewritten to the new rule:
 
 | Test | Why |
 |---|---|
-| ROWS_REWRITTEN | |
+| `test_guest_payment.test_a_settle_job_that_ran_out_is_armed_again_until_the_checkout_is_final` | The sweep now arms a job whose tries ran out after the capped retry delay, not at once (G-E1). The test asserts the job is pending and due more than 5 hours out, then runs the loop at that time. |
+| `test_guest_payment.test_the_job_loop_arms_every_live_checkout_left_without_a_settle_job` and the test above | `arm_live_checkouts` is now `arm_outstanding_attempts`; same assertions. |
 
 ## Evidence
 
