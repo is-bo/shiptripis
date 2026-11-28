@@ -87,6 +87,15 @@ class PushDevice(models.Model):
     token = models.TextField()
     token_fingerprint = models.CharField(max_length=64, unique=True, editable=False)
     app_version = models.CharField(max_length=32, blank=True, default="")
+    # The sign-in that registered this binding, and the app's number for that
+    # registration. Ending the sign-in switches the binding off, and the
+    # number says which registration of the installation is current.
+    session = models.ForeignKey(
+        "accounts.SignInSession",
+        on_delete=models.CASCADE,
+        related_name="push_devices",
+    )
+    binding_sequence = models.BigIntegerField()
     active = models.BooleanField(default=True, db_index=True)
     last_seen_at = models.DateTimeField(default=timezone.now, db_index=True)
     last_success_at = models.DateTimeField(null=True, blank=True)
@@ -113,6 +122,42 @@ class PushDevice(models.Model):
 
     def __str__(self) -> str:
         return f"PushDevice#{self.pk} {self.platform} {self.token_fingerprint[:12]}"
+
+
+class PushInstallationBinding(models.Model):
+    """The newest operation the app reported for one installation.
+
+    The app numbers every registration and every unregister of an installation
+    from one counter that only grows. A registration numbered below this one
+    was overtaken by a later operation and is refused, so a registration that
+    was slow on the network can never rebind the phone after the phone moved
+    on. The same number again is accepted only as an exact repeat (same
+    operation, account, sign-in and token): two different operations sharing a
+    number means the app's counter was lost, and the app is told to catch up.
+    The row exists apart from ``PushDevice`` because an unregister can arrive
+    before the registration it overtakes has created a device. A sign-out is
+    not recorded here: it ends the sign-in, and that alone refuses the
+    sign-in's later registrations (`apps.notifications.push`).
+    """
+
+    class Operation(models.TextChoices):
+        REGISTER = "register", "Registration"
+        UNREGISTER = "unregister", "Unregister"
+
+    installation_id = models.UUIDField(primary_key=True)
+    sequence = models.BigIntegerField()
+    operation = models.CharField(max_length=10, choices=Operation.choices)
+    user_id = models.BigIntegerField()
+    # The sign-in that sent the operation, live when it was recorded.
+    session_id = models.UUIDField()
+    token_fingerprint = models.CharField(max_length=64, blank=True, default="")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "notification_push_installation_binding"
+
+    def __str__(self) -> str:
+        return f"PushInstallationBinding {self.installation_id} #{self.sequence}"
 
 
 class NotificationPreference(models.Model):

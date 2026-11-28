@@ -387,6 +387,91 @@ void main() {
     expect(await tokens.readAccess(), 'second-access');
     expect(await tokens.readRefresh(), 'second-refresh');
   });
+
+  // N1 round 5. A sign-in the app lets go of because renewing it failed may
+  // still be live on the server, with this phone's notifications switched on
+  // (its refresh token expired while the app went unopened, or a rotation's
+  // answer was lost). The app ends it there too, by that refresh token alone.
+  group('a session the app lets go of', () {
+    FakeBackend refusingRenewal() => FakeBackend()
+      ..on('GET', '/api/protected', const FakeResponse(401))
+      ..on('POST', '/api/auth/refresh', const FakeResponse(401))
+      ..on('POST', '/api/auth/sign-out', const FakeResponse(205));
+
+    test('is ended on the server by its refresh token alone', () async {
+      final backend = refusingRenewal();
+      final tokens = _MemoryTokenStore('old-access', 'old-refresh');
+      var expired = 0;
+      final api = apiClientFor(
+        backend,
+        tokens,
+        onSessionExpired: () => expired++,
+      );
+      addTearDown(() => api.raw.close(force: true));
+
+      await expectLater(
+        api.getObject('/api/protected'),
+        throwsA(isA<Object>()),
+      );
+      await _waitFor(() => backend.to('POST', '/api/auth/sign-out').isNotEmpty);
+
+      final signOut = backend.to('POST', '/api/auth/sign-out').single;
+      expect(signOut.body, {'refresh': 'old-refresh'});
+      expect(signOut.headers, isNot(contains('Authorization')));
+      expect(expired, 1);
+      expect(await tokens.readAccess(), isNull);
+      expect(await tokens.readRefresh(), isNull);
+    });
+
+    test('never lends it the bearer of a sign-in made meanwhile', () async {
+      final backend = refusingRenewal();
+      final tokens = _MemoryTokenStore('old-access', 'old-refresh');
+      final api = apiClientFor(
+        backend,
+        tokens,
+        // Someone signs in the moment the session ends, before its sign-out
+        // has left the phone.
+        onSessionExpired: () => unawaited(
+          tokens.save(access: 'new-access', refresh: 'new-refresh'),
+        ),
+      );
+      addTearDown(() => api.raw.close(force: true));
+
+      await expectLater(
+        api.getObject('/api/protected'),
+        throwsA(isA<Object>()),
+      );
+      await _waitFor(() => backend.to('POST', '/api/auth/sign-out').isNotEmpty);
+
+      final signOut = backend.to('POST', '/api/auth/sign-out').single;
+      expect(signOut.body, {'refresh': 'old-refresh'});
+      expect(signOut.headers, isNot(contains('Authorization')));
+      expect(await tokens.readAccess(), 'new-access');
+    });
+
+    test('is still signed out when that sign-out fails', () async {
+      final backend = refusingRenewal()
+        ..on('POST', '/api/auth/sign-out', const FakeResponse(503));
+      final tokens = _MemoryTokenStore('old-access', 'old-refresh');
+      var expired = 0;
+      final api = apiClientFor(
+        backend,
+        tokens,
+        onSessionExpired: () => expired++,
+      );
+      addTearDown(() => api.raw.close(force: true));
+
+      await expectLater(
+        api.getObject('/api/protected'),
+        throwsA(isA<Object>()),
+      );
+      await _waitFor(() => backend.to('POST', '/api/auth/sign-out').isNotEmpty);
+
+      expect(expired, 1);
+      expect(await tokens.readRefresh(), isNull);
+      expect(backend.to('POST', '/api/auth/refresh'), hasLength(1));
+    });
+  });
 }
 
 Future<void> _waitFor(bool Function() condition) async {

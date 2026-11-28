@@ -15,6 +15,8 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from apps.accounts.sessions import write_password
+
 from .models import AdminAuditLog, AdminInvitation
 from .permissions import (
     AdminRole,
@@ -288,13 +290,17 @@ def accept_admin_invitation(
 
         if existing is None:
             validate_password(password, user=user)
-            user.set_password(password)
+            write_password(user, password)
         user.email = invitation.email
         user.is_active = True
         user.is_staff = True
         user.is_email_verified = True
         user.role = "admin"
-        user.save()
+        user.save(
+            update_fields=None
+            if existing is None
+            else ("full_name", "email", "is_active", "is_staff", "is_email_verified", "role")
+        )
         assign_admin_roles(
             user,
             (invitation.role,),

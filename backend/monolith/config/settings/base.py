@@ -267,6 +267,11 @@ REST_FRAMEWORK = {
         "apple_signin": env.str(
             "DRF_APPLE_SIGNIN_THROTTLE_RATE", default="30/min"
         ),
+        # Per address (per member with a valid access token). Only a token
+        # this server signed ends anything, and the phone resends a sign-out
+        # until it is answered, so the bound only stops a flood; roomy for the
+        # carrier NAT, and apart from the shared `anon` rate.
+        "sign_out": env.str("DRF_SIGN_OUT_THROTTLE_RATE", default="300/min"),
         "media_upload": env.str("DRF_MEDIA_UPLOAD_THROTTLE_RATE", default="20/hour"),
         "chat_message": env.str("DRF_CHAT_MESSAGE_THROTTLE_RATE", default="60/min"),
         "admin_invitation": env.str(

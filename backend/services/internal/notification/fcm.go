@@ -24,7 +24,10 @@ import (
 //     write `delivered:<event_id>:<user_id>` if the user has a live socket.
 //  3. Check that per-recipient key — if set, the user got the WS push and
 //     FCM would be a duplicate. XAck and move on.
-//  4. Otherwise, send via the configured Firebase Admin client. On
+//  4. Keep only the phones still switched on for the recipient with the
+//     same token and the same sign-in (DeviceRegistry); with none left,
+//     XAck and drop. A partial retry is checked again the same way.
+//  5. Send to those via the configured Firebase Admin client. On
 //     success, XAck. On failure, leave in the PEL so the sweeper retries.
 //
 // A separate `Sweep` goroutine runs XAUTOCLAIM every `SweepInterval` to
@@ -33,6 +36,7 @@ import (
 type Consumer struct {
 	rdb            streamClient
 	sender         FCMSender
+	devices        DeviceRegistry
 	stream         string
 	group          string
 	name           string
@@ -89,6 +93,27 @@ type ConsumerConfig struct {
 	// Metrics receives the drop/defer counters. Optional: nil disables them.
 	// cmd/notification passes the service group its ws_stats line logs.
 	Metrics *metrics.Group
+	// Devices says which of a push's phones are still the recipient's when
+	// it is about to be sent. Required: cmd/notification passes
+	// PostgresDevices.
+	Devices DeviceRegistry
+}
+
+// DeviceRegistry answers, at send time, whether the phones a queued push
+// names still belong to its recipient.
+//
+// A push is queued with the raw tokens of the recipient's devices as they
+// were then, and the sign-in that registered each. A sign-out, an account
+// switch on the phone or a token rotation can switch a device off or hand it
+// to another sign-in while the entry waits in the stream (the delivery grace,
+// a retry, a reclaim), and sending it anyway would put account A's
+// notification on a phone B now holds, or on a sign-in of A's that never
+// received it.
+type DeviceRegistry interface {
+	// StillBound reports, for each device of p, whether it is still switched
+	// on for p.UserID with the token fingerprint and the sign-in p was
+	// queued with.
+	StillBound(ctx context.Context, p FCMPayload) ([]bool, error)
 }
 
 // Default timings — tracked here so changes are diff-reviewable.
@@ -164,9 +189,13 @@ func NewConsumer(rdb *redisbus.Client, cfg ConsumerConfig, log *slog.Logger) *Co
 	if sender == nil {
 		sender = LogOnlySender{Log: log}
 	}
+	if cfg.Devices == nil {
+		panic("notification: ConsumerConfig.Devices is required")
+	}
 	return &Consumer{
 		rdb:            rdb,
 		sender:         sender,
+		devices:        cfg.Devices,
 		stream:         cfg.Stream,
 		group:          cfg.ConsumerGroup,
 		name:           cfg.ConsumerName,
@@ -419,6 +448,18 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage, readAt 
 		return
 	}
 
+	payload, ok := c.stillBound(sendCtx, eventID, payload)
+	if !ok {
+		return
+	}
+	if len(payload.Tokens) == 0 {
+		c.count("fcm_unbound_drops_total")
+		c.log.Debug("fcm: no device still bound to the recipient; acking to drop",
+			"event_id", eventID, "id", m.ID)
+		c.ack(m.ID)
+		return
+	}
+
 	result, err := c.sender.Send(sendCtx, payload)
 	if err == nil && len(result.RetryTokenIndexes) > 0 && attempt >= maxPartialRetries {
 		// The retry budget is spent. Ack below rather than re-enqueue: the
@@ -428,7 +469,7 @@ func (c *Consumer) handle(ctx context.Context, m redisbus.StreamMessage, readAt 
 		c.log.Warn("fcm: partial-retry budget exhausted; dropping failed tokens",
 			"event_id", eventID, "attempt", attempt, "tokens", len(result.RetryTokenIndexes))
 	} else if err == nil && len(result.RetryTokenIndexes) > 0 {
-		retryPayload, retryErr := transientRetryPayload(payload, result.RetryTokenIndexes)
+		retryPayload, retryErr := subsetPayload(payload, result.RetryTokenIndexes)
 		if retryErr != nil {
 			c.log.Warn("fcm: invalid partial-retry result; leaving original in PEL",
 				"event_id", eventID, "err", retryErr)
@@ -542,10 +583,13 @@ type FCMPayload struct {
 	Tokens            []string `json:"tokens"`
 	DeviceIDs         []int64  `json:"device_ids"`
 	TokenFingerprints []string `json:"token_fingerprints"`
-	Title             string   `json:"title"`
-	Body              string   `json:"body"`
-	AndroidChannelID  string   `json:"android_channel_id,omitempty"`
-	CollapseKey       string   `json:"collapse_key,omitempty"`
+	// SessionIDs names, per device, the sign-in that registered it
+	// (accounts_sign_in_session.id) when the push was queued.
+	SessionIDs       []string `json:"session_ids"`
+	Title            string   `json:"title"`
+	Body             string   `json:"body"`
+	AndroidChannelID string   `json:"android_channel_id,omitempty"`
+	CollapseKey      string   `json:"collapse_key,omitempty"`
 	// Data is the FCM `data` payload — opaque key/value pairs the app
 	// uses for in-app routing (e.g. open the right chat thread).
 	Data map[string]string `json:"data,omitempty"`
@@ -574,6 +618,9 @@ func decodePayload(values map[string]any) (FCMPayload, error) {
 	}
 	if len(p.TokenFingerprints) != len(p.Tokens) {
 		return FCMPayload{}, errors.New("token_fingerprints must align with tokens")
+	}
+	if len(p.SessionIDs) != len(p.Tokens) {
+		return FCMPayload{}, errors.New("session_ids must align with tokens")
 	}
 	if len(p.Tokens) > 500 {
 		return FCMPayload{}, errors.New("token batch exceeds FCM multicast limit")
@@ -617,28 +664,68 @@ type SendResult struct {
 	RetryTokenIndexes           []int
 }
 
-func transientRetryPayload(p FCMPayload, indexes []int) (FCMPayload, error) {
-	retry := p
-	retry.Tokens = make([]string, 0, len(indexes))
-	retry.DeviceIDs = make([]int64, 0, len(indexes))
-	retry.TokenFingerprints = make([]string, 0, len(indexes))
+// stillBound narrows payload to the devices still bound to its recipient
+// (see DeviceRegistry). It reports false when the registry cannot answer: the
+// entry then stays in the PEL and the sweeper retries it, since sending
+// without the check is exactly what it exists to prevent. A payload left with
+// no tokens means none of its devices is the recipient's any more.
+func (c *Consumer) stillBound(ctx context.Context, eventID string, p FCMPayload) (FCMPayload, bool) {
+	bound, err := c.devices.StillBound(ctx, p)
+	if err == nil && len(bound) != len(p.DeviceIDs) {
+		err = fmt.Errorf("registry answered %d devices for %d", len(bound), len(p.DeviceIDs))
+	}
+	if err != nil {
+		c.log.Warn("fcm: device check failed; leaving in PEL for sweep",
+			"event_id", eventID, "err", err)
+		return p, false
+	}
+	keep := make([]int, 0, len(bound))
+	for index, ok := range bound {
+		if ok {
+			keep = append(keep, index)
+		}
+	}
+	switch len(keep) {
+	case len(p.Tokens):
+		return p, true
+	case 0:
+		p.Tokens, p.DeviceIDs, p.TokenFingerprints, p.SessionIDs = nil, nil, nil, nil
+		return p, true
+	}
+	narrowed, err := subsetPayload(p, keep)
+	if err != nil {
+		c.log.Warn("fcm: device check result unusable; leaving in PEL for sweep",
+			"event_id", eventID, "err", err)
+		return p, false
+	}
+	return narrowed, true
+}
+
+// subsetPayload is p with only the devices at indexes, in that order.
+func subsetPayload(p FCMPayload, indexes []int) (FCMPayload, error) {
+	subset := p
+	subset.Tokens = make([]string, 0, len(indexes))
+	subset.DeviceIDs = make([]int64, 0, len(indexes))
+	subset.TokenFingerprints = make([]string, 0, len(indexes))
+	subset.SessionIDs = make([]string, 0, len(indexes))
 	seen := make(map[int]struct{}, len(indexes))
 	for _, index := range indexes {
 		if index < 0 || index >= len(p.Tokens) || index >= len(p.DeviceIDs) {
-			return FCMPayload{}, fmt.Errorf("retry token index %d out of range", index)
+			return FCMPayload{}, fmt.Errorf("token index %d out of range", index)
 		}
 		if _, duplicate := seen[index]; duplicate {
-			return FCMPayload{}, fmt.Errorf("duplicate retry token index %d", index)
+			return FCMPayload{}, fmt.Errorf("duplicate token index %d", index)
 		}
 		seen[index] = struct{}{}
-		retry.Tokens = append(retry.Tokens, p.Tokens[index])
-		retry.DeviceIDs = append(retry.DeviceIDs, p.DeviceIDs[index])
-		retry.TokenFingerprints = append(retry.TokenFingerprints, p.TokenFingerprints[index])
+		subset.Tokens = append(subset.Tokens, p.Tokens[index])
+		subset.DeviceIDs = append(subset.DeviceIDs, p.DeviceIDs[index])
+		subset.TokenFingerprints = append(subset.TokenFingerprints, p.TokenFingerprints[index])
+		subset.SessionIDs = append(subset.SessionIDs, p.SessionIDs[index])
 	}
-	if len(retry.Tokens) == 0 {
-		return FCMPayload{}, errors.New("empty partial retry")
+	if len(subset.Tokens) == 0 {
+		return FCMPayload{}, errors.New("empty token subset")
 	}
-	return retry, nil
+	return subset, nil
 }
 
 // LogOnlySender is a development/test sender for stream-flow exercises.

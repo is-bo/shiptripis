@@ -36,6 +36,7 @@ SCOPES = (
     "login",
     "google_signin",
     "apple_signin",
+    "sign_out",
     "anon",
 )
 VARIABLES = {
@@ -45,6 +46,7 @@ VARIABLES = {
     "login": "DRF_LOGIN_THROTTLE_RATE",
     "google_signin": "DRF_GOOGLE_SIGNIN_THROTTLE_RATE",
     "apple_signin": "DRF_APPLE_SIGNIN_THROTTLE_RATE",
+    "sign_out": "DRF_SIGN_OUT_THROTTLE_RATE",
     "anon": "DRF_ANON_THROTTLE_RATE",
 }
 
@@ -91,6 +93,7 @@ class ThrottleRateSettingsTests(SimpleTestCase):
                 "login": "10/min",
                 "google_signin": "30/min",
                 "apple_signin": "30/min",
+                "sign_out": "300/min",
                 # Every endpoint other than the public reads keeps it.
                 "anon": "60/min",
             },

@@ -661,3 +661,49 @@ func TestConn_SlowConsumerIsDisconnected(t *testing.T) {
 	}
 	_ = ws.CloseNow()
 }
+
+// TestUpgrade_ClosesWhenTheTokenExpires: the handshake checks the token
+// once, so the connection itself must end when that token stops being valid
+// (N1 Astra round 4). The token here expired 29s ago, inside the 30s leeway,
+// so it is accepted and stops being valid about a second later.
+func TestUpgrade_ClosesWhenTheTokenExpires(t *testing.T) {
+	v := testValidator(t)
+	closed := make(chan struct{})
+	srv := upgradeServer(t, v, func(c *Conn) {
+		<-c.Done()
+		close(closed)
+	})
+
+	ws, _, err := dial(t, srv, "Bearer "+signedToken(t, testSecret, jwt.MapClaims{
+		"exp": time.Now().Add(-29 * time.Second).Unix(),
+	}))
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	drainClient(t, ws)
+
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the connection outlived its token")
+	}
+}
+
+// TestUpgrade_RefusesATokenWithoutExpiry: such a token would never stop
+// authenticating, and nothing would bound the connection it opened.
+func TestUpgrade_RefusesATokenWithoutExpiry(t *testing.T) {
+	v := testValidator(t)
+	srv := upgradeServer(t, v, func(c *Conn) { c.Close(websocket.StatusNormalClosure, "") })
+	base := jwt.MapClaims{
+		"user_id": float64(42), "role": "sender", "typ": "access", "jti": "no-exp",
+		"iat": time.Now().Unix(),
+	}
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, base).SignedString([]byte(testSecret))
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	_, resp, err := dial(t, srv, "Bearer "+token)
+	if err == nil || resp == nil || resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("want 401, got resp=%v err=%v", resp, err)
+	}
+}
