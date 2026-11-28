@@ -42,8 +42,10 @@ from rest_framework.views import APIView
 
 from apps.core.pagination import paginated_array_response
 from apps.core.storage import (
+    ImageRejected,
     ext_for_content_type,
     image_bytes_match_extension,
+    jpeg_without_metadata,
     make_key,
     put_object,
     storage_for,
@@ -547,7 +549,11 @@ class JourneyLegProofCreateView(APIView):
                 status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             )
         body = upload.read()
-        if not image_bytes_match_extension(body, ext):
+        try:
+            if not image_bytes_match_extension(body, ext):
+                raise ImageRejected("declared type does not match")
+            body = jpeg_without_metadata(body)
+        except ImageRejected:
             return self._error(
                 "proof_media_type_unsupported",
                 "File content is not a valid image of the declared type.",
@@ -583,13 +589,13 @@ class JourneyLegProofCreateView(APIView):
         # KYC bucket: that belongs to the Go KYC service's key, which is how
         # every deployed proof upload came to 500 before Phase 8F-A.
         bucket = storage_for("proof").require_bucket()
-        key = make_key(f"journeys/{journey_pk}/legs/{leg_pk}/proofs", ext)
+        key = make_key(f"journeys/{journey_pk}/legs/{leg_pk}/proofs", "jpg")
         try:
             put_object(
                 bucket=bucket,
                 key=key,
                 body=body,
-                content_type=upload.content_type,
+                content_type="image/jpeg",
             )
         except Exception:
             # The provider's own message names buckets, keys and credentials.
@@ -608,7 +614,7 @@ class JourneyLegProofCreateView(APIView):
                 leg=leg,
                 bucket=bucket,
                 object_key=key,
-                content_type=upload.content_type,
+                content_type="image/jpeg",
                 bytes=len(body),
                 kind=kind,
                 idempotency_key=idempotency_key,

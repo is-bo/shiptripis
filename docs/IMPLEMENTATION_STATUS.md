@@ -35,6 +35,20 @@
   against the row right before each send and retry. Detail and evidence:
   `docs/PHASE_N1_NOTIFICATION_FIRST_OPEN.md`.
 
+## Wassla: stored photos without metadata, names by audience (PV, 2026-11-27)
+
+- Older privacy findings of `HANDOFF.md` 0.7. Server only, no migration, no app change. Nothing
+  deployed.
+- Parcel item photos and attachments, ticket proofs and dispute photos are stored as a new JPEG
+  made from the pixels (`jpeg_without_metadata` in `apps/core/storage.py`, sharing the profile
+  photo's re-encoder): upright, transparency flattened, longer side at most 2560 px, no EXIF, GPS,
+  XMP, ICC or comment. An animated file is refused with each path's existing code. Dispute videos
+  and payout evidence are unchanged (payout evidence reaches only audited Finance staff).
+- Anyone but the member and staff now gets the first name only: `traveler_name` on journeys,
+  `sender_name`/`traveler_name` on proposals, `counterparty_name` in chat, the blocked list and the
+  recipient's email. "Own-card labels" closed with no case. Detail:
+  `docs/PHASE_PV_IMAGE_METADATA_AND_NAMES.md`.
+
 ## Wassla: the old payments, wallet and handover-code tables are dropped (L1, 2026-11-27)
 
 - Loop-end plan 7.1, decision D4. Server only, no route, payload or app change. Nothing deployed.

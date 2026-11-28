@@ -37,8 +37,10 @@ from apps.core.business_settings import NoActiveBusinessSettings
 from apps.core.pagination import paginated_array_response
 from apps.core.phase4_policy import InvalidPhase4Policy, phase4_policy
 from apps.core.storage import (
+    ImageRejected,
     ext_for_content_type,
     image_bytes_match_extension,
+    jpeg_without_metadata,
     make_key,
     put_object,
     s3_client,
@@ -94,9 +96,9 @@ class _RejectedUpload(Exception):
 
 
 def _read_image_upload(request: Request, *, field: str = "photo"):
-    """Validate one uploaded image and return ``(upload, bytes, extension)``.
+    """Validate one uploaded image and return the JPEG the server stores.
 
-    Three parcel endpoints accept an image and each has to make the same four
+    Two parcel endpoints accept an image and each has to make the same four
     judgements. Sharing them is not only less code: it is the only way the
     *bytes* check cannot be forgotten on one of them. A declared content type
     is a claim by the caller, so Pillow parses the real header and the
@@ -131,18 +133,21 @@ def _read_image_upload(request: Request, *, field: str = "photo"):
             )
         )
     body = upload.read()
-    if not image_bytes_match_extension(body, ext):
+    try:
+        if not image_bytes_match_extension(body, ext):
+            raise ImageRejected("declared type does not match")
+        return jpeg_without_metadata(body)
+    except ImageRejected:
         raise _RejectedUpload(
             _error(
                 "parcel_photo_media_type_unsupported",
                 "File content is not a valid image of the declared type.",
                 status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             )
-        )
-    return upload, body, ext
+        ) from None
 
 
-def _store_image(*, key_prefix: str, body: bytes, ext: str, content_type: str):
+def _store_image(*, key_prefix: str, body: bytes):
     """Write one image to the private parcel bucket, or refuse cleanly.
 
     The bucket is ``S3_BUCKET_PARCEL`` — Django's own credential, the same
@@ -155,9 +160,9 @@ def _store_image(*, key_prefix: str, body: bytes, ext: str, content_type: str):
     """
 
     bucket = storage_for("parcel").require_bucket()
-    key = make_key(key_prefix, ext)
+    key = make_key(key_prefix, "jpg")
     try:
-        put_object(bucket=bucket, key=key, body=body, content_type=content_type)
+        put_object(bucket=bucket, key=key, body=body, content_type="image/jpeg")
     except Exception:
         # The provider's message names buckets, keys and credentials. It goes
         # to the log with the request id and never to the phone.
@@ -652,12 +657,9 @@ class ParcelItemPhotoStageView(APIView):
                 )
 
         try:
-            upload, body, ext = _read_image_upload(request)
+            body = _read_image_upload(request)
             bucket, object_key = _store_image(
-                key_prefix=f"parcels/staged/{request.user.pk}",
-                body=body,
-                ext=ext,
-                content_type=upload.content_type,
+                key_prefix=f"parcels/staged/{request.user.pk}", body=body
             )
         except _RejectedUpload as rejected:
             return rejected.response
@@ -670,7 +672,7 @@ class ParcelItemPhotoStageView(APIView):
                 idempotency_key=key_value,
                 bucket=bucket,
                 object_key=object_key,
-                content_type=upload.content_type,
+                content_type="image/jpeg",
                 bytes=len(body),
             )
         except IntegrityError:
@@ -717,13 +719,8 @@ class ParcelMediaUploadView(APIView):
                 status.HTTP_403_FORBIDDEN,
             )
         try:
-            upload, body, ext = _read_image_upload(request)
-            bucket, object_key = _store_image(
-                key_prefix=f"parcels/{parcel.id}",
-                body=body,
-                ext=ext,
-                content_type=upload.content_type,
-            )
+            body = _read_image_upload(request)
+            bucket, object_key = _store_image(key_prefix=f"parcels/{parcel.id}", body=body)
         except _RejectedUpload as rejected:
             return rejected.response
 
@@ -733,7 +730,7 @@ class ParcelMediaUploadView(APIView):
             purpose=ParcelMedia.Purpose.ATTACHMENT,
             bucket=bucket,
             object_key=object_key,
-            content_type=upload.content_type,
+            content_type="image/jpeg",
             bytes=len(body),
         )
         return Response(

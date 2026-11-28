@@ -9,6 +9,7 @@ from rest_framework import serializers
 from apps.accounts.photos import public_photo
 from apps.locations.models import Location, Place, SeaCrossing
 from apps.locations.serializers import PublicLocationSerializer
+from apps.matching.find_travelers import name_seen_by
 from apps.matching.public_contract import distance_band
 from apps.parcels.models import ParcelRequest
 from apps.routing.geometry import GeoPoint
@@ -877,7 +878,7 @@ class JourneySerializer(serializers.ModelSerializer):
         )
 
     traveler_id = serializers.IntegerField(read_only=True)
-    traveler_name = serializers.CharField(source="traveler.full_name", read_only=True)
+    traveler_name = serializers.SerializerMethodField()
     traveler_photo = serializers.SerializerMethodField()
     start_location = PublicLocationSerializer(read_only=True)
     destination_location = PublicLocationSerializer(read_only=True)
@@ -918,6 +919,10 @@ class JourneySerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = fields
+
+    def get_traveler_name(self, obj: Journey) -> str:
+        request = self.context.get("request")
+        return name_seen_by(request.user if request else None, obj.traveler)
 
     def get_traveler_photo(self, obj: Journey) -> dict | None:
         """The traveler's public photo (spec 21), the same block every card carries."""
