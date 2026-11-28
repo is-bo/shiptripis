@@ -45,6 +45,9 @@ Console: **Retire Stripe account** on the traveler's Payouts tab (only with `ret
 `finance/payout-accounts/<id>/retire/`, guarded by the same capability; the form collects the reason
 and shows the domain's refusal text. `docs/ADMIN_OPERATIONS.md` says when and how.
 
+The staff helper knows the page: a how-to task `retire_payout_account` (`apps/admin_helper/tasks.py`)
+and an entry in `actions.NEVER`, so the helper explains it and never does it.
+
 ## 2. The readiness job guard
 
 `jobs.handle_payout_account_refresh` returns `account_other_environment` before any provider call
@@ -73,5 +76,11 @@ Red: each fix removed in turn against the new tests (local runs, 2026-11-28).
 | A dispatch queued behind the retirement sees it | `RetireRacesDispatchTests` (threads, PostgreSQL) | `_lock_payout_aggregate` re-read | yes |
 | Console form from the payout page | `TestConsoleForm::test_finance_retires_with_a_reason_from_the_travelers_payout_page` | new | yes |
 | Job: current platform refreshed; other platform or mode, no provider call | `test_f1b_refresh_job_environment` | job guard | yes |
+
+Rewritten to the new rule: `test_phase8fh6a_mobile::test_eur_method_states`, case `active=False`. It
+expected `needs_attention` with no action, from before anything set an account inactive. An inactive
+account is now one Finance retired, and the brief has the page offer setup again: `setup_required`
+with `configure_eur`. The helper's coverage tests (`test_l15_api`, `test_l16_coverage`) pass with the
+new route listed.
 
 Screenshots: `docs/screenshots/f1b/` (the form, and the payout tab at 360 px).

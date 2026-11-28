@@ -1,6 +1,7 @@
 # F1b status
 
-Branch `claude/project-thread-13gwfo`. Server and console only, no migration.
+Branch `claude/project-thread-13gwfo`. Server and console only, no migration. Taken over on
+2026-11-28: `main` merged in, the helper's coverage lists and one fh6a case fixed (see the phase doc).
 
 - Done: `retire_account` (Finance, reason, audit row, refused while a payout is processing, sent or
   failed, idempotent refusal when already retired); the console form on the traveler's Payouts tab;

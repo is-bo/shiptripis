@@ -406,6 +406,19 @@ TASKS: tuple[Task, ...] = (
         route="admin_console:payout-accounts",
         covers=("payout-accounts",),
     ),
+    Task(
+        code="retire_payout_account",
+        title="Retire a traveler's Stripe payout account",
+        asks=("A traveler's Stripe account is for the wrong country. What do I do?",),
+        steps=(
+            "Open the person's page from People, then Users, and open the Payouts tab.",
+            "Press Retire Stripe account and write the reason. A payout still in progress to the account blocks it.",
+            "The traveler is offered payout setup again, and their next setup opens a new account for the country they declare.",
+        ),
+        permission=("retry_payouts",),
+        route="admin_console:users",
+        covers=("payout-account-retire",),
+    ),
     # --- finance overview ---------------------------------------------------------
     Task(
         code="finance_overview",

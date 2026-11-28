@@ -130,7 +130,8 @@ def test_j1_setup_notification_uses_funded_instruction_not_current_preference():
     ({}, "ready"), ({"transfers_status": "pending"}, "pending_verification"),
     ({"details_submitted": False}, "setup_required"),
     ({"disabled_reason": "rejected.fraud"}, "needs_attention"),
-    ({"active": False}, "needs_attention"),
+    # F1b: an inactive account is one Finance retired, and the page offers setup again.
+    ({"active": False}, "setup_required"),
 ])
 def test_eur_method_states(changes, expected):
     s, _, account, _ = build_stripe_payout(prefix="h6states")
@@ -142,7 +143,7 @@ def test_eur_method_states(changes, expected):
     assert result["state"] == expected
     assert "acct_" not in str(result) and "ba_" not in str(result)
     if changes.get("active") is False:
-        assert not result["available_actions"]
+        assert result["available_actions"] == ["configure_eur"]
     assert eur_method(None, setup_gate(s.traveler))["state"] == "not_configured"
 
 
