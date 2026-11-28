@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from datetime import timedelta
 from decimal import Decimal
+from io import BytesIO
 from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils import timezone
+from PIL import Image
 from rest_framework.test import APIClient, APITestCase
 
 from apps.accounts.models import User
@@ -461,11 +463,8 @@ class JourneyApiTests(APITestCase):
         assert proof_response.status_code == 403
         assert proof_response.data["code"] == "journey_not_owned"
 
-    @patch("apps.trips.views.image_bytes_match_extension", return_value=True)
     @patch("apps.trips.views.put_object")
-    def test_proof_storage_fields_are_visible_only_to_owner(
-        self, _put_object, _valid_image
-    ):
+    def test_proof_storage_fields_are_visible_only_to_owner(self, _put_object):
         create_response = self.client.post(
             reverse("journeys-list-create"),
             self._canonical_payload(),
@@ -473,9 +472,11 @@ class JourneyApiTests(APITestCase):
         )
         journey_id = create_response.data["id"]
         flight_leg_id = create_response.data["legs"][0]["id"]
+        ticket = BytesIO()
+        Image.new("RGB", (64, 32), "white").save(ticket, format="JPEG")
         upload = SimpleUploadedFile(
             "ticket.jpg",
-            b"test-jpeg-content",
+            ticket.getvalue(),
             content_type="image/jpeg",
         )
 

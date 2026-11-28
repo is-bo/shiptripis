@@ -114,7 +114,7 @@ Related files: money.md (payout protection, how payouts are released, refunds), 
 ## What evidence can be added?
 - Who: either party, and staff with the evidence capability. Only while the dispute is active ("This dispute is no longer accepting evidence.").
 - Kinds: text statement (up to 4,000 characters), photo, video.
-- Limits (stored business settings; the item count shows read-only as "Dispute evidence limit" in the console Business settings "Lifecycle guardrails" table, with no form to change it): 20 items, 25 MiB (26,214,400 bytes) per file, types JPEG, PNG, WebP, MP4, MOV (QuickTime). Files are also checked against their real content.
+- Limits (stored business settings; the item count shows read-only as "Dispute evidence limit" in the console Business settings "Lifecycle guardrails" table, with no form to change it): 20 items, 25 MiB (26,214,400 bytes) per file, types JPEG, PNG, WebP, MP4, MOV (QuickTime). Files are also checked against their real content. A photo is stored as a new JPEG made from its pixels, upright, at most 2560 px on the longer side, with no hidden data (no location, camera or date); an animated image is refused. A video is stored as sent.
 - Evidence cannot be edited or removed. Files open only through a short-lived link (5 minutes).
 - Staff view of evidence files needs `view_evidence` and is audited.
 - Refusals: "That file type is not accepted as dispute evidence.", "That file is larger than the evidence size limit.", "This dispute already holds the maximum number of evidence items."
