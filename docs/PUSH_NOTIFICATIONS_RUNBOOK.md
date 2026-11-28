@@ -171,8 +171,8 @@ nothing there; the number the app still sends with it is not read. Every sign-in
 is a server row (`SignInSession`) named by the `sid` claim of each of its
 tokens, rotations included. A sign-out ends its sign-in and switches off every
 device that sign-in registered, so a late sign-out never touches what a later
-sign-in registered. Every password change (`write_password`: a reset, the staff
-technical admin's form, an account closed or claimed) ends every sign-in of the
+sign-in registered. Every password change (`write_password`: a reset, the
+technical admin's two password forms, an account closed or claimed) ends every sign-in of the
 account through `end_all_sessions`. A registration, and a refresh, from a
 sign-in that has ended is refused (`409 push_session_ended`, checked under the
 account row lock that ending a sign-in also takes). A slow registration can
@@ -186,7 +186,9 @@ or by a refresh token this server signed, whatever else is true of it: its
 sign-in live or already ended, the token rotated meanwhile or expired, the
 account deleted (ending the sign-in is all it can do). A repeat answers 205 and
 writes nothing. A proof this server cannot verify, or none, answers 400
-`sign_out_proof_invalid`. The app sends it from the Sign-out button and also
+`sign_out_proof_invalid`. Only the signature counts, not the token's age, and the
+endpoint has its own per-address throttle (`DRF_SIGN_OUT_THROTTLE_RATE`), so the
+shared guest quota never holds a sign-out up. The app sends it from the Sign-out button and also
 when it lets a session go because renewing it failed, with that refresh token
 alone. A queued push carries, for each device, the sign-in that registered it,
 and is sent only to the devices still switched on for its recipient with the

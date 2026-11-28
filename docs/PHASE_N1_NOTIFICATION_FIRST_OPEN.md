@@ -25,7 +25,8 @@ Nothing deployed. Round history is in git and in `docs/handoff/astra/results/`.
 - **Registration** waits for sign-in. One installation ID per phone; each registration takes the next
   number of one counter (`push.binding_sequence`, only grows, kept through logout). Only the newest
   attempt may settle state or clear the pending token; behind the server, the phone raises its counter
-  to `current_sequence` and registers once more. The app reads `active` from the receipt.
+  to `current_sequence` and registers once more. The app reads `active` from the receipt. It sends
+  Firebase's current token, the one a refresh carried only when Firebase has none.
 - **Leaving a sign-in.** The Sign-out button, and a session dropped because renewing it failed, send
   `POST /api/auth/sign-out` best-effort. N1 does not change how the phone exits (S1 replaces that code);
   the installation ID and number the phone still sends with a sign-out are no longer read.
@@ -42,7 +43,9 @@ Nothing deployed. Round history is in git and in `docs/handoff/astra/results/`.
   is a valid access token (its own sign-in) or a refresh token this server signed, whatever else is true
   of it: live, already ended, expired, rotated, or of a deleted account. After a 205 the sign-in is ended
   and every device it registered is off; a repeat answers 205 and writes nothing. A proof that cannot be
-  verified as ours, or none, answers `400 sign_out_proof_invalid` (the 401 is gone).
+  verified as ours, or none, answers `400 sign_out_proof_invalid` (the 401 is gone). Only the signature
+  counts, not the expiry or the issue time; the throttle is its own roomy scope (`sign_out`), apart from
+  the shared guest quota; an account deleted mid-request answers 205.
 - **The sign-in row decides (N-B).** `end_session` writes nothing when the sign-in is not live, and
   otherwise switches off only that sign-in's devices (`deactivate_session_push_devices`). A sign-out
   records nothing in `PushInstallationBinding`, which now holds registrations and unregisters only (its
@@ -53,8 +56,9 @@ Nothing deployed. Round history is in git and in `docs/handoff/astra/results/`.
 - **Credentials have named writers (N-D).** `write_password` (`sessions.py`) sets a password, or makes
   it unusable, and for an existing account ends every sign-in in the same transaction, under the lock.
   Its callers: the reset, sign-up, the Google and Apple account paths, account deletion, the invitation
-  of a new staff member, the bootstrap command and the technical admin's password form. Every save of an
-  existing user names its fields. No override of `User.save()`.
+  of a new staff member, the bootstrap command, and both of Django's admin password forms (a member's,
+  and an operator's own at `/admin/password_change/`), which save through `_WritesPassword`
+  (`accounts/admin.py`). Every save of an existing user names its fields. No override of `User.save()`.
 - **The technical admin** (`apps/accounts/admin.py`) saves an existing user with
   `update_fields` = the model fields in `form.changed_data`, never `password` or `session_epoch`. Staff
   rights are read only there (decision D5), with one line saying where they change:
@@ -92,12 +96,14 @@ notification WebSocket closes when the token that opened it stops being valid (e
 | N-F: a queued push names each device's sign-in | `test_push.py::test_a_queued_push_names_the_sign_in_of_each_device` | `d830d22` | `621cf4d` |
 | N-F: the row as it is now; same member new sign-in, other member, off, token rotated | Go `TestPostgresDevicesKeepAPushToItsSignIn` (integration, real PostgreSQL) | `d830d22` | `621cf4d` |
 | N-F: a retry is checked again, with its sign-in | Go `TestFCMChecksARetryAgainWithItsSignIn` | | `621cf4d` |
+| Final review, Blocker C: the admin site's own password form saves the whole row and ends no sign-in | `TechnicalAdminSaveTests::test_the_site_password_form_ends_every_sign_in`, `::test_a_reset_during_the_site_password_form_keeps_the_epoch_moving` | `a5d5e57` | `2db6cf7` |
+| Final review: a genuine proof read by a clock a few seconds behind; the shared guest quota spent; the account deleted between the two lookups | `SignOutContractTests` (3 tests) | `a5d5e57` | `2db6cf7` |
+| Final review: a late repeat of a replaced Firebase token | `n1_notification_recovery_test.dart` "a late repeat of a replaced token registers the current one" | `a5d5e57` | `2db6cf7` |
 | Socket expiry stays | Go `TestUpgrade_ClosesWhenTheTokenExpires`, `TestUpgrade_RefusesATokenWithoutExpiry` | | kept |
 
-Mutation checks: the scan guard fails at the line of a whole-row save put back into `deletion.py`, and
-the concurrent-change test of that path fails with it. The phone's prompt and registration tests
-(`k5_cold_start_test.dart`, `n1_notification_recovery_test.dart`, `phase8ff4_session_test.dart`) were
-each checked to fail with their fix removed in earlier rounds.
+Mutation: the scan guard fails at a whole-row save put back into `deletion.py`, with that path's
+concurrent-change test. The phone's prompt and registration tests were each checked to fail with their
+fix removed in earlier rounds.
 
 ## Tests removed or rewritten, against `main`
 
@@ -110,7 +116,8 @@ each checked to fail with their fix removed in earlier rounds.
 - Server: the account-deletion test asserts the sign-in ended instead of a blacklist; the K7
   speed-budget test mints its tokens through a real sign-in, outside the counted queries; device
   fixtures elsewhere now carry the sign-in that registered them.
-- Phone: the first-open tests run on a real router; the "Profile only" and "Android fresh install reads
+- Phone: "a refreshed token the keystore cannot keep" now makes the fake Firebase hold the new token, as
+  the real one does once it hands a refresh over. The first-open tests run on a real router; the "Profile only" and "Android fresh install reads
   as denied" rules were replaced; `egs_guest_mode_test.dart` now pins `/profile/notifications` as
   public; the two registration-retry tests use an HTTP 500 again.
 
@@ -139,3 +146,5 @@ first-open prompt is the system's own dialog and cannot be captured here.
   hasher change (Django's `check_password` setter).
 - A renewal failing on the network signs out on the phone (S1, S2). A ban ends none of the member's
   sign-ins.
+- The Go worker can still hand a push to Firebase when a reset commits between its device check and the
+  handoff (the same on `main`; final review, out of scope).

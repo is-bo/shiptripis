@@ -11,10 +11,12 @@
   `notifications.0009`); a sign-out records nothing there and switches off only its own sign-in's
   devices.
 - `POST /api/auth/sign-out` answers 205 for any proof this server signed (live, ended, expired,
-  rotated, deleted account; a repeat writes nothing) and `400 sign_out_proof_invalid` otherwise.
+  rotated, deleted account; a repeat writes nothing) and `400 sign_out_proof_invalid` otherwise. It
+  has its own throttle scope, `sign_out` (`DRF_SIGN_OUT_THROTTLE_RATE`, `300/min`).
 - One credential writer, `write_password`, ends every sign-in of an existing account; every save of
   a loaded user names its fields (a test-time guard in `conftest.py` and a scan enforce both). The
-  technical admin saves only what its form changed, and staff rights are read only there (D5).
+  technical admin saves only what its form changed, both its password forms go through the writer,
+  and staff rights are read only there (D5).
 - A queued push carries each device's sign-in; the Go worker checks user, device, token and sign-in
   against the row right before each send and retry. Detail and evidence:
   `docs/PHASE_N1_NOTIFICATION_FIRST_OPEN.md`.
