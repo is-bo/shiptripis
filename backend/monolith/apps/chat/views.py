@@ -18,7 +18,6 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status as http
-from rest_framework.generics import ListAPIView
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -58,14 +57,12 @@ class _Pagination(PageNumberPagination):
     max_page_size = 200
 
 
-class ChatMessagesView(ListAPIView, APIView):
+class ChatMessagesView(APIView):
     """GET  /api/matches/<id>/chat/messages — thread history, oldest first.
     POST /api/matches/<id>/chat/messages — send a message.
     """
 
-    serializer_class = ChatMessageSerializer
     permission_classes = (IsAuthenticated,)
-    pagination_class = _Pagination
 
     def get_throttles(self):
         if self.request.method == "POST":
@@ -108,8 +105,8 @@ class ChatMessagesView(ListAPIView, APIView):
             .order_by("id")
         )
 
-    def list(self, request, *args, **kwargs):
-        """Serve the legacy page API or an additive ID-keyset read contract.
+    def get(self, request: Request, pk: int) -> Response:
+        """Read history by message-ID keyset; without a cursor, the latest window.
 
         Cursor reads deliberately avoid a generated next URL: the client
         carries the immutable message ID itself and can reconnect without
@@ -122,13 +119,6 @@ class ChatMessagesView(ListAPIView, APIView):
         cursor, page_size, error = self._read_options(request)
         if error is not None:
             return error
-
-        if cursor is None:
-            page = self.paginate_queryset(self.filter_queryset(queryset))
-            data = self.get_serializer(page, many=True).data
-            response = self.get_paginated_response(data)
-            self._mark_fetched_read(request, [row["id"] for row in data])
-            return response
 
         if cursor[0] == "latest":
             rows = list(queryset.order_by("-id")[: page_size + 1])
@@ -184,12 +174,6 @@ class ChatMessagesView(ListAPIView, APIView):
                 {"detail": "latest, after_id, and before_id are mutually exclusive."},
                 status=http.HTTP_400_BAD_REQUEST,
             )
-        if supplied and "page" in params:
-            return None, None, Response(
-                {"detail": "Cursor history cannot be combined with page."},
-                status=http.HTTP_400_BAD_REQUEST,
-            )
-
         for name in ("page_size", *cursor_names):
             if len(params.getlist(name)) > 1:
                 return None, None, Response(
@@ -206,7 +190,7 @@ class ChatMessagesView(ListAPIView, APIView):
             )
 
         if not supplied:
-            return None, page_size, None
+            return ("latest", None), page_size, None
         name = supplied[0]
         if name == "latest":
             if params.get("latest") != "1":
