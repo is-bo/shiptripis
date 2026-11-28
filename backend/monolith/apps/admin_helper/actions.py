@@ -1248,6 +1248,7 @@ NEVER: dict[str, str] = {
     "payment-reconcile": "Reconciling a payment with its provider.",
     "payment-resolve": "Resolving a payment exception.",
     "refund-detail": "Settling a refund by hand.",
+    "payout-account-retire": "Retiring a traveler's Stripe payout account.",
     "job-bulk": "Deciding background jobs in bulk: the helper prepares one job at a time.",
     "sea-crossing-new": "Adding a sea crossing to the geography.",
     "finance-exports": "Finance exports: files for the admin, never for an assistant.",

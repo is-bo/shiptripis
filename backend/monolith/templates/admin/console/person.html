@@ -217,6 +217,12 @@
           <div><dt>EUR · Stripe Connect</dt><dd><span class="st-chip st-{{ body.readiness.eur.tone }}">{{ body.readiness.eur.label }}</span>{% if body.stripe %}<small>{{ body.stripe.status }} &middot; payouts {{ body.stripe.payouts_enabled|yesno:"enabled,off" }} &middot; {{ body.stripe.bank|yesno:"EUR bank on file,no EUR bank" }}{% if body.stripe.checked_at %} &middot; checked {{ body.stripe.checked_at|date:"d M Y" }}{% endif %}</small>{% endif %}</dd></div>
           <div><dt>DZD · Algerian CCP</dt><dd><span class="st-chip st-{{ body.readiness.dzd.tone }}">{{ body.readiness.dzd.label }}</span></dd></div>
         </dl>
+        {% if body.stripe.retire_url %}
+        <div class="st-split-actions">
+          <a class="button st-button-quiet" href="{{ body.stripe.retire_url }}">Retire Stripe account</a>
+          <span class="st-muted">Opened for {{ body.stripe.country }}. Retire it when the traveler needs an account for another country.</span>
+        </div>
+        {% endif %}
       </section>
 
       <section class="st-card">

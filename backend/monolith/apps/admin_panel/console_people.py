@@ -1072,6 +1072,8 @@ def build_payouts(request, person, caps, header, source):
                 "bank": account.eur_bank_present,
                 "checked_at": account.readiness_checked_at,
                 "country": account.verified_country or account.declared_country,
+                "retire_url": reverse("admin_console:payout-account-retire", args=(account.pk,))
+                if caps("retry_payouts") else None,
             }
 
     history = None

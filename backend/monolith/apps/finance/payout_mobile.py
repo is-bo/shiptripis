@@ -87,8 +87,9 @@ def _eur_rail(method, gate, creation):
     bound = version.stripe_account if version else None
     # Setup is decided in the configured platform and mode only. A method still
     # bound to an account from another one keeps it as history (the method
-    # projection shows it), and onboarding here binds this environment's.
-    account = bound if bound is not None and in_this_environment(bound) else None
+    # projection shows it), and onboarding here binds this environment's. So
+    # does an account Finance retired.
+    account = bound if bound is not None and bound.active and in_this_environment(bound) else None
     countries = list(gate.countries)
     country = version.country if version else ""
     country_supported = not country or country in countries
@@ -152,7 +153,7 @@ def _eur_rail(method, gate, creation):
     # does not stop it.
     connect = gate.refusal is None and gate.connect
     actions = []
-    if connect and account and account.active:
+    if connect and account:
         actions.append("refresh")
         if account.details_submitted:
             actions.append("manage_eur")

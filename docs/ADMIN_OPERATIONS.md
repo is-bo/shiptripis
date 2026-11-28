@@ -138,6 +138,30 @@ an amount or a destination. When the page says an operation's outcome is
 unknown, the money may already have moved: nothing new will be sent for that
 payout, and no button on the page can resolve it — only a provider read can.
 
+### Retiring a Stripe payout account (F1b)
+
+Stripe never changes the country of a connected account, and a Traveler has one
+active account per platform and mode. A Traveler whose account was opened for
+the wrong country (for example FR, while they now declare DE) is therefore
+stuck: their payout setup says `stripe_account_country_mismatch` and offers no
+way on. **When:** only then, once you have confirmed with the Traveler which
+country their bank account and identity are in.
+
+**How:** open the Traveler's page, tab **Payouts**, and choose **Retire Stripe
+account** under Payout methods. Give a reason; it is recorded in the audit log
+(`payout_account.retired`, with the account's state before and after) and is
+not shown to the Traveler. You need the `retry_payouts` capability (Finance and
+Super Admin). Afterwards the account no longer serves this Traveler, their
+payout setup offers EUR setup again, and their next onboarding opens a new
+account for the country they now declare. Nothing changes at Stripe.
+
+It is refused while a payout to that account is in progress (processing, sent,
+or failed and waiting for Finance): resolve that payout first. Payouts already
+funded keep their instructions; execution refuses to send one to the retired
+account (`account_missing`), and Finance settles it like any other blocked payout. A
+second retirement of the same account reports that it is already retired and
+records nothing.
+
 ## Staff and settings
 
 On **Staff**, enter a work email, choose one fixed role and an expiry. The
