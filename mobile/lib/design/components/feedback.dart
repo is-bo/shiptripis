@@ -221,6 +221,7 @@ String staleMessage(BuildContext context, ApiErrorCode code) {
     'stripe_connect_unavailable' => l.staleStripeConnectUnavailable,
     'stripe_connect_provider_error' => l.staleStripeConnectProviderError,
     'payout_setup_invalid' => l.stalePayoutSetupInvalid,
+    'payout_setup_in_progress' => l.stalePayoutSetupInProgress,
     'payout_evidence_unavailable' => l.stalePayoutEvidenceUnavailable,
     _ => l.staleRefreshAction,
   };

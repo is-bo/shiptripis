@@ -524,21 +524,61 @@ class ImageRejected(ValueError):
     """Bytes the server will not decode as an image."""
 
 
+#: The longer side, in pixels, of a stored parcel photo, ticket proof or
+#: dispute photo: a boarding pass's small print and barcode stay readable.
+MAX_STORED_IMAGE_SIDE = 2560
+
+
 def square_jpeg_without_metadata(body: bytes, *, size: int, quality: int = 85) -> bytes:
     """Re-encode an uploaded image as a centred ``size`` square JPEG with no metadata.
+
+    The profile photo's shape: see `_jpeg_from_pixels` for what is removed. An
+    animated file keeps its first frame.
+    """
+
+    return _jpeg_from_pixels(
+        body,
+        lambda flat: ImageOps.fit(
+            flat, (size, size), method=Image.Resampling.LANCZOS, centering=(0.5, 0.5)
+        ),
+        quality=quality,
+        still_only=False,
+    )
+
+
+def jpeg_without_metadata(body: bytes, *, max_side: int = MAX_STORED_IMAGE_SIDE) -> bytes:
+    """Re-encode an uploaded image as a JPEG with no metadata, keeping its shape.
+
+    Every stored parcel photo, ticket proof and dispute photo goes through
+    here, so a photo taken at the sender's home does not carry its position to
+    whoever may open it. The longer side is brought down to ``max_side``; a
+    smaller image keeps its size. An animated file is refused: evidence is one
+    picture, and a first frame could hide what the others show.
+    """
+
+    return _jpeg_from_pixels(
+        body,
+        lambda flat: flat
+        if max(flat.size) <= max_side
+        else ImageOps.contain(flat, (max_side, max_side), method=Image.Resampling.LANCZOS),
+        quality=85,
+        still_only=True,
+    )
+
+
+def _jpeg_from_pixels(body: bytes, shape, *, quality: int, still_only: bool) -> bytes:
+    """Decode ``body``, make it upright and flat, ``shape`` it, and write a new JPEG.
 
     Upload bytes may carry what a phone wrote into them: GPS coordinates, the
     camera, the time, a thumbnail of the uncropped picture. None of it may
     reach anyone else, so the original is never stored. The image is decoded
     (with the same pixel ceiling as `image_bytes_match_extension`), turned
-    upright from its EXIF orientation, cropped to its centred square, resized
-    and written afresh as a JPEG from pixels alone: no EXIF, XMP, ICC profile
-    or comment survives. Transparency, an alpha channel or a PNG colour key
-    (``tRNS``), is flattened onto white before resizing.
+    upright from its EXIF orientation and written afresh as a JPEG from pixels
+    alone: no EXIF, XMP, ICC profile or comment survives. Transparency, an
+    alpha channel or a PNG colour key (``tRNS``), is flattened onto white.
 
-    Accepts JPEG, PNG and WebP; an animated file keeps its first frame. Any
-    decoder failure raises `ImageRejected`, never anything else, for the
-    reason `image_bytes_match_extension` gives.
+    Accepts JPEG, PNG and WebP. Any decoder failure raises `ImageRejected`,
+    never anything else, for the reason `image_bytes_match_extension` gives.
     """
 
     if not _declared_canvas_allowed(body):
@@ -549,6 +589,8 @@ def square_jpeg_without_metadata(body: bytes, *, size: int, quality: int = 85) -
                 raise ImageRejected("unsupported image format")
             if image.width * image.height > MAX_IMAGE_PIXELS:
                 raise ImageRejected("image too large to decode")
+            if still_only and getattr(image, "n_frames", 1) != 1:
+                raise ImageRejected("animated image")
             upright = ImageOps.exif_transpose(image)
             if upright.has_transparency_data:
                 rgba = upright.convert("RGBA")
@@ -556,11 +598,9 @@ def square_jpeg_without_metadata(body: bytes, *, size: int, quality: int = 85) -
                 flat.paste(rgba, mask=rgba.getchannel("A"))
             else:
                 flat = upright.convert("RGB")
-            square = ImageOps.fit(
-                flat, (size, size), method=Image.Resampling.LANCZOS, centering=(0.5, 0.5)
-            )
+            shaped = shape(flat)
             # A new image from the pixels only: nothing in `info` can follow.
-            clean = Image.frombytes("RGB", square.size, square.tobytes())
+            clean = Image.frombytes("RGB", shaped.size, shaped.tobytes())
             out = BytesIO()
             clean.save(out, format="JPEG", quality=quality, optimize=True)
     except ImageRejected:

@@ -39,6 +39,17 @@ from apps.trips.models import Journey, JourneyLeg
 from apps.finance.models import PaymentAttempt, PaymentOrder, ScheduledJob
 from apps.finance.policy import Phase3Policy, phase3_policy
 from apps.finance.providers.mock import MOCK_WEBHOOK_SECRET
+from apps.finance.sensitive_data import CCP_NUMBER_DIGITS, CCP_RIP_PREFIX
+
+
+def ccp_rip(number: str, key: str = "00") -> str:
+    """A synthetic CCP RIP that carries `number`, as Algérie Poste builds one.
+
+    The key is not computed; the server checks the RIP's shape and that it
+    carries the CCP number, not its key.
+    """
+
+    return CCP_RIP_PREFIX + number.lstrip("0").zfill(CCP_NUMBER_DIGITS) + key
 
 
 def make_user(

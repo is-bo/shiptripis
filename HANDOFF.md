@@ -23,6 +23,10 @@ public repository: they live in Ismail's uncommitted `CLAUDE.local.md` on his PC
   It replaces the order in 0.4.
 - **Reviews (D1, plan 3.4):** only a Blocker stops a merge. One Astra pass for F1, F1b, G1, N1, S1
   and S2; a Blocker is fixed and re-checked once, the fix only.
+- **Ismail's standing rule, 2026-11-28 (overrides the Astra pass above):** no more Astra reviews.
+  Merge each package when every CI check is green, take the recommended option without asking, and
+  do not wait for his input until the VPS step (deploy, restart and server changes still need his OK).
+- **In progress:** L2 (old trips, product requests, schema versions) has started.
 
 ### 0.1 Where everything stopped (2026-11-27)
 Ismail ran out of usage on his account and **stopped all four builders at about 11:20 UTC**. Each
@@ -69,6 +73,7 @@ EGS #53, STORE fixes #54.
 Ponytail working rules #72 (`d44345a`, 2026-11-27): documents and skill files only, no code. Every agent now works under the "Working style: ponytail" section of `CLAUDE.md`.
 H1 #73 (`37eedf1`, 2026-11-27): stale root files and tool folders removed, root docs corrected, 0 broken doc links. Seven old branches await Ismail's manual deletion.
 L1 #74 (`1e8c41c`, 2026-11-27): the old payments, wallet and handover-code tables are dropped (one migration per app; the three apps stay as empty shells so the drop runs on existing databases), their admin pages and `core/historical_admin.py` removed, chat gated on the Deal only. L4's `historical_admin.py` item is done. Follow-ups: the chat inbox `route` is always empty for V1 requests; `REASON_V1_PAYMENT_UNAVAILABLE` has no reader (DC).
+PV #75 (`f1d973c`, 2026-11-28): photos stored without metadata, first names for other members. Follow-ups: dispute videos are stored as sent and keep their metadata; payout evidence could be re-encoded later.
 
 ### 0.4 Next packages, in order (each planned in `docs/WASSLA_PHONE_TEST_2_PLAN.md`, each reviewed by Astra)
 Replaced by plan section 9 (see 0.0); kept for the package descriptions.

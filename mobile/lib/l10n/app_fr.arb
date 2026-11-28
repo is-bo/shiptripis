@@ -97,6 +97,7 @@
   "staleStripeConnectUnavailable": "La configuration des paiements en EUR est momentanément indisponible. Vos informations sont inchangées — réessayez dans un instant.",
   "staleStripeConnectProviderError": "Stripe n’a pas pu traiter la demande. Rien n’a été modifié ; réessayez dans un instant.",
   "stalePayoutSetupInvalid": "Cette configuration de paiement n’a pas pu être finalisée. Vérifiez les informations et réessayez.",
+  "stalePayoutSetupInProgress": "Votre compte Stripe pour les paiements en EUR est en cours de création. Poursuivez d’abord la configuration ; vous pourrez changer de pays ou désactiver les paiements en EUR une fois celle-ci terminée.",
   "stalePayoutEvidenceUnavailable": "Le document envoyé n’est plus disponible. Veuillez téléverser de nouveau le chèque barré.",
   "staleOfferExpired": "Cette offre n’est plus disponible.",
   "moneyYouPay": "Vous payez",

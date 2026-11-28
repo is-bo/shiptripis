@@ -328,6 +328,10 @@ class LEn extends L {
       'That payout setup could not be completed. Check the details and try again.';
 
   @override
+  String get stalePayoutSetupInProgress =>
+      'Your Stripe payout account is being created. Continue the setup first; you can change the country or turn off EUR payouts once it is done.';
+
+  @override
   String get stalePayoutEvidenceUnavailable =>
       'The uploaded document is no longer available. Please upload the crossed cheque again.';
 

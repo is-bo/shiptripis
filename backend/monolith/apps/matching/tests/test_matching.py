@@ -167,7 +167,7 @@ class MatchListAndDetailTests(APITestCase):
         assert r.data["latest_offer"]["total_dzd"] == 5000
         assert r.data["accepted_offer"] is None
 
-    def test_match_detail_includes_full_names(self):
+    def test_match_detail_names_the_viewer_whole_and_the_other_party_by_first_name(self):
         self.sender.full_name = "Amine Khelifi"
         self.sender.save(update_fields=["full_name"])
         self.traveler.full_name = "Yacine Bensalah"
@@ -176,9 +176,9 @@ class MatchListAndDetailTests(APITestCase):
         r = c.get(reverse("matches-detail", args=[self.match.id]))
         assert r.status_code == 200
         assert r.data["sender_name"] == "Amine Khelifi"
-        assert r.data["traveler_name"] == "Yacine Bensalah"
+        assert r.data["traveler_name"] == "Yacine"
 
-    def test_match_list_includes_full_names(self):
+    def test_match_list_names_the_viewer_whole_and_the_other_party_by_first_name(self):
         self.sender.full_name = "Amine Khelifi"
         self.sender.save(update_fields=["full_name"])
         self.traveler.full_name = "Yacine Bensalah"
@@ -188,7 +188,7 @@ class MatchListAndDetailTests(APITestCase):
         assert r.status_code == 200
         row = next(m for m in r.data if m["id"] == self.match.id)
         assert row["sender_name"] == "Amine Khelifi"
-        assert row["traveler_name"] == "Yacine Bensalah"
+        assert row["traveler_name"] == "Yacine"
 
 
 class ChatEligibilityTests(APITestCase):

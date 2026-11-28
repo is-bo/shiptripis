@@ -23,9 +23,7 @@ from __future__ import annotations
 
 import logging
 
-from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError as DomainError
-from django.http import Http404
 from django.shortcuts import render
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -38,12 +36,9 @@ from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
-from apps.accounts.permissions import EmailVerifiedToWrite
-
 from .payout_accounts import (
-    ConnectUnavailable,
-    CountryUnsupported,
-    allowed_countries,
+    AccountKeptProviderError,
+    destination_account,
     open_dashboard,
     read_onboarding_state,
     refresh_account,
@@ -51,7 +46,14 @@ from .payout_accounts import (
     resolve_state_account,
     start_onboarding,
 )
-from .payout_profile_api import StrictInput, method_projection
+from .payout_mobile import setup_gate
+from .payout_profile_api import (
+    PayoutSetupMember,
+    StrictInput,
+    method_projection,
+    one_read,
+    setup_refusal,
+)
 from .providers.base import ProviderError
 from .providers.stripe_connect import get_connect_gateway
 from .models import TravelerPayoutMethod
@@ -67,27 +69,24 @@ class ConnectThrottle(UserRateThrottle):
 
 
 class OnboardingInput(StrictInput):
-    #: Only meaningful on the first call, and only ever an account country the
-    #: deployment has actually validated.
+    #: Optional. When present it must be the saved EUR declaration's country:
+    #: the call checks that the caller saw the same declaration. A country
+    #: change is the preference PATCH's.
     country = serializers.CharField(
         max_length=2, required=False, default="", allow_blank=True
     )
 
 
 class ConnectView(APIView):
-    # Writing payout setup needs a confirmed email (L18A, as `ProfileView`).
-    permission_classes = [IsAuthenticated, EmailVerifiedToWrite]
+    # As `ProfileView`: the member setup gate, a confirmed email included
+    # (L18A), before the body is read.
+    permission_classes = [IsAuthenticated, PayoutSetupMember]
     throttle_classes = [ConnectThrottle]
 
     def finalize_response(self, request, response, *args, **kwargs):
         response = super().finalize_response(request, response, *args, **kwargs)
         response["Cache-Control"] = "no-store, private"
         return response
-
-    def initial(self, request, *args, **kwargs):
-        super().initial(request, *args, **kwargs)
-        if not settings.PAYOUT_PROFILES_ENABLED:
-            raise Http404
 
     def _method(self, request):
         method = TravelerPayoutMethod.objects.filter(
@@ -102,47 +101,29 @@ class ConnectView(APIView):
 
         Ownership is derived server-side from the authenticated user every
         time. There is no request field naming an account, so there is nothing
-        for one Traveler to point at another's setup with.
+        for one Traveler to point at another's setup with. An account from
+        another platform or mode is refused here, as the read stops offering
+        it, before any Stripe call.
         """
 
-        method = self._method(request)
-        version = method.current_version
-        account = version.stripe_account if version else None
-        if not account or account.traveler_id != request.user.pk or not account.active:
-            raise DomainError("No Stripe payout account is set up for this Traveler.")
-        return method, account
+        return destination_account(request.user)
 
     def handle_exception(self, exc):
-        if isinstance(exc, CountryUnsupported):
-            # A distinct, actionable contract: the client can name the
-            # supported countries and offer the DZD manual rail instead of
-            # showing a generic validation failure.
-            return Response(
-                {
-                    "code": "payout_country_unsupported",
-                    "detail": "Stripe EUR payouts are not available for this "
-                    "account country.",
-                    "supported_countries": list(allowed_countries()),
-                    "alternative": {"currency": "DZD", "rail": "manual"},
-                },
-                status=400,
-            )
-        if isinstance(exc, ConnectUnavailable):
-            return Response(
-                {
-                    "code": "stripe_connect_unavailable",
-                    "detail": "Stripe payout setup is not available yet.",
-                },
-                status=409,
-            )
+        refusal = setup_refusal(exc, self.request.user)
+        if refusal is not None:
+            return refusal
         if isinstance(exc, ProviderError):
             # Provider prose never reaches the client; a stable machine code
-            # does. An outage leaves the stored readiness exactly as it was.
+            # does. A failed read or creation leaves the stored readiness as it
+            # was. A failure after the account was bound keeps that account,
+            # and the next call reuses it; the client refetches either way.
             logger.warning("finance.connect_provider_error code=%s", exc.code)
             return Response(
                 {
                     "code": "stripe_connect_provider_error",
-                    "detail": "Stripe could not be reached. Nothing changed.",
+                    "detail": "Stripe did not finish this step after your payout account was saved. Try again."
+                    if isinstance(exc, AccountKeptProviderError)
+                    else "Stripe could not be reached. Try again.",
                 },
                 status=502,
             )
@@ -167,14 +148,15 @@ class StripeOnboardingView(ConnectView):
         result = start_onboarding(
             actor=request.user, country=data.validated_data["country"].upper()
         )
-        method = self._method(request)
         return Response(
             {
                 # The only place this URL ever appears. Not persisted, not
                 # audited, not logged, not pushed.
                 "onboarding_url": result["url"],
                 "expires_at": result["expires_at"],
-                "method": method_projection(method),
+                # The method as the link was checked against it, read in the
+                # same transaction.
+                "method": result["method"],
             },
             status=201,
         )
@@ -189,7 +171,9 @@ class StripeReadinessRefreshView(ConnectView):
         require_connect_enabled()
         _, account = self._account(request)
         refresh_account(account, gateway=get_connect_gateway())
-        return Response({"method": method_projection(self._method(request))})
+        with one_read():
+            body = {"method": method_projection(self._method(request), setup_gate(request.user))}
+        return Response(body)
 
 
 class StripeDashboardView(ConnectView):

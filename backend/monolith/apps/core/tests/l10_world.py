@@ -13,12 +13,14 @@ airports, the Algerian cities with coordinates and the Marseille ferry line.
 from __future__ import annotations
 
 from datetime import timedelta
+from io import BytesIO
 from unittest.mock import patch
 from uuid import uuid4
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db.models import Sum
 from django.urls import reverse
+from PIL import Image
 from rest_framework.test import APIClient
 
 from apps.admin_panel.permissions import assign_admin_roles
@@ -116,13 +118,12 @@ class AcceptanceWorld(SeaWorld):
         assert journey.status == Journey.Status.ACTIVE, journey.status
 
     def upload_ticket(self, leg: JourneyLeg) -> int:
+        ticket = BytesIO()
+        Image.new("RGB", (64, 32), "white").save(ticket, format="JPEG")
         upload = SimpleUploadedFile(
-            "ticket.jpg", b"l10-ticket", content_type="image/jpeg"
+            "ticket.jpg", ticket.getvalue(), content_type="image/jpeg"
         )
-        with (
-            patch("apps.trips.views.image_bytes_match_extension", return_value=True),
-            patch("apps.trips.views.put_object"),
-        ):
+        with patch("apps.trips.views.put_object"):
             response = api(leg.journey.traveler).post(
                 reverse("journey-leg-proof-create", args=(leg.journey_id, leg.pk)),
                 {"photo": upload, "kind": "ticket"},

@@ -326,6 +326,7 @@ class ApiErrorCode {
     'stripe_connect_provider_error',
   );
   static const payoutSetupInvalid = ApiErrorCode('payout_setup_invalid');
+  static const payoutSetupInProgress = ApiErrorCode('payout_setup_in_progress');
   static const payoutEvidenceUnavailable = ApiErrorCode(
     'payout_evidence_unavailable',
   );
