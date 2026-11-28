@@ -80,12 +80,19 @@ blacklisted token accepted fails three `LostAnswerTests`; the column never writt
 
 ## Tests removed or rewritten
 
-None. The refresh's earlier behaviour for a live, an ended and a rotated sign-in stays covered by
-`test_l18a_sessions.py`, `test_sign_out.py` and `test_credential_writers.py`, unchanged.
+- `apps/core/tests/test_phase_k7_certification_profile.py`: the statement ceiling of `auth.restore`
+  goes from 8 to 10. On `main` the first refresh of a sign-in measured 7 there. The brief's lock and
+  column add the row's `UPDATE` and the transaction around them (logged as a savepoint pair under the
+  test's own transaction; in production it is BEGIN and COMMIT, which are not counted), and the
+  blacklist's `INSERT` now runs in a savepoint of that transaction. Measured 10. A refresh happens
+  once every five minutes of use, so three more round trips cost nothing measurable.
+- No other test was removed or rewritten. The refresh's earlier behaviour for a live, an ended and a
+  rotated sign-in stays covered by `test_l18a_sessions.py`, `test_sign_out.py` and
+  `test_credential_writers.py`, unchanged.
 
 ## Not checked here
 
 - No phone: the app's repeat after a lost answer was not exercised on a device. The phone keeps
   the token it holds until a refresh answer reaches it (no app change, per the brief).
-- The whole Django suite runs in CI; locally only the accounts, notifications, ban, staff and K7
-  budget files ran.
+- The whole Django suite runs in CI. Locally, the accounts and notifications suites, the ban, staff
+  and payout-eligibility files and the K7 budget ran: 830 passed.

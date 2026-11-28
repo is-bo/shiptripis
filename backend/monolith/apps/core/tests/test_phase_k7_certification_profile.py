@@ -294,7 +294,11 @@ def _profile(world: _Marketplace, finance) -> dict[str, dict]:
 # K3/K4 ceiling wherever one already exists for the same surface.
 QUERY_CEILINGS = {
     "auth.login": 12,
-    "auth.restore": 8,
+    # S2: the refresh locks its sign-in row and records the token it rotates, in
+    # one transaction: the lock, the blacklist read, the column's UPDATE, and the
+    # blacklist's two reads and its INSERT inside a savepoint. Under the test's
+    # wrapping transaction the outer one is a savepoint too.
+    "auth.restore": 10,
     "auth.profile": 8,
     "sender.home_current_deals": 8,  # K4 deal_list
     "sender.deal_list": 8,  # K4
