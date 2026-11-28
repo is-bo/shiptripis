@@ -638,7 +638,7 @@ def handle_payout_account_refresh(payload: dict) -> str:
     """Re-read one connected account's authoritative readiness."""
 
     from .models import StripePayoutAccount
-    from .payout_accounts import refresh_account
+    from .payout_accounts import in_this_environment, refresh_account
     from .providers.base import ProviderError, ProviderUnavailable
 
     account_id = payload.get("account_id")
@@ -650,6 +650,9 @@ def handle_payout_account_refresh(payload: dict) -> str:
     account = StripePayoutAccount.objects.filter(pk=account_id).first()
     if account is None:
         return "account_missing"
+    if not in_this_environment(account):
+        # Its id means nothing to this platform's credential, as for the member's calls.
+        return "account_other_environment"
     try:
         _, applied = refresh_account(account)
     except ProviderUnavailable as exc:

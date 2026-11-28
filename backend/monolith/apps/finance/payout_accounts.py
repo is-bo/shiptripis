@@ -36,12 +36,14 @@ from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
 from django.db import transaction
+from django.db.models import Exists, Q
 from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.admin_panel.services import record_admin_action
 from .models import (
     FinanceHold,
+    Payout,
     PayoutMethodVersion,
     PayoutProviderOperation,
     StripePayoutAccount,
@@ -465,16 +467,23 @@ def _creation_operation(method) -> tuple:
     Found by its idempotency key, which names this platform, mode and method,
     so an operation from another platform or mode is never this environment's.
     A failed attempt with no provider object is passed over, because Stripe
-    refused it and created nothing; anything else is the one creation the next
-    onboarding call deals with, so a method never has two in flight.
+    refused it and created nothing, and so is one whose account Finance
+    retired (`retire_account`), so the next onboarding opens a new account;
+    anything else is the one creation the next onboarding call deals with, so
+    a method never has two in flight.
     """
 
     attempt = 1
     while True:
-        operation = PayoutProviderOperation.objects.filter(
-            idempotency_key=_creation_key(method, attempt)
-        ).first()
-        if not operation or operation.status != "failed" or operation.provider_object_id:
+        key = _creation_key(method, attempt)
+        operation = (
+            PayoutProviderOperation.objects.filter(idempotency_key=key)
+            .annotate(retired=Exists(StripePayoutAccount.objects.filter(
+                creation_operation_key=key, active=False)))
+            .first()
+        )
+        refused = operation and operation.status == "failed" and not operation.provider_object_id
+        if not operation or not (refused or operation.retired):
             return attempt, operation
         attempt += 1
 
@@ -766,6 +775,71 @@ def _sync_method_status(method, account: StripePayoutAccount, verdict: Readiness
         status_reason=verdict.reason,
         updated_at=timezone.now(),
     )
+
+
+#: Payout states in which Stripe work on an account has begun and is not
+#: finished: a transfer committed or sent, or a failure Finance must resolve.
+PAYOUT_IN_PROGRESS = ("processing", "sent", "failed")
+
+
+def retire_account(*, actor, account_id: int, reason: str) -> StripePayoutAccount:
+    """Finance retires a Traveler's Stripe account, so the next onboarding opens a new one.
+
+    The way out for an account opened for the wrong country, which Stripe
+    never changes. The account stops being the Traveler's standing account
+    and the creation that produced it is passed over (`_creation_operation`).
+    Funded payout instructions keep naming it; execution refuses an inactive
+    account. Refused while a payout to it is in progress. Under the Payout
+    locks, then the method's, then the account's (`apps.core.financial_locks`);
+    execution reads the account again after its Payout lock.
+    """
+
+    from .payout_profiles import require_capabilities
+
+    require_capabilities(actor, "retry_payouts", "view_payouts")
+    reason = str(reason or "").strip()
+    if not reason:
+        raise ValidationError("A reason is required.", code="reason_required")
+    traveler_id = StripePayoutAccount.objects.values_list("traveler_id", flat=True).get(
+        pk=account_id
+    )
+    with transaction.atomic():
+        payouts = list(
+            Payout.objects.select_for_update(no_key=True, of=("self",))
+            .filter(Q(stripe_account_id=account_id)
+                    | Q(active_instruction_version__stripe_account_id=account_id))
+            .order_by("pk")
+        )
+        method = _lock_method_for(traveler_id)
+        account = StripePayoutAccount.objects.select_for_update(no_key=True).get(pk=account_id)
+        if not account.active:
+            raise ValidationError(
+                "This Stripe payout account is already retired. Nothing was changed.",
+                code="already_retired",
+            )
+        if any(payout.status in PAYOUT_IN_PROGRESS for payout in payouts):
+            raise ValidationError(
+                "A payout to this account is in progress. Retire the account once "
+                "that payout is paid or cancelled.",
+                code="payout_in_progress",
+            )
+        before = {"active": True, "status": account.status,
+                  "status_reason": account.status_reason, "country": account_country(account)}
+        account.active = False
+        verdict = evaluate_readiness(account)
+        account.status, account.status_reason = verdict.status, verdict.reason
+        account.save(update_fields=["active", "status", "status_reason"])
+        _sync_method_status(method, account, verdict)
+        record_admin_action(
+            actor=actor,
+            action="payout_account.retired",
+            target=account,
+            before=before,
+            after={"active": False, "status": account.status,
+                   "status_reason": account.status_reason},
+            reason=reason,
+        )
+    return account
 
 
 def refresh_account(account: StripePayoutAccount, *, gateway=None):

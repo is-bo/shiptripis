@@ -1,5 +1,15 @@
 # Waçla V1 Implementation Status
 
+## Wassla: Finance can retire a Stripe payout account, and the readiness job checks its environment (F1b, 2026-11-28)
+
+- Brief F1b. Server and console only, no migration, no switch. Nothing deployed. Design:
+  `docs/PHASE_F1B_RETIRE_PAYOUT_ACCOUNT.md`.
+- **Retire Stripe account** on a traveler's Payouts tab (`retry_payouts`, reason required, audit row
+  `payout_account.retired`). Refused while a payout to the account is processing, sent or failed, and
+  when already retired. The traveler's next onboarding opens a new account for the declared country.
+- The payout-account refresh job makes no provider call for an account of another platform or mode
+  (`account_other_environment`). Execution re-reads the destination after its Payout lock.
+
 ## Wassla: onboarding serves one declaration, and payout setup reads eligibility on the locked row (F1 round 6, 2026-11-27)
 
 - Brief F1 rules F-C, F-F and F-G, with the owner's decision D3. No migration, no switch. Nothing

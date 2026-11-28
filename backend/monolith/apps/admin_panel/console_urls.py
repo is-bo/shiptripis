@@ -15,6 +15,7 @@ from .console_discovery import profile_visibility
 from .console_exports import finance_exports
 from .console_identity_checks import identity_check_detail, identity_checks
 from .console_journey_pause import journey_pause_action
+from .console_payout_account import payout_account_retire
 from .console_notes import NOTE_ROUTE_CAPABILITIES, note_add
 from .console_people import person_profile
 from .console_photos import photo_remove
@@ -253,6 +254,11 @@ urlpatterns = [
         "finance/payout-accounts/",
         views.payout_accounts,
         name="payout-accounts",
+    ),
+    path(
+        "finance/payout-accounts/<int:pk>/retire/",
+        capability_required("retry_payouts")(payout_account_retire),
+        name="payout-account-retire",
     ),
     # The DZD payout-method review queue. Finance and Super only: the guard is
     # the same named capability the domain command checks, so the page and the

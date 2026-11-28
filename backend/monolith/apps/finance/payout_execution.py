@@ -453,6 +453,11 @@ def _lock_payout_aggregate(payout_id: int):
         .select_related("deal", "active_instruction_version__stripe_account")
         .get(pk=payout_id)
     )
+    version = payout.active_instruction_version
+    if version and version.stripe_account:
+        # Retiring changes `active` under this Payout lock; the join above may
+        # predate it, so read it again now that the lock is held.
+        version.stripe_account.refresh_from_db(fields=["active"])
     balance.refresh_from_db()
     return payout, balance, sources
 
