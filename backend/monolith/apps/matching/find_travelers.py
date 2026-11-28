@@ -212,19 +212,25 @@ def classify_timing_fit(
 
 
 def first_name(full_name: str) -> str:
-    """The Traveler's first name, and nothing after it.
+    """A member's first name, and nothing after it.
 
-    `JourneySerializer` already publishes `traveler_name` — the whole
-    `full_name` — to any authenticated viewer of a discoverable journey, so this
-    is a narrowing of an existing disclosure, not a new one. A browse row needs
-    enough to address someone, not enough to look them up.
+    Anyone but the member and staff is given only this (spec 4.2: never a last
+    name). It is enough to address someone, not enough to look them up.
 
-    A Traveler with no name on file resolves to an empty string. The local part
+    A member with no name on file resolves to an empty string. The local part
     of an email address is not a name and is never published as one.
     """
 
     cleaned = (full_name or "").strip()
     return cleaned.split()[0] if cleaned else ""
+
+
+def name_seen_by(viewer, member) -> str:
+    """``member``'s name as ``viewer`` may see it: whole to themselves and staff."""
+
+    if viewer is not None and (viewer.pk == member.pk or viewer.is_staff):
+        return member.full_name
+    return first_name(member.full_name)
 
 
 def _empty_trust() -> dict:

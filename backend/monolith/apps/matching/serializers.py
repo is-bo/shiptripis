@@ -14,7 +14,12 @@ from apps.accounts.photos import public_photo
 from apps.parcels.models import ParcelRequest
 from apps.parcels import tracking
 
-from .find_travelers import DEFAULT_PAGE_SIZE, SORT_BEST_MATCH, SORT_VALUES
+from .find_travelers import (
+    DEFAULT_PAGE_SIZE,
+    SORT_BEST_MATCH,
+    SORT_VALUES,
+    name_seen_by,
+)
 from .models import Match, Offer
 from .offer_deadlines import deadline_passed, effective_status
 from .offer_economics import OfferEconomicsReader
@@ -252,7 +257,8 @@ class _MatchParcelMini(serializers.Serializer):
 class MatchSerializer(serializers.ModelSerializer):
     """A proposal as its two parties see it.
 
-    Each party appears by name and photo (spec 21). The Deal a match leads to
+    Each party appears by photo (spec 21) and by name: the whole name to
+    themselves and staff, the first name to the other party. The Deal a match leads to
     names nobody; the app reads the counterparty from here.
     """
 
@@ -320,11 +326,15 @@ class MatchSerializer(serializers.ModelSerializer):
 
         return distance_band(obj.matched_distance_meters)
 
+    def _viewer(self):
+        request = self.context.get("request")
+        return request.user if request else None
+
     def get_sender_name(self, obj: Match) -> str:
-        return obj.sender.full_name
+        return name_seen_by(self._viewer(), obj.sender)
 
     def get_traveler_name(self, obj: Match) -> str:
-        return obj.traveler.full_name
+        return name_seen_by(self._viewer(), obj.traveler)
 
     def get_sender_photo(self, obj: Match) -> dict | None:
         return public_photo(obj.sender)
