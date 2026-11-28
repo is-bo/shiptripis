@@ -1,4 +1,5 @@
 import json
+import time
 from datetime import timedelta
 from unittest.mock import patch
 from uuid import uuid4
@@ -7,17 +8,24 @@ import redis
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
 from apps.accounts.models import User
+from apps.accounts.sessions import end_all_sessions
 from apps.core import redis_bus
 
-from ..models import Notification, NotificationPreference, PushDevice
+from ..models import (
+    Notification,
+    NotificationPreference,
+    PushDevice,
+    PushInstallationBinding,
+)
 from ..push import (
     consume_fcm_results,
     deactivate_stale_push_devices,
     enqueue_fcm_for_event,
 )
+from .factories import push_device, signed_in
 
 
 class _RedisRecorder:
@@ -63,9 +71,12 @@ def _user(email: str, language: str = "en") -> User:
     )
 
 
-def _registration(installation_id, token: str, platform: str = "android") -> dict:
+def _registration(
+    installation_id, token: str, platform: str = "android", sequence: int = 1
+) -> dict:
     return {
         "installation_id": str(installation_id),
+        "binding_sequence": sequence,
         "token": token,
         "platform": platform,
         "app_version": "1.0.0",
@@ -80,6 +91,9 @@ class PushDeviceAPITests(TestCase):
         self.installation = uuid4()
         self.token = "fcm-token-one-1234567890"
 
+    def _as(self, session):
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {session['access']}")
+
     def test_registration_requires_authentication_and_never_returns_token(self):
         response = self.client.post(
             "/api/notifications/devices",
@@ -88,7 +102,7 @@ class PushDeviceAPITests(TestCase):
         )
         self.assertEqual(response.status_code, 401)
 
-        self.client.force_authenticate(self.user)
+        self._as(signed_in(self.user))
         response = self.client.post(
             "/api/notifications/devices",
             _registration(self.installation, self.token),
@@ -97,12 +111,13 @@ class PushDeviceAPITests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("token", response.data)
         self.assertNotIn("token_fingerprint", response.data)
+        self.assertNotIn("session", response.data)
         device = PushDevice.objects.get()
         self.assertEqual(device.user, self.user)
         self.assertTrue(device.active)
 
     def test_same_installation_is_idempotent_and_rotates_token_in_place(self):
-        self.client.force_authenticate(self.user)
+        self._as(signed_in(self.user))
         first = self.client.post(
             "/api/notifications/devices",
             _registration(self.installation, self.token),
@@ -111,7 +126,7 @@ class PushDeviceAPITests(TestCase):
         rotated = "fcm-token-rotated-1234567890"
         second = self.client.post(
             "/api/notifications/devices",
-            _registration(self.installation, rotated),
+            _registration(self.installation, rotated, sequence=2),
             format="json",
         )
         self.assertEqual(first.data["id"], second.data["id"])
@@ -119,14 +134,14 @@ class PushDeviceAPITests(TestCase):
         self.assertEqual(PushDevice.objects.get().token, rotated)
 
     def test_same_token_moves_to_authenticated_owner_and_installation(self):
-        self.client.force_authenticate(self.user)
+        self._as(signed_in(self.user))
         self.client.post(
             "/api/notifications/devices",
             _registration(self.installation, self.token),
             format="json",
         )
         replacement_installation = uuid4()
-        self.client.force_authenticate(self.other)
+        self._as(signed_in(self.other))
         response = self.client.post(
             "/api/notifications/devices",
             _registration(replacement_installation, self.token),
@@ -139,7 +154,8 @@ class PushDeviceAPITests(TestCase):
         self.assertEqual(device.installation_id, replacement_installation)
 
     def test_user_can_have_multiple_devices_and_cannot_unregister_another_users(self):
-        self.client.force_authenticate(self.user)
+        mine = signed_in(self.user)
+        self._as(mine)
         self.client.post(
             "/api/notifications/devices",
             _registration(self.installation, self.token),
@@ -155,10 +171,10 @@ class PushDeviceAPITests(TestCase):
             PushDevice.objects.filter(user=self.user, active=True).count(), 2
         )
 
-        self.client.force_authenticate(self.other)
+        self._as(signed_in(self.other))
         response = self.client.post(
             "/api/notifications/devices/unregister",
-            {"installation_id": str(self.installation)},
+            {"installation_id": str(self.installation), "binding_sequence": 2},
             format="json",
         )
         self.assertEqual(response.status_code, 204)
@@ -166,35 +182,362 @@ class PushDeviceAPITests(TestCase):
             PushDevice.objects.get(installation_id=self.installation).active
         )
 
-        self.client.force_authenticate(self.user)
+        self._as(mine)
         response = self.client.post(
             "/api/notifications/devices/unregister",
-            {"installation_id": str(self.installation)},
+            {"installation_id": str(self.installation), "binding_sequence": 3},
             format="json",
         )
         self.assertEqual(response.status_code, 204)
         self.assertFalse(
             PushDevice.objects.get(installation_id=self.installation).active
         )
-
-    def test_valid_logout_disables_current_installation(self):
-        PushDevice.objects.create(
-            user=self.user,
-            installation_id=self.installation,
-            token=self.token,
-            platform=PushDevice.Platform.ANDROID,
+        self.assertTrue(
+            PushDevice.objects.get(installation_id=second_installation).active,
+            "turning push off on one phone leaves the sign-in's other phone alone",
         )
-        self.client.force_authenticate(self.user)
-        response = self.client.post(
-            "/api/auth/sign-out",
-            {
-                "refresh": str(RefreshToken.for_user(self.user)),
-                "installation_id": str(self.installation),
-            },
+
+    # ---- A registration that was slow on the network (N1) -----------------
+    # The app numbers every registration and unregister of one installation
+    # from a counter that only grows, and every token of a sign-in names it
+    # (`sid`, a `SignInSession` row). A registration overtaken by a later
+    # operation must not rebind the phone, a sign-out ends only its own
+    # sign-in's binding, and a registration from a sign-in that has ended is
+    # refused, whatever order the requests reach the server in.
+
+    def _register(self, session, sequence, token=None, installation=None):
+        self._as(session)
+        return self.client.post(
+            "/api/notifications/devices",
+            _registration(
+                installation or self.installation,
+                token or self.token,
+                sequence=sequence,
+            ),
             format="json",
         )
-        self.assertEqual(response.status_code, 205)
-        self.assertFalse(PushDevice.objects.get().active)
+
+    def _sign_out(self, session):
+        self._as(session)
+        return self.client.post(
+            "/api/auth/sign-out", {"refresh": session["refresh"]}, format="json"
+        )
+
+    def _device(self):
+        return PushDevice.objects.get()
+
+    def test_a_registration_remembers_its_sign_in_and_number(self):
+        a = signed_in(self.user)
+        self.assertEqual(self._register(a, 7).status_code, 200)
+        device = self._device()
+        self.assertEqual(device.session_id.hex, a["sid"])
+        self.assertEqual(device.binding_sequence, 7)
+
+    def test_registration_delayed_past_sign_out_does_not_rebind_the_phone(self):
+        # Registered earlier, then a token-refresh registration (2) is held up
+        # while the person signs out (3).
+        a = signed_in(self.user)
+        self.assertEqual(self._register(a, 1).status_code, 200)
+        self.assertEqual(self._sign_out(a).status_code, 205)
+        self.assertFalse(self._device().active)
+
+        late = self._register(a, 2, token="fcm-token-late-1234567890")
+
+        self.assertEqual(late.status_code, 409)
+        device = self._device()
+        self.assertEqual(device.user, self.user)
+        self.assertFalse(device.active)
+        self.assertEqual(device.token, self.token, "the late token is not stored")
+
+    def test_a_late_registration_of_a_live_sign_in_learns_the_current_number(self):
+        # The phone's counter is behind the server's (2 against 3): the server
+        # says where it stands so the app can catch up.
+        a = signed_in(self.user)
+        self.assertEqual(self._register(a, 3).status_code, 200)
+
+        late = self._register(a, 2, token="fcm-token-late-1234567890")
+
+        self.assertEqual(late.status_code, 409)
+        self.assertEqual(late.data["code"], "push_registration_superseded")
+        self.assertEqual(late.data["current_sequence"], 3)
+        self.assertEqual(self._device().token, self.token)
+
+    def test_first_registration_delayed_past_sign_out_creates_no_device(self):
+        # The sign-out reaches the server before the very first registration
+        # does: there is no device to switch off, and the sign-in has ended.
+        a = signed_in(self.user)
+        self.assertEqual(self._sign_out(a).status_code, 205)
+        self.assertEqual(PushDevice.objects.count(), 0)
+
+        late = self._register(a, 1)
+
+        self.assertEqual(late.status_code, 409)
+        self.assertEqual(PushDevice.objects.count(), 0)
+
+    def test_registration_delayed_past_the_next_account_keeps_that_account(self):
+        # A's registration (1) is slow; A signs out (2); B signs in on the same
+        # phone and registers (3); only then does A's request arrive.
+        a, b = signed_in(self.user), signed_in(self.other)
+        self.assertEqual(self._sign_out(a).status_code, 205)
+        self.assertEqual(self._register(b, 3).status_code, 200)
+
+        late = self._register(a, 1)
+
+        self.assertEqual(late.status_code, 409)
+        device = self._device()
+        self.assertEqual(device.user, self.other)
+        self.assertTrue(device.active)
+
+    def test_registration_delayed_past_the_next_account_without_a_sign_out(self):
+        # The sign-out never reached the server (offline); B's registration
+        # still overtakes A's late one.
+        a, b = signed_in(self.user), signed_in(self.other)
+        self.assertEqual(self._register(b, 3).status_code, 200)
+
+        late = self._register(a, 1)
+
+        self.assertEqual(late.status_code, 409)
+        device = self._device()
+        self.assertEqual(device.user, self.other)
+        self.assertTrue(device.active)
+
+    def test_sign_in_after_sign_out_registers_again(self):
+        a = signed_in(self.user)
+        self.assertEqual(self._sign_out(a).status_code, 205)
+        again = signed_in(self.user)
+        self.assertEqual(self._register(again, 3).status_code, 200)
+        device = self._device()
+        self.assertEqual(device.user, self.user)
+        self.assertTrue(device.active)
+
+    def test_sign_out_delayed_past_the_same_persons_next_sign_in_changes_nothing(
+        self,
+    ):
+        # The person signed back in and registered (3) before the earlier
+        # sign-in's sign-out (2) arrived: that sign-out must not switch the new
+        # binding off, even though both belong to the same account.
+        first, second = signed_in(self.user), signed_in(self.user)
+        self.assertEqual(self._register(second, 3).status_code, 200)
+
+        self.assertEqual(self._sign_out(first).status_code, 205)
+
+        self.assertTrue(self._device().active)
+
+    def test_every_sign_out_still_lands_when_the_operations_arrive_out_of_order(
+        self,
+    ):
+        # A is registered (1). A's sign-out (2) and B's registration (3) are
+        # delayed, and B's own sign-out (4) arrives first. Everybody has signed
+        # out, so nothing may be left switched on, and B's late registration
+        # must not switch it back on.
+        a, b = signed_in(self.user), signed_in(self.other)
+        self.assertEqual(self._register(a, 1).status_code, 200)
+
+        self.assertEqual(self._sign_out(b).status_code, 205)
+        self.assertTrue(self._device().active, "B never owned the device")
+        self.assertEqual(self._register(b, 3).status_code, 409)
+        self.assertEqual(self._sign_out(a).status_code, 205)
+
+        device = self._device()
+        self.assertEqual(device.user, self.user)
+        self.assertFalse(device.active)
+
+    def test_a_sign_out_cannot_switch_off_another_accounts_phone(self):
+        a, b = signed_in(self.user), signed_in(self.other)
+        self.assertEqual(self._register(a, 1).status_code, 200)
+
+        self.assertEqual(self._sign_out(b).status_code, 205)
+
+        self.assertTrue(self._device().active)
+
+    def test_a_token_that_names_no_sign_in_cannot_register(self):
+        # Every token the server issues names its sign-in; one that does not
+        # (or names a sign-in that never existed) has nothing to end, so it
+        # can never switch a phone on.
+        refresh = RefreshToken.for_user(self.user)
+        self._as({"access": refresh.access_token})
+        response = self.client.post(
+            "/api/notifications/devices",
+            _registration(self.installation, self.token),
+            format="json",
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data["code"], "push_session_ended")
+
+        refresh["sid"] = uuid4().hex
+        self._as({"access": refresh.access_token})
+        response = self.client.post(
+            "/api/notifications/devices",
+            _registration(self.installation, self.token),
+            format="json",
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(PushDevice.objects.count(), 0)
+
+    # N1 Astra round 4, should-fix 2.
+    def _unregister(self, session, sequence):
+        self._as(session)
+        return self.client.post(
+            "/api/notifications/devices/unregister",
+            {"installation_id": str(self.installation), "binding_sequence": sequence},
+            format="json",
+        )
+
+    def test_an_unregister_from_an_ended_sign_in_leaves_the_order_alone(self):
+        a = signed_in(self.user)
+        self.assertEqual(self._register(a, 1).status_code, 200)
+        self.assertEqual(self._sign_out(a).status_code, 205)
+
+        self.assertEqual(self._unregister(a, 9).status_code, 204)
+
+        self.assertEqual(PushInstallationBinding.objects.get().sequence, 1)
+
+    def test_a_late_unregister_leaves_the_newer_registration_on(self):
+        a = signed_in(self.user)
+        self.assertEqual(self._register(a, 1).status_code, 200)
+        self.assertEqual(self._register(a, 3).status_code, 200)
+
+        late = self._unregister(a, 2)
+
+        self.assertEqual(late.status_code, 409)
+        self.assertEqual(late.data["current_sequence"], 3)
+        self.assertTrue(self._device().active)
+        self.assertEqual(self._unregister(a, 4).status_code, 204)
+        self.assertFalse(self._device().active)
+
+    def test_a_repeated_registration_is_idempotent(self):
+        a = signed_in(self.user)
+        self.assertEqual(self._register(a, 4).status_code, 200)
+        self.assertEqual(self._register(a, 4).status_code, 200)
+        self.assertEqual(PushDevice.objects.count(), 1)
+        self.assertTrue(self._device().active)
+
+    def test_a_repeat_of_a_switched_off_registration_asks_for_a_new_number(self):
+        # N1 Astra round 4, should-fix 8. A repeat changes nothing, so a device
+        # the delivery feedback switched off stays off; it is refused as
+        # superseded rather than acknowledged, and the registration numbered
+        # after it switches the phone back on.
+        a = signed_in(self.user)
+        self.assertEqual(self._register(a, 4).status_code, 200)
+        PushDevice.objects.update(active=False)
+
+        repeat = self._register(a, 4)
+
+        self.assertEqual(repeat.status_code, 409)
+        self.assertEqual(repeat.data["code"], "push_registration_superseded")
+        self.assertEqual(repeat.data["current_sequence"], 4)
+        self.assertFalse(self._device().active)
+        self.assertEqual(self._register(a, 5).status_code, 200)
+        self.assertTrue(self._device().active)
+
+    def test_the_same_number_from_another_sign_in_of_the_same_person_collides(self):
+        # Astra round 3, blocker 4. The phone's counter was lost and the same
+        # person signed in again: both sign-ins register the same token at the
+        # same number. The earlier sign-in's late request must not take the
+        # binding over, or the newer sign-in's sign-out would miss the phone.
+        older, newer = signed_in(self.user), signed_in(self.user)
+        self.assertEqual(self._register(newer, 5).status_code, 200)
+
+        late = self._register(older, 5)
+
+        self.assertEqual(late.status_code, 409)
+        self.assertEqual(late.data["current_sequence"], 5)
+        self.assertEqual(self._device().session_id.hex, newer["sid"])
+        self.assertEqual(self._sign_out(newer).status_code, 205)
+        self.assertFalse(self._device().active)
+
+    def test_the_same_number_for_another_token_is_a_collision(self):
+        a = signed_in(self.user)
+        self.assertEqual(self._register(a, 1).status_code, 200)
+
+        collision = self._register(a, 1, token="fcm-token-other-1234567890")
+
+        self.assertEqual(collision.status_code, 409)
+        self.assertEqual(collision.data["current_sequence"], 1)
+        self.assertEqual(self._device().token, self.token)
+
+    def test_the_same_number_for_another_account_is_a_collision(self):
+        # A's counter was lost while the installation id survived: B reuses the
+        # number of A's registration, and whichever arrives last must not win.
+        a, b = signed_in(self.user), signed_in(self.other)
+        self.assertEqual(self._register(a, 1).status_code, 200)
+
+        collision = self._register(b, 1)
+
+        self.assertEqual(collision.status_code, 409)
+        device = self._device()
+        self.assertEqual(device.user, self.user)
+        self.assertTrue(device.active)
+
+    def test_a_registration_sharing_a_number_with_an_unregister_is_a_collision(self):
+        a, b = signed_in(self.user), signed_in(self.user)
+        self.assertEqual(self._register(a, 4).status_code, 200)
+        self.assertEqual(self._unregister(a, 5).status_code, 204)
+
+        collision = self._register(b, 5)
+
+        self.assertEqual(collision.status_code, 409)
+        self.assertEqual(collision.data["code"], "push_registration_superseded")
+        self.assertFalse(self._device().active)
+
+    def test_a_binding_sequence_is_required_to_register(self):
+        self._as(signed_in(self.user))
+        body = _registration(self.installation, self.token)
+        del body["binding_sequence"]
+        response = self.client.post(
+            "/api/notifications/devices", body, format="json"
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(PushDevice.objects.count(), 0)
+
+    # ---- Ending every sign-in (password reset) ------------------------------
+
+    def test_a_registration_begun_before_a_password_reset_cannot_switch_the_phone_on(
+        self,
+    ):
+        a = signed_in(self.user)
+        self.assertEqual(self._register(a, 1).status_code, 200)
+        end_all_sessions(self.user)
+        self.assertFalse(self._device().active)
+
+        late = self._register(a, 2, token="fcm-token-late-1234567890")
+
+        self.assertEqual(late.status_code, 409)
+        self.assertEqual(late.data["code"], "push_session_ended")
+        self.assertFalse(self._device().active)
+
+    def test_a_token_from_the_reset_second_cannot_switch_the_phone_on(self):
+        # Astra round 3, blocker 2. The old check compared whole seconds, so a
+        # token issued in the reset's own second passed. A sign-in is ended by
+        # identity, not by time: this token is stamped at the reset's second
+        # (or later) and is refused, while a new sign-in in the same second
+        # registers.
+        a = signed_in(self.user)
+        end_all_sessions(self.user)
+        access = AccessToken(a["access"])
+        access["iat"] = int(time.time())
+        fresh = signed_in(self.user)
+
+        late = self._register({"access": str(access)}, 1)
+
+        self.assertEqual(late.status_code, 409)
+        self.assertEqual(late.data["code"], "push_session_ended")
+        self.assertEqual(self._register(fresh, 2).status_code, 200)
+        self.assertTrue(self._device().active)
+
+    def test_a_sign_in_after_the_password_reset_registers_normally(self):
+        a = signed_in(self.user)
+        self.assertEqual(self._register(a, 1).status_code, 200)
+        end_all_sessions(self.user)
+
+        fresh = signed_in(self.user)
+        self.assertEqual(self._register(fresh, 2).status_code, 200)
+        self.assertTrue(self._device().active)
+
+    def test_a_password_reset_does_not_stop_other_accounts_registering(self):
+        b = signed_in(self.other)
+        end_all_sessions(self.user)
+        self.assertEqual(self._register(b, 1).status_code, 200)
 
     def test_preferences_have_two_real_toggles_and_essential_is_fixed(self):
         self.client.force_authenticate(self.user)
@@ -222,13 +565,13 @@ class PushDeviceAPITests(TestCase):
         self.assertFalse(response.data["marketplace_enabled"])
 
     def test_stale_devices_can_be_pruned_without_touching_recent_devices(self):
-        stale = PushDevice.objects.create(
+        stale = push_device(
             user=self.user,
             installation_id=self.installation,
             token=self.token,
             platform=PushDevice.Platform.ANDROID,
         )
-        recent = PushDevice.objects.create(
+        recent = push_device(
             user=self.user,
             installation_id=uuid4(),
             token="fcm-token-recent-1234567890",
@@ -248,11 +591,31 @@ class PushDeviceAPITests(TestCase):
 @override_settings(FCM_ENABLED=True, FCM_STREAM="notif:fcm")
 class PushPublicationTests(TestCase):
     def _device(self, user: User, suffix: str) -> PushDevice:
-        return PushDevice.objects.create(
+        return push_device(
             user=user,
             installation_id=uuid4(),
             token=f"fcm-token-{suffix}-1234567890",
             platform=PushDevice.Platform.ANDROID,
+        )
+
+    @patch("apps.core.redis_bus.get_client")
+    def test_a_queued_push_names_the_sign_in_of_each_device(self, get_client):
+        # N-F: the worker's last check compares each device with the sign-in
+        # that registered it when the push was queued, so a device rebound to
+        # another sign-in meanwhile, even of the same member, is skipped.
+        recorder = _RedisRecorder()
+        get_client.return_value = recorder
+        user = _user("sign-in-named@example.com")
+        phone, tablet = self._device(user, "phone"), self._device(user, "tablet")
+
+        enqueue_fcm_for_event(
+            channel="offer.created", event_id="event-sign-in", payload={}, targets=[user.pk]
+        )
+
+        payload = json.loads(recorder.entries[0][1]["payload"])
+        self.assertEqual(payload["device_ids"], [phone.pk, tablet.pk])
+        self.assertEqual(
+            payload["session_ids"], [str(phone.session_id), str(tablet.session_id)]
         )
 
     @patch("apps.core.redis_bus.get_client")
@@ -405,13 +768,13 @@ class PushFeedbackTests(TestCase):
     @patch("apps.core.redis_bus.get_client")
     def test_invalid_device_feedback_deactivates_without_tokens(self, get_client):
         user = _user("feedback@example.com")
-        invalid = PushDevice.objects.create(
+        invalid = push_device(
             user=user,
             installation_id=uuid4(),
             token="fcm-token-invalid-1234567890",
             platform=PushDevice.Platform.ANDROID,
         )
-        successful = PushDevice.objects.create(
+        successful = push_device(
             user=user,
             installation_id=uuid4(),
             token="fcm-token-success-1234567890",
@@ -457,7 +820,7 @@ class PushFeedbackTests(TestCase):
     @patch("apps.core.redis_bus.get_client")
     def test_stale_invalid_feedback_cannot_disable_a_rotated_token(self, get_client):
         user = _user("rotated-feedback@example.com")
-        device = PushDevice.objects.create(
+        device = push_device(
             user=user,
             installation_id=uuid4(),
             token="fcm-token-old-1234567890",

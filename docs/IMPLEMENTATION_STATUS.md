@@ -10,6 +10,27 @@
 - The payout-account refresh job makes no provider call for an account of another platform or mode
   (`account_other_environment`). Execution re-reads the destination after its Payout lock.
 
+## Wassla: notifications on first open, sign-in sessions and who a push belongs to (N1, 2026-11-27)
+
+- Ismail's decision of 2026-11-26: the app asks for notification permission on its own, once, the
+  first time it is opened on a usable screen, a guest included; Profile > Notifications recovers.
+  Registering the phone waits for sign-in. Nothing deployed.
+- Every sign-in is a `SignInSession` row named by the `sid` of all its tokens (migration
+  `accounts.0008`); a refresh and a push registration need it live, under the account lock. A
+  phone's registrations are numbered and ordered by the server (`PushInstallationBinding`, migration
+  `notifications.0009`); a sign-out records nothing there and switches off only its own sign-in's
+  devices.
+- `POST /api/auth/sign-out` answers 205 for any proof this server signed (live, ended, expired,
+  rotated, deleted account; a repeat writes nothing) and `400 sign_out_proof_invalid` otherwise. It
+  has its own throttle scope, `sign_out` (`DRF_SIGN_OUT_THROTTLE_RATE`, `300/min`).
+- One credential writer, `write_password`, ends every sign-in of an existing account; every save of
+  a loaded user names its fields (a test-time guard in `conftest.py` and a scan enforce both). The
+  technical admin saves only what its form changed, both its password forms go through the writer,
+  and staff rights are read only there (D5).
+- A queued push carries each device's sign-in; the Go worker checks user, device, token and sign-in
+  against the row right before each send and retry. Detail and evidence:
+  `docs/PHASE_N1_NOTIFICATION_FIRST_OPEN.md`.
+
 ## Wassla: onboarding serves one declaration, and payout setup reads eligibility on the locked row (F1 round 6, 2026-11-27)
 
 - Brief F1 rules F-C, F-F and F-G, with the owner's decision D3. No migration, no switch. Nothing

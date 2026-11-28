@@ -10,6 +10,7 @@ from apps.kyc.models import KycSubmission
 
 from . import photos
 from .models import User
+from .sessions import write_password
 from .wilayas import WILAYA_CODES
 
 
@@ -63,7 +64,7 @@ class SignUpSerializer(serializers.Serializer):
             wilaya=validated_data.get("wilaya", ""),
             preferred_language=validated_data["preferred_language"],
         )
-        user.set_password(validated_data["password"])
+        write_password(user, validated_data["password"])
         user.save()
         return user
 

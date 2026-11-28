@@ -12,7 +12,12 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .models import Notification, NotificationPreference
-from .push import register_push_device, unregister_push_device
+from .push import (
+    PushBindingSuperseded,
+    PushSessionEnded,
+    register_push_device,
+    unregister_push_device,
+)
 from .serializers import (
     NotificationPreferenceSerializer,
     NotificationSerializer,
@@ -94,13 +99,45 @@ def unread_count(request: Request) -> Response:
     return Response({"unread": counts["active"], **counts})
 
 
+def _session_id(request: Request):
+    """The sign-in (``sid`` claim) of the access token that authenticated ``request``."""
+
+    return None if request.auth is None else request.auth.get("sid")
+
+
+def _superseded(superseded: PushBindingSuperseded) -> Response:
+    return Response(
+        {
+            "code": "push_registration_superseded",
+            "detail": "A newer registration or sign-out of this phone was already applied.",
+            "current_sequence": superseded.current_sequence,
+        },
+        status=status.HTTP_409_CONFLICT,
+    )
+
+
 class PushDeviceRegistrationView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def post(self, request: Request) -> Response:
         serializer = PushDeviceRegistrationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        device = register_push_device(user=request.user, **serializer.validated_data)
+        try:
+            device = register_push_device(
+                user=request.user,
+                session_id=_session_id(request),
+                **serializer.validated_data,
+            )
+        except PushSessionEnded:
+            return Response(
+                {
+                    "code": "push_session_ended",
+                    "detail": "The sign-in this request comes from has ended.",
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        except PushBindingSuperseded as superseded:
+            return _superseded(superseded)
         return Response(PushDeviceSerializer(device).data, status=status.HTTP_200_OK)
 
 
@@ -110,10 +147,14 @@ class PushDeviceUnregisterView(APIView):
     def post(self, request: Request) -> Response:
         serializer = PushDeviceUnregisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        unregister_push_device(
-            user=request.user,
-            installation_id=serializer.validated_data["installation_id"],
-        )
+        try:
+            unregister_push_device(
+                user=request.user,
+                session_id=_session_id(request),
+                **serializer.validated_data,
+            )
+        except PushBindingSuperseded as superseded:
+            return _superseded(superseded)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

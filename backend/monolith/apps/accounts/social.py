@@ -35,7 +35,7 @@ from django.db import IntegrityError, transaction
 from rest_framework import status
 
 from .models import OAuthIdentity, User
-from .sessions import end_all_sessions
+from .sessions import write_password
 
 #: Stable refusal codes, sent with a `detail` the app may show.
 ACCOUNT_DISABLED = "account_disabled"
@@ -192,7 +192,7 @@ def _open_account(*, email: str, name: str, data: dict) -> User:
         preferred_language=data["preferred_language"],
         is_email_verified=True,
     )
-    user.set_unusable_password()
+    write_password(user, None)
     user.save()
     return user
 
@@ -209,8 +209,7 @@ def _claim_unconfirmed_account(user: User, *, name: str, data: dict) -> None:
     can set a password again through the reset email.
     """
 
-    end_all_sessions(user)
-    user.set_unusable_password()
+    write_password(user, None)
     user.full_name = name
     user.phone = data.get("phone", "")
     user.wilaya = data.get("wilaya", "")
@@ -219,7 +218,6 @@ def _claim_unconfirmed_account(user: User, *, name: str, data: dict) -> None:
     user.is_email_verified = True
     user.save(
         update_fields=(
-            "password",
             "full_name",
             "phone",
             "wilaya",

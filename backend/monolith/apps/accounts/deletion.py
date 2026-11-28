@@ -231,7 +231,7 @@ def _erase(user) -> None:
     )
     from apps.notifications.outbox import cancel_message
 
-    sessions.end_all_sessions(user)
+    sessions.write_password(user, None)
     PushDevice.objects.filter(user=user).delete()
     Notification.objects.filter(recipient=user).delete()
     NotificationPreference.objects.filter(user=user).delete()
@@ -267,5 +267,19 @@ def _erase(user) -> None:
     user.is_email_verified = False
     user.is_phone_verified = False
     user.deleted_at = timezone.now()
-    user.set_unusable_password()
-    user.save()
+    user.save(
+        update_fields=(
+            "email",
+            "username",
+            "full_name",
+            "first_name",
+            "last_name",
+            "phone",
+            "wilaya",
+            "preferred_language",
+            "is_active",
+            "is_email_verified",
+            "is_phone_verified",
+            "deleted_at",
+        )
+    )

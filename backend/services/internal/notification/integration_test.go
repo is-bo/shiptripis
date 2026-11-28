@@ -431,6 +431,7 @@ func itNewConsumer(rdb *redisbus.Client, stream string, sender FCMSender) *Consu
 		ConsumerName:   "it-1",
 		FeedbackStream: stream + ":results",
 		Sender:         sender,
+		Devices:        fcmBoundDevices{},
 	}, discardLogger())
 	c.deliverGrace = 300 * time.Millisecond
 	return c
@@ -457,6 +458,13 @@ func itFCMEntry(t *testing.T, eventID string, userID int64, tokens []string) map
 				ids[i] = int64(i + 1)
 			}
 			return ids
+		}(),
+		SessionIDs: func() []string {
+			sessions := make([]string, len(tokens))
+			for i := range tokens {
+				sessions[i] = fmt.Sprintf("sign-in-%d", i+1)
+			}
+			return sessions
 		}(),
 		Title: "New offer",
 		Body:  "A traveler made you an offer",

@@ -35,6 +35,7 @@ from apps.kyc.models import KycSubmission
 from apps.notifications import outbox
 from apps.notifications.models import Notification, OutboundMessage, PushDevice
 from apps.notifications.push import enqueue_fcm_for_event
+from apps.notifications.tests.factories import push_device
 from apps.notifications.tests.test_push import _RedisRecorder
 from apps.notifications.tests.test_push import _user as _push_user
 from apps.trips.models import Journey, JourneyLegProof
@@ -598,7 +599,7 @@ class ResubmissionPushTests(TestCase):
         ]
         event_id = f"event-{uuid4().hex}"
         for user in users:
-            PushDevice.objects.create(
+            push_device(
                 user=user,
                 installation_id=uuid4(),
                 token=f"fcm-token-{uuid4().hex}",
