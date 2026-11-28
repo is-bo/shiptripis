@@ -253,6 +253,13 @@ class LEn extends L {
       'We couldn\'t complete that. Try again, and tell us if it keeps happening.';
 
   @override
+  String get stateSessionNotSavedTitle => 'This phone couldn\'t save that';
+
+  @override
+  String get stateSessionNotSavedBody =>
+      'Nothing changed. Try again, and restart your phone if it keeps happening.';
+
+  @override
   String get stateAppOutdatedTitle => 'This version is out of date';
 
   @override
@@ -3447,14 +3454,26 @@ class LEn extends L {
 
   @override
   String get pushPermissionBody =>
-      'Get timely updates about offers, payments, delivery, messages and verification. Wassla asks only when you choose Enable.';
+      'Get timely updates about offers, payments, delivery, messages and verification. Wassla asks once, when you first open the app, and you can enable notifications here at any time.';
 
   @override
   String get pushPermissionEnabled => 'Notifications are enabled.';
 
   @override
+  String get pushPermissionEnabledGuest =>
+      'Notifications are allowed on this phone. Sign in and Wassla will start sending them here.';
+
+  @override
+  String get pushGuestSignInNote =>
+      'Sign in to receive notifications for your account and to choose which kinds you get.';
+
+  @override
   String get pushPermissionDeniedRequestable =>
       'Notifications are still off. Choose Enable notifications to ask Android again. Your in-app inbox keeps working either way.';
+
+  @override
+  String get pushPermissionDeniedRequestableGuest =>
+      'Notifications are still off. Choose Enable notifications to ask Android again.';
 
   @override
   String get pushPermissionDenied =>
@@ -3467,6 +3486,14 @@ class LEn extends L {
   @override
   String get pushPermissionInitializationFailed =>
       'Push could not start on this phone. Your in-app notifications still work; reopen Wassla to try again.';
+
+  @override
+  String get pushPermissionUnavailableGuest =>
+      'Push is not configured in this build.';
+
+  @override
+  String get pushPermissionInitializationFailedGuest =>
+      'Push could not start on this phone. Reopen Wassla to try again.';
 
   @override
   String get pushEnableAction => 'Enable notifications';

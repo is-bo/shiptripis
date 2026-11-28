@@ -31,7 +31,7 @@ class _FixedSession extends SessionController {
   final Account _account;
 
   @override
-  SessionState build() => SessionSignedIn(_account);
+  SessionState build() => SessionSignedIn(_account, sid: 'sid-a');
 }
 
 ProviderContainer _dealContainer(FakeBackend backend, {int accountId = 42}) {
@@ -40,7 +40,8 @@ ProviderContainer _dealContainer(FakeBackend backend, {int accountId = 42}) {
   return ProviderContainer(
     overrides: [
       tokenStoreProvider.overrideWithValue(tokens),
-      apiClientProvider.overrideWithValue(apiClientFor(backend, tokens)),
+      sessionCoreProvider.overrideWithValue(backend.session),
+      apiClientProvider.overrideWithValue(apiClientFor(backend)),
       sessionProvider.overrideWith(() => _FixedSession(account)),
     ],
   );

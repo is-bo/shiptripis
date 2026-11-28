@@ -20,10 +20,17 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from apps.accounts.locks import lock_account
+from apps.accounts.models import SignInSession
 from apps.core import channels
 from apps.core.languages import normalize_communication_language
 
-from .models import Notification, NotificationPreference, PushDevice
+from .models import (
+    Notification,
+    NotificationPreference,
+    PushDevice,
+    PushInstallationBinding,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -580,20 +587,126 @@ _TICKET_PUSH_COPY: dict[tuple[str, str], dict[str, tuple[str, str]]] = {
 }
 
 
+class PushBindingSuperseded(Exception):
+    """A later operation on the installation was already applied, or the app's
+    counter collided with one.
+
+    ``current_sequence`` is the newest number the server has seen, so an app
+    whose own counter was lost can catch up instead of being refused forever.
+    """
+
+    def __init__(self, current_sequence: int) -> None:
+        super().__init__(current_sequence)
+        self.current_sequence = current_sequence
+
+
+class PushSessionEnded(Exception):
+    """The sign-in the access token names has ended (or was never issued)."""
+
+
+Operation = PushInstallationBinding.Operation
+
+
+def _claim_binding_sequence(
+    installation_id: UUID,
+    sequence: int,
+    *,
+    operation: str,
+    user_id: int,
+    session_id: UUID,
+    token_fingerprint: str = "",
+) -> bool:
+    """Record ``sequence`` as the installation's newest operation.
+
+    Runs inside the caller's transaction and holds the installation's row lock
+    until it ends, so operations on one installation are applied in the order
+    the app numbered them. Raises :class:`PushBindingSuperseded` when a higher
+    number was already applied, or when the same number was already used for
+    a different operation, account, sign-in or token. Returns True for an
+    exact repeat of the operation already recorded at this number, which the
+    caller acknowledges without changing anything. Callers check first, under
+    the account lock, that ``session_id`` is live.
+    """
+
+    identity = {
+        "operation": operation,
+        "user_id": user_id,
+        "session_id": session_id,
+        "token_fingerprint": token_fingerprint,
+    }
+    binding, created = PushInstallationBinding.objects.select_for_update().get_or_create(
+        installation_id=installation_id,
+        defaults={"sequence": sequence, **identity},
+    )
+    if created:
+        return False
+    if sequence < binding.sequence:
+        raise PushBindingSuperseded(binding.sequence)
+    if sequence == binding.sequence:
+        if any(getattr(binding, field) != value for field, value in identity.items()):
+            raise PushBindingSuperseded(binding.sequence)
+        return True
+    binding.sequence = sequence
+    for field, value in identity.items():
+        setattr(binding, field, value)
+    binding.save()
+    return False
+
+
 def register_push_device(
     *,
     user,
     token: str,
     installation_id: UUID,
     platform: str,
+    binding_sequence: int,
+    session_id,
     app_version: str = "",
 ) -> PushDevice:
-    """Idempotently bind one installation and one current token to ``user``."""
+    """Idempotently bind one installation and one current token to ``user``.
+
+    ``session_id`` is the sign-in that registers (the access token's ``sid``).
+    It must be live, which is checked under the account lock that ending a
+    sign-in also takes: a registration that ran first is switched off by the
+    end, and one that runs after it is refused with :class:`PushSessionEnded`.
+    Raises :class:`PushBindingSuperseded` when a later operation on the
+    installation was already applied (the app moved on, and this request must
+    not rebind the phone to ``user``). An exact repeat of the registration the
+    installation last recorded returns the binding as it stands.
+    """
 
     fingerprint = PushDevice.fingerprint(token)
     for attempt in range(2):
         try:
             with transaction.atomic():
+                lock_account(user)
+                session = SignInSession.live(user_id=user.pk, session_id=session_id)
+                if session is None:
+                    raise PushSessionEnded
+                repeat = _claim_binding_sequence(
+                    installation_id,
+                    binding_sequence,
+                    operation=Operation.REGISTER,
+                    user_id=user.pk,
+                    session_id=session.pk,
+                    token_fingerprint=fingerprint,
+                )
+                if repeat:
+                    current = PushDevice.objects.filter(
+                        installation_id=installation_id,
+                        user=user,
+                        session=session,
+                        token_fingerprint=fingerprint,
+                        binding_sequence=binding_sequence,
+                        active=True,
+                    ).first()
+                    if current is None:
+                        # The binding this number made is gone or switched off
+                        # (its token moved to another installation, or Firebase
+                        # refused it): the app registers again, numbered after
+                        # this one, instead of reading this number as live.
+                        raise PushBindingSuperseded(binding_sequence)
+                    return current
                 rows = list(
                     PushDevice.objects.select_for_update()
                     .filter(
@@ -629,6 +742,8 @@ def register_push_device(
                 device.token = token
                 device.token_fingerprint = fingerprint
                 device.app_version = app_version
+                device.session = session
+                device.binding_sequence = binding_sequence
                 device.active = True
                 device.last_seen_at = timezone.now()
                 if rotated_or_rebound:
@@ -642,30 +757,76 @@ def register_push_device(
     raise RuntimeError("Push device registration retry was exhausted.")
 
 
-def unregister_push_device(*, user, installation_id: UUID) -> bool:
-    """Disable only the authenticated user's installation; idempotent."""
-
-    return bool(
-        PushDevice.objects.filter(
-            user=user,
-            installation_id=installation_id,
-            active=True,
-        ).update(active=False, last_seen_at=timezone.now(), updated_at=timezone.now())
+def _switch_off(devices) -> int:
+    now = timezone.now()
+    return devices.filter(active=True).update(
+        active=False, last_seen_at=now, updated_at=now
     )
+
+
+def deactivate_session_push_devices(session) -> int:
+    """Switch off every device the sign-in ``session`` registered.
+
+    Called by `apps.accounts.sessions.end_session` under the account lock, in
+    the transaction that ends the sign-in. The installation's order is left
+    alone: a registration of the ended sign-in is refused because the sign-in
+    ended, and another sign-in's binding on the same phone stays on.
+    """
+
+    return _switch_off(PushDevice.objects.filter(session=session))
+
+
+def unregister_push_device(
+    *,
+    user,
+    installation_id: UUID,
+    session_id,
+    binding_sequence: int | None = None,
+) -> bool:
+    """Switch off this installation's device if ``session_id`` registered it.
+
+    Owner-scoped and idempotent, and the sign-in itself stays live: this is the
+    phone turning its own push off. A device another sign-in registered since
+    is left alone, and an ended sign-in changes nothing, not even the
+    installation's order. With ``binding_sequence`` the operation takes its
+    place in that order: one numbered below an operation already applied
+    raises :class:`PushBindingSuperseded` and leaves the newer registration
+    on. (A sign-out is different: it ends the sign-in, so it switches its
+    devices off however late it arrives; see `deactivate_session_push_devices`.)
+    """
+
+    with transaction.atomic():
+        lock_account(user)
+        session = SignInSession.live(user_id=user.pk, session_id=session_id)
+        if session is None:
+            return False
+        if binding_sequence is not None:
+            _claim_binding_sequence(
+                installation_id,
+                binding_sequence,
+                operation=Operation.UNREGISTER,
+                user_id=user.pk,
+                session_id=session.pk,
+            )
+        return bool(
+            _switch_off(
+                PushDevice.objects.filter(
+                    user=user, installation_id=installation_id, session=session
+                )
+            )
+        )
 
 
 def deactivate_all_push_devices(*, user) -> int:
     """Switch off every active installation of ``user`` (L18A, ending sessions).
 
     Used when the account changes hands: a device left on would keep delivering
-    the owner's notifications to a phone that is no longer theirs. The app
-    registers again on its next sign-in.
+    the owner's notifications to a phone that is no longer theirs. The caller
+    ends every sign-in in the same transaction, so no token issued before can
+    register a phone again; the app registers on its next sign-in.
     """
 
-    now = timezone.now()
-    return PushDevice.objects.filter(user=user, active=True).update(
-        active=False, last_seen_at=now, updated_at=now
-    )
+    return _switch_off(PushDevice.objects.filter(user=user))
 
 
 def _preference_allows(
@@ -763,6 +924,9 @@ def enqueue_fcm_for_event(
                 "token_fingerprints": [
                     device.token_fingerprint for device in batch
                 ],
+                # The worker sends to a device only while the sign-in that
+                # registered it is still the one bound to it (N1, N-F).
+                "session_ids": [str(device.session_id) for device in batch],
                 "title": title,
                 "body": body,
                 "android_channel_id": android_channel,

@@ -47,7 +47,7 @@ void main() {
     test('reads an envelope page, its next link and its count', () async {
       final backend = FakeBackend()
         ..handle('GET', '/api/deals', (r) => _envelope(r, total: 25));
-      final api = apiClientFor(backend, FakeTokenStore());
+      final api = apiClientFor(backend);
       addTearDown(() => api.raw.close(force: true));
 
       final first = await api.getListPage('/api/deals');
@@ -63,7 +63,7 @@ void main() {
     test('reads a bare-array page from its X-Next-Page header', () async {
       final backend = FakeBackend()
         ..handle('GET', '/api/parcels', (r) => _bare(r, total: 150));
-      final api = apiClientFor(backend, FakeTokenStore());
+      final api = apiClientFor(backend);
       addTearDown(() => api.raw.close(force: true));
 
       final first = await api.getListPage('/api/parcels');
@@ -85,7 +85,7 @@ void main() {
             {'id': 1},
           ]),
         );
-      final api = apiClientFor(backend, FakeTokenStore());
+      final api = apiClientFor(backend);
       addTearDown(() => api.raw.close(force: true));
 
       final page = await api.getListPage('/api/legacy');
@@ -97,7 +97,7 @@ void main() {
     test('an object with no results list is malformed, not empty', () async {
       final backend = FakeBackend()
         ..on('GET', '/api/deals', const FakeResponse(200, {'count': 3}));
-      final api = apiClientFor(backend, FakeTokenStore());
+      final api = apiClientFor(backend);
       addTearDown(() => api.raw.close(force: true));
 
       await expectLater(
@@ -117,7 +117,7 @@ void main() {
     test('follows an envelope to its last page and stops there', () async {
       final backend = FakeBackend()
         ..handle('GET', '/api/deals', (r) => _envelope(r, total: 230));
-      final api = apiClientFor(backend, FakeTokenStore());
+      final api = apiClientFor(backend);
       addTearDown(() => api.raw.close(force: true));
 
       final rows = await api.getAllPages(
@@ -138,7 +138,7 @@ void main() {
     test('follows the bare-array header to its last page', () async {
       final backend = FakeBackend()
         ..handle('GET', '/api/parcels', (r) => _bare(r, total: 201));
-      final api = apiClientFor(backend, FakeTokenStore());
+      final api = apiClientFor(backend);
       addTearDown(() => api.raw.close(force: true));
 
       final rows = await api.getAllPages('/api/parcels');
@@ -150,7 +150,7 @@ void main() {
     test('one short page costs one request', () async {
       final backend = FakeBackend()
         ..handle('GET', '/api/deals', (r) => _envelope(r, total: 3));
-      final api = apiClientFor(backend, FakeTokenStore());
+      final api = apiClientFor(backend);
       addTearDown(() => api.raw.close(force: true));
 
       expect(await api.getAllPages('/api/deals'), hasLength(3));
@@ -170,7 +170,7 @@ void main() {
             ],
           }),
         );
-      final api = apiClientFor(backend, FakeTokenStore());
+      final api = apiClientFor(backend);
       addTearDown(() => api.raw.close(force: true));
 
       final rows = await api.getAllPages('/api/deals', maxPages: 4);
@@ -200,7 +200,7 @@ void main() {
                   ],
           });
         });
-      final api = apiClientFor(backend, FakeTokenStore());
+      final api = apiClientFor(backend);
       addTearDown(() => api.raw.close(force: true));
 
       final rows = await api.getAllPages('/api/deals', pageSize: 2);
@@ -219,7 +219,7 @@ void main() {
             {'name': 'a'},
           ]),
         );
-      final api = apiClientFor(backend, FakeTokenStore());
+      final api = apiClientFor(backend);
       addTearDown(() => api.raw.close(force: true));
 
       expect(await api.getAllPages('/api/legacy'), hasLength(2));

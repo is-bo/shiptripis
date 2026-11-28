@@ -555,6 +555,18 @@ abstract class L {
   /// **'We couldn\'t complete that. Try again, and tell us if it keeps happening.'**
   String get stateUnexpectedBody;
 
+  /// No description provided for @stateSessionNotSavedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'This phone couldn\'t save that'**
+  String get stateSessionNotSavedTitle;
+
+  /// No description provided for @stateSessionNotSavedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing changed. Try again, and restart your phone if it keeps happening.'**
+  String get stateSessionNotSavedBody;
+
   /// No description provided for @stateAppOutdatedTitle.
   ///
   /// In en, this message translates to:
@@ -6018,7 +6030,7 @@ abstract class L {
   /// No description provided for @pushPermissionBody.
   ///
   /// In en, this message translates to:
-  /// **'Get timely updates about offers, payments, delivery, messages and verification. Wassla asks only when you choose Enable.'**
+  /// **'Get timely updates about offers, payments, delivery, messages and verification. Wassla asks once, when you first open the app, and you can enable notifications here at any time.'**
   String get pushPermissionBody;
 
   /// No description provided for @pushPermissionEnabled.
@@ -6027,11 +6039,29 @@ abstract class L {
   /// **'Notifications are enabled.'**
   String get pushPermissionEnabled;
 
+  /// No description provided for @pushPermissionEnabledGuest.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications are allowed on this phone. Sign in and Wassla will start sending them here.'**
+  String get pushPermissionEnabledGuest;
+
+  /// No description provided for @pushGuestSignInNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to receive notifications for your account and to choose which kinds you get.'**
+  String get pushGuestSignInNote;
+
   /// No description provided for @pushPermissionDeniedRequestable.
   ///
   /// In en, this message translates to:
   /// **'Notifications are still off. Choose Enable notifications to ask Android again. Your in-app inbox keeps working either way.'**
   String get pushPermissionDeniedRequestable;
+
+  /// No description provided for @pushPermissionDeniedRequestableGuest.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications are still off. Choose Enable notifications to ask Android again.'**
+  String get pushPermissionDeniedRequestableGuest;
 
   /// No description provided for @pushPermissionDenied.
   ///
@@ -6050,6 +6080,18 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Push could not start on this phone. Your in-app notifications still work; reopen Wassla to try again.'**
   String get pushPermissionInitializationFailed;
+
+  /// No description provided for @pushPermissionUnavailableGuest.
+  ///
+  /// In en, this message translates to:
+  /// **'Push is not configured in this build.'**
+  String get pushPermissionUnavailableGuest;
+
+  /// No description provided for @pushPermissionInitializationFailedGuest.
+  ///
+  /// In en, this message translates to:
+  /// **'Push could not start on this phone. Reopen Wassla to try again.'**
+  String get pushPermissionInitializationFailedGuest;
 
   /// No description provided for @pushEnableAction.
   ///

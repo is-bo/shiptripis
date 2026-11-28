@@ -251,6 +251,13 @@ class LAr extends L {
       'لم نتمكن من إتمام ذلك. أعد المحاولة، وأخبرنا إذا استمر حدوث هذا.';
 
   @override
+  String get stateSessionNotSavedTitle => 'تعذّر على هذا الهاتف حفظ ذلك';
+
+  @override
+  String get stateSessionNotSavedBody =>
+      'لم يتغيّر شيء. أعد المحاولة، وأعد تشغيل هاتفك إذا استمر ذلك.';
+
+  @override
   String get stateAppOutdatedTitle => 'هذا الإصدار قديم';
 
   @override
@@ -3453,14 +3460,26 @@ class LAr extends L {
 
   @override
   String get pushPermissionBody =>
-      'احصل على تحديثات في وقتها حول العروض والمدفوعات والتسليم والرسائل والتحقق. لا يطلب Wassla الإذن إلا عندما تختار التفعيل.';
+      'احصل على تحديثات في وقتها حول العروض والمدفوعات والتسليم والرسائل والتحقق. يطلب Wassla الإذن مرة واحدة عند فتح التطبيق للمرة الأولى، ويمكنك تفعيل الإشعارات من هنا في أي وقت.';
 
   @override
   String get pushPermissionEnabled => 'الإشعارات مفعّلة.';
 
   @override
+  String get pushPermissionEnabledGuest =>
+      'الإشعارات مسموحة على هذا الهاتف. سجّل الدخول وسيبدأ Wassla بإرسالها إليك هنا.';
+
+  @override
+  String get pushGuestSignInNote =>
+      'سجّل الدخول لتستلم إشعارات حسابك وتختار أنواعها.';
+
+  @override
   String get pushPermissionDeniedRequestable =>
       'لا تزال الإشعارات متوقفة. اختر تفعيل الإشعارات ليطلبها Android مرة أخرى. يبقى صندوق الإشعارات داخل التطبيق متاحًا في كل الأحوال.';
+
+  @override
+  String get pushPermissionDeniedRequestableGuest =>
+      'لا تزال الإشعارات متوقفة. اختر تفعيل الإشعارات ليطلبها Android مرة أخرى.';
 
   @override
   String get pushPermissionDenied =>
@@ -3473,6 +3492,14 @@ class LAr extends L {
   @override
   String get pushPermissionInitializationFailed =>
       'تعذّر تشغيل الإشعارات الفورية على هذا الهاتف. تبقى إشعارات التطبيق متاحة؛ أعد فتح Wassla للمحاولة مرة أخرى.';
+
+  @override
+  String get pushPermissionUnavailableGuest =>
+      'الإشعارات الفورية غير مضبوطة في هذا الإصدار.';
+
+  @override
+  String get pushPermissionInitializationFailedGuest =>
+      'تعذّر تشغيل الإشعارات الفورية على هذا الهاتف. أعد فتح Wassla للمحاولة مرة أخرى.';
 
   @override
   String get pushEnableAction => 'تفعيل الإشعارات';

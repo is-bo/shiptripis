@@ -110,14 +110,13 @@ Future<ProviderContainer> _signedIn(
   final container = ProviderContainer(
     overrides: [
       tokenStoreProvider.overrideWithValue(tokens),
-      apiClientProvider.overrideWithValue(apiClientFor(backend, tokens)),
+      sessionCoreProvider.overrideWithValue(backend.session),
+      apiClientProvider.overrideWithValue(apiClientFor(backend)),
     ],
     retry: (_, _) => null,
   );
   addTearDown(container.dispose);
-  await tester.runAsync(
-    () => container.read(sessionProvider.notifier).restore(),
-  );
+  await launchPumped(tester, container);
   return container;
 }
 

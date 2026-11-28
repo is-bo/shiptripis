@@ -123,7 +123,7 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: backend/services/go.sum
 
-      - name: Load Django-owned schema for email delivery guards
+      - name: Load Django-owned schema for the email and push device guards
         run: psql 'postgresql://wacla:local-ci-fixture-only@127.0.0.1:5432/wacla' -v ON_ERROR_STOP=1 -f ../contracts/sql/schema.sql
 
       # REDIS_TEST_URL is what un-skips the tier; without it every test calls
@@ -139,6 +139,7 @@ jobs:
         env:
           REDIS_TEST_URL: redis://localhost:6399/0
           EMAIL_TEST_DATABASE_URL: postgresql://wacla:local-ci-fixture-only@127.0.0.1:5432/wacla
+          NOTIFICATION_TEST_DATABASE_URL: postgresql://wacla:local-ci-fixture-only@127.0.0.1:5432/wacla
         run: |
           set -o pipefail
           go test -tags integration -race -count=1 -v ./... 2>&1 | tee /tmp/it.log

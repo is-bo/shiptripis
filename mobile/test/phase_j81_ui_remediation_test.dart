@@ -129,9 +129,7 @@ Future<void> _pumpScreenWithRoute(
 
   final container = containerFor(backend);
   addTearDown(container.dispose);
-  await tester.runAsync(
-    () => container.read(sessionProvider.notifier).restore(),
-  );
+  await launchPumped(tester, container);
   await pumpApp(
     tester,
     screen,
@@ -207,9 +205,7 @@ Future<void> _pumpCreateScreen(
 
   final container = containerFor(backend);
   addTearDown(container.dispose);
-  await tester.runAsync(
-    () => container.read(sessionProvider.notifier).restore(),
-  );
+  await launchPumped(tester, container);
   await pumpApp(
     tester,
     const RequestCreateScreen(),

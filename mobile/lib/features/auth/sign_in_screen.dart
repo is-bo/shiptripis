@@ -63,10 +63,10 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
 
     final l = L.of(context);
     try {
-      await ref
+      final signedIn = await ref
           .read(sessionProvider.notifier)
           .signIn(email: _email.text, password: _password.text);
-      if (mounted) finishSignIn(context, widget.flow);
+      if (signedIn && mounted) finishSignIn(context, widget.flow);
     } on ApiException catch (error) {
       if (!mounted) return;
       setState(() {

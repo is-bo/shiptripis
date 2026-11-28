@@ -1,13 +1,15 @@
 /// K5: the launch snapshot of the signed-in profile.
 ///
-/// A cold start with a snapshot enters the app at once and lets `/api/me`
-/// confirm it in the background. These tests hold the rest of the contract:
-/// the server still decides who is signed in, the snapshot never outlives the
-/// credentials it was read under, and it carries presentation fields only.
+/// A cold start with a stored sign-in enters the app at once, from the
+/// account stored with it, and lets `/api/me` confirm it in the background.
+/// These tests hold the rest of the contract: the server still decides who is
+/// signed in, the account never outlives the sign-in it was read under, and it
+/// carries presentation fields only.
 ///
-/// The keystore here is the real [TokenStore] over in-memory storage, so what
-/// is asserted about keys is what the device would hold. Widget tests, not
-/// plain tests, for the fake clock: the revalidation timer runs in seconds.
+/// The keystore here is the real [SessionCore] over in-memory storage, so what
+/// is asserted about the record is what the device would hold. Widget tests,
+/// not plain tests, for the fake clock: the revalidation timer runs in
+/// seconds.
 library;
 
 import 'dart:async';
@@ -15,17 +17,12 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shiptrip/core/session/session.dart';
+import 'package:shiptrip/core/session/session_core.dart';
 import 'package:shiptrip/core/session/token_store.dart';
-import 'package:shiptrip/domain/account.dart';
 
 import 'support/fake_api.dart';
-
-const _kAccess = 'auth.access';
-const _kRefresh = 'auth.refresh';
-const _kSnapshot = 'auth.account_snapshot';
 
 /// Exactly what [Account.fromJson] reads, and nothing else.
 const _presentationKeys = {
@@ -44,83 +41,17 @@ const _presentationKeys = {
   'date_joined',
 };
 
-class _MemoryStorage extends FlutterSecureStorage {
-  _MemoryStorage();
-
-  final values = <String, String>{};
-
-  @override
-  Future<String?> read({
-    required String key,
-    AndroidOptions? aOptions,
-    IOSOptions? iOptions,
-    LinuxOptions? lOptions,
-    WebOptions? webOptions,
-    MacOsOptions? mOptions,
-    WindowsOptions? wOptions,
-  }) async => values[key];
-
-  @override
-  Future<void> write({
-    required String key,
-    required String? value,
-    AndroidOptions? aOptions,
-    IOSOptions? iOptions,
-    LinuxOptions? lOptions,
-    WebOptions? webOptions,
-    MacOsOptions? mOptions,
-    WindowsOptions? wOptions,
-  }) async {
-    if (value == null) {
-      values.remove(key);
-    } else {
-      values[key] = value;
-    }
-  }
-
-  @override
-  Future<void> delete({
-    required String key,
-    AndroidOptions? aOptions,
-    IOSOptions? iOptions,
-    LinuxOptions? lOptions,
-    WebOptions? webOptions,
-    MacOsOptions? mOptions,
-    WindowsOptions? wOptions,
-  }) async {
-    values.remove(key);
-  }
-}
-
-String _snapshotOf(Map<String, dynamic> me) =>
-    jsonEncode(Account.fromJson(me).toSnapshotJson());
-
-/// A device that signed in before: tokens, and optionally a snapshot.
-_MemoryStorage _device({String? snapshot}) => _MemoryStorage()
-  ..values[_kAccess] = 'old-access'
-  ..values[_kRefresh] = 'old-refresh'
-  ..values.addAll({_kSnapshot: ?snapshot});
-
 final _cachedMe = {...meFixture(), 'full_name': 'Cached Name'};
 
-/// The session over [backend] and [tokens], with the terminal-refresh path
-/// wired exactly as `apiClientProvider` wires it in the app.
-ProviderContainer _container(FakeBackend backend, TokenStore tokens) =>
-    ProviderContainer(
-      overrides: [
-        tokenStoreProvider.overrideWithValue(tokens),
-        apiClientProvider.overrideWith((ref) {
-          final client = apiClientFor(
-            backend,
-            tokens,
-            onSessionExpired: () =>
-                ref.read(sessionProvider.notifier).handleSessionExpired(),
-          );
-          ref.onDispose(() => client.raw.close(force: true));
-          return client;
-        }),
-      ],
-    );
+/// A phone on which [meFixture] signed in before, shown as [_cachedMe].
+MemoryStorage _device() =>
+    MemoryStorage({SessionCore.recordKey: signedInRecord(account: _cachedMe)});
+
+/// The session over [backend] and the record in [storage].
+ProviderContainer _container(FakeBackend backend, MemoryStorage storage) {
+  backend.session = coreFor(backend, storage: storage);
+  return containerFor(backend);
+}
 
 Never _offline(RecordedRequest r) => throw DioException(
   requestOptions: RequestOptions(path: r.path),
@@ -140,23 +71,19 @@ Future<T> _drive<T>(WidgetTester tester, Future<T> work) async {
   return work;
 }
 
-/// What the auth interceptor raises for a request whose login ended.
-DioException _sessionChanged(RecordedRequest r) => DioException(
-  requestOptions: RequestOptions(path: r.path),
-  type: DioExceptionType.cancel,
-);
-
-Map<String, dynamic>? _stored(_MemoryStorage storage) {
-  final raw = storage.values[_kSnapshot];
-  return raw == null ? null : jsonDecode(raw) as Map<String, dynamic>;
+/// The account stored with the current sign-in, as JSON.
+Map<String, dynamic>? _stored(MemoryStorage storage) {
+  final current =
+      (jsonDecode(storage.values[SessionCore.recordKey]!) as Map)['current'];
+  return current == null ? null : current['account'] as Map<String, dynamic>;
 }
 
 void main() {
-  testWidgets('a snapshot signs in before /api/me answers', (tester) async {
+  testWidgets('a stored sign-in shows before /api/me answers', (tester) async {
     final me = Completer<FakeResponse>();
     final backend = FakeBackend()..handle('GET', '/api/me', (_) => me.future);
-    final storage = _device(snapshot: _snapshotOf(_cachedMe));
-    final container = _container(backend, TokenStore(storage));
+    final storage = _device();
+    final container = _container(backend, storage);
 
     container.read(sessionProvider);
     await _flush(tester);
@@ -171,33 +98,14 @@ void main() {
 
     final confirmed = container.read(sessionProvider) as SessionSignedIn;
     expect(confirmed.account.fullName, 'Amina Bouzid');
-    expect(confirmed.generation, early.generation, reason: 'same account');
+    expect(confirmed.sid, early.sid, reason: 'the same sign-in');
     expect(_stored(storage)?['full_name'], 'Amina Bouzid');
 
     container.dispose();
   });
 
-  testWidgets('a malformed snapshot is no snapshot', (tester) async {
-    final me = Completer<FakeResponse>();
-    final backend = FakeBackend()..handle('GET', '/api/me', (_) => me.future);
-    final container = _container(
-      backend,
-      TokenStore(_device(snapshot: '{not json')),
-    );
-
-    container.read(sessionProvider);
-    await _flush(tester);
-    expect(container.read(sessionProvider), isA<SessionRestoring>());
-
-    me.complete(FakeResponse(200, meFixture()));
-    await _flush(tester);
-    expect(container.read(sessionProvider), isA<SessionSignedIn>());
-    container.dispose();
-  });
-
-  testWidgets('offline with a snapshot stays in, then revalidates on a timer', (
-    tester,
-  ) async {
+  testWidgets('offline with a stored sign-in stays in, then revalidates on a '
+      'timer', (tester) async {
     var offline = true;
     final backend = FakeBackend()
       ..handle(
@@ -205,8 +113,8 @@ void main() {
         '/api/me',
         (r) => offline ? _offline(r) : FakeResponse(200, meFixture()),
       );
-    final storage = _device(snapshot: _snapshotOf(_cachedMe));
-    final container = _container(backend, TokenStore(storage));
+    final storage = _device();
+    final container = _container(backend, storage);
     final states = <SessionState>[];
     container.listen(sessionProvider, (_, next) => states.add(next));
 
@@ -240,166 +148,119 @@ void main() {
       isEmpty,
       reason: 'never back to the splash once in',
     );
-    expect(storage.values[_kRefresh], 'old-refresh');
+    expect(storage.record!.current?.refresh, fakeToken('sid-a'));
 
     container.dispose();
   });
 
-  testWidgets('offline without a snapshot holds the splash, as before', (
-    tester,
-  ) async {
-    final backend = FakeBackend()..handle('GET', '/api/me', _offline);
-    final storage = _device();
-    final container = _container(backend, TokenStore(storage));
-
-    container.read(sessionProvider);
-    await tester.pump(const Duration(seconds: 2));
-    final calls = backend.to('GET', '/api/me').length;
-    expect(container.read(sessionProvider), isA<SessionRestoring>());
-
-    // No revalidation timer on this path: the splash's retry owns it.
-    await tester.pump(const Duration(seconds: 200));
-    expect(backend.to('GET', '/api/me'), hasLength(calls));
-    expect(container.read(sessionProvider), isA<SessionRestoring>());
-    expect(storage.values[_kRefresh], 'old-refresh');
-
-    container.dispose();
-  });
-
-  testWidgets('a rejected credential signs out and clears the snapshot', (
-    tester,
-  ) async {
+  testWidgets('a refused refresh token signs out and leaves no account on the '
+      'phone', (tester) async {
     final backend = FakeBackend()
       ..on('GET', '/api/me', const FakeResponse(401))
-      ..on('POST', '/api/auth/refresh', const FakeResponse(401));
-    final storage = _device(snapshot: _snapshotOf(_cachedMe));
-    final container = _container(backend, TokenStore(storage));
+      ..on('POST', '/api/auth/refresh', const FakeResponse(401))
+      ..on('POST', '/api/auth/sign-out', const FakeResponse(205));
+    final storage = _device();
+    final container = _container(backend, storage);
 
     container.read(sessionProvider);
     await tester.pump(const Duration(seconds: 1));
     await _flush(tester);
 
-    expect(container.read(sessionProvider), isA<SessionSignedOut>());
+    final state = container.read(sessionProvider);
+    expect(state, isA<SessionSignedOut>());
+    expect((state as SessionSignedOut).becauseExpired, isTrue);
     expect(backend.to('POST', '/api/auth/refresh'), hasLength(1));
-    expect(storage.values.keys, isNot(contains(_kSnapshot)));
-    expect(storage.values.keys, isNot(contains(_kAccess)));
-    expect(storage.values.keys, isNot(contains(_kRefresh)));
+    expect(storage.record!.current, isNull);
+    expect(storage.values[SessionCore.recordKey], isNot(contains('Cached')));
 
     container.dispose();
   });
 
-  testWidgets('another account from /api/me replaces the snapshot account', (
+  testWidgets('sign-out stores the end before its network call', (
     tester,
   ) async {
-    final me = Completer<FakeResponse>();
-    final backend = FakeBackend()..handle('GET', '/api/me', (_) => me.future);
-    final storage = _device(snapshot: _snapshotOf(_cachedMe));
-    final container = _container(backend, TokenStore(storage));
-
+    final signOut = Completer<FakeResponse>();
+    final backend = FakeBackend()
+      ..on('GET', '/api/me', FakeResponse(200, meFixture()))
+      ..handle('POST', '/api/auth/sign-out', (_) => signOut.future);
+    final storage = _device();
+    final container = _container(backend, storage);
     container.read(sessionProvider);
     await _flush(tester);
-    final cached = container.read(accountSessionProvider);
-    expect(cached?.accountId, 42);
+    expect(_stored(storage), isNotNull);
 
-    me.complete(
-      FakeResponse(200, {...meFixture(), 'id': 99, 'email': 'b@example.com'}),
-    );
+    await _drive(tester, container.read(sessionProvider.notifier).signOut());
+    expect(backend.to('POST', '/api/auth/sign-out'), hasLength(1));
+    expect(_stored(storage), isNull);
+    expect(storage.record!.ended.single.sid, 'sid-a');
+
+    signOut.complete(const FakeResponse(205));
     await _flush(tester);
+    expect(storage.record!.ended, isEmpty);
 
-    final session = container.read(accountSessionProvider);
-    expect(session?.accountId, 99);
+    container.dispose();
+  });
+
+  testWidgets('an account write queued before sign-out lands before it, and '
+      'one queued after it writes nothing', (tester) async {
+    final backend = FakeBackend()
+      ..on('GET', '/api/me', FakeResponse(200, meFixture()))
+      ..on('POST', '/api/auth/sign-out', const FakeResponse(205));
+    final storage = _device();
+    final container = _container(backend, storage);
+    container.read(sessionProvider);
+    await _flush(tester);
+    final core = container.read(sessionCoreProvider);
+    final renamed = {...meFixture(), 'full_name': 'Renamed'};
+    final writes = storage.writes;
+
+    // A profile read's account write, still queued when the member taps.
+    final before = core.updateAccount(
+      'sid-a',
+      signInFor(account: renamed).account,
+    );
+    final leaving = container.read(sessionProvider.notifier).signOut();
+    final after = core.updateAccount(
+      'sid-a',
+      signInFor(account: renamed).account,
+    );
+    await _drive(tester, Future.wait([before, leaving, after]));
+
+    expect(container.read(sessionProvider), isA<SessionSignedOut>());
+    expect(_stored(storage), isNull);
     expect(
-      session?.generation,
-      isNot(cached?.generation),
-      reason: 'every account-scoped read moves to a fresh generation',
+      storage.writes,
+      writes + 3,
+      reason: 'the account, the end, the server\'s confirmation: no more',
     );
-    expect(_stored(storage)?['id'], 99);
-
-    container.dispose();
-  });
-
-  testWidgets('sign-out deletes the snapshot before its network call', (
-    tester,
-  ) async {
-    final signOut = Completer<FakeResponse>();
-    final backend = FakeBackend()
-      ..on('GET', '/api/me', FakeResponse(200, meFixture()))
-      ..handle('POST', '/api/auth/sign-out', (_) => signOut.future);
-    final storage = _device(snapshot: _snapshotOf(_cachedMe));
-    final container = _container(backend, TokenStore(storage));
-    container.read(sessionProvider);
-    await _flush(tester);
-    expect(storage.values.keys, contains(_kSnapshot));
-
-    final leaving = container.read(sessionProvider.notifier).signOut();
-    await _flush(tester);
-    expect(backend.to('POST', '/api/auth/sign-out'), hasLength(1));
-    expect(storage.values.keys, isNot(contains(_kSnapshot)));
-
-    signOut.complete(const FakeResponse(205));
-    await _drive(tester, leaving);
-    expect(storage.values.keys, isNot(contains(_kRefresh)));
-
-    container.dispose();
-  });
-
-  testWidgets('sign-out ends the login in the tap\'s own turn, and a snapshot '
-      'write queued before it cannot land after it', (tester) async {
-    final signOut = Completer<FakeResponse>();
-    final backend = FakeBackend()
-      ..on('GET', '/api/me', FakeResponse(200, meFixture()))
-      ..handle('POST', '/api/auth/sign-out', (_) => signOut.future);
-    final storage = _device(snapshot: _snapshotOf(_cachedMe));
-    final tokens = TokenStore(storage);
-    final container = _container(backend, tokens);
-    container.read(sessionProvider);
-    await _flush(tester);
-
-    // A profile refresh's snapshot write, still queued when the user taps.
-    final before = tokens.identityGeneration;
-    final queued = tokens.writeAccountSnapshotIfCurrent(
-      expectedIdentityGeneration: before,
-      json: _snapshotOf(meFixture()),
-    );
-    final leaving = container.read(sessionProvider.notifier).signOut();
-    expect(tokens.identityGeneration, isNot(before));
-
-    await _flush(tester);
-    expect(await queued, isFalse);
-    expect(backend.to('POST', '/api/auth/sign-out'), hasLength(1));
-    expect(storage.values.keys, isNot(contains(_kSnapshot)));
-
-    signOut.complete(const FakeResponse(205));
-    await _drive(tester, leaving);
-    expect(storage.values.keys, isNot(contains(_kSnapshot)));
 
     container.dispose();
   });
 
   for (final (name, answer)
       in <(String, FakeResponse Function(RecordedRequest))>[
-        ('is cancelled', (r) => throw _sessionChanged(r)),
+        (
+          'is cancelled',
+          (r) => throw DioException(
+            requestOptions: RequestOptions(path: r.path),
+            type: DioExceptionType.cancel,
+          ),
+        ),
         ('is a stale 401', (_) => const FakeResponse(401)),
       ]) {
     testWidgets('a launch confirmation that $name after another request ended '
         'the session keeps the expiry message', (tester) async {
-      final storage = _device(snapshot: _snapshotOf(_cachedMe));
-      final tokens = TokenStore(storage);
-      late final ProviderContainer container;
+      final storage = _device();
+      late final SessionCore core;
       final backend = FakeBackend()
-        ..handle('GET', '/api/me', (r) {
-          // Another request's terminal refresh: it clears the credentials,
-          // and its expiry callback runs only after this answer is back.
-          unawaited(
-            tokens.clearIfIdentityCurrent(tokens.identityGeneration).then((_) {
-              Timer(const Duration(milliseconds: 30), () {
-                container.read(sessionProvider.notifier).handleSessionExpired();
-              });
-            }),
-          );
+        ..on('POST', '/api/auth/sign-out', const FakeResponse(205))
+        ..handle('GET', '/api/me', (r) async {
+          // Another request's refused refresh ends the sign-in first.
+          await core.end('sid-a', EndReason.refused);
           return answer(r);
         });
-      container = _container(backend, tokens);
+      final container = _container(backend, storage);
+      core = backend.session;
 
       container.read(sessionProvider);
       await _flush(tester);
@@ -407,7 +268,7 @@ void main() {
       final state = container.read(sessionProvider);
       expect(state, isA<SessionSignedOut>());
       expect((state as SessionSignedOut).becauseExpired, isTrue);
-      expect(storage.values.keys, isNot(contains(_kRefresh)));
+      expect(storage.record!.current, isNull);
 
       container.dispose();
     });
@@ -420,53 +281,54 @@ void main() {
     final backend = FakeBackend()
       ..handle('GET', '/api/me', (_) => me.future)
       ..on('POST', '/api/auth/sign-out', const FakeResponse(205));
-    final storage = _device(snapshot: _snapshotOf(_cachedMe));
-    final container = _container(backend, TokenStore(storage));
+    final storage = _device();
+    final container = _container(backend, storage);
     container.read(sessionProvider);
     await _flush(tester);
 
     await _drive(tester, container.read(sessionProvider.notifier).signOut());
+    final writes = storage.writes;
     me.complete(FakeResponse(200, meFixture()));
     await _flush(tester);
 
     expect(container.read(sessionProvider), isA<SessionSignedOut>());
-    expect(storage.values.keys, isNot(contains(_kSnapshot)));
+    expect(_stored(storage), isNull);
+    expect(storage.writes, writes);
 
     container.dispose();
   });
 
-  testWidgets('signing in as another account replaces the snapshot', (
-    tester,
-  ) async {
+  testWidgets('another account starts from signed out: a sign-in while one is '
+      'current starts nothing', (tester) async {
     final backend = FakeBackend()
       ..on('GET', '/api/me', FakeResponse(200, meFixture()))
       ..on('POST', '/api/auth/sign-out', const FakeResponse(205))
       ..on(
         'POST',
         '/api/auth/sign-in',
-        FakeResponse(200, {
-          'access': 'b-access',
-          'refresh': 'b-refresh',
-          'user': {...meFixture(), 'id': 99, 'email': 'b@example.com'},
-        }),
+        signInAnswer(user: {...meFixture(), 'id': 99, 'email': 'b@x.com'}),
       );
-    final storage = _device(snapshot: _snapshotOf(_cachedMe));
-    final container = _container(backend, TokenStore(storage));
+    final storage = _device();
+    final container = _container(backend, storage);
     container.read(sessionProvider);
     await _flush(tester);
     expect(_stored(storage)?['id'], 42);
 
-    // Straight from one account to the next, without a sign-out between.
-    await _drive(
-      tester,
-      container
-          .read(sessionProvider.notifier)
-          .signIn(email: 'b@example.com', password: 'secret'),
+    final session = container.read(sessionProvider.notifier);
+    expect(
+      await _drive(tester, session.signIn(email: 'b@x.com', password: 's')),
+      isFalse,
     );
-    await _flush(tester);
+    expect(backend.to('POST', '/api/auth/sign-in'), isEmpty);
+    expect(_stored(storage)?['id'], 42);
 
+    await _drive(tester, session.signOut());
+    expect(
+      await _drive(tester, session.signIn(email: 'b@x.com', password: 's')),
+      isTrue,
+    );
     expect(_stored(storage)?['id'], 99);
-    expect(storage.values[_kRefresh], 'b-refresh');
+    expect(storage.record!.current?.refresh, fakeToken('sid-b'));
 
     container.dispose();
   });
@@ -475,10 +337,7 @@ void main() {
     final backend = FakeBackend()
       ..handle('GET', '/api/me', _offline)
       ..on('POST', '/api/auth/sign-out', const FakeResponse(205));
-    final container = _container(
-      backend,
-      TokenStore(_device(snapshot: _snapshotOf(_cachedMe))),
-    );
+    final container = _container(backend, _device());
     final states = <SessionState>[];
     container.listen(sessionProvider, (_, next) => states.add(next));
 
@@ -500,10 +359,7 @@ void main() {
 
   testWidgets('the revalidation timer dies with the container', (tester) async {
     final backend = FakeBackend()..handle('GET', '/api/me', _offline);
-    final container = _container(
-      backend,
-      TokenStore(_device(snapshot: _snapshotOf(_cachedMe))),
-    );
+    final container = _container(backend, _device());
 
     container.read(sessionProvider);
     await tester.pump(const Duration(seconds: 2));
@@ -514,15 +370,16 @@ void main() {
     expect(backend.to('GET', '/api/me'), hasLength(calls));
   });
 
-  testWidgets('the snapshot holds presentation fields only', (tester) async {
+  testWidgets('the stored account holds presentation fields only', (
+    tester,
+  ) async {
     final backend = FakeBackend()
       ..on(
         'POST',
         '/api/auth/sign-in',
-        FakeResponse(200, {
-          'access': 'secret-access-token',
-          'refresh': 'secret-refresh-token',
-          'user': {
+        signInAnswer(
+          sid: 'sid-b',
+          user: {
             ...meFixture(),
             // What a richer profile might one day carry. None of it belongs
             // on the device.
@@ -535,10 +392,10 @@ void main() {
             ],
             'access': 'secret-access-token',
           },
-        }),
+        ),
       );
-    final storage = _MemoryStorage();
-    final container = _container(backend, TokenStore(storage));
+    final storage = MemoryStorage();
+    final container = _container(backend, storage);
     container.read(sessionProvider);
     await _flush(tester);
     expect(container.read(sessionProvider), isA<SessionSignedOut>());
@@ -551,11 +408,13 @@ void main() {
     );
     await _flush(tester);
 
-    final raw = storage.values[_kSnapshot]!;
-    expect((jsonDecode(raw) as Map).keys.toSet(), _presentationKeys);
+    final account = _stored(storage)!;
+    expect(account.keys.toSet(), _presentationKeys);
+    final raw = jsonEncode(account);
     for (final secret in [
       'secret-access-token',
-      'secret-refresh-token',
+      fakeToken('sid-b', 'access'),
+      fakeToken('sid-b'),
       'DZ58',
       '0002000000000',
       'passport',
@@ -566,83 +425,76 @@ void main() {
     container.dispose();
   });
 
-  group('TokenStore snapshot', () {
-    (TokenStore, _MemoryStorage) seeded() {
-      final storage = _device(snapshot: _snapshotOf(meFixture()));
-      return (TokenStore(storage), storage);
+  // The phone's own keys sit beside the record and outlive every sign-in.
+  group('the phone\'s own keys', () {
+    /// One keystore holding both, and a sign-out through the core.
+    Future<TokenStore> afterSignOut(
+      MemoryStorage storage,
+      Future<void> Function(TokenStore) before,
+    ) async {
+      final tokens = TokenStore(storage);
+      await before(tokens);
+      final backend = FakeBackend()
+        ..on('POST', '/api/auth/sign-out', const FakeResponse(205));
+      final core = coreFor(backend, storage: storage);
+      await core.load();
+      await core.end('sid-a', EndReason.signedOut);
+      return tokens;
     }
 
-    test('a new sign-in deletes it', () async {
-      final (tokens, storage) = seeded();
-      final saved = await tokens.saveAuthenticationIfCurrent(
-        expectedIdentityGeneration: tokens.invalidateIdentity(),
-        access: 'b-access',
-        refresh: 'b-refresh',
-      );
-      expect(saved, isTrue);
-      expect(storage.values.keys, isNot(contains(_kSnapshot)));
-    });
+    test(
+      'the notification request count belongs to the phone, not the account',
+      () async {
+        final storage = MemoryStorage({
+          SessionCore.recordKey: signedInRecord(),
+        });
+        final tokens = await afterSignOut(storage, (tokens) async {
+          expect(await tokens.readPushPermissionRequests(), 0);
+          expect(await tokens.recordPushPermissionRequest(), 1);
+        });
+        expect(storage.record!.current, isNull);
+        expect(await tokens.readPushPermissionRequests(), 1);
+        expect(await tokens.recordPushPermissionRequest(), 2);
+      },
+    );
 
-    test('saving credentials deletes it', () async {
-      final (tokens, storage) = seeded();
-      await tokens.save(access: 'b-access', refresh: 'b-refresh');
-      expect(storage.values.keys, isNot(contains(_kSnapshot)));
-    });
+    test(
+      'push registrations are numbered one after another, for good',
+      () async {
+        final storage = MemoryStorage({
+          SessionCore.recordKey: signedInRecord(),
+        });
+        final tokens = await afterSignOut(storage, (tokens) async {
+          final numbers = await Future.wait([
+            tokens.nextPushBindingSequence(),
+            tokens.nextPushBindingSequence(),
+            tokens.nextPushBindingSequence(),
+          ]);
+          expect(numbers..sort(), [1, 2, 3], reason: 'no two share one');
+        });
+        expect(
+          await tokens.nextPushBindingSequence(),
+          4,
+          reason: 'sign-out keeps it',
+        );
 
-    test('a terminal clear deletes it', () async {
-      final (tokens, storage) = seeded();
-      expect(
-        await tokens.clearIfIdentityCurrent(tokens.identityGeneration),
-        isTrue,
-      );
-      expect(storage.values.keys, isNot(contains(_kSnapshot)));
-    });
+        await tokens.raisePushBindingSequence(40);
+        expect(await tokens.nextPushBindingSequence(), 41);
+        await tokens.raisePushBindingSequence(7);
+        expect(
+          await tokens.nextPushBindingSequence(),
+          42,
+          reason: 'never lowered',
+        );
+      },
+    );
 
-    test('a plain clear deletes it', () async {
-      final (tokens, storage) = seeded();
-      await tokens.clear();
-      expect(storage.values.keys, isNot(contains(_kSnapshot)));
-    });
-
-    test('a write from an older identity is refused', () async {
-      final storage = _device();
-      final tokens = TokenStore(storage);
-      final identity = tokens.identityGeneration;
-      tokens.invalidateIdentity();
-
-      final written = await tokens.writeAccountSnapshotIfCurrent(
-        expectedIdentityGeneration: identity,
-        json: _snapshotOf(meFixture()),
-      );
-
-      expect(written, isFalse);
-      expect(storage.values.keys, isNot(contains(_kSnapshot)));
-      expect(await tokens.readAccountSnapshot(), isNull);
-    });
-
-    test('a delete waits for a write queued before it', () async {
-      final storage = _device();
-      final tokens = TokenStore(storage);
-      final written = tokens.writeAccountSnapshotIfCurrent(
-        expectedIdentityGeneration: tokens.identityGeneration,
-        json: _snapshotOf(meFixture()),
-      );
-      await tokens.deleteAccountSnapshot();
-      expect(await written, isTrue);
-      expect(storage.values.keys, isNot(contains(_kSnapshot)));
-    });
-
-    test('a current write is kept and read back', () async {
-      final tokens = TokenStore(_device());
-      final json = _snapshotOf(meFixture());
-      expect(
-        await tokens.writeAccountSnapshotIfCurrent(
-          expectedIdentityGeneration: tokens.identityGeneration,
-          json: json,
-        ),
-        isTrue,
-      );
-      expect(await tokens.readAccountSnapshot(), json);
+    test('a request count taken back never goes below nothing', () async {
+      final tokens = TokenStore(MemoryStorage());
+      expect(await tokens.releasePushPermissionRequest(), 0);
+      expect(await tokens.recordPushPermissionRequest(), 1);
+      expect(await tokens.releasePushPermissionRequest(), 0);
+      expect(await tokens.readPushPermissionRequests(), 0);
     });
   });
 }

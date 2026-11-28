@@ -22,6 +22,7 @@ import '../../core/env/app_config.dart';
 import '../../core/env/app_version.dart';
 import '../../core/format/locale_formats.dart';
 import '../../core/session/session.dart';
+import '../../core/session/session_core.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/navigation.dart';
 import '../../design/components/primitives.dart';
@@ -219,7 +220,11 @@ class ProfileScreen extends ConsumerWidget {
       isDestructive: true,
     );
     if (!confirmed || !context.mounted) return;
-    await ref.read(sessionProvider.notifier).signOut();
+    try {
+      await ref.read(sessionProvider.notifier).signOut();
+    } on SessionNotSaved catch (error) {
+      if (context.mounted) AppSnack.failure(context, error);
+    }
   }
 
   static Future<void> _openLegalUrl(BuildContext context, String path) async {
@@ -299,6 +304,11 @@ class _GuestProfile extends ConsumerWidget {
           const SizedBox(height: AppSpace.xl),
 
           SectionHeader(title: l.guestSettings),
+          _Row(
+            icon: Icons.notifications_active_outlined,
+            label: l.profileNotificationSettings,
+            onTap: () => context.pushNamed(Routes.profileNotifications),
+          ),
           _Row(
             icon: Icons.translate_rounded,
             label: l.profileLanguage,

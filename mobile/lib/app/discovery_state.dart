@@ -65,7 +65,7 @@ class DiscoveryAudience extends Notifier<Object?> {
     final session = ref.watch(sessionProvider);
     final previous = _member;
     final member = _member = session is SessionSignedIn
-        ? (accountId: session.account.id, generation: session.generation)
+        ? (accountId: session.account.id, sid: session.sid)
         : null;
     final fromGuest = previous == null && _audience is _Guest;
     return _audience = switch (session) {

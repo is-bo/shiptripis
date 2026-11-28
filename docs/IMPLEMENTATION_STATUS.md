@@ -1,5 +1,40 @@
 # Waçla V1 Implementation Status
 
+## Wassla: the phone's session record and core (S1-A, 2026-11-27)
+
+- Loop-end plan 5.4, rules S-1, S-2, S-3, S-5 and S-6. Phone only, nothing deployed. S1-B continues
+  on the same branch and pull request.
+- One record in secure storage (`session.record`): the current sign-in (`sid`, account snapshot,
+  tokens) or none, and the ended sign-ins the server has not confirmed. `SessionCore`, created in
+  `main()`, is its one writer: one queue, one write per transition, storage before memory. The
+  Android activity is `singleTask`.
+- One sign-in attempt at a time, reserved before any await; no step from one member to another.
+  One exit, `end(sid, reason)`, for a sign-out, a refused refresh token or a deleted account; a
+  429, 403, 404, 5xx, timeout or no network ends nothing. A record unreadable in the background
+  waits; unreadable in the foreground or unparseable, it is lost and the push token is deleted.
+- Every ended sign-in is posted to `POST /api/auth/sign-out` with its own refresh token until the
+  server answers 205 or 400 `sign_out_proof_invalid`. The account has one owner that reads
+  `/api/me`; the newest read wins. Detail and evidence: `docs/PHASE_S1A_SESSION_CORE.md`.
+
+## Wassla: notifications on first open, sign-in sessions and who a push belongs to (N1, 2026-11-27)
+
+- Ismail's decision of 2026-11-26: the app asks for notification permission on its own, once, the
+  first time it is opened on a usable screen, a guest included; Profile > Notifications recovers.
+  Registering the phone waits for sign-in. Nothing deployed.
+- Every sign-in is a `SignInSession` row named by the `sid` of all its tokens (migration
+  `accounts.0008`); a refresh and a push registration need it live, under the account lock. A
+  phone's registrations are numbered and ordered by the server (`PushInstallationBinding`, migration
+  `notifications.0009`); a sign-out records nothing there and switches off only its own sign-in's
+  devices.
+- `POST /api/auth/sign-out` answers 205 for any proof this server signed (live, ended, expired,
+  rotated, deleted account; a repeat writes nothing) and `400 sign_out_proof_invalid` otherwise.
+- One credential writer, `write_password`, ends every sign-in of an existing account; every save of
+  a loaded user names its fields (a test-time guard in `conftest.py` and a scan enforce both). The
+  technical admin saves only what its form changed, and staff rights are read only there (D5).
+- A queued push carries each device's sign-in; the Go worker checks user, device, token and sign-in
+  against the row right before each send and retry. Detail and evidence:
+  `docs/PHASE_N1_NOTIFICATION_FIRST_OPEN.md`.
+
 ## Wassla: stored photos without metadata, names by audience (PV, 2026-11-27)
 
 - Older privacy findings of `HANDOFF.md` 0.7. Server only, no migration, no app change. Nothing

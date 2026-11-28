@@ -19,10 +19,13 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_test/flutter_test.dart' show WidgetTester;
 import 'package:shiptrip/core/api/api_client.dart';
 import 'package:shiptrip/core/session/session.dart';
-import 'package:shiptrip/core/time/clock.dart';
+import 'package:shiptrip/core/session/session_core.dart';
 import 'package:shiptrip/core/session/token_store.dart';
+import 'package:shiptrip/core/time/clock.dart';
+import 'package:shiptrip/domain/account.dart';
 
 /// One request the client actually made.
 class RecordedRequest {
@@ -76,6 +79,10 @@ class FakeBackend {
     'GET /api/users/me/ratings/summary': (_) =>
         const FakeResponse(200, {'state': 'new', 'average': null, 'count': 0}),
   };
+
+  /// The phone's session core, posting its sign-outs here. [meFixture] is
+  /// signed in unless a test sets another core.
+  late SessionCore session = coreFor(this);
 
   /// Answers any request no route claims. Null keeps the default: an unrouted
   /// call is a loud failure. A whole-app test that boots every tab sets this
@@ -170,84 +177,170 @@ class _FakeAdapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
-/// A keystore that answers from memory.
+/// Secure storage that answers from memory, as a keystore would.
 ///
-/// Subclassed rather than mocked at the channel so the production
-/// `SessionController.restore()` path runs exactly as it does on a device: it
-/// finds a refresh token, calls `/api/me`, and signs the user in.
+/// [readError] and [writeError], while set, are thrown by every read or
+/// write: a keystore can refuse either. [readGate] and [writeGate], while
+/// set, hold every read or write until they complete.
+class MemoryStorage extends FlutterSecureStorage {
+  MemoryStorage([Map<String, String>? values]) : values = {...?values};
+
+  final Map<String, String> values;
+  Object? readError;
+  Object? writeError;
+  Completer<void>? readGate;
+  Completer<void>? writeGate;
+  int writes = 0;
+
+  @override
+  Future<String?> read({
+    required String key,
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    await readGate?.future;
+    final error = readError;
+    if (error != null) throw error;
+    return values[key];
+  }
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    await writeGate?.future;
+    final error = writeError;
+    if (error != null) throw error;
+    writes++;
+    if (value == null) {
+      values.remove(key);
+    } else {
+      values[key] = value;
+    }
+  }
+
+  @override
+  Future<void> delete({
+    required String key,
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    final error = writeError;
+    if (error != null) throw error;
+    values.remove(key);
+  }
+
+  /// The session record as stored now.
+  SessionRecord? get record => switch (values[SessionCore.recordKey]) {
+    null => null,
+    final String raw => SessionRecord.decode(raw),
+  };
+}
+
+/// A JWT-shaped token of sign-in [sid]. The phone reads only its `sid`
+/// claim; [kind] keeps the access token, the refresh token and each rotation
+/// apart.
+String fakeToken(String sid, [String kind = 'refresh']) =>
+    'h.${base64Url.encode(utf8.encode(jsonEncode({'sid': sid, 'kind': kind})))}.s';
+
+/// The answer to a sign-in, a sign-up or a provider sign-in that issues
+/// sign-in [sid] for [user].
+FakeResponse signInAnswer({String sid = 'sid-b', Map<String, dynamic>? user}) =>
+    FakeResponse(200, {
+      'access': fakeToken(sid, 'access'),
+      'refresh': fakeToken(sid),
+      'user': user ?? meFixture(),
+    });
+
+/// Sign-in [sid] of [account] ([meFixture] by default), as the server issued
+/// it.
+SignIn signInFor({String sid = 'sid-a', Map<String, dynamic>? account}) =>
+    SignIn(
+      sid: sid,
+      account: Account.fromJson(account ?? meFixture()),
+      access: fakeToken(sid, 'access'),
+      refresh: fakeToken(sid),
+    );
+
+/// The record of a phone on which [account] is signed in as [sid].
+String signedInRecord({
+  String sid = 'sid-a',
+  Map<String, dynamic>? account,
+  List<EndedSignIn> ended = const [],
+}) => SessionRecord(
+  current: signInFor(sid: sid, account: account),
+  ended: ended,
+).encode();
+
+/// The real [SessionCore] over [storage], posting its sign-outs to [backend].
+/// Without [storage], the phone holds sign-in `sid-a` of [meFixture], or
+/// nobody when [signedIn] is false.
+SessionCore coreFor(
+  FakeBackend backend, {
+  MemoryStorage? storage,
+  bool signedIn = true,
+  Future<void> Function()? deletePushToken,
+}) => SessionCore(
+  storage:
+      storage ??
+      MemoryStorage({if (signedIn) SessionCore.recordKey: signedInRecord()}),
+  http: Dio()..httpClientAdapter = _FakeAdapter(backend),
+  deletePushToken: deletePushToken,
+);
+
+/// The phone's own keys, in memory.
 class FakeTokenStore extends TokenStore {
-  FakeTokenStore({
-    this.refresh = 'refresh-token',
-    String? locale,
-    this.accountSnapshot,
-  }) : _locale = locale,
-       super(const FlutterSecureStorage());
+  FakeTokenStore({String? locale})
+    : _locale = locale,
+      super(const FlutterSecureStorage());
 
-  final String? refresh;
-
-  /// The launch snapshot, as secure storage would hold it. Null by default,
-  /// so a test not about K5's fast launch keeps the `/api/me`-first restore.
-  String? accountSnapshot;
   String? _locale;
   String? _roleContext;
+  int _pushPermissionRequests = 0;
 
   @override
-  Future<void> save({required String access, required String refresh}) async {
-    invalidateIdentity();
-    accountSnapshot = null;
-  }
+  Future<int> readPushPermissionRequests() async => _pushPermissionRequests;
 
   @override
-  Future<String?> readAccountSnapshot() async => accountSnapshot;
+  Future<int> recordPushPermissionRequest({bool afterDenial = false}) async =>
+      _pushPermissionRequests = afterDenial && _pushPermissionRequests < 1
+      ? 2
+      : _pushPermissionRequests + 1;
 
   @override
-  Future<bool> writeAccountSnapshotIfCurrent({
-    required int expectedIdentityGeneration,
-    required String json,
-  }) async {
-    if (identityGeneration != expectedIdentityGeneration) return false;
-    accountSnapshot = json;
-    return true;
-  }
+  Future<int> releasePushPermissionRequest() async => _pushPermissionRequests =
+      _pushPermissionRequests > 0 ? _pushPermissionRequests - 1 : 0;
+
+  int _pushBindingSequence = 0;
 
   @override
-  Future<void> deleteAccountSnapshot() async => accountSnapshot = null;
+  Future<int> nextPushBindingSequence() async => ++_pushBindingSequence;
 
   @override
-  Future<String?> readAccess() async => 'access-token';
-
-  @override
-  Future<String?> readRefresh() async => refresh;
-
-  @override
-  Future<void> updateAccess(String access) async {}
-
-  @override
-  Future<bool> saveRefreshedIfCurrent({
-    required int expectedIdentityGeneration,
-    required String expectedRefresh,
-    required String access,
-    String? refresh,
-  }) async =>
-      identityGeneration == expectedIdentityGeneration &&
-      this.refresh == expectedRefresh;
-
-  @override
-  Future<bool> saveAuthenticationIfCurrent({
-    required int expectedIdentityGeneration,
-    required String access,
-    required String refresh,
-  }) async {
-    if (identityGeneration != expectedIdentityGeneration) return false;
-    accountSnapshot = null;
-    return true;
+  Future<void> raisePushBindingSequence(int sequence) async {
+    if (sequence > _pushBindingSequence) _pushBindingSequence = sequence;
   }
 
   @override
   Future<String?> readRoleContext() async => _roleContext;
 
   @override
-  Future<void> writeRoleContext(String value) async => _roleContext = value;
+  Future<void> writeRoleContext(String? value) async => _roleContext = value;
 
   @override
   Future<String?> readLocale() async => _locale;
@@ -256,60 +349,70 @@ class FakeTokenStore extends TokenStore {
   Future<void> writeLocale(String? tag) async => _locale = tag;
 
   @override
-  Future<void> clear() async {
-    invalidateIdentity();
-    accountSnapshot = null;
-  }
-
-  @override
-  Future<bool> clearIfIdentityCurrent(int expectedIdentityGeneration) async {
-    if (identityGeneration != expectedIdentityGeneration) return false;
-    invalidateIdentity();
-    accountSnapshot = null;
-    return true;
-  }
-
-  @override
   Future<void> purgeLegacyArtifacts() async {}
 }
 
-/// A container whose HTTP layer is [backend] and whose keystore is in memory.
+/// A container whose HTTP layer is [backend] and whose storage is in memory.
 ///
-/// Everything else — repositories, session, providers — is the real thing.
+/// Everything else — the session core, repositories, session, providers — is
+/// the real thing. Without [session], [meFixture] is signed in.
 ProviderContainer containerFor(
   FakeBackend backend, {
   FakeTokenStore? tokens,
+  SessionCore? session,
   DateTime Function()? now,
 }) {
   final store = tokens ?? FakeTokenStore();
+  final core = session ?? backend.session;
   return ProviderContainer(
     overrides: [
       tokenStoreProvider.overrideWithValue(store),
-      apiClientProvider.overrideWithValue(apiClientFor(backend, store)),
+      sessionCoreProvider.overrideWithValue(core),
+      apiClientProvider.overrideWithValue(apiClientFor(backend, core)),
       if (now != null) clockProvider.overrideWithValue(now),
     ],
   );
 }
 
-/// The real [ApiClient], talking to [backend].
+/// A launch, finished: the stored record read and the stored member's
+/// account confirmed by `/api/me`. For a plain test, on real time; a widget
+/// test uses [launchPumped].
+Future<void> launch(ProviderContainer container) async {
+  container.read(sessionProvider);
+  await container.read(sessionCoreProvider).load();
+  await container.read(sessionProvider.notifier).refreshAccount();
+}
+
+/// [launch] under a widget test's fake clock, before the first frame.
+///
+/// Not `tester.runAsync`: the core's queue would then end on a future of the
+/// real event loop, and the next write the test makes on the fake clock would
+/// wait on it for real time.
+Future<void> launchPumped(WidgetTester tester, ProviderContainer container) =>
+    _pumped(tester, launch(container));
+
+Future<void> _pumped(WidgetTester tester, Future<void> work) async {
+  var done = false;
+  final watched = work.whenComplete(() => done = true);
+  for (var i = 0; i < 100 && !done; i++) {
+    await tester.pump(const Duration(milliseconds: 10));
+  }
+  await watched;
+}
+
+/// The real [ApiClient] of [session] (by default the backend's), talking to
+/// [backend].
 ///
 /// Exposed for a test that needs to build its own container — one standing in
 /// for a camera, say. `Override` is not nameable from Riverpod 3's public API,
 /// so the override list has to be written as a literal at the call site rather
-/// than passed in here.
-///
-/// [tokens] may be a real [TokenStore] over in-memory storage, for a test about
-/// what the store itself keeps; [onSessionExpired] wires the terminal-refresh
-/// path the way `apiClientProvider` does in the app.
-ApiClient apiClientFor(
-  FakeBackend backend,
-  TokenStore tokens, {
-  OnSessionExpired? onSessionExpired,
-}) => ApiClient(
-  tokens: tokens,
-  dio: Dio()..httpClientAdapter = _FakeAdapter(backend),
-  onSessionExpired: onSessionExpired,
-);
+/// than passed in here: `sessionCoreProvider` with `backend.session`, then
+/// `apiClientProvider` with this.
+ApiClient apiClientFor(FakeBackend backend, [SessionCore? session]) =>
+    ApiClient(
+      session: session ?? backend.session,
+      dio: Dio()..httpClientAdapter = _FakeAdapter(backend),
+    );
 
 // ---------------------------------------------------------------------------
 // Fixtures, shaped from the real Phase 6C responses
@@ -320,8 +423,11 @@ ApiClient apiClientFor(
 /// [preferredLanguage] is passed through verbatim, including `null` and `''`,
 /// so a test can reproduce a legacy row exactly as an older deployment would
 /// serialise it rather than as the client wishes it looked.
-Map<String, dynamic> meFixture({Object? preferredLanguage = 'en'}) => {
-  'id': 42,
+Map<String, dynamic> meFixture({
+  Object? preferredLanguage = 'en',
+  int id = 42,
+}) => {
+  'id': id,
   'email': 'sender@example.com',
   'full_name': 'Amina Bouzid',
   'phone': '+213555000111',

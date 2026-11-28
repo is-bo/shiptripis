@@ -256,6 +256,14 @@ class LFr extends L {
       'Nous n’avons pas pu terminer cette action. Réessayez, et signalez-le si cela persiste.';
 
   @override
+  String get stateSessionNotSavedTitle =>
+      'Ce téléphone n’a pas pu l’enregistrer';
+
+  @override
+  String get stateSessionNotSavedBody =>
+      'Rien n’a changé. Réessayez, et redémarrez votre téléphone si cela persiste.';
+
+  @override
   String get stateAppOutdatedTitle => 'Cette version n’est plus à jour';
 
   @override
@@ -3478,14 +3486,26 @@ class LFr extends L {
 
   @override
   String get pushPermissionBody =>
-      'Recevez à temps les nouvelles concernant les offres, paiements, livraisons, messages et vérifications. Wassla ne demande l’autorisation que lorsque vous choisissez Activer.';
+      'Recevez à temps les nouvelles concernant les offres, paiements, livraisons, messages et vérifications. Wassla demande l’autorisation une seule fois, à la première ouverture de l’application, et vous pouvez activer les notifications ici à tout moment.';
 
   @override
   String get pushPermissionEnabled => 'Les notifications sont activées.';
 
   @override
+  String get pushPermissionEnabledGuest =>
+      'Les notifications sont autorisées sur ce téléphone. Connectez-vous et Wassla commencera à vous en envoyer ici.';
+
+  @override
+  String get pushGuestSignInNote =>
+      'Connectez-vous pour recevoir les notifications de votre compte et choisir lesquelles vous recevez.';
+
+  @override
   String get pushPermissionDeniedRequestable =>
       'Les notifications sont toujours désactivées. Choisissez Activer les notifications pour les redemander à Android. La boîte de réception de l’application reste disponible dans tous les cas.';
+
+  @override
+  String get pushPermissionDeniedRequestableGuest =>
+      'Les notifications sont toujours désactivées. Choisissez Activer les notifications pour les redemander à Android.';
 
   @override
   String get pushPermissionDenied =>
@@ -3498,6 +3518,14 @@ class LFr extends L {
   @override
   String get pushPermissionInitializationFailed =>
       'Les notifications push n’ont pas pu démarrer sur ce téléphone. Les notifications dans l’application restent disponibles ; rouvrez Wassla pour réessayer.';
+
+  @override
+  String get pushPermissionUnavailableGuest =>
+      'Les notifications push ne sont pas configurées dans cette version.';
+
+  @override
+  String get pushPermissionInitializationFailedGuest =>
+      'Les notifications push n’ont pas pu démarrer sur ce téléphone. Rouvrez Wassla pour réessayer.';
 
   @override
   String get pushEnableAction => 'Activer les notifications';

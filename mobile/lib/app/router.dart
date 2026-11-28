@@ -92,6 +92,7 @@ import '../features/requests/request_create_screen.dart';
 import '../features/requests/request_detail_screen.dart';
 import '../features/shell/app_shell.dart';
 import '../features/splash/splash_screen.dart';
+import 'route_transition_tracker.dart';
 
 /// Route names. Screens navigate by name so a path change is a one-line edit
 /// here rather than a search across thirty files.
@@ -182,6 +183,7 @@ const _publicLocations = <String>[
   '/profile',
   '/profile/language',
   '/profile/appearance',
+  '/profile/notifications',
   '/how-it-works',
   '/location/pick',
   '/discover/',
@@ -257,8 +259,7 @@ String? _redirectFor(SessionState session, Uri uri) {
   final location = uri.path;
 
   // Restoring: hold on the splash rather than flashing a sign-in screen at a
-  // user who is already signed in. A cold start with no network stays here
-  // too — being offline is not being signed out.
+  // user who is already signed in, until the stored record has been read.
   if (session is SessionRestoring) {
     return location == '/splash' ? null : '/splash';
   }
@@ -321,6 +322,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/splash',
     refreshListenable: refresh,
+    observers: [ref.read(routeTransitionTrackerProvider)],
     debugLogDiagnostics: false,
     redirect: (context, state) =>
         _redirectFor(ref.read(sessionProvider), state.uri),

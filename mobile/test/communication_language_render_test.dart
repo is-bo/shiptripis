@@ -16,7 +16,6 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shiptrip/core/session/session.dart';
 import 'package:shiptrip/design/components/forms.dart';
 import 'package:shiptrip/design/tokens.dart';
 import 'package:shiptrip/domain/communication_language.dart';
@@ -33,9 +32,7 @@ Future<ProviderContainer> _signedIn(
 ) async {
   final container = containerFor(backend);
   addTearDown(container.dispose);
-  await tester.runAsync(
-    () => container.read(sessionProvider.notifier).restore(),
-  );
+  await launchPumped(tester, container);
   return container;
 }
 

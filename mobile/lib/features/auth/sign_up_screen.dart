@@ -71,7 +71,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
     });
 
     try {
-      await ref
+      final signedIn = await ref
           .read(sessionProvider.notifier)
           .signUp(
             fullName: _fullName.text,
@@ -87,7 +87,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
               ref.read(effectiveLocaleProvider).languageCode,
             ),
           );
-      if (!mounted) return;
+      if (!signedIn || !mounted) return;
       // The account exists but is unverified, and the server has already sent
       // a code. Taking the user straight there is the difference between an
       // email they act on and one they find a week later. Inside the account

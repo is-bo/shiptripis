@@ -102,39 +102,53 @@ void main() {
 
     test('nothing writes a handover code to storage', () {
       final storageWriters = _grepLib(RegExp(r'\.write\(\s*key:'));
-      // Session/push storage is the only place anything is persisted at all,
-      // and it never stores handover code material.
+      // The session record and the phone's own keys are the only places
+      // anything is persisted at all, and neither stores handover code
+      // material.
       for (final file in storageWriters) {
         expect(
           file,
-          contains('token_store.dart'),
+          anyOf(contains('token_store.dart'), contains('session_core.dart')),
           reason: 'unexpected secure-storage write in $file',
         );
       }
 
-      // And the keys it writes are exactly the seven it is allowed to hold.
-      // The account snapshot (K5) is the user's own presentation profile —
-      // its key set is pinned in k5_session_snapshot_test.dart.
+      // The session core writes one key: the record of the sign-in (its
+      // tokens and the account's own presentation profile, whose fields are
+      // pinned in k5_session_snapshot_test.dart) and of the ended sign-ins.
+      final core = File(
+        'lib/core/session/session_core.dart',
+      ).readAsStringSync();
+      expect(
+        RegExp(
+          r'\.write\(\s*key:\s*([A-Za-z_]+)',
+        ).allMatches(core).map((m) => m.group(1)).toSet(),
+        {'recordKey'},
+      );
+
+      // And the phone's keys are exactly the six it is allowed to hold.
       final store = File(
         'lib/core/session/token_store.dart',
       ).readAsStringSync();
       final written = RegExp(
-        r'\.write\(\s*key:\s*(_k[A-Za-z]+)',
+        // A key is written directly, or through the counter helper.
+        r'(?:\.write\(\s*key:\s*|_addToCounter\(\s*)(_k[A-Za-z]+)',
       ).allMatches(store).map((m) => m.group(1)).toSet();
       expect(
         written,
         {
-          '_kAccess',
-          '_kRefresh',
-          '_kAccountSnapshot',
           '_kRoleContext',
           '_kLocale',
           '_kInstallationId',
           '_kPendingPushToken',
+          '_kPushPermissionRequests',
+          '_kPushBindingSequence',
         },
         reason:
-            'secure storage may hold session/push tokens, the account’s '
-            'own profile snapshot, a random install ID, a role and a locale '
+            'the phone\'s keys may hold a pending push token, a random '
+            'install ID, a count of '
+            'notification permission requests, the number of the newest push '
+            'registration, a role and a locale '
             '— never code material, a guest token or recipient details',
       );
     });

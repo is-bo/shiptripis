@@ -19,7 +19,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shiptrip/core/api/api_exception.dart';
 import 'package:shiptrip/core/api/error_codes.dart';
-import 'package:shiptrip/core/session/session.dart';
 import 'package:shiptrip/design/components/route.dart';
 import 'package:shiptrip/domain/canonical_place.dart';
 import 'package:shiptrip/domain/delivery_request.dart';
@@ -153,9 +152,7 @@ Future<L> _pumpDetail(
   final backend = _detailBackend(request);
   final container = containerFor(backend);
   addTearDown(container.dispose);
-  await tester.runAsync(
-    () => container.read(sessionProvider.notifier).restore(),
-  );
+  await launchPumped(tester, container);
   await pumpApp(
     tester,
     const RequestDetailScreen(requestId: 77),
@@ -196,9 +193,7 @@ Future<void> _pumpList(
     );
   final container = containerFor(backend);
   addTearDown(container.dispose);
-  await tester.runAsync(
-    () => container.read(sessionProvider.notifier).restore(),
-  );
+  await launchPumped(tester, container);
   await pumpApp(tester, screen, container: container, locale: locale);
   await tester.pumpAndSettle();
 }

@@ -315,8 +315,12 @@ void main() {
       expect((session as SessionSignedOut).becauseDeleted, isTrue);
       expect(container.read(routerProvider).state.uri.path, '/profile');
       expect(find.text(_en.deleteAccountDone), findsOneWidget);
-      // The server already ended every session.
-      expect(server.backend.to('POST', '/api/auth/sign-out'), isEmpty);
+      // The server already ended every session; the phone still reports
+      // its own (rule S-5), with that sign-in's refresh token and nothing
+      // else, and the server confirms it.
+      expect(server.backend.to('POST', '/api/auth/sign-out').single.body, {
+        'refresh': fakeToken('sid-a'),
+      });
     });
 
     testWidgets('an Apple account asks Apple for a code first, and cancelling '
@@ -487,9 +491,6 @@ class _Store extends FakeTokenStore {
   _Store({super.locale});
 
   @override
-  Future<String?> readAccess() async => 'access-token';
-
-  @override
   Future<String> readOrCreateInstallationId() async => 'installation';
 
   @override
@@ -536,7 +537,8 @@ class _DeletionServer {
         deleted = true;
         return const FakeResponse(204, <String, dynamic>{});
       })
-      ..on('POST', '/api/auth/sign-out', const FakeResponse(200, {}))
+      // A deleted account's sign-in has ended already: plan 5.3 answers 205.
+      ..on('POST', '/api/auth/sign-out', const FakeResponse(205))
       ..fallback = _memberRead;
   }
 
@@ -594,9 +596,8 @@ Future<ProviderContainer> _openDeletion(
     ProviderScope(
       overrides: [
         tokenStoreProvider.overrideWithValue(tokens),
-        apiClientProvider.overrideWithValue(
-          apiClientFor(server.backend, tokens),
-        ),
+        sessionCoreProvider.overrideWithValue(server.backend.session),
+        apiClientProvider.overrideWithValue(apiClientFor(server.backend)),
         notificationSocketProvider.overrideWithValue(
           NotificationSocket(connector: (_, _) async => _IdleConnection()),
         ),

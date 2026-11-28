@@ -29,7 +29,7 @@ void main() {
           if (calls == 1) _stall(r);
           return FakeResponse(200, {'id': 7});
         });
-      final api = apiClientFor(backend, FakeTokenStore());
+      final api = apiClientFor(backend);
       addTearDown(() => api.raw.close(force: true));
 
       final body = await api.getObject('/api/me');
@@ -41,7 +41,7 @@ void main() {
     test('a read that keeps timing out ends as a retryable timeout after '
         'three attempts', () async {
       final backend = FakeBackend()..handle('GET', '/api/deals', _stall);
-      final api = apiClientFor(backend, FakeTokenStore());
+      final api = apiClientFor(backend);
       addTearDown(() => api.raw.close(force: true));
 
       final failure = await api
@@ -62,7 +62,7 @@ void main() {
       () async {
         final backend = FakeBackend()
           ..handle('POST', '/api/matches/propose', _stall);
-        final api = apiClientFor(backend, FakeTokenStore());
+        final api = apiClientFor(backend);
         addTearDown(() => api.raw.close(force: true));
 
         final failure = await api

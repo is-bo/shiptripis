@@ -26,6 +26,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
+import '../../data/auth_repository.dart';
 import '../../domain/communication_language.dart';
 import '../api/api_exception.dart';
 import '../env/app_config.dart';
@@ -329,43 +330,48 @@ class SocialAuth {
 
   SocialSignIn get _provider => _ref.read(socialSignInProvider);
   SessionController get _session => _ref.read(sessionProvider.notifier);
+  AuthRepository get _auth => _ref.read(authRepositoryProvider);
 
-  /// Signs in with Google. False when the person cancelled.
-  Future<bool> google(CommunicationLanguage language) async {
-    final credential = await _provider.google();
-    if (credential == null) return false;
-    await _session.signInWithGoogle(
-      idToken: credential.idToken,
-      preferredLanguage: language,
-    );
-    return true;
-  }
+  /// Signs in with Google. False when the person cancelled, or when another
+  /// sign-in was already under way: the attempt is reserved before the
+  /// provider's sheet opens.
+  Future<bool> google(CommunicationLanguage language) =>
+      _session.signInWith(() async {
+        final credential = await _provider.google();
+        if (credential == null) return null;
+        return _auth.signInWithGoogle(
+          idToken: credential.idToken,
+          preferredLanguage: language,
+        );
+      });
 
-  /// Signs in with Apple. False when the person cancelled.
-  Future<bool> apple(CommunicationLanguage language) async {
-    final credential = await _appleCredential();
-    if (credential == null) return false;
-    _keptApple = credential;
-    _keptAppleUsable = true;
-    try {
-      await _session.signInWithApple(
-        identityToken: credential.identityToken,
-        nonce: credential.rawNonce,
-        fullName: credential.fullName,
-        preferredLanguage: language,
-      );
-    } on ApiException catch (error) {
-      _keptAppleUsable =
-          error.isRetryable || error.kind == ApiFailureKind.rateLimited;
-      rethrow;
-    } on Object {
-      _keptAppleUsable = false;
-      rethrow;
-    }
-    _keptApple = null;
-    _keptAppleUsable = false;
-    return true;
-  }
+  /// Signs in with Apple. False when the person cancelled, or when another
+  /// sign-in was already under way.
+  Future<bool> apple(CommunicationLanguage language) =>
+      _session.signInWith(() async {
+        final credential = await _appleCredential();
+        if (credential == null) return null;
+        _keptApple = credential;
+        _keptAppleUsable = true;
+        try {
+          final signIn = await _auth.signInWithApple(
+            identityToken: credential.identityToken,
+            nonce: credential.rawNonce,
+            fullName: credential.fullName,
+            preferredLanguage: language,
+          );
+          _keptApple = null;
+          _keptAppleUsable = false;
+          return signIn;
+        } on ApiException catch (error) {
+          _keptAppleUsable =
+              error.isRetryable || error.kind == ApiFailureKind.rateLimited;
+          rethrow;
+        } on Object {
+          _keptAppleUsable = false;
+          rethrow;
+        }
+      });
 
   Future<AppleCredential?> _appleCredential() async {
     final kept = _keptApple;

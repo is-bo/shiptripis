@@ -9,6 +9,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
+from apps.accounts.sessions import write_password
 from apps.admin_panel.models import AdminAuditLog
 from apps.admin_panel.permissions import AdminRole, assign_admin_roles
 from apps.admin_panel.services import record_admin_action
@@ -79,12 +80,16 @@ class Command(BaseCommand):
             # live administrator's password just because env was reloaded.
             if created:
                 validate_password(password, user=user)
-                user.set_password(password)
+                write_password(user, password)
             user.email = email
             user.full_name = full_name[:120]
             user.is_active = True
             user.is_email_verified = True
-            user.save()
+            user.save(
+                update_fields=None
+                if created
+                else ("email", "full_name", "is_active", "is_email_verified")
+            )
             assign_admin_roles(
                 user, (AdminRole.SUPER_ADMIN,), elevate_super_admin=True
             )

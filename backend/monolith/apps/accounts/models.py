@@ -1,4 +1,5 @@
 import secrets
+import uuid
 from datetime import timedelta
 
 from django.conf import settings
@@ -42,6 +43,10 @@ class User(AbstractUser):
     #: When the member deleted their account (`apps.accounts.deletion`). The
     #: row stays, emptied, because deliveries and payments point at it.
     deleted_at = models.DateTimeField(null=True, blank=True)
+    #: How many times every sign-in of the account was ended at once
+    #: (`apps.accounts.sessions.end_all_sessions`). A sign-in is issued only
+    #: while the count is still the one its credentials were checked under.
+    session_epoch = models.PositiveIntegerField(default=0)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["username"]
@@ -66,6 +71,50 @@ class User(AbstractUser):
         if filled:
             self.full_name = name
         return bool(filled)
+
+
+class SignInSession(models.Model):
+    """One sign-in, from the moment its tokens are issued until it ends.
+
+    Its id is the ``sid`` claim of every token the sign-in produces: the first
+    refresh and access tokens, and every pair a refresh rotates into. It ends
+    with its own sign-out, or with every other sign-in of the account when the
+    account changes hands (`apps.accounts.sessions.end_all_sessions`), and an
+    ended sign-in never comes back. A refresh and a push registration both
+    require the sign-in to be live, so no token can outlive the sign-in it
+    came from, however it was rotated (`apps.notifications.push`).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="sign_in_sessions",
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+    ended_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "accounts_sign_in_session"
+
+    def __str__(self) -> str:
+        return f"SignInSession({self.user_id}, {self.pk})"
+
+    @classmethod
+    def live(cls, *, user_id, session_id) -> "SignInSession | None":
+        """The live sign-in ``session_id`` (a token's ``sid``) of ``user_id``.
+
+        None when the claim is missing or malformed, names another account's
+        sign-in, or names one that has ended.
+        """
+
+        try:
+            pk = uuid.UUID(str(session_id))
+        except (TypeError, ValueError, AttributeError):
+            return None
+        return cls.objects.filter(
+            pk=pk, user_id=user_id, ended_at__isnull=True
+        ).first()
 
 
 class OAuthIdentity(models.Model):

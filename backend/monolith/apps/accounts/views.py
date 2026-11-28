@@ -1,6 +1,6 @@
-import logging
-from uuid import UUID
+from collections.abc import Callable
 
+import jwt
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
@@ -10,18 +10,20 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
-from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.settings import api_settings as jwt_settings
+from rest_framework_simplejwt.state import token_backend
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.notifications.models import OutboundMessage
 from apps.notifications.outbox import cancel_message, enqueue_secret_message
-from apps.notifications.push import unregister_push_device
 
 from . import deletion, photos
 from .apple import AppleAuthError, AppleAuthUnavailable, verify_identity_token
 from .google import GoogleAuthError, GoogleAuthUnavailable, verify_id_token
 from .models import EmailVerificationCode, OAuthIdentity, PasswordResetCode, User
-from .sessions import end_all_sessions
+from .sessions import SignInInterrupted, end_session, start_session, write_password
 from .serializers import (
     AccountDeletionSerializer,
     AppleSignInSerializer,
@@ -36,18 +38,56 @@ from .serializers import (
 )
 from .social import SocialSignInRefused, sign_in_with_identity
 
-logger = logging.getLogger(__name__)
-
 #: The answer to a provider sign-in that cannot be checked right now (503):
 #: the provider is not configured on this server, or could not be reached.
 GOOGLE_SIGN_IN_UNAVAILABLE = "google_sign_in_unavailable"
 APPLE_SIGN_IN_UNAVAILABLE = "apple_sign_in_unavailable"
+#: Every sign-in of the account ended twice while this one was being issued.
+SIGN_IN_INTERRUPTED = "sign_in_interrupted"
+#: A sign-out whose refresh token this server cannot verify as its own (400).
+SIGN_OUT_PROOF_INVALID = "sign_out_proof_invalid"
 
 
 def _tokens_for_user(user: User) -> dict[str, str]:
     refresh = RefreshToken.for_user(user)
     refresh["role"] = user.role
+    # The sign-in these tokens belong to. Refresh rotation and the access
+    # tokens copy it, so every token of the sign-in ends when it ends.
+    refresh["sid"] = start_session(user).pk.hex
     return {"access": str(refresh.access_token), "refresh": str(refresh)}
+
+
+#: How many times a sign-in checks its credentials. A second check happens
+#: only when every sign-in of the account ended between the first check and
+#: the issue (`SignInInterrupted`); a third would need another end in that
+#: same instant.
+_SIGN_IN_CHECKS = 2
+
+
+def _sign_in(identify: Callable[[], User]) -> Response:
+    """Sign in the account whose credentials ``identify`` checks.
+
+    A password reset, a Google claim or a deletion that commits between the
+    check and the issue refuses the issue (`start_session`). The credentials
+    are then checked again against the account as it is now: an old password
+    no longer passes, and a provider identity that still owns the account
+    does. ``identify`` raises its own refusal.
+    """
+
+    for _ in range(_SIGN_IN_CHECKS):
+        user = identify()
+        try:
+            tokens = _tokens_for_user(user)
+        except SignInInterrupted:
+            continue
+        return Response({"user": MeSerializer(user).data, **tokens})
+    return Response(
+        {
+            "code": SIGN_IN_INTERRUPTED,
+            "detail": "The account changed during sign-in. Try again.",
+        },
+        status=status.HTTP_409_CONFLICT,
+    )
 
 
 def _send_verify_email(user: User) -> None:
@@ -86,53 +126,111 @@ class SignInView(APIView):
     throttle_scope = "login"
 
     def post(self, request: Request) -> Response:
-        s = SignInSerializer(data=request.data, context={"request": request})
-        s.is_valid(raise_exception=True)
-        user: User = s.validated_data["user"]
-        return Response({"user": MeSerializer(user).data, **_tokens_for_user(user)})
+        def identify() -> User:
+            s = SignInSerializer(data=request.data, context={"request": request})
+            s.is_valid(raise_exception=True)
+            return s.validated_data["user"]
+
+        return _sign_in(identify)
+
+
+class _AccessIfValid(JWTAuthentication):
+    """The access token while it is valid; an expired or refused one is no
+    answer rather than a 401, so the refresh token can prove the sign-in."""
+
+    def authenticate(self, request):
+        try:
+            return super().authenticate(request)
+        except AuthenticationFailed:
+            return None
+
+
+def _signed_claims(token: str) -> dict | None:
+    """The claims of ``token`` if this server signed it, expired or not.
+
+    SimpleJWT's own decode refuses an expired token, rightly for everything a
+    token grants. Proving which sign-in to end grants nothing, so only the
+    signature counts here (`_proven_sign_in`).
+    """
+
+    try:
+        return jwt.decode(
+            token,
+            token_backend.get_verifying_key(token),
+            algorithms=[token_backend.algorithm],
+            audience=token_backend.audience,
+            issuer=token_backend.issuer,
+            options={
+                "verify_aud": token_backend.audience is not None,
+                "verify_exp": False,
+            },
+        )
+    except jwt.PyJWTError:
+        return None
+
+
+def _proven_sign_in(request: Request) -> tuple[int, str | None] | None:
+    """The account id and sign-in (``sid``) that ``request`` proves, if any.
+
+    A valid access token proves its own sign-in, whatever refresh token comes
+    with it: a concurrent refresh may have rotated the one the phone captured,
+    and a refresh token of another account must not be touched. Without one,
+    a refresh token proves its sign-in when this server signed it, even if a
+    refresh already rotated it or it has expired: it still names the same
+    sign-in, and all that it can do here is end it.
+    """
+
+    if request.user.is_authenticated:
+        return request.user.pk, request.auth.get("sid")
+    data = request.data if isinstance(request.data, dict) else {}
+    token = data.get("refresh")
+    if not isinstance(token, str) or not token:
+        return None
+    claims = _signed_claims(token)
+    if claims is None or (
+        claims.get(jwt_settings.TOKEN_TYPE_CLAIM) != RefreshToken.token_type
+    ):
+        return None
+    return claims.get(jwt_settings.USER_ID_CLAIM), claims.get("sid")
 
 
 class SignOutView(APIView):
-    permission_classes = (IsAuthenticated,)
+    """End the sign-in the request proves, and every phone it registered.
+
+    205 whenever a token this server signed proves the sign-in, whatever else
+    is true of it: live, already ended, expired, rotated, or of an account
+    that no longer exists. After a 205 the sign-in is ended and its devices
+    are off; a repeat writes nothing. 400 `sign_out_proof_invalid` when no
+    token can be verified as ours. The phone's session core relies on exactly
+    these two answers to stop resending a sign-out (S1).
+    """
+
+    authentication_classes = (_AccessIfValid,)
+    permission_classes = (AllowAny,)
 
     def post(self, request: Request) -> Response:
-        token = request.data.get("refresh")
-        if not token:
+        proven = _proven_sign_in(request)
+        if proven is None:
             return Response(
-                {"detail": "Missing 'refresh' token."},
+                {
+                    "code": SIGN_OUT_PROOF_INVALID,
+                    "detail": "No access or refresh token of this server.",
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        try:
-            RefreshToken(token).blacklist()
-        except TokenError:
-            return Response(
-                {"detail": "Invalid or expired refresh token."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        installation_id = request.data.get("installation_id")
-        if installation_id:
-            try:
-                unregister_push_device(
-                    user=request.user,
-                    installation_id=UUID(str(installation_id)),
-                )
-            except (TypeError, ValueError):
-                # Device cleanup metadata is best-effort and must never trap a
-                # user in an account or weaken refresh-token validation.
-                pass
-            except Exception:
-                logger.warning(
-                    "push device cleanup failed during logout user_id=%s",
-                    request.user.pk,
-                )
+        user_id, session_id = proven
+        user = User.objects.filter(pk=user_id).first()
+        # A deleted account's sign-ins ended with it.
+        if user is not None:
+            end_session(user, session_id)
         return Response(status=status.HTTP_205_RESET_CONTENT)
 
 
 def _social_sign_in(*, provider: str, claims: dict, name, data: dict) -> Response:
     """Sign a verified provider identity in through the one rule (`social.py`)."""
 
-    try:
-        user = sign_in_with_identity(
+    def identify() -> User:
+        return sign_in_with_identity(
             provider=provider,
             subject=claims.get("sub"),
             email=claims.get("email"),
@@ -140,9 +238,11 @@ def _social_sign_in(*, provider: str, claims: dict, name, data: dict) -> Respons
             name=name,
             data=data,
         )
+
+    try:
+        return _sign_in(identify)
     except SocialSignInRefused as exc:
         return Response(exc.payload, status=exc.status)
-    return Response({"user": MeSerializer(user).data, **_tokens_for_user(user)})
 
 
 class GoogleSignInView(APIView):
@@ -264,10 +364,9 @@ class PasswordResetConfirmView(APIView):
             # The code went to the address, so this proves the email (L18A,
             # item 5): the new password, the end of every older session and
             # the confirmed flag land together.
-            user.set_password(new_password)
+            write_password(user, new_password)
             user.is_email_verified = True
-            user.save(update_fields=("password", "is_email_verified"))
-            end_all_sessions(user)
+            user.save(update_fields=("is_email_verified",))
             from apps.notifications.outbox import enqueue_message
 
             enqueue_message(
