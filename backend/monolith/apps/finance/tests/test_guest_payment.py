@@ -73,6 +73,7 @@ from apps.notifications.models import OutboundMessage
 
 from .factories import (
     build_scenario,
+    claim,
     deliver_mock_webhook,
     mock_event_body,
     open_mock_checkout,
@@ -1088,7 +1089,7 @@ class OpenCheckoutTests(GuestPaymentTestCase):
         assert settle.run_at <= timezone.now() + services.CHECKOUT_COLLECTING_POLL
 
         MockGateway.mark(kept.provider_session_id, "succeeded")
-        assert jobs.run_job(settle) == "applied"
+        assert jobs.run_job(claim(settle)) == "applied"
         settle.refresh_from_db()
         assert settle.status == ScheduledJob.Status.SUCCEEDED
         kept.refresh_from_db()
@@ -1476,12 +1477,12 @@ class OpenCheckoutTests(GuestPaymentTestCase):
         assert settle.run_at <= timezone.now()
         assert MockGateway.is_payable(live.provider_session_id)
         MockGateway.fail_close(live.provider_session_id, ProviderUnavailable("down"))
-        assert jobs.run_job(settle) == "failed"
+        assert jobs.run_job(claim(settle)) == "failed"
         settle.refresh_from_db()
         assert settle.status == ScheduledJob.Status.PENDING
         assert MockGateway.is_payable(live.provider_session_id)
         MockGateway.fail_close(live.provider_session_id, None)
-        jobs.run_job(settle)
+        jobs.run_job(claim(settle))
         settle.refresh_from_db()
         assert settle.status == ScheduledJob.Status.SUCCEEDED
         assert settle.last_result == "checkout_final"
@@ -1502,7 +1503,7 @@ class OpenCheckoutTests(GuestPaymentTestCase):
         with mock.patch.object(
             MockGateway, "close_checkout", return_value=CHECKOUT_COLLECTED
         ):
-            assert jobs.run_job(settle) == "deferred"
+            assert jobs.run_job(claim(settle)) == "deferred"
         settle.refresh_from_db()
         assert settle.status == ScheduledJob.Status.PENDING
         assert settle.last_result == "deferred:checkout_collecting"
@@ -1510,7 +1511,7 @@ class OpenCheckoutTests(GuestPaymentTestCase):
         assert settle.run_at > timezone.now()
 
         MockGateway.mark(live.provider_session_id, "succeeded")
-        assert jobs.run_job(settle) == "unapplied_payment_refunded"
+        assert jobs.run_job(claim(settle)) == "unapplied_payment_refunded"
         settle.refresh_from_db()
         assert settle.status == ScheduledJob.Status.SUCCEEDED
         live.refresh_from_db()
@@ -1531,7 +1532,7 @@ class OpenCheckoutTests(GuestPaymentTestCase):
         assert live.close_requested_at is not None
         settle = ScheduledJob.objects.get(key=f"provider_reconcile:{live.pk}")
         assert settle.run_at <= timezone.now()
-        jobs.run_job(settle)
+        jobs.run_job(claim(settle))
         assert not MockGateway.is_payable(live.provider_session_id)
 
     def test_an_order_closed_while_a_checkout_opens_has_nothing_to_close(self):
@@ -1549,9 +1550,9 @@ class OpenCheckoutTests(GuestPaymentTestCase):
         assert lost.close_requested_at is None
         # It never had a checkout stored, so its URL never left the server.
         settle = ScheduledJob.objects.get(key=f"provider_reconcile:{lost.pk}")
-        assert jobs.run_job(settle) == "checkout_never_handed_out"
+        assert jobs.run_job(claim(settle)) == "checkout_never_handed_out"
         assert MockGateway.checkout_session_ids() == []
-        assert services.arm_live_checkouts() == 0
+        assert services.arm_outstanding_attempts() == 0
 
     def test_a_payment_settling_outlives_its_orders_cancellation(self):
         live = self.owner_starts().attempt
@@ -1565,7 +1566,7 @@ class OpenCheckoutTests(GuestPaymentTestCase):
         assert live.close_requested_at is None
         # Its settle job follows it to its own outcome.
         settle = ScheduledJob.objects.get(key=f"provider_reconcile:{live.pk}")
-        assert jobs.run_job(settle) == "deferred"
+        assert jobs.run_job(claim(settle)) == "deferred"
         settle.refresh_from_db()
         assert settle.status == ScheduledJob.Status.PENDING
         assert settle.last_result == "deferred:checkout_settling"
@@ -1725,8 +1726,8 @@ class OpenCheckoutTests(GuestPaymentTestCase):
             old, status=PaymentAttempt.Status.CANCELLED, failure_code="superseded"
         )
 
-        assert services.arm_live_checkouts() == 1
-        assert services.arm_live_checkouts() == 0
+        assert services.arm_outstanding_attempts() == 1
+        assert services.arm_outstanding_attempts() == 0
         jobs.run_due_jobs()
 
         settle = ScheduledJob.objects.get(key=f"provider_reconcile:{old.pk}")
@@ -1744,9 +1745,14 @@ class OpenCheckoutTests(GuestPaymentTestCase):
             completed_at=timezone.now(),
         )
 
-        # Its checkout is live, so its failure is not archived as done.
+        # Its checkout is live, so its failure is not archived as done. The
+        # loop arms it again after the capped retry delay, not at once (G1-B).
         assert jobs.resolve_satisfied_failed_jobs() == 0
         jobs.run_due_jobs()
+        settle.refresh_from_db()
+        assert settle.status == ScheduledJob.Status.PENDING
+        assert settle.run_at > timezone.now() + timedelta(hours=5)
+        jobs.run_due_jobs(at=settle.run_at)
 
         settle.refresh_from_db()
         assert settle.status == ScheduledJob.Status.SUCCEEDED
@@ -1918,7 +1924,7 @@ class OpenCheckoutTests(GuestPaymentTestCase):
             return replace(snapshot, amount_minor=expected + 1)
 
         with mock.patch.object(MockGateway, "fetch_attempt", new=still_wrong):
-            assert jobs.run_job(settle) == "failed"
+            assert jobs.run_job(claim(settle)) == "failed"
         settle.refresh_from_db()
         assert settle.status == ScheduledJob.Status.PENDING
         assert settle.last_error_code == "payment_held"
@@ -1928,10 +1934,10 @@ class OpenCheckoutTests(GuestPaymentTestCase):
         self.order.refresh_from_db()
         assert self.order.status != PaymentOrder.Status.PAID
         # Not live, so the sweep leaves it to its own job.
-        assert services.arm_live_checkouts() == 0
+        assert services.arm_outstanding_attempts() == 0
 
         MockGateway.mark(own.provider_session_id, "succeeded")
-        assert jobs.run_job(settle) == "applied"
+        assert jobs.run_job(claim(settle)) == "applied"
         settle.refresh_from_db()
         assert settle.status == ScheduledJob.Status.SUCCEEDED
         own.refresh_from_db()
@@ -1953,7 +1959,7 @@ class OpenCheckoutTests(GuestPaymentTestCase):
         job, kind = queue_payment_reconciliation(attempt_id=own.pk)
         assert kind == "provider_reconciliation"
         MockGateway.mark(own.provider_session_id, "succeeded")
-        assert jobs.run_job(job) == "applied"
+        assert jobs.run_job(claim(job)) == "applied"
         own.refresh_from_db()
         assert own.status == PaymentAttempt.Status.SUCCEEDED
         self.order.refresh_from_db()
@@ -1997,7 +2003,7 @@ class OpenCheckoutTests(GuestPaymentTestCase):
         )
 
         with mock.patch.object(MockGateway, "fetch_attempt") as fetch:
-            assert jobs.run_job(self.settle_job(own)) == "checkout_final"
+            assert jobs.run_job(claim(self.settle_job(own))) == "checkout_final"
         fetch.assert_not_called()
 
     def test_a_payment_any_path_finds_unaccounted_is_read_until_it_is(self):
@@ -2044,7 +2050,7 @@ class OpenCheckoutTests(GuestPaymentTestCase):
             assert settle.last_error_code == "payment_held"
             assert settle.run_at > timezone.now()
 
-        assert jobs.run_job(settle) == "applied"
+        assert jobs.run_job(claim(settle)) == "applied"
         own.refresh_from_db()
         assert own.status == PaymentAttempt.Status.SUCCEEDED
         self.order.refresh_from_db()
@@ -2081,7 +2087,7 @@ class OpenCheckoutTests(GuestPaymentTestCase):
         assert settle.run_at <= timezone.now()
         assert MockGateway.is_payable(own.provider_session_id)
 
-        assert jobs.run_job(settle) == "checkout_final"
+        assert jobs.run_job(claim(settle)) == "checkout_final"
         own.refresh_from_db()
         assert own.checkout_final_at is not None
         assert not MockGateway.is_payable(own.provider_session_id)

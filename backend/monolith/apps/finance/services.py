@@ -129,8 +129,8 @@ CHECKOUT_ROUNDS = 3
 
 #: Failed runs an attempt's expiry or settle job makes before it is logged at
 #: error level for a human. With the capped backoff this spans about six days.
-#: A checkout that is still live is never left without a settle job: the job
-#: loop arms it again (`arm_live_checkouts`) (G1).
+#: An outstanding attempt is never left without a settle job: the job loop
+#: arms it again (`arm_outstanding_attempts`) (G1).
 CHECKOUT_JOB_ATTEMPTS = 32
 
 #: How often a payment settling at its provider (a delayed method) is read
@@ -1845,12 +1845,16 @@ def _record_close_intent(attempt: PaymentAttempt, *, at: datetime) -> None:
     """Mark a locked attempt's checkout to be closed, before any provider is asked.
 
     From then on it is never handed out again, and any request or job may
-    finish the close (G1).
+    finish the close (G1). Its settle job is made due now in the caller's
+    transaction, so the intent and its wake commit together (R2). Only a new
+    intent wakes it: asked again, the job keeps its backoff, so a provider
+    outage is not read hot.
     """
 
     if attempt.close_requested_at is None:
         attempt.close_requested_at = at
         attempt.save(update_fields=["close_requested_at", "updated_at"])
+        _arm_checkout_settle(attempt.pk)
 
 
 def _settle_before_checkout(attempt: PaymentAttempt) -> None:
@@ -1859,7 +1863,7 @@ def _settle_before_checkout(attempt: PaymentAttempt) -> None:
     Returns once its provider confirmed it can take no further payment, its
     outcome recorded if it took one. Anything else (an error, a payment being
     made or settling through it) answers `CheckoutInProgress`, and its settle
-    job is due at once to follow it up (G1).
+    job, armed with the close intent, follows it up (G1).
     """
 
     try:
@@ -1871,7 +1875,6 @@ def _settle_before_checkout(attempt: PaymentAttempt) -> None:
             attempt.pk,
             exc.code,
         )
-        _arm_checkout_settle(attempt.pk)
         raise CheckoutInProgress("The open checkout could not be closed.") from exc
     if note in LIVE_CHECKOUT_NOTES:
         logger.info(
@@ -1880,7 +1883,6 @@ def _settle_before_checkout(attempt: PaymentAttempt) -> None:
             attempt.pk,
             note,
         )
-        _arm_checkout_settle(attempt.pk)
         raise CheckoutInProgress("The open checkout is taking a payment.")
 
 
@@ -2256,7 +2258,7 @@ def _arm_checkout_settle(attempt_id: int, *, run_at: datetime | None = None) -> 
         if job.status == ScheduledJob.Status.RUNNING:
             # Asked again while it runs, perhaps on facts the run read before:
             # whatever the run then answers, it is due again by then
-            # (`jobs._next_run_at`). Later than its claim, so the run's end
+            # (`jobs._complete_run`). Later than its claim, so the run's end
             # tells this request apart.
             due = max(run_at, now)
             if job.locked_at is not None and job.run_at > job.locked_at:
@@ -2287,31 +2289,51 @@ def _arm_checkout_settle(attempt_id: int, *, run_at: datetime | None = None) -> 
         )
 
 
-def arm_live_checkouts(*, limit: int = 100) -> int:
-    """Give each live checkout without one a pending settle job (G1).
+def arm_outstanding_attempts(*, limit: int = 100) -> int:
+    """Give each outstanding attempt without one a pending settle job (G1, R3).
 
-    Run by the job loop. A live checkout's settle job completes only once the
-    checkout is final, so one left without a pending job has lost it: its
-    retries ran out while the provider confirmed nothing. Returns how many
-    were armed.
+    Run by the job loop on every cycle. An outstanding attempt (`OUTSTANDING`)
+    always has a settle job that is pending or running, since that job
+    reports done only once the attempt is no longer outstanding. One with
+    none, or with one that finished, failed or was cancelled, is armed: due
+    now, or after the capped retry delay when its tries ran out, so a provider
+    that keeps failing is not read hot. A pending job is never pulled
+    forward. Taken in id order up to `limit`; an armed one leaves the unarmed
+    set, so every attempt is armed within a known number of cycles. Returns
+    how many were armed.
     """
 
-    pending = ScheduledJob.objects.filter(
+    from .jobs import _retry_delay
+
+    settle_job = ScheduledJob.objects.filter(
         key=Concat(
             Value("provider_reconcile:"),
             Cast(OuterRef("pk"), output_field=CharField()),
-        ),
-        status__in=(ScheduledJob.Status.PENDING, ScheduledJob.Status.RUNNING),
+        )
     )
     unarmed = list(
-        PaymentAttempt.objects.filter(LIVE_CHECKOUT)
-        .filter(~Exists(pending))
+        PaymentAttempt.objects.filter(OUTSTANDING)
+        .filter(
+            ~Exists(
+                settle_job.filter(
+                    status__in=(
+                        ScheduledJob.Status.PENDING,
+                        ScheduledJob.Status.RUNNING,
+                    )
+                )
+            )
+        )
+        .annotate(ran_out=Exists(settle_job.filter(status=ScheduledJob.Status.FAILED)))
         .order_by("pk")
-        .values_list("pk", flat=True)[:limit]
+        .values_list("pk", "ran_out")[:limit]
     )
-    for attempt_id in unarmed:
-        _arm_checkout_settle(attempt_id)
-        logger.warning("finance.live_checkout_rearmed attempt=%s", attempt_id)
+    now = timezone.now()
+    for attempt_id, ran_out in unarmed:
+        _arm_checkout_settle(
+            attempt_id,
+            run_at=now + _retry_delay(CHECKOUT_JOB_ATTEMPTS) if ran_out else now,
+        )
+        logger.warning("finance.outstanding_attempt_rearmed attempt=%s", attempt_id)
     return len(unarmed)
 
 
@@ -2658,9 +2680,10 @@ def _finish_event(event_id: int, result: str, note: str) -> None:
         next_retry_at=None,
         processed_at=timezone.now(),
     )
+    # A running job writes its own end (R4).
     ScheduledJob.objects.filter(
         key=f"provider_event_process:{event_id}",
-        status__in=(ScheduledJob.Status.PENDING, ScheduledJob.Status.RUNNING),
+        status=ScheduledJob.Status.PENDING,
     ).update(
         status=ScheduledJob.Status.SUCCEEDED,
         last_result=note[:255],
@@ -3396,10 +3419,11 @@ def mark_refund_succeeded(
         deal_id=order.deal_id,
     )
     _recompute_order_money(order)
+    # A running job writes its own end (R4).
     ScheduledJob.objects.filter(
         kind=ScheduledJob.Kind.REFUND_RECONCILE,
         payload__refund_id=refund.pk,
-        status__in=(ScheduledJob.Status.PENDING, ScheduledJob.Status.RUNNING),
+        status=ScheduledJob.Status.PENDING,
     ).update(
         status=ScheduledJob.Status.SUCCEEDED,
         last_result="refund_succeeded",
@@ -3592,11 +3616,11 @@ def _stop_collecting_attempts(order: PaymentOrder, *, reason: str) -> None:
 
     Called under the order lock, once the order no longer collects. Each
     attempt ends now, so nothing funds the order from it. One whose checkout
-    was stored may have been handed out, so its settle job is due at once
-    (`settle_checkout`): it closes the checkout a payer may still hold, and
-    records a payment made through it first, which lands as unapplied and is
-    refunded. A payment already settling is left to its own outcome, which
-    its settle job follows.
+    was stored may have been handed out, so its close is asked for
+    (`_record_close_intent`) and its settle job closes the checkout a payer
+    may still hold, recording a payment made through it first, which lands as
+    unapplied and is refunded. A payment already settling is left to its own
+    outcome, which its settle job follows.
     """
 
     now = timezone.now()
@@ -3609,13 +3633,9 @@ def _stop_collecting_attempts(order: PaymentOrder, *, reason: str) -> None:
     for attempt in attempts:
         attempt.status = PaymentAttempt.Status.CANCELLED
         attempt.failure_code = reason[:64]
-        fields = ["status", "failure_code", "updated_at"]
-        if attempt.provider_session_id and attempt.close_requested_at is None:
-            attempt.close_requested_at = now
-            fields.append("close_requested_at")
-        attempt.save(update_fields=fields)
+        attempt.save(update_fields=["status", "failure_code", "updated_at"])
         if attempt.provider_session_id:
-            _arm_checkout_settle(attempt.pk, run_at=now)
+            _record_close_intent(attempt, at=now)
         ended.append(attempt.pk)
     ScheduledJob.objects.filter(
         kind=ScheduledJob.Kind.ATTEMPT_EXPIRY,

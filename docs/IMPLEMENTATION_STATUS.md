@@ -1,5 +1,19 @@
 # Waçla V1 Implementation Status
 
+## Wassla: the jobs that follow a checkout (G1-B, 2026-11-28)
+
+- Rule G-E of the loop-end plan: the obligation to follow a checkout cannot be lost. Server only,
+  no route, payload or app change. Migration `finance 0038` (the sweep's index). Nothing deployed.
+- The job runner writes a run's end only while the claim is still its own: one helper,
+  `jobs._complete_run`, filtered on the claim's `locked_at`, for every job kind. A run whose job
+  was requeued and claimed again writes nothing, and a wake recorded during a run is kept whatever
+  the run answers.
+- The job loop's sweep arms a settle job for every outstanding attempt (a checkout that can still
+  collect, or a held payment), after the capped retry delay when its tries ran out; the settle job
+  reports done only once the attempt is accounted for. A close intent wakes its settle job in the
+  same transaction, and only a new intent does. Detail and evidence:
+  `docs/PHASE_G1B_CHECKOUT_FOLLOW_UP.md`.
+
 ## Wassla: held payments and finality (G1-A, 2026-11-27)
 
 - Rule G-D of the loop-end plan, decision D2: every reported payment is accounted for before the

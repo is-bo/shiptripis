@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from django.db import connection, models, transaction
-from django.db.models import Case, F, Value, When
+from django.db.models import Case, F, Q, Value, When
 from django.db.models.functions import Least
 from django.utils import timezone
 
@@ -221,13 +221,7 @@ def handle_attempt_expiry(payload: dict) -> str:
     """
 
     from .providers import ProviderError
-    from .services import (
-        CHECKOUT_COLLECTING_POLL,
-        CHECKOUT_OPENING_WINDOW,
-        CHECKOUT_SETTLING_POLL,
-        _arm_checkout_settle,
-        expire_checkout_attempt,
-    )
+    from .services import CHECKOUT_OPENING_WINDOW, expire_checkout_attempt
 
     attempt_id = payload.get("attempt_id")
     if not isinstance(attempt_id, int):
@@ -257,13 +251,6 @@ def handle_attempt_expiry(payload: dict) -> str:
             code="attempt_opening",
             delay=CHECKOUT_OPENING_WINDOW,
         )
-    if result in ("attempt_settling", "attempt_collecting"):
-        poll = (
-            CHECKOUT_SETTLING_POLL
-            if result == "attempt_settling"
-            else CHECKOUT_COLLECTING_POLL
-        )
-        _arm_checkout_settle(attempt_id, run_at=timezone.now() + poll)
     return result
 
 
@@ -272,11 +259,12 @@ def handle_provider_reconcile(payload: dict) -> str:
 
     Providers do not guarantee webhook delivery, so this reads the provider's
     own answer and records it through the path a webhook takes
-    (`settle_checkout`). The job completes only once the checkout can take no
-    further payment, its outcome recorded. Until then it is deferred, or
-    retried while the provider answers nothing usable, and a checkout left
-    live without a pending settle job is armed again by the job loop
-    (`arm_live_checkouts`). It never repeats a create.
+    (`settle_checkout`). The job reports done only once the attempt is no
+    longer `OUTSTANDING`: its checkout can take no further payment and any
+    payment it reported is accounted for. Until then it is deferred, or
+    retried while the provider answers nothing usable, and an outstanding
+    attempt left without a pending settle job is armed again by the job loop
+    (`arm_outstanding_attempts`). It never repeats a create.
     """
 
     from .providers import ProviderError
@@ -304,15 +292,17 @@ def handle_provider_reconcile(payload: dict) -> str:
                 code="checkout_not_stored",
                 delay=CHECKOUT_OPENING_WINDOW,
             )
-        return "checkout_never_handed_out"
-    try:
-        note = settle_checkout(attempt_id=attempt_id)
-    except ProviderError as exc:
-        # Unreachable or refused: the checkout's fate is still unknown, and a
-        # payer may still hold its URL, so the obligation is kept.
-        raise RetryableJobError(
-            "The provider has not told what became of the checkout.", code=exc.code
-        ) from exc
+        note = "checkout_never_handed_out"
+    else:
+        try:
+            note = settle_checkout(attempt_id=attempt_id)
+        except ProviderError as exc:
+            # Unreachable or refused: the checkout's fate is still unknown, and
+            # a payer may still hold its URL, so the obligation is kept.
+            raise RetryableJobError(
+                "The provider has not told what became of the checkout.",
+                code=exc.code,
+            ) from exc
     if note == "checkout_open":
         now = timezone.now()
         raise JobDeferred(
@@ -342,6 +332,10 @@ def handle_provider_reconcile(payload: dict) -> str:
         raise RetryableJobError(
             "A payment the provider reported is held.",
             code="payment_held",
+        )
+    if PaymentAttempt.objects.filter(OUTSTANDING, pk=attempt_id).exists():
+        raise RetryableJobError(
+            "The attempt is still outstanding.", code=f"outstanding_{note}"[:64]
         )
     return note
 
@@ -819,22 +813,6 @@ def _retry_delay(attempts: int) -> timedelta:
     return timedelta(seconds=min(60 * (2 ** max(0, attempts - 1)), 6 * 3_600))
 
 
-def _next_run_at(proposed: datetime):
-    """When a job that ran and must run again is next due.
-
-    A running job's `run_at` is no later than its claim, unless it was asked
-    while running to run again (`services._arm_checkout_settle`): that sooner
-    time is kept, so a request made during the run is never pushed back by the
-    run's own deferral or retry (G1).
-    """
-
-    return Case(
-        When(run_at__gt=F("locked_at"), then=Least(F("run_at"), Value(proposed))),
-        default=Value(proposed),
-        output_field=models.DateTimeField(),
-    )
-
-
 def claim_due_jobs(*, limit: int, at: datetime | None = None) -> list[ScheduledJob]:
     """Atomically take up to `limit` due jobs for this worker."""
 
@@ -993,22 +971,60 @@ def resolve_satisfied_failed_jobs(*, limit: int = 100) -> int:
     return resolved
 
 
+def _complete_run(
+    job: ScheduledJob, *, status: str, run_at: datetime | None = None, **fields
+) -> None:
+    """Write the end of `job`'s run, only while its claim is still this run's (R4).
+
+    Filtered on the `locked_at` its claim stamped: a run whose job was
+    requeued (`requeue_stuck_jobs`) and claimed again writes nothing, so the
+    newer claim's outcome stands. A wake recorded during the run, `run_at`
+    later than the claim (`services._arm_checkout_settle`), is kept whatever
+    the run answers: the job is pending again, due by the sooner of the two.
+    """
+
+    now = timezone.now()
+    moment = models.DateTimeField()
+    woken = Q(run_at__gt=F("locked_at"))
+    due = F("run_at") if run_at is None else Value(run_at, output_field=moment)
+    ended = (
+        None
+        if status == ScheduledJob.Status.PENDING
+        else Case(
+            When(woken, then=Value(None, output_field=moment)),
+            default=Value(now, output_field=moment),
+        )
+    )
+    written = ScheduledJob.objects.filter(
+        pk=job.pk, status=ScheduledJob.Status.RUNNING, locked_at=job.locked_at
+    ).update(
+        status=Case(
+            When(woken, then=Value(ScheduledJob.Status.PENDING)),
+            default=Value(status),
+        ),
+        run_at=Case(When(woken, then=Least(F("run_at"), due)), default=due),
+        completed_at=ended,
+        last_attempt_at=now,
+        locked_at=None,
+        locked_by="",
+        updated_at=now,
+        **fields,
+    )
+    if not written:
+        logger.warning("finance.job_claim_lost job=%s kind=%s", job.pk, job.kind)
+
+
 def run_job(job: ScheduledJob) -> str:
     """Execute one claimed job and record its outcome. Never raises."""
 
     handler = HANDLERS.get(job.kind)
-    now = timezone.now()
     if handler is None:
-        ScheduledJob.objects.filter(pk=job.pk).update(
+        _complete_run(
+            job,
             status=ScheduledJob.Status.FAILED,
             attempts=int(job.attempts) + 1,
-            last_attempt_at=now,
             last_error_code="handler_missing",
             last_error="No handler is registered for this job kind.",
-            locked_at=None,
-            locked_by="",
-            completed_at=now,
-            updated_at=now,
         )
         logger.error("finance.job_no_handler job=%s kind=%s", job.pk, job.kind)
         return "no_handler"
@@ -1021,17 +1037,13 @@ def run_job(job: ScheduledJob) -> str:
         # failure.  Keep the durable obligation live without consuming its
         # retry budget or raising a false incident.
         delay = max(exc.delay, timedelta(seconds=30))
-        ScheduledJob.objects.filter(pk=job.pk).update(
+        _complete_run(
+            job,
             status=ScheduledJob.Status.PENDING,
-            run_at=_next_run_at(now + delay),
-            last_attempt_at=now,
+            run_at=timezone.now() + delay,
             last_error_code="",
             last_error="",
             last_result=f"deferred:{exc.code}"[:255],
-            locked_at=None,
-            locked_by="",
-            completed_at=None,
-            updated_at=now,
         )
         logger.info(
             "finance.job_deferred job=%s kind=%s code=%s",
@@ -1041,16 +1053,12 @@ def run_job(job: ScheduledJob) -> str:
         )
         return "deferred"
     except PermanentJobError as exc:
-        ScheduledJob.objects.filter(pk=job.pk).update(
+        _complete_run(
+            job,
             status=ScheduledJob.Status.FAILED,
             attempts=attempts,
-            last_attempt_at=now,
             last_error_code=exc.code[:64],
             last_error=str(exc)[:500],
-            locked_at=None,
-            locked_by="",
-            completed_at=now,
-            updated_at=now,
         )
         logger.error(
             "finance.job_terminal job=%s kind=%s key=%s attempts=%s code=%s",
@@ -1073,21 +1081,17 @@ def run_job(job: ScheduledJob) -> str:
             if isinstance(exc, RetryableJobError)
             else f"Unexpected {type(exc).__name__} while running the handler."
         )
-        ScheduledJob.objects.filter(pk=job.pk).update(
+        _complete_run(
+            job,
             status=(
                 ScheduledJob.Status.FAILED
                 if failed_permanently
                 else ScheduledJob.Status.PENDING
             ),
+            run_at=timezone.now() + _retry_delay(attempts),
             attempts=attempts,
-            last_attempt_at=now,
             last_error_code=error_code,
             last_error=safe_message,
-            run_at=_next_run_at(now + _retry_delay(attempts)),
-            locked_at=None,
-            locked_by="",
-            completed_at=now if failed_permanently else None,
-            updated_at=now,
         )
         if failed_permanently:
             # The retry budget is gone. This is now a human obligation, not a
@@ -1111,21 +1115,17 @@ def run_job(job: ScheduledJob) -> str:
             )
         return "failed"
 
-    ScheduledJob.objects.filter(pk=job.pk).update(
+    _complete_run(
+        job,
         status=ScheduledJob.Status.SUCCEEDED,
         attempts=attempts,
-        last_attempt_at=now,
         last_result=str(result)[:255],
         last_error_code="",
         last_error="",
-        locked_at=None,
-        locked_by="",
-        completed_at=now,
         resolution="",
         resolved_at=None,
         resolved_by=None,
         resolution_reason="",
-        updated_at=now,
     )
     return str(result)
 
@@ -1148,21 +1148,21 @@ def _sweep_payout_backlog() -> None:
         logger.exception("finance.payout_sweep_failed")
 
 
-def _sweep_live_checkouts() -> None:
-    """Give every live checkout a pending settle job, before claiming this batch.
+def _sweep_outstanding_attempts() -> None:
+    """Give every outstanding attempt a pending settle job, before claiming this batch.
 
     In the loop for the reason `_sweep_payout_backlog` is: a checkout that may
-    still take a payment must be followed to its fate even when the job that
-    should have done so ran out of retries or was never armed (G1). One
-    bounded lookup over an indexed predicate per cycle.
+    still take a payment, or a payment it reported that is held, must be
+    followed to its fate even when the job that should have done so ran out
+    of retries or was never armed (G1, R3). One bounded lookup per cycle.
     """
 
     try:
-        from .services import arm_live_checkouts
+        from .services import arm_outstanding_attempts
 
-        arm_live_checkouts()
+        arm_outstanding_attempts()
     except Exception:  # noqa: BLE001 - the sweep must never stop the job loop
-        logger.exception("finance.live_checkout_sweep_failed")
+        logger.exception("finance.outstanding_attempt_sweep_failed")
 
 
 def run_due_jobs(*, limit: int = 50, at: datetime | None = None) -> JobRunReport:
@@ -1170,7 +1170,7 @@ def run_due_jobs(*, limit: int = 50, at: datetime | None = None) -> JobRunReport
 
     resolve_satisfied_failed_jobs(limit=min(limit, 100))
     _sweep_payout_backlog()
-    _sweep_live_checkouts()
+    _sweep_outstanding_attempts()
     jobs = claim_due_jobs(limit=limit, at=at)
     results = [run_job(job) for job in jobs]
     failed = sum(1 for result in results if result in {"failed", "no_handler"})

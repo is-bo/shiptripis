@@ -22,6 +22,8 @@ from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
 
+from django.db.models import F, Value
+from django.db.models.functions import Least
 from django.utils import timezone
 
 from apps.accounts.models import User
@@ -34,7 +36,7 @@ from apps.matching.v1_services import accept_offer, create_sender_offer
 from apps.parcels.models import DeliveryRequest, ParcelRequest
 from apps.trips.models import Journey, JourneyLeg
 
-from apps.finance.models import PaymentAttempt, PaymentOrder
+from apps.finance.models import PaymentAttempt, PaymentOrder, ScheduledJob
 from apps.finance.policy import Phase3Policy, phase3_policy
 from apps.finance.providers.mock import MOCK_WEBHOOK_SECRET
 
@@ -230,6 +232,25 @@ def active_settings() -> BusinessSettingsVersion:
 
 
 # --- mock provider webhook helpers -------------------------------------------
+
+
+def claim(job: ScheduledJob) -> ScheduledJob:
+    """`job` claimed now, as the worker claims it once it is due (R4).
+
+    Brought due first, so a later `run_at` does not read as a wake.
+    """
+
+    now = timezone.now()
+    claimed = ScheduledJob.objects.filter(
+        pk=job.pk, status=ScheduledJob.Status.PENDING
+    ).update(
+        status=ScheduledJob.Status.RUNNING,
+        run_at=Least(F("run_at"), Value(now)),
+        locked_at=now,
+        locked_by="test",
+    )
+    assert claimed == 1, "Only a pending job can be claimed."
+    return ScheduledJob.objects.get(pk=job.pk)
 
 
 def mock_event_body(

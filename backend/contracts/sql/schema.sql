@@ -7330,13 +7330,6 @@ CREATE INDEX fin_attempt_expiry_idx ON public.finance_payment_attempt USING btre
 
 
 --
--- Name: fin_attempt_live_checkout_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX fin_attempt_live_checkout_idx ON public.finance_payment_attempt USING btree (id) WHERE ((checkout_final_at IS NULL) AND (NOT ((provider_session_id)::text = ''::text)) AND (NOT ((status)::text = 'succeeded'::text)));
-
-
---
 -- Name: fin_attempt_one_open_per_order; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -7348,6 +7341,13 @@ CREATE UNIQUE INDEX fin_attempt_one_open_per_order ON public.finance_payment_att
 --
 
 CREATE INDEX fin_attempt_order_idx ON public.finance_payment_attempt USING btree (order_id, created_at DESC);
+
+
+--
+-- Name: fin_attempt_outstanding_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fin_attempt_outstanding_idx ON public.finance_payment_attempt USING btree (id) WHERE (((checkout_final_at IS NULL) AND (NOT ((provider_session_id)::text = ''::text)) AND (NOT ((status)::text = 'succeeded'::text))) OR (((status)::text = 'failed'::text) AND ((failure_code)::text = ANY ((ARRAY['amount_mismatch'::character varying, 'amount_unverifiable'::character varying, 'currency_mismatch'::character varying, 'paid_after_disposition'::character varying])::text[])) AND ((operational_resolution)::text = ''::text)));
 
 
 --

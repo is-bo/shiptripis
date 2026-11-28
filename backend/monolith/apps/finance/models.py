@@ -335,13 +335,12 @@ LIVE_CHECKOUT = (
 PAID_AFTER_DISPOSITION = "paid_after_disposition"
 #: Codes of a held payment: its provider reported it, but its amount or
 #: currency could not be verified, or it arrived after staff closed the item.
-HELD_PAYMENT_CODES = frozenset(
-    {
-        "amount_unverifiable",
-        "amount_mismatch",
-        "currency_mismatch",
-        PAID_AFTER_DISPOSITION,
-    }
+#: A tuple, so the sweep's index built from it is the same SQL on every run.
+HELD_PAYMENT_CODES = (
+    "amount_mismatch",
+    "amount_unverifiable",
+    "currency_mismatch",
+    PAID_AFTER_DISPOSITION,
 )
 #: A reported payment that is neither applied nor refunded, with no staff
 #: disposition: money may have moved, so the order takes no new payment until
@@ -540,11 +539,11 @@ class PaymentAttempt(models.Model):
             models.Index(
                 fields=["status", "expires_at"], name="fin_attempt_expiry_idx"
             ),
-            # The job loop's sweep reads every live checkout (G1).
+            # The job loop's sweep reads every outstanding attempt (G1).
             models.Index(
                 fields=["id"],
-                condition=LIVE_CHECKOUT,
-                name="fin_attempt_live_checkout_idx",
+                condition=OUTSTANDING,
+                name="fin_attempt_outstanding_idx",
             ),
         ]
         constraints = [
