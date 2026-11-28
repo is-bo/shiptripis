@@ -1,5 +1,16 @@
 # Waçla V1 Implementation Status
 
+## Wassla: the other compatibility code removed (L4, 2026-11-28)
+
+- Brief L4, decision D4. No migration, no switch, no app change. Nothing deployed. Detail:
+  `docs/PHASE_L4_COMPATIBILITY_CLEANUP.md`.
+- Removed: the Phase 4 staff group names, the disputes app's shadowed `GET /api/admin/disputes`
+  view and its permission class, the chat history page-number form (a read without a cursor answers
+  the latest window), and the bare `delivered:<event_id>` receipt read in the outbox sweep.
+- Kept with corrected comments: the bare-array paging the app reads, the Go dispatcher's
+  untargeted-publish branch and the email worker's missing-obligation guard. The KYC mTLS comments
+  no longer call Django's side a TODO.
+
 ## Wassla: notifications on first open, sign-in sessions and who a push belongs to (N1, 2026-11-27)
 
 - Ismail's decision of 2026-11-26: the app asks for notification permission on its own, once, the
