@@ -273,9 +273,8 @@ func (d *Dispatcher) dispatch(msg redisbus.Message) {
 		return
 	}
 	if len(env.Targets) == 0 {
-		// Django built the publish without targets. We don't speculate on
-		// legacy keys here — once the publisher migrates everything to
-		// targets=[...] this branch goes away. Log so misses are visible.
+		// An untargeted publish (redis_bus.publish_after_commit without
+		// targets) has no WebSocket recipient.
 		d.log.Warn("dispatcher: no targets", "channel", msg.Channel, "event_id", env.EventID)
 		return
 	}

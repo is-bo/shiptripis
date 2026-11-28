@@ -296,9 +296,7 @@ type KYCGRPC struct {
 // dependency should fail loud at boot rather than ship a NoopRecorder to
 // prod (CLAUDE.md §9). GRPC_AUTH_MODE defaults to "mtls" per §G5 so a
 // missing value in prod surfaces as a config error (missing certs)
-// rather than silently downgrading to bearer. The Go client side of mtls
-// is wired (grpc_client.go); the Django server branch + cert pipeline are
-// still TODO (see HANDOVER.md).
+// rather than silently downgrading to bearer.
 func LoadKYCGRPC() (KYCGRPC, error) {
 	var b errBuilder
 	target := mustString(&b, "KYC_GRPC_TARGET", "")
