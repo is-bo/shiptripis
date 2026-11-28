@@ -74,4 +74,4 @@ Red: each fix removed in turn against the new tests (local runs, 2026-11-28).
 | Console form from the payout page | `TestConsoleForm::test_finance_retires_with_a_reason_from_the_travelers_payout_page` | new | yes |
 | Job: current platform refreshed; other platform or mode, no provider call | `test_f1b_refresh_job_environment` | job guard | yes |
 
-Screenshots of the console form and the payout tab: in the pull request.
+Screenshots: `docs/screenshots/f1b/` (the form, and the payout tab at 360 px).
