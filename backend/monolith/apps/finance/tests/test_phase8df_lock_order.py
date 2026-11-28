@@ -74,7 +74,8 @@ CANONICAL_LOCK_MODULES = (
     "apps/finance/settlement.py",
     "apps/finance/payout_domain.py",
     "apps/finance/payout_profiles.py",
-    "apps/finance/payout_snapshots.py",
+    # F1: `payout_snapshots` takes its locks only through `lock_deal_aggregate`
+    # and `lock_payout_method_set` in `apps/core/financial_locks.py`, listed above.
     "apps/finance/payout_operations.py",
     # H3 execution. These are the modules that actually move money, so a bare
     # `select_for_update()` here would reintroduce the deferred-FK lock cycle

@@ -133,6 +133,10 @@ PRODUCT_DESCRIPTION_PARAM = "business_profile[product_description]"
 MAX_PRODUCT_DESCRIPTION_CHARS = 500
 
 
+#: The longest account listing a recovery search reads before it gives up.
+MAX_LISTING_PAGES = 20
+
+
 class ConnectPlatformMismatch(ProviderError):
     """The credential answers for an account this deployment is not configured for."""
 
@@ -739,39 +743,42 @@ class StripeConnectGateway:
         return self._snapshot(self._request("GET", f"/v1/accounts/{account_id}"))
 
     def find_account_by_metadata(
-        self, *, key: str, value: str, created_gte: int, limit: int = 100
+        self, *, key: str, value: str, created_gte: int, created_lte: int
     ):
-        """Bounded recovery search for an ambiguous account creation.
+        """Every account created in [created_gte, created_lte] that carries `key=value`.
 
-        Stripe cannot filter accounts by metadata, so this is a single bounded
-        page anchored on the creation time of the operation being recovered. It
-        exists so a timed-out create is *resolved*, never guessed: no match
-        means the caller blocks for investigation, and no account id from
-        outside this platform is ever accepted.
+        Stripe cannot filter accounts by metadata, so this reads every page of
+        the accounts created in the window, following `starting_after` while
+        `has_more`. A list call has no search delay
+        (Stripe: list APIs "aren't subject to the availability delays" of
+        search), so a complete listing without a match means Stripe holds no
+        such account. Returns the matches, or None when the listing did not
+        end within `MAX_LISTING_PAGES`. No account id from outside this
+        platform is ever accepted: the list is this platform's own.
         """
 
-        response = self._request(
-            "GET",
-            "/v1/accounts",
-            data={"limit": min(int(limit), 100), "created[gte]": int(created_gte)},
-        )
-        entries = response.body.get("data")
-        if not isinstance(entries, list):
-            return None
-        matches = [
-            entry
-            for entry in entries
-            if isinstance(entry, dict)
-            and isinstance(entry.get("metadata"), dict)
-            and str(entry["metadata"].get(key) or "") == value
-        ]
-        if len(matches) != 1:
-            # Zero is unresolved; more than one is a contradiction. Neither is
-            # something to pick a winner from.
-            return None
-        return self._snapshot(
-            ProviderResponse(body=matches[0], request_id=response.request_id)
-        )
+        query = {"limit": 100, "created[gte]": int(created_gte),
+                 "created[lte]": int(created_lte)}
+        matches = []
+        for _ in range(MAX_LISTING_PAGES):
+            response = self._request("GET", "/v1/accounts", data=query)
+            entries = response.body.get("data")
+            more = response.body.get("has_more")
+            if not isinstance(entries, list) or not all(isinstance(e, dict) for e in entries) \
+                    or not isinstance(more, bool):
+                raise ProviderUnavailable("Stripe Connect returned a malformed account list.")
+            matches += [
+                self._snapshot(ProviderResponse(body=entry, request_id=response.request_id))
+                for entry in entries
+                if isinstance(entry.get("metadata"), dict)
+                and str(entry["metadata"].get(key) or "") == value
+            ]
+            if not more:
+                return matches
+            if not entries or not entries[-1].get("id"):
+                raise ProviderUnavailable("Stripe Connect returned a page it cannot continue.")
+            query["starting_after"] = str(entries[-1]["id"])
+        return None
 
     def set_payout_schedule(
         self, *, account_id: str, interval: str = "manual"

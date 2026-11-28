@@ -11,6 +11,7 @@ from apps.admin_panel.tests.two_step_helpers import staff_login
 from apps.admin_panel.finance_operations import _payout_detail_url
 
 from .test_phase8fh4_manual import (  # noqa: F401
+    CCP,
     build_manual,
     configured_h4,
     image_upload,
@@ -140,5 +141,5 @@ def test_invalid_cohort_is_dropped_and_reveal_remains_request_scoped(configured_
     revealed = client.post(_url(payout), {"action": "reveal"})
     assert revealed.status_code == 200
     assert "Location" not in revealed
-    assert "0000000000" in revealed.content.decode()
-    assert "0000000000" not in revealed.request["QUERY_STRING"]
+    assert CCP in revealed.content.decode()
+    assert CCP not in revealed.request["QUERY_STRING"]

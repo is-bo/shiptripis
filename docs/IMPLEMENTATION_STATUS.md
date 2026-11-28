@@ -1,5 +1,18 @@
 # Waçla V1 Implementation Status
 
+## Wassla: onboarding serves one declaration, and payout setup reads eligibility on the locked row (F1 round 6, 2026-11-27)
+
+- Brief F1 rules F-C, F-F and F-G, with the owner's decision D3. No migration, no switch. Nothing
+  deployed. Design: `docs/PHASE_F1_PAYOUT_AVAILABILITY.md`.
+- The session advisory lock held across Stripe is removed. While a Stripe account is being created, a
+  change of the EUR country or of EUR on/off answers 409 `payout_setup_in_progress` (new, in English,
+  French and Arabic in the app); the read offers only `resume_eur_setup`. A call whose rows changed
+  runs once more, then answers `payout_preference_changed`.
+- Past the 23-hour replay window the recovery lists every account created around the request (all
+  pages); none found ends the creation and a fresh attempt follows. `stripe_account_unresolved` is gone.
+- One eligibility function (`member_refusal`) on the locked User row, also at the hosted-link handoff.
+  A payout GET computes each rail once inside one snapshot.
+
 ## Wassla: stored photos without metadata, names by audience (PV, 2026-11-27)
 
 - Older privacy findings of `HANDOFF.md` 0.7. Server only, no migration, no app change. Nothing
@@ -31,6 +44,47 @@
   code-graph and editor-agent configuration, `docs/superpowers/` and two finished Astra prompts.
   `ARCHITECTURE.md` and `PRODUCT.md` were corrected in place, `README.md` replaced, three broken
   links fixed. Each file's evidence and the files kept: `docs/PHASE_H1_REPO_FILES.md`.
+
+## Wassla: payout setup says what is open, and offers only what the server accepts (F1, 2026-11-26)
+
+- Phone test 2 (plan 1.3): with payout profiles off, `GET /api/payouts/methods` was a bare 404 and the
+  owner saw the payout pages as broken; with them on, the read offered actions the server refused.
+  Server only, no migration, no switch, no new rail. Nothing deployed.
+- One gate, `payout_mobile.setup_gate`, read from the checks that refuse each write, decides every
+  action, choice and reason. The two member reads answer 200 with the stored setup and a new `setup`
+  block (`available`, `unavailable_reason`, `preference_options`); each rail adds `selectable` and
+  `unavailable_reason`. Writes refuse with stable codes: `payout_profiles_disabled` (409, was 404),
+  `payout_traveler_required` (403, now on the Stripe routes too), `stripe_connect_no_countries` (409)
+  beside the existing ones. History detail shows only its funded rail's usable setup actions. Funding,
+  revisions, review and execution untouched. Detail and the F2 shapes:
+  `docs/PHASE_F1_PAYOUT_AVAILABILITY.md`.
+- Round 2 (Astra review of `317b55e`): funding and preference changes take one per-traveler method-set
+  lock, so funding never reads half a change (a pre-existing race; two-connection PostgreSQL test).
+  Every write meets the read's refusal order. A CCP number has at most ten digits and its RIP must be
+  `00799999` plus that number; masks never show more than half of it. An account of another country or
+  an unresolved creation is no longer offered as a new setup; a Stripe failure after binding keeps the
+  account and the retry finishes it. The DZD read carries the common contract.
+- Round 3 (Astra review of `f3f37a3`): onboarding binds only the method version it started on, so a
+  preference committed while Stripe answers is never overwritten (409 `payout_preference_changed`; an
+  account Stripe created meanwhile is kept, unbound). The read and onboarding share one account country
+  decision. An ambiguous creation is recovered with its own key and country, per platform and mode, and a
+  refused recovery search no longer opens a second Stripe account. Refresh locks the method before the
+  account, as onboarding does. The read offers `resume_eur_setup` while Stripe still needs the traveler.
+- Round 4 (Astra review of `ee1e477`): one root cause behind three blockers. Every onboarding call now
+  serves one declaration, the method's current version and its country, and each Stripe account call is
+  tied to it: a named country is only an assertion; a creation's identity includes its declaration, so a
+  request is sent or replayed only for the declaration it was made for, while current and open, and is
+  otherwise only looked for by its own operation; answers are written back conditionally; binding and
+  the hosted link are checked under the method lock. The read decides from the configured platform and
+  mode only, and `account_country` names only an account's own closed country. The unused
+  `resume_account` path is removed.
+- Round 5 (Astra review of `c559318`): a preference change could still commit between onboarding's
+  account-creation intent and its POST. One per-traveler advisory lock now keeps an onboarding call and
+  EUR preference changes from overlapping: onboarding holds it from reading the declaration to handing
+  out the link, the preference write takes it before User, and nothing else takes it. Onboarding
+  refuses a closed rail first, as the read does; a replayed creation is dated by its first request;
+  refresh and dashboard refuse an account from another platform or mode before Stripe. Real-thread
+  PostgreSQL tests for each overlap.
 
 ## Wassla: the bell names the ticket decision (N2, 2026-11-26)
 

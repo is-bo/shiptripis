@@ -259,11 +259,12 @@ class TestTheDomainOwnsTheWording:
         """A different sentence to Stripe is a different request, not a replay."""
 
         method = method_of(traveler)
-        _, baseline, _, _ = accounts._creation_identity(method, "FR")
+        declaration = method.current_version
+        _, baseline, _, _ = accounts._creation_identity(method, declaration, 1)
         original = accounts.TRAVELER_PRODUCT_DESCRIPTION
         try:
             accounts.TRAVELER_PRODUCT_DESCRIPTION = original + " Amended."
-            _, amended, _, _ = accounts._creation_identity(method, "FR")
+            _, amended, _, _ = accounts._creation_identity(method, declaration, 1)
         finally:
             accounts.TRAVELER_PRODUCT_DESCRIPTION = original
         assert baseline != amended

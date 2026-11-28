@@ -10,7 +10,7 @@ from django.core.exceptions import ValidationError
 from django.views.decorators.debug import sensitive_variables
 from PIL import Image, UnidentifiedImageError
 
-from apps.core.storage import storage_for
+from apps.core.storage import StorageNotConfigured, storage_for
 from apps.admin_panel.services import record_admin_action
 from .models import PayoutEvidence
 from .payout_profiles import require_capabilities, _traveler
@@ -40,6 +40,25 @@ FORMATS = {
     "PNG": ("image/png", {".png"}),
     "WEBP": ("image/webp", {".webp"}),
 }
+
+
+def require_evidence_store():
+    """Refuse unless the private store a cheque upload writes to has a key and bucket.
+
+    Configuration only, no network call: an outage of a configured store still
+    surfaces on the upload itself as `payout_evidence_unavailable`. A DZD profile
+    submission asks it too, because Finance reviews the cheque from that store.
+    """
+    storage_for("payout").require_bucket()
+
+
+def evidence_store_configured():
+    """`require_evidence_store` as the read model asks it."""
+    try:
+        require_evidence_store()
+    except StorageNotConfigured:
+        return False
+    return True
 
 
 @sensitive_variables()

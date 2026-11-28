@@ -26,9 +26,17 @@ from apps.finance.payout_evidence import upload_evidence, read_evidence
 from apps.finance.payout_manual import prepare, begin, confirm, release
 from apps.finance.payout_domain import open_hold
 from apps.finance.services import reconcile_attempt
-from .factories import build_scenario
+from .factories import build_scenario, ccp_rip
 from .test_phase8fh1_foundations import KEYS
 from apps.admin_panel.tests.two_step_helpers import staff_login
+
+
+#: The synthetic CCP account `build_manual` submits. Not a real account.
+CCP = "4071958263"
+CCP_KEY = "57"
+RIP = ccp_rip(CCP, "57")
+#: The same account typed with Arabic-Indic digits and a separator.
+ARABIC_DIGITS = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")
 
 
 def image_upload():
@@ -47,6 +55,9 @@ def configured_h4():
     objects = {}
 
     class Store:
+        def require_bucket(self):
+            return "payout-test"
+
         def put(self, key, body, mime):
             assert key not in objects and mime == "application/octet-stream"
             objects[key] = body
@@ -80,9 +91,9 @@ def build_manual(prefix="h4", *, delivered=True, provider_mode="test"):
         expected_revision=1,
         first_name="QA",
         last_name="Synthetic",
-        ccp_number="0000000000",
-        ccp_key="00",
-        rip="0" * 20,
+        ccp_number=CCP,
+        ccp_key=CCP_KEY,
+        rip=RIP,
         proof_reference=proof.public_reference,
     )
     assign_admin_roles(s.outsider, ["trust_verification"])
@@ -300,9 +311,9 @@ def test_required_profile_fields(configured_h4, field):
         expected_revision=0,
         first_name="QA",
         last_name="Synthetic",
-        ccp_number="0000",
-        ccp_key="00",
-        rip="0" * 20,
+        ccp_number=CCP,
+        ccp_key=CCP_KEY,
+        rip=RIP,
         proof_reference="00000000-0000-0000-0000-000000000000",
         consent_policy="payout_profile_v1",
     )
@@ -321,6 +332,7 @@ def test_required_profile_fields(configured_h4, field):
 def test_console_and_profile_replacement(configured_h4):
     from django.test import Client
     from django.urls import reverse
+    from apps.finance.payout_mobile import setup_gate
     from apps.finance.payout_profile_api import method_projection
     from apps.finance.models import DzdPayoutProfileRevision
 
@@ -337,7 +349,7 @@ def test_console_and_profile_replacement(configured_h4):
         b"Claim and prepare transfer" in response.content
         and b"Mark paid" not in response.content
     )
-    assert b"0000000000" not in response.content
+    assert CCP.encode() not in response.content
     assert response["Cache-Control"] == "no-store, private"
     assert client.post(url, {"action": "reveal"}).status_code == 200
     assert client.post(url, {"action": "proof"}).status_code == 200
@@ -348,9 +360,9 @@ def test_console_and_profile_replacement(configured_h4):
         expected_revision=method.revision,
         first_name="QA",
         last_name="Synthetic",
-        ccp_number="٠٠٠٠-٠٠٠٠٠٠",
-        ccp_key="٠٠",
-        rip="٠" * 20,
+        ccp_number=f"{CCP[:4]}-{CCP[4:]}".translate(ARABIC_DIGITS),
+        ccp_key=CCP_KEY.translate(ARABIC_DIGITS),
+        rip=RIP.translate(ARABIC_DIGITS),
         proof_reference=proof.public_reference,
     )
     assert replacement.current_version.dzd_profile_revision_id != profile.pk
@@ -367,7 +379,7 @@ def test_console_and_profile_replacement(configured_h4):
         expected_revision=replacement.revision,
     )
     assert DzdPayoutProfileRevision.objects.filter(pk=profile.pk).exists()
-    assert "rip_encrypted" not in str(method_projection(replacement))
+    assert "rip_encrypted" not in str(method_projection(replacement, setup_gate(s.traveler)))
     assert (
         client.post(
             url, {"action": "prepare", "state_version": payout.state_version}
@@ -416,9 +428,9 @@ def test_api_upload_and_object_isolation(configured_h4):
             expected_revision=0,
             first_name="QA",
             last_name="Synthetic",
-            ccp_number="0000",
-            ccp_key="00",
-            rip="0" * 20,
+            ccp_number=CCP,
+            ccp_key=CCP_KEY,
+            rip=RIP,
             proof_reference=profile.evidence.public_reference,
         )
 

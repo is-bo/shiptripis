@@ -133,13 +133,14 @@ Recovery from an ambiguous create has exactly two routes and no third:
 
 1. **Inside 23 hours** — replay the byte-identical request under the same
    idempotency key; Stripe returns the original account.
-2. **Past that window** — search a single bounded page of accounts created at or
-   after the operation's first request, matching the internal method reference
-   in metadata. Exactly one match resolves; zero or two do not.
+2. **Past that window** — list every page of the accounts created from one
+   minute before the operation's first request to 25 hours after it, matching
+   the operation's own reference in metadata. Exactly one match resolves.
 
-If neither resolves it, the operation stays `unknown` and the request raises
-`stripe_account_unresolved`. A fresh `POST /v1/accounts` is never issued because
-a retry window expired.
+Since F1 round 6: no match on a complete listing ends the operation as `failed`,
+and onboarding starts a fresh attempt with a new key. Two matches, an error or
+more than 20 pages leave it `unknown`, and the call answers
+`payout_setup_in_progress` (`docs/PHASE_F1_PAYOUT_AVAILABILITY.md`).
 
 Account metadata carries only opaque internal references
 (`shiptrip_method`, `shiptrip_operation`, `shiptrip_env`). No name, no email, no

@@ -15,10 +15,10 @@ from django.test import TestCase, override_settings
 from django.urls import get_resolver, reverse
 from rest_framework.test import APIClient
 
-from apps.accounts.permissions import EMAIL_VERIFICATION_REQUIRED, EmailVerifiedToWrite
+from apps.accounts.permissions import EMAIL_VERIFICATION_REQUIRED
 from apps.admin_panel.staff_api import StaffSessionMixin
 from apps.finance.payout_account_api import ConnectView
-from apps.finance.payout_profile_api import ProfileView
+from apps.finance.payout_profile_api import PayoutSetupMember, ProfileView
 
 from .factories import make_user
 from .test_phase8fh2_accounts import H2
@@ -103,8 +103,8 @@ class PayoutSetupGateTests(TestCase):
         self.assertTrue(views)
         for view in views:
             with self.subTest(view=view.__name__):
-                self.assertIn(EmailVerifiedToWrite, view.permission_classes)
+                self.assertIn(PayoutSetupMember, view.permission_classes)
         for view in (ProfileView, ConnectView):
             for staff in view.__subclasses__():
                 if issubclass(staff, StaffSessionMixin):
-                    self.assertNotIn(EmailVerifiedToWrite, staff.permission_classes)
+                    self.assertNotIn(PayoutSetupMember, staff.permission_classes)
