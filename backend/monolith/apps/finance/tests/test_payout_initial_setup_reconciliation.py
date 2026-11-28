@@ -32,7 +32,7 @@ from apps.finance.payout_setup_reconciliation import (
 )
 from apps.finance.services import reconcile_attempt
 from apps.finance.settlement import apply_settlement, plan_settlement, read_deal_money
-from .factories import build_scenario
+from .factories import build_scenario, ccp_rip
 from .test_phase8fh4_manual import build_manual, configured_h4, image_upload  # noqa: F401
 from apps.admin_panel.tests.two_step_helpers import staff_login
 
@@ -88,7 +88,7 @@ def submit_initial(scenario, method):
         last_name="Synthetic",
         ccp_number="1111111111",
         ccp_key="11",
-        rip="1" * 20,
+        rip=ccp_rip("1111111111"),
         proof_reference=proof.public_reference,
     )
     assign_admin_roles(scenario.outsider, ["trust_verification"])
@@ -267,7 +267,7 @@ def test_reapproval_is_idempotent_and_real_destination_never_rebinds():
         last_name="Synthetic",
         ccp_number="2222222222",
         ccp_key="22",
-        rip="2" * 20,
+        rip=ccp_rip("2222222222"),
         proof_reference=later.public_reference,
     )
     review_profile(

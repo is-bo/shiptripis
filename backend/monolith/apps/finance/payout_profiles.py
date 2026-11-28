@@ -10,6 +10,7 @@ from django.utils import timezone
 from django.views.decorators.debug import sensitive_variables
 
 from apps.accounts.models import User
+from apps.accounts.permissions import EMAIL_VERIFICATION_REQUIRED
 from apps.admin_panel.permissions import has_all_admin_permissions
 from apps.admin_panel.services import record_admin_action
 from apps.kyc.models import KycSubmission
@@ -22,14 +23,53 @@ from .models import (
     PayoutIdentityRevocation,
     PayoutEvidence,
 )
-from .sensitive_data import encrypt, decrypt, account_fingerprint, normalize_digits
+from .sensitive_data import (
+    account_fingerprint,
+    decrypt,
+    encrypt,
+    postal_account,
+    postal_account_masks,
+)
 
 POLICY_VERSION = "payout_profile_v1"
 
 
+class PayoutProfilesDisabled(PermissionDenied):
+    """This deployment has payout profiles switched off."""
+
+    code = "payout_profiles_disabled"
+
+
+class TravelerRequired(PermissionDenied):
+    """Payout setup belongs to an active traveler account."""
+
+    code = "payout_traveler_required"
+
+
+class EmailVerificationRequired(PermissionDenied):
+    """Payout setup is written only by an account whose email is confirmed (L18A)."""
+
+    code = EMAIL_VERIFICATION_REQUIRED
+
+
 def require_profiles():
     if not settings.PAYOUT_PROFILES_ENABLED:
-        raise PermissionDenied("Payout profiles are disabled.")
+        raise PayoutProfilesDisabled("Payout profiles are disabled.")
+
+
+def member_refusal(user):
+    """Why this account may not write payout setup now, or None.
+
+    The one answer: an active traveler, not banned, with a confirmed email.
+    A write asks it of the User row it has locked, so a ban, a role change or
+    an email unconfirmed by staff that committed first is the one it sees; the
+    read model asks it for the reason it reports.
+    """
+    if not (user.is_active and not user.is_banned and user.role in ("traveler", "both")):
+        return TravelerRequired("Traveler access required.")
+    if not user.is_email_verified:
+        return EmailVerificationRequired("Confirm your email address first.")
+    return None
 
 
 def require_capabilities(actor, *codes):
@@ -38,20 +78,23 @@ def require_capabilities(actor, *codes):
         raise PermissionDenied("Payout capability required.")
 
 
-def _traveler(actor):
+def _traveler(user):
+    """`user`, as the caller read or locked it, if payout setup is open to it now."""
     require_profiles()
-    user = User.objects.get(pk=actor.pk)
-    if not user.is_active or user.is_banned or user.role not in ("traveler", "both"):
-        raise PermissionDenied("Traveler access required.")
+    refusal = member_refusal(user)
+    if refusal is not None:
+        raise refusal
     return user
 
 
 def _method(actor, currency, expected_revision):
-    user = _traveler(actor)
+    from apps.core.financial_locks import lock_payout_method_set
+
     # A fixed row exists for each preference once set. Serialize initial insert
-    # with the user witness, before method rows; funding takes existing methods
-    # only and never acquires User after Payout.
-    User.objects.select_for_update(no_key=True).get(pk=user.pk)
+    # with the user witness, then the method set funding also takes; funding
+    # never acquires User after Payout. Eligibility is read on that locked row.
+    user = _traveler(User.objects.select_for_update(no_key=True).get(pk=actor.pk))
+    lock_payout_method_set(user.pk)
     if currency not in ("EUR", "DZD"):
         raise ValidationError("Unsupported payout currency.")
     method, _ = TravelerPayoutMethod.objects.get_or_create(
@@ -94,6 +137,24 @@ def _version(method, *, actor, country="", profile=None):
     )
 
 
+def _refuse_during_creation(method, enabled, country):
+    """The freeze: no change of the euro declaration while its account is being created.
+
+    Read on the locked method row, the same lock onboarding records its
+    creation intent under, so a change and an intent always see each other.
+    A write that changes neither "enabled" nor the country passes.
+    """
+    from .payout_accounts import SetupInProgress, creation_in_progress, current_creation
+
+    version = method.current_version
+    saved = version.country if version else ""
+    changes = enabled != method.enabled or (
+        enabled and str(country or "").strip().upper() != saved
+    )
+    if changes and creation_in_progress(current_creation(method)):
+        raise SetupInProgress("A Stripe account is being created for this payout method.")
+
+
 @transaction.atomic
 def set_preference(
     *,
@@ -109,18 +170,26 @@ def set_preference(
             "Explicit current policy consent and boolean preference required."
         )
     method = _method(actor, currency, expected_revision)
+    if currency == "EUR":
+        _refuse_during_creation(method, enabled, country)
     method.currency = currency
     method.save(update_fields=["currency"])
-    if enabled and currency == "EUR":
+    if currency == "DZD":
+        # The account country belongs to the Stripe EUR rail. A DZD manual
+        # instruction is Algeria-side, and stamping a European country onto its
+        # version would make the snapshot say something untrue about the
+        # destination; the profile version records DZ itself.
+        country = ""
+    elif enabled:
         # H2 owns the country decision so there is exactly one answer to "can
         # this account country hold a Stripe EUR payout account here", and the
-        # refusal carries a distinct machine code the client can act on.
+        # refusal carries a distinct machine code the client can act on. The
+        # stored country is the normalized one it accepted.
         from .payout_accounts import require_supported_country
 
-        require_supported_country(country)
-    if not enabled and method.current_version_id is None:
-        # Disabled method is a preference only, not a destination snapshot.
-        country = ""
+        country = require_supported_country(country)
+    # A disabled method is a preference only, not a destination snapshot, so
+    # only an enabled one records a version.
     if enabled and method.current_version_id is None:
         method.current_version = _version(method, actor=actor, country=country)
     elif enabled and currency == "EUR" and country != method.current_version.country:
@@ -188,10 +257,9 @@ def submit_dzd_profile(
         raise ValidationError("A new owned full crossed cheque image is required.")
     method.currency = "DZD"
     method.save(update_fields=["currency"])
-    number = normalize_digits(ccp_number, minimum=1, maximum=20)
-    key = normalize_digits(ccp_key, minimum=2, maximum=2)
-    rip = normalize_digits(rip, minimum=20, maximum=20)
+    number, key, rip = postal_account(ccp_number=ccp_number, ccp_key=ccp_key, rip=rip)
     fingerprint = account_fingerprint(number, key, rip)
+    ccp_mask, rip_mask = postal_account_masks(number, rip)
     sequence = (
         method.dzd_revisions.order_by("-sequence")
         .values_list("sequence", flat=True)
@@ -201,8 +269,8 @@ def submit_dzd_profile(
     profile = DzdPayoutProfileRevision(
         method=method,
         sequence=sequence,
-        ccp_last_four=number[-4:],
-        rip_last_four=rip[-4:],
+        ccp_last_four=ccp_mask,
+        rip_last_four=rip_mask,
         account_fingerprint=fingerprint,
         evidence=proof,
     )

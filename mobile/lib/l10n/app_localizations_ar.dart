@@ -323,6 +323,10 @@ class LAr extends L {
       'تعذّر إعداد تحويل الأرباح. تحقّق من البيانات وأعد المحاولة.';
 
   @override
+  String get stalePayoutSetupInProgress =>
+      'جارٍ إنشاء حسابك لتحويل الأرباح باليورو لدى Stripe. أكمل الإعداد أولًا، ويمكنك بعد انتهائه تغيير البلد أو إيقاف تحويل الأرباح باليورو.';
+
+  @override
   String get stalePayoutEvidenceUnavailable =>
       'المستند المُرسل لم يعد متاحًا. يرجى رفع الشيك المسطّر من جديد.';
 

@@ -26,11 +26,12 @@ from apps.finance.payout_domain import open_hold
 from apps.finance.payout_evidence import CHEQUE_LABELS, RECEIPT_LABELS
 from apps.finance.payout_evidence import upload_evidence
 from apps.finance.payout_manual import prepare, begin, confirm
-from .test_phase8fh4_manual import configured_h4, build_manual, image_upload  # noqa: F401
+from .factories import ccp_rip
+from .test_phase8fh4_manual import CCP, RIP, configured_h4, build_manual, image_upload  # noqa: F401
 from apps.admin_panel.tests.two_step_helpers import staff_login
 
-SECRET_CCP = "0000000000"
-SECRET_RIP = "0" * 20
+SECRET_CCP = CCP
+SECRET_RIP = RIP
 
 
 @pytest.fixture(autouse=True)
@@ -93,7 +94,7 @@ def test_masked_by_default_and_revealed_only_on_purpose(configured_h4):  # noqa:
     # attribute, script or comment carries it either.
     assert SECRET_CCP not in masked.content.decode()
     assert SECRET_RIP not in masked.content.decode()
-    assert "•••• 0000" in masked.content.decode()
+    assert f"•••• {SECRET_CCP[-4:]}" in masked.content.decode()
 
     revealed = client.post(url, {"action": "reveal"})
     assert revealed.status_code == 200
@@ -280,9 +281,9 @@ def test_a_newer_profile_is_context_and_never_an_alternative(configured_h4):  # 
         expected_revision=profile.method.revision,
         first_name="QA",
         last_name="Synthetic",
-        ccp_number="9999999999",
+        ccp_number="5162738490",
         ccp_key="99",
-        rip="9" * 20,
+        rip=ccp_rip("5162738490", "99"),
         proof_reference=proof.public_reference,
     )
     client = Client()
@@ -294,7 +295,7 @@ def test_a_newer_profile_is_context_and_never_an_alternative(configured_h4):  # 
     assert "This destination was locked when the shipment was funded" in body
     # The replacement account's mask must not be offered as this payout's
     # destination.
-    assert "•••• 9999" not in body
+    assert "•••• 8490" not in body
     payout.refresh_from_db()
     assert payout.active_instruction_version.dzd_profile_revision_id == profile.pk
 
@@ -323,8 +324,13 @@ def test_the_queue_shows_the_settlement_amount_and_what_it_waits_on(configured_h
     assert "Manual DZD transfer" in body
     assert "€60.00" in body and "15,600 DZD" in body
     assert "Ready - claim and send" in body
-    # A queue never carries account data, masked or otherwise.
-    assert SECRET_CCP not in body and "•••• 0000" not in body
+    # A queue never carries account data, masked or otherwise: neither the
+    # numbers nor either of the two masks this profile has.
+    assert profile.ccp_last_four and profile.rip_last_four
+    assert profile.ccp_last_four != profile.rip_last_four
+    assert SECRET_CCP not in body and SECRET_RIP not in body
+    assert f"•••• {profile.ccp_last_four}" not in body
+    assert f"•••• {profile.rip_last_four}" not in body
 
 
 @pytest.mark.django_db

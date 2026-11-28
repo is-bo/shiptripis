@@ -22,12 +22,13 @@ from apps.finance.sensitive_data import (
 )
 from apps.finance.payout_identity import compare_names
 from apps.finance.payout_profiles import set_preference, submit_dzd_profile
+from apps.finance.payout_mobile import setup_gate
 from apps.finance.payout_profile_api import method_projection
 from apps.finance.payout_domain import revise_amount_locked, validate_transition
 from apps.finance.payout_snapshots import create_snapshot
 from apps.finance.models import PaymentAttempt, Payout, PayoutMethodVersion
 from apps.finance.money import convert_eur_cents
-from .factories import build_scenario
+from .factories import build_scenario, ccp_rip
 
 KEYS = dict(
     PAYOUT_PROFILES_ENABLED=True,
@@ -117,7 +118,8 @@ def test_no_float_bool(bad):
 @pytest.mark.django_db
 def test_profile_version_and_safe_projection(configured):
     user = User.objects.create_user(
-        username="profile", email="profile@example.invalid", role="traveler"
+        username="profile", email="profile@example.invalid", role="traveler",
+        is_email_verified=True,
     )
     method = set_preference(
         actor=user, currency="DZD", enabled=True, expected_revision=0
@@ -128,19 +130,19 @@ def test_profile_version_and_safe_projection(configured):
         expected_revision=1,
         first_name="PrivateGiven",
         last_name="PrivateFamily",
-        ccp_number="00123456789",
+        ccp_number="0123456789",
         ccp_key="01",
-        rip="00123456789012345678",
+        rip=ccp_rip("0123456789", "01"),
         proof_reference=_profile_proof(user).public_reference,
     )
     profile = method.current_version.dzd_profile_revision
     assert old != method.current_version_id
-    text = json.dumps(method_projection(method), default=str) + str(profile)
+    text = json.dumps(method_projection(method, setup_gate(user)), default=str) + str(profile)
     for secret in (
         "PrivateGiven",
         "PrivateFamily",
-        "00123456789",
-        "00123456789012345678",
+        "123456789",
+        ccp_rip("0123456789", "01"),
         profile.account_fingerprint,
     ):
         assert secret not in text
@@ -348,7 +350,8 @@ def test_profile_endpoints_disabled_and_owner_only(configured):
     from rest_framework.test import APIClient
 
     owner = User.objects.create_user(
-        username="api-owner", email="api-owner@example.invalid", role="traveler"
+        username="api-owner", email="api-owner@example.invalid", role="traveler",
+        is_email_verified=True,
     )
     other = User.objects.create_user(
         username="api-other",
@@ -362,8 +365,15 @@ def test_profile_endpoints_disabled_and_owner_only(configured):
     response = client.get("/api/payouts/methods")
     assert response.status_code == 200
     assert response.data["methods"] == []
+    # F1: switched-off profiles are a stable authenticated state, not a 404.
+    # The read stays open and says so; a write is refused with the same code.
     with override_settings(PAYOUT_PROFILES_ENABLED=False):
-        assert client.get("/api/payouts/methods").status_code == 404
+        disabled = client.get("/api/payouts/methods")
+        assert disabled.status_code == 200
+        assert disabled.data["setup"]["unavailable_reason"] == "payout_profiles_disabled"
+        refused = client.post("/api/payouts/methods", {}, format="json")
+        assert refused.status_code == 409
+        assert refused.data["code"] == "payout_profiles_disabled"
     assert (
         client.post(
             "/api/payouts/methods",
@@ -387,7 +397,8 @@ def test_postgres_raw_history_update_refused(configured):
     if connection.vendor != "postgresql":
         pytest.skip("PostgreSQL trigger contract")
     user = User.objects.create_user(
-        username="raw-history", email="raw-history@example.invalid", role="traveler"
+        username="raw-history", email="raw-history@example.invalid", role="traveler",
+        is_email_verified=True,
     )
     method = set_preference(
         actor=user, currency="DZD", enabled=True, expected_revision=0
@@ -582,9 +593,9 @@ def test_instruction_amendment_keeps_original_snapshot(funded_snapshot):
         expected_revision=1,
         first_name="Example",
         last_name="Holder",
-        ccp_number="00123456789",
+        ccp_number="0123456789",
         ccp_key="01",
-        rip="00123456789012345678",
+        rip=ccp_rip("0123456789", "01"),
         proof_reference=_profile_proof(scenario.traveler).public_reference,
     )
     # H4 will own evidence-backed review. This domain test supplies its ready

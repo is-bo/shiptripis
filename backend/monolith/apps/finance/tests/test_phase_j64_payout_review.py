@@ -475,7 +475,7 @@ def test_masked_values_audited_reveal_and_audited_cheque(configured_h4):  # noqa
 
     body = client.get(url).content.decode()
     assert SECRET_CCP not in body and SECRET_RIP not in body
-    assert "•••• 0000" in body
+    assert f"•••• {SECRET_CCP[-4:]}" in body
     cheque_url = reverse("admin_console:payout-review-evidence", args=[profile.public_reference])
     # The cheque is a large inline preview, served only by its scoped route.
     assert f'<img src="{cheque_url}"' in body

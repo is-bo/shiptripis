@@ -122,7 +122,7 @@ def source_order_ids(order):
 
 @transaction.atomic
 def create_snapshot(*, deal_id, traveler_id, amount_eur_cents, order=None):
-    from apps.core.financial_locks import lock_deal_aggregate
+    from apps.core.financial_locks import lock_deal_aggregate, lock_payout_method_set
     from .money import require_positive_cents
 
     require_positive_cents(amount_eur_cents)
@@ -139,12 +139,9 @@ def create_snapshot(*, deal_id, traveler_id, amount_eur_cents, order=None):
         raise ValidationError("Payout funding order does not belong to this Deal.")
     source = funding_attempt(order) if order else None
     provider = source.provider if source else ""
-    methods = list(
-        TravelerPayoutMethod.objects.select_for_update(no_key=True)
-        .filter(traveler_id=traveler_id)
-        .order_by("pk")
-    )
-    method = choose_method(methods, provider)
+    # The whole set, so a preference change is read before or after, never
+    # half applied (`lock_payout_method_set`).
+    method = choose_method(lock_payout_method_set(traveler_id), provider)
     now = timezone.now()
     values = dict(
         deal_id=deal_id,

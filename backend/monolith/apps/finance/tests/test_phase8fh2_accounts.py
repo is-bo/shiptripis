@@ -34,8 +34,8 @@ from apps.finance.models import (
 )
 from apps.finance import payout_accounts as accounts
 from apps.finance.payout_accounts import (
-    AccountCreationUnresolved,
     CountryUnsupported,
+    SetupInProgress,
     ensure_account,
     evaluate_readiness,
     open_dashboard,
@@ -164,7 +164,7 @@ class FakeGateway:
 
     def find_account_by_metadata(self, **kwargs):
         self.calls.append(("find_account_by_metadata", kwargs))
-        return getattr(self, "_found", None)
+        return getattr(self, "_found", [])
 
     def set_payout_schedule(self, *, account_id, interval="manual"):
         self.calls.append(("set_payout_schedule", (account_id, interval)))
@@ -647,7 +647,7 @@ class TestOwnershipAndMode:
         operation = PayoutProviderOperation.objects.get(kind="account_create")
         assert operation.status == "unknown"
         recovering = FakeGateway()
-        accounts.resume_account(actor=traveler, gateway=recovering)
+        ensure_account(actor=traveler, gateway=recovering)
         replay = [kw for name, kw in recovering.calls if name == "create_account"]
         assert replay[0]["idempotency_key"] == operation.idempotency_key
         assert PayoutProviderOperation.objects.count() == 1
@@ -661,32 +661,50 @@ class TestOwnershipAndMode:
         key = PayoutProviderOperation.objects.get(kind="account_create").idempotency_key
 
         recovering = FakeGateway(create=snapshot())
-        account = accounts.resume_account(actor=traveler, gateway=recovering)
+        account = ensure_account(actor=traveler, gateway=recovering)
         replay = [kw for name, kw in recovering.calls if name == "create_account"]
         assert replay and replay[0]["idempotency_key"] == key
         assert account.provider_account_id == "acct_1TESTconnected"
         assert StripePayoutAccount.objects.count() == 1
 
-    def test_past_the_replay_window_an_unresolvable_creation_blocks(
+    def test_past_the_replay_window_a_complete_listing_without_the_account_starts_afresh(
         self, db, h2, traveler
     ):
+        """F1 F-C3, rewritten from "an unresolvable creation blocks": Stripe's
+        list calls have no search delay, so a complete listing of the window
+        with no match proves the expired creation made no account. It is
+        marked failed and the call starts again with a fresh key."""
         gateway = FakeGateway(create=ProviderUnavailable("timeout"))
         with pytest.raises(ProviderUnavailable):
             ensure_account(actor=traveler, gateway=gateway)
         operation = PayoutProviderOperation.objects.get(kind="account_create")
-        PayoutProviderOperation.objects.filter(pk=operation.pk).update(
-            first_request_at=timezone.now() - timedelta(days=2)
-        )
+        first = timezone.now() - timedelta(days=2)
+        PayoutProviderOperation.objects.filter(pk=operation.pk).update(first_request_at=first)
         recovering = FakeGateway()
-        recovering._found = None
-        with pytest.raises(AccountCreationUnresolved):
-            accounts.resume_account(actor=traveler, gateway=recovering)
-        assert [name for name, _ in recovering.calls] == ["find_account_by_metadata"]
-        assert StripePayoutAccount.objects.count() == 0
+        recovering._found = []
+        account = ensure_account(actor=traveler, gateway=recovering)
+        names = [name for name, _ in recovering.calls]
+        assert names[:3] == ["platform_identity", "find_account_by_metadata", "platform_identity"]
+        searched = dict(recovering.calls)["find_account_by_metadata"]
+        assert searched["created_gte"] == int(first.timestamp()) - 60
+        assert searched["created_lte"] == int(first.timestamp()) + 25 * 3600
+        creates = [kw for name, kw in recovering.calls if name == "create_account"]
+        assert len(creates) == 1 and creates[0]["idempotency_key"] != operation.idempotency_key
+        operation.refresh_from_db()
+        assert operation.status == "failed" and operation.provider_object_id == ""
+        fresh = PayoutProviderOperation.objects.get(status="accepted")
+        assert fresh.provider_object_id == account.provider_account_id
+        assert method_of(traveler).current_version.stripe_account_id == account.pk
 
-    def test_normal_onboarding_also_refuses_to_repost_an_expired_unknown_creation(
-        self, db, h2, traveler
+    @pytest.mark.parametrize("found", [None, "two"], ids=["incomplete", "ambiguous"])
+    def test_past_the_replay_window_an_unsettled_listing_keeps_the_setup_in_progress(
+        self, db, h2, traveler, monkeypatch, caplog, found
     ):
+        """F1 F-C3, rewritten from "normal onboarding refuses to repost": a
+        listing that is not complete, or that names two accounts, settles
+        nothing. The creation stays unknown, nothing is posted, the read says
+        the setup is in progress and offers to continue it, and the call
+        answers the same code."""
         with pytest.raises(ProviderUnavailable):
             start_onboarding(actor=traveler, gateway=FakeGateway(create=ProviderUnavailable("timeout")))
         operation = PayoutProviderOperation.objects.get(kind="account_create")
@@ -694,12 +712,28 @@ class TestOwnershipAndMode:
             first_request_at=timezone.now() - timedelta(days=2)
         )
         gateway = FakeGateway()
-        with pytest.raises(AccountCreationUnresolved):
+        gateway._found = None if found is None else [
+            snapshot(account_id="acct_1TESTa"), snapshot(account_id="acct_1TESTb")]
+        with caplog.at_level("WARNING"), pytest.raises(SetupInProgress):
             start_onboarding(actor=traveler, gateway=gateway)
+        event = ("finance.account_creation_listing_incomplete" if found is None
+                 else "finance.account_creation_ambiguous")
+        assert event in caplog.text
         assert "create_account" not in [name for name, _ in gateway.calls]
         operation.refresh_from_db()
         assert operation.status == "unknown"
         assert PayoutProviderOperation.objects.count() == 1
+        client = APIClient()
+        client.force_authenticate(traveler)
+        eur = client.get(reverse("payout-methods")).json()["eur"]
+        assert eur["unavailable_reason"] == SetupInProgress.code
+        assert eur["available_actions"] == ["resume_eur_setup"]
+        monkeypatch.setattr(accounts, "get_connect_gateway", lambda: gateway)
+        refused = client.post(reverse("payout-stripe-onboarding"), {}, format="json")
+        assert refused.status_code == 409
+        assert refused.json()["code"] == SetupInProgress.code
+        assert "create_account" not in [name for name, _ in gateway.calls]
+        assert StripePayoutAccount.objects.count() == 0
 
     def test_an_account_belonging_to_another_traveler_is_never_adopted(
         self, db, h2, traveler
@@ -1047,16 +1081,23 @@ class TestMobileContract:
         assert "individual.id_number" not in json.dumps(projection, default=str)
         assert projection["payouts_execution_enabled"] is False
 
-    def test_the_projection_offers_the_actions_the_screen_needs(
+    def test_the_methods_read_offers_the_actions_the_screen_needs(
         self, db, h2, traveler
     ):
+        # F1: the next actions have one authority, the H6A read model, which
+        # follows the gates that refuse the write. The H2 readiness projection
+        # no longer carries its own `can_start_onboarding`/`can_manage` flags.
+        from apps.finance.payout_mobile import eur_method, setup_gate
+
         method = method_of(traveler)
-        projection = stripe_setup_projection(method)
-        assert projection["can_start_onboarding"] is True
-        assert projection["can_manage"] is False
+        assert "can_start_onboarding" not in stripe_setup_projection(method)
+        assert eur_method(method, setup_gate(traveler))["available_actions"] == [
+            "configure_eur"
+        ]
         account = make_account(traveler)
         method = bind_version(traveler, account)
-        assert stripe_setup_projection(method)["can_manage"] is True
+        actions = eur_method(method, setup_gate(traveler))["available_actions"]
+        assert "manage_eur" in actions and "configure_eur" not in actions
 
     def test_the_methods_list_exposes_the_same_single_authority(
         self, db, h2, traveler
@@ -1069,10 +1110,13 @@ class TestMobileContract:
         setup = body["methods"][0]["stripe_setup"]
         assert setup["status"] == evaluate_readiness(account).status
 
-    def test_with_connect_disabled_the_projection_reports_unavailable_setup(
+    def test_with_connect_disabled_the_read_reports_unavailable_setup(
         self, db, h2, traveler
     ):
+        from apps.finance.payout_mobile import eur_method, setup_gate
+
         with override_settings(**{**H2, "STRIPE_CONNECT_ENABLED": False}):
-            projection = stripe_setup_projection(method_of(traveler))
-        assert projection["available"] is False
-        assert projection["can_start_onboarding"] is False
+            projection = eur_method(method_of(traveler), setup_gate(traveler))
+        assert projection["supported"] is False
+        assert projection["available_actions"] == []
+        assert projection["unavailable_reason"] == "stripe_connect_unavailable"

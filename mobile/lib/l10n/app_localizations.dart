@@ -681,6 +681,12 @@ abstract class L {
   /// **'That payout setup could not be completed. Check the details and try again.'**
   String get stalePayoutSetupInvalid;
 
+  /// No description provided for @stalePayoutSetupInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Stripe payout account is being created. Continue the setup first; you can change the country or turn off EUR payouts once it is done.'**
+  String get stalePayoutSetupInProgress;
+
   /// No description provided for @stalePayoutEvidenceUnavailable.
   ///
   /// In en, this message translates to:

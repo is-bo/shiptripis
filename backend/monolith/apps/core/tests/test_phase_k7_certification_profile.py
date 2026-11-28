@@ -318,7 +318,9 @@ QUERY_CEILINGS = {
     "traveler.deal_detail": 20,
     "traveler.earnings_history": 12,
     "traveler.payout_detail": 10,
-    "traveler.payout_methods": 4,
+    # F1 (rule F-G): one data query inside one snapshot, whose BEGIN, two SETs
+    # and COMMIT are the other four statements.
+    "traveler.payout_methods": 5,
     "shared.chat_inbox": 8,  # K4
     "shared.chat_messages": 6,  # K4
     "shared.notifications": 12,  # K4

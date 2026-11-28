@@ -273,8 +273,14 @@ Safe DRF field errors reject unknown fields. Existing domain codes remain:
 `payout_country_unsupported` (400 with supported countries/DZD alternative),
 `stripe_connect_unavailable` (409), `stripe_connect_provider_error` (502),
 `payout_setup_invalid` (400) or existing safe domain code,
+`payout_setup_in_progress` (409, since F1: a Stripe account is being created, so the EUR country and
+EUR on/off wait; onboarding continues it),
 `payout_evidence_unavailable` (503). No raw Stripe/DB errors.
-Auth: 401/403; unowned resource: 404; throttle: 429; disabled profiles: 404.
+Auth: 401/403; unowned resource: 404; throttle: 429. Disabled profiles and the
+other setup-availability outcomes are no longer a 404: since F1 the reads answer
+200 with a `setup` block and per-rail `selectable`/`unavailable_reason`, and
+writes refuse with stable codes. `docs/PHASE_F1_PAYOUT_AVAILABILITY.md` is the
+authority for those fields, codes and the action gates.
 
 ### What Flutter must never calculate
 

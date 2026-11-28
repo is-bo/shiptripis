@@ -427,6 +427,10 @@ void main() {
         'payout_setup_invalid':
             'That payout setup could not be completed. '
             'Check the details and try again.',
+        'payout_setup_in_progress':
+            'Your Stripe payout account is being created. Continue the setup '
+            'first; you can change the country or turn off EUR payouts once it '
+            'is done.',
         'payout_evidence_unavailable':
             'The uploaded document is no longer '
             'available. Please upload the crossed cheque again.',
