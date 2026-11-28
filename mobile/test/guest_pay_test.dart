@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shiptrip/data/repositories.dart';
 import 'package:shiptrip/domain/payment.dart';
 import 'package:shiptrip/features/guest/guest_pay_screen.dart';
+import 'package:shiptrip/l10n/app_localizations.dart';
 
 import 'support/fake_api.dart';
 import 'support/harness.dart';
@@ -25,31 +26,31 @@ FakeResponse _checkoutResponse(RecordedRequest request) => FakeResponse(201, {
   'expires_at': '2026-09-01T00:00:00Z',
 });
 
-FakeBackend _guestBackend({FakeHandler? checkout}) => FakeBackend()
-  ..on(
-    'GET',
-    '/api/payments/guest/opaque',
-    FakeResponse(200, {
-      'amount_eur_cents': 4200,
-      'currency': 'EUR',
-      'description': 'Payment for a Wassla delivery',
-      'expires_at': '2026-09-01T00:00:00Z',
-      'providers': [
-        {
-          'provider': 'stripe',
-          'available': true,
-          'payment_currency': 'EUR',
-          'supports_guest_payment': true,
-          'unavailable_reason': '',
-        },
-      ],
-    }),
-  )
-  ..handle(
-    'POST',
-    '/api/payments/guest/opaque/checkout',
-    checkout ?? _checkoutResponse,
-  );
+FakeResponse _quote({String checkoutState = 'ready'}) => FakeResponse(200, {
+  'amount_eur_cents': 4200,
+  'currency': 'EUR',
+  'description': 'Payment for a Wassla delivery',
+  'expires_at': '2026-09-01T00:00:00Z',
+  'providers': [
+    {
+      'provider': 'stripe',
+      'available': true,
+      'payment_currency': 'EUR',
+      'supports_guest_payment': true,
+      'unavailable_reason': '',
+    },
+  ],
+  'checkout_state': checkoutState,
+});
+
+FakeBackend _guestBackend({FakeHandler? checkout, FakeHandler? quote}) =>
+    FakeBackend()
+      ..handle('GET', '/api/payments/guest/opaque', quote ?? (_) => _quote())
+      ..handle(
+        'POST',
+        '/api/payments/guest/opaque/checkout',
+        checkout ?? _checkoutResponse,
+      );
 
 void main() {
   testWidgets('rapid Pay taps start one checkout and failure allows retry', (
@@ -96,6 +97,79 @@ void main() {
         .onPressed!();
     await tester.pumpAndSettle();
     expect(calls, 2);
+  });
+
+  testWidgets('a payment already under way is waited for, then checked again', (
+    tester,
+  ) async {
+    // The server says a payment is under way from the refused tap on, until
+    // it is over (G1).
+    var underWay = false;
+    final backend = _guestBackend(
+      quote: (_) async =>
+          _quote(checkoutState: underWay ? 'in_progress' : 'ready'),
+      checkout: (_) async {
+        underWay = true;
+        return const FakeResponse(409, {
+          'code': 'checkout_in_progress',
+          'detail': 'A payment for this order is already under way.',
+        });
+      },
+    );
+    final l = lookupL(const Locale('en'));
+    await pumpApp(
+      tester,
+      const GuestPayScreen(token: 'opaque'),
+      container: containerFor(backend),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField), 'payer@example.eu');
+    await tester.tap(find.text('Stripe'));
+    await tester.pump();
+
+    await tester.tap(find.text('Pay €42.00'));
+    await tester.pumpAndSettle();
+
+    expect(find.text(l.paymentInProgressTitle), findsOneWidget);
+    expect(find.text(l.paymentInProgressBody), findsOneWidget);
+    // Pay gives way to checking again: the server would refuse it.
+    expect(find.text('Pay €42.00'), findsNothing);
+    await tester.tap(find.text(l.paymentCheckAgain));
+    await tester.pumpAndSettle();
+    expect(find.text(l.paymentInProgressTitle), findsOneWidget);
+    expect(find.text('Pay €42.00'), findsNothing);
+
+    underWay = false;
+    await tester.tap(find.text(l.paymentCheckAgain));
+    await tester.pumpAndSettle();
+    expect(find.text(l.paymentInProgressTitle), findsNothing);
+    expect(find.text('Pay €42.00'), findsOneWidget);
+    expect(
+      backend.to('POST', '/api/payments/guest/opaque/checkout'),
+      hasLength(1),
+    );
+  });
+
+  testWidgets('a link opened while its payment is settling offers no Pay', (
+    tester,
+  ) async {
+    final backend = _guestBackend(
+      quote: (_) async => _quote(checkoutState: 'in_progress'),
+    );
+    final l = lookupL(const Locale('en'));
+    await pumpApp(
+      tester,
+      const GuestPayScreen(token: 'opaque'),
+      container: containerFor(backend),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Stripe'));
+    await tester.pump();
+
+    expect(find.text(l.paymentInProgressTitle), findsOneWidget);
+    expect(find.text('Pay €42.00'), findsNothing);
+    expect(find.text(l.paymentCheckAgain), findsOneWidget);
+    expect(backend.to('POST', '/api/payments/guest/opaque/checkout'), isEmpty);
   });
 
   group('guest checkout email contract', () {

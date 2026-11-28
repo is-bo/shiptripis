@@ -42,7 +42,13 @@ from django.views.decorators.http import require_GET
 
 from .guest_web import COPY as GUEST_COPY
 from .guest_web import LANGUAGE_NAMES, LANGUAGES, _amount, _language, _throttled
-from .models import PaymentAttempt, PaymentOrder, PaymentProvider, PaymentRefund
+from .models import (
+    HELD_PAYMENT,
+    PaymentAttempt,
+    PaymentOrder,
+    PaymentProvider,
+    PaymentRefund,
+)
 from .services import guest_receipt_email_required
 
 #: Backing-off re-check delays, in seconds, for a return still being confirmed.
@@ -269,7 +275,10 @@ def _state(order: PaymentOrder | None, latest, result: str) -> str:
         # through and something else is still owed on the obligation.
         return "success"
     if latest.status == PaymentAttempt.Status.FAILED:
-        return "failed"
+        # A held payment is being checked, never "nothing was charged": the
+        # page says not to pay again (G1).
+        held = PaymentAttempt.objects.filter(HELD_PAYMENT, pk=latest.pk).exists()
+        return "slow" if held else "failed"
     if latest.status in _DEAD_ATTEMPT:
         return "cancelled"
     if latest.status in _IN_FLIGHT:

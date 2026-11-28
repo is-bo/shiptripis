@@ -44,6 +44,7 @@ from apps.finance.payout_execution import (
 from apps.finance.payout_reconciliation import reconcile_payout
 from apps.finance.services import RefundExceedsCapture, request_refund
 
+from .factories import claim
 from .payout_execution_harness import (
     BANK,
     CONNECTED,
@@ -782,7 +783,7 @@ class TestWorker:
             payload={"payout_id": payout.pk},
             run_at=timezone.now(),
         )
-        assert run_job(job) == "deferred"
+        assert run_job(claim(job)) == "deferred"
         job.refresh_from_db()
         assert job.status == ScheduledJob.Status.PENDING
         assert job.attempts == 0
@@ -810,7 +811,7 @@ class TestWorker:
         original = execution.get_connect_gateway
         execution.get_connect_gateway = lambda **kwargs: gateway
         try:
-            assert run_job(job) == "failed"
+            assert run_job(claim(job)) == "failed"
         finally:
             execution.get_connect_gateway = original
         job.refresh_from_db()

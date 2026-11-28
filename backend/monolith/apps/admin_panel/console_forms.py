@@ -129,6 +129,52 @@ class PaymentAttentionResolutionForm(ConsoleForm):
     )
 
 
+class PaymentDispositionForm(ConsoleForm):
+    """What became of a held payment, as Finance saw it at the provider (G1).
+
+    The failure code staff reviewed travels with the form, so a payment that
+    changed since is refused rather than closed on old evidence.
+    """
+
+    resolution = forms.ChoiceField(
+        choices=[(c.value, c.label) for c in PaymentAttempt.HELD_DISPOSITIONS],
+        widget=forms.RadioSelect,
+        label="What became of the money",
+    )
+    provider_reference = forms.CharField(
+        required=False,
+        max_length=255,
+        label="Provider payment reference",
+        help_text=(
+            "Required when the money was returned: the payment's id at the "
+            "provider (Stripe: pi_…; Chargily: the checkout id)."
+        ),
+    )
+    reason = forms.CharField(
+        max_length=500,
+        label="What you saw at the provider",
+        widget=forms.Textarea(attrs={"rows": 3}),
+    )
+    failure_code = forms.CharField(widget=forms.HiddenInput)
+    confirm = forms.BooleanField(
+        label=(
+            "I checked this at the provider. This is audited and lets the "
+            "order take a payment again."
+        )
+    )
+
+    def __init__(self, *args, returned_only: bool = False, **kwargs):
+        super().__init__(*args, **kwargs)
+        if returned_only:
+            # Paid after an earlier decision: only returned money ends it.
+            self.fields["resolution"].choices = [
+                (
+                    PaymentAttempt.OperationalResolution.RETURNED.value,
+                    PaymentAttempt.OperationalResolution.RETURNED.label,
+                )
+            ]
+
+
 class ReviewDecisionForm(ConsoleForm):
     """The verification inbox's one decision form, for ID and for tickets (spec 13)."""
 

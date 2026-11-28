@@ -72,6 +72,8 @@ Map<String, dynamic> _order({
   int? dealId = 7,
   int? requestId,
   bool withProviders = false,
+  String checkoutState = 'ready',
+  String? resumeProvider,
 }) => {
   'public_reference': 'ord_7',
   'purpose': purpose,
@@ -105,6 +107,9 @@ Map<String, dynamic> _order({
           },
         ]
       : <Object>[],
+  // Served with the rails, while something is still owed (G1).
+  if (withProviders) 'checkout_state': checkoutState,
+  if (withProviders) 'resume_provider': resumeProvider,
   'settlement': {
     'is_settled': status == 'paid',
     'purpose': purpose,
@@ -776,18 +781,17 @@ void main() {
         hasLength(1),
       );
       expect(opened, ['https://checkout.stripe.test/c/pay_1']);
-      // The payer is on the provider's page now.
+      // The payer is on the provider's page now. The order's history never
+      // carries the checkout's URL: only the checkout endpoint hands it out.
       order = _order(
         status: 'pending',
         paid: 0,
         outstanding: 3500,
         withProviders: true,
-        attempts: [
-          _attempt(
-            status: 'checkout_pending',
-            checkoutUrl: 'https://checkout.stripe.test/c/pay_1',
-          ),
-        ],
+        attempts: [_attempt(status: 'checkout_pending')],
+        // The payer's own checkout is open: the server hands it back.
+        checkoutState: 'resumable',
+        resumeProvider: 'stripe',
       );
       return (backend, container);
     }
@@ -914,6 +918,56 @@ void main() {
         backend.to('POST', '/api/payments/orders/ord_7/checkout'),
         hasLength(1),
       );
+    });
+
+    testWidgets('continuing asks the server, which hands the checkout back', (
+      tester,
+    ) async {
+      final (backend, _) = await start(tester);
+      await tester.pump(const Duration(seconds: 3));
+      await _settle(tester);
+      await _tap(tester, find.text('Back to payment'));
+      await _settle(tester);
+
+      await _tap(tester, find.text(_en.paymentContinueAction));
+      await _settle(tester);
+
+      // The server decides whether the payer may have it again (G1).
+      expect(
+        backend.to('POST', '/api/payments/orders/ord_7/checkout'),
+        hasLength(2),
+      );
+      expect(opened, [
+        'https://checkout.stripe.test/c/pay_1',
+        'https://checkout.stripe.test/c/pay_1',
+      ]);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a payment already under way is waited for, not opened', (
+      tester,
+    ) async {
+      final (backend, _) = await start(tester);
+      await tester.pump(const Duration(seconds: 3));
+      await _settle(tester);
+      await _tap(tester, find.text('Back to payment'));
+      await _settle(tester);
+      backend.on(
+        'POST',
+        '/api/payments/orders/ord_7/checkout',
+        const FakeResponse(409, {
+          'code': 'checkout_in_progress',
+          'detail': 'A payment for this order is already under way.',
+        }),
+      );
+
+      await _tap(tester, find.text(_en.paymentContinueAction));
+      await _settle(tester);
+
+      expect(find.text(_en.paymentInProgressTitle), findsOneWidget);
+      expect(find.text(_en.paymentInProgressBody), findsOneWidget);
+      expect(opened, ['https://checkout.stripe.test/c/pay_1']);
+      await tester.pumpWidget(const SizedBox.shrink());
     });
 
     testWidgets('a partial payment offers the remainder, not an error', (

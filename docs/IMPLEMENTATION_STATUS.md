@@ -1,5 +1,36 @@
 # Waçla V1 Implementation Status
 
+## Wassla: the jobs that follow a checkout (G1-B, 2026-11-28)
+
+- Rule G-E of the loop-end plan: the obligation to follow a checkout cannot be lost. Server only,
+  no route, payload or app change. Migration `finance 0038` (the sweep's index). Nothing deployed.
+- The job runner writes a run's end only while the claim is still its own: one helper,
+  `jobs._complete_run`, filtered on the claim's `locked_at`, for every job kind. A run whose job
+  was requeued and claimed again writes nothing, and a wake recorded during a run is kept whatever
+  the run answers.
+- The job loop's sweep arms a settle job for every outstanding attempt (a checkout that can still
+  collect, or a held payment), after the capped retry delay when its tries ran out; the settle job
+  reports done only once the attempt is accounted for. A close intent wakes its settle job in the
+  same transaction, and only a new intent does. Detail and evidence:
+  `docs/PHASE_G1B_CHECKOUT_FOLLOW_UP.md`.
+
+## Wassla: held payments and finality (G1-A, 2026-11-27)
+
+- Rule G-D of the loop-end plan, decision D2: every reported payment is accounted for before the
+  order collects again. A payment whose amount or currency cannot be verified is held; while it is,
+  the order opens and hands out no checkout (`payment_under_review`, 409, strings in English,
+  French and Arabic) and no surface sends "payment failed". Migration `finance 0037`. Nothing
+  deployed.
+- A hold ends when a verified report applies or refunds it, when the settle read finds the checkout
+  final with no payment, or when Finance closes it from the console as "No money was taken" or
+  "Money returned" (with the provider's reference), audited as `payment.hold_closed`. A payment
+  reported after that holds the order again (`paid_after_disposition`) and only "Money returned"
+  ends it. `docs/ADMIN_OPERATIONS.md` says how Finance uses the two.
+- `checkout_final_at` is written only with a terminal status, by `reconcile_attempt`, and a check
+  constraint keeps it so; a close reports how the provider says the checkout ended. The three
+  predicates live once in `finance/models.py`. Detail and evidence:
+  `docs/PHASE_G1A_HELD_PAYMENTS.md`.
+
 ## Wassla: notifications on first open, sign-in sessions and who a push belongs to (N1, 2026-11-27)
 
 - Ismail's decision of 2026-11-26: the app asks for notification permission on its own, once, the
@@ -65,6 +96,75 @@
   code-graph and editor-agent configuration, `docs/superpowers/` and two finished Astra prompts.
   `ARCHITECTURE.md` and `PRODUCT.md` were corrected in place, `README.md` replaced, three broken
   links fixed. Each file's evidence and the files kept: `docs/PHASE_H1_REPO_FILES.md`.
+
+## Wassla: guest checkout without a browser-session dependency (G1, 2026-11-25)
+
+- Phone test 2, finding 1.1: pressing "Pay" on a shared guest link answered "CSRF verification
+  failed". The page's no-referrer policy makes Chromium submit with `Origin: null` and no Referer,
+  which Django's CSRF check refuses. Plan `WASSLA_PHONE_TEST_2_PLAN.md`, package G1. Server, proxy
+  configuration and the app's payment screens; migration `finance 0036`. Nothing deployed.
+- `guest_payment_page` alone is exempt from Django's CSRF check and its form carries no CSRF token:
+  the link token in the path is the authority, and the session is never read, so a signed-in member
+  pays as a guest. Every guest page response, redirects and Django's own 500s included, sends
+  `Referrer-Policy: no-referrer` and `Cache-Control: private, no-store`, from
+  `GuestPagePrivacyMiddleware`, first in `MIDDLEWARE` and scoped to `/pay/guest/`. No CSRF or
+  trusted-origin change anywhere else.
+- `start_checkout` reads a guest link again under the order lock that revoking and replacing take
+  (`_recheck_guest_link`), bound to its own order; a link stopped, expired, used or paired with another
+  order since the page read it starts nothing (`guest_link_invalid`). One validity rule,
+  `_guest_link_payable`, serves both reads.
+- Second and third passes (Astra 6.2, eleven findings fixed). Neither Caddy proxy logs a request URI
+  or Referer, in any encoding, and both send `no-referrer` and `private, no-store` on every error
+  they answer themselves. The guest throttle keys by client address whether or not a session is
+  signed in. An order has at most one checkout that can collect: an open checkout is replaced only
+  after its provider (Stripe or Chargily expire) confirms it closed, never while a payment settles,
+  and otherwise the caller gets the retryable `checkout_in_progress` (on the page, a translated "A
+  payment is already under way"). Only the signed-in member who opened a checkout is handed it
+  again; a guest never is, so the address a link holder sends tells them nothing. A checkout whose
+  request died is recovered under its own key with identical parameters, one request at a time.
+  With receipts off no surface keeps or sends an address.
+- Fourth pass (Astra 6.2, three blockers and six should-fix findings fixed). The expiry job ends an
+  attempt only once its provider confirms its checkout closed, and leaves a payment that is settling
+  or being taken to its own outcome. The attempt carries its frozen create request
+  (`checkout_request`), its claim (`opening_until`) and a recorded close (`close_requested_at`): a
+  recovery repeats exactly the first request, an attempt is abandoned only by the claim that owns
+  it, and a checkout being closed is never handed out. Neither the reconcile job nor staff repeat a
+  create; order history carries no checkout URL, and the app's "Continue" asks the checkout endpoint.
+  A lost create keeps its key; Stripe's "key in use" is retryable. The app shows "A payment is
+  already under way" on the owner and guest screens. Amounts, provider idempotency and webhook-only
+  settlement unchanged. Detail: `docs/PHASE_G1_GUEST_CHECKOUT_CSRF.md`.
+- Fifth pass (Astra 6.2, two blockers and eight should-fix findings fixed). A provider event is bound
+  to the attempt its checkout was opened for (the attempt id in the checkout's metadata, on Stripe,
+  Chargily and the mock), never to an order's newest attempt, and is checked against the stored
+  checkout under the lock. Cancelling an order, or closing it to collection, ends its attempts and
+  has a new `checkout_close` job close each issued checkout at its provider; a settling payment is
+  left to its outcome. Close work retries for about six days. With receipts off no stored event
+  keeps the payer's address. The technical admin lists an explicit field set without the hosted URL
+  or the frozen request. A recovery refused for credentials keeps the key; the claim is dated after
+  the locks; an attempt ends no later than its provider's own checkout expiry; a completed, unpaid
+  Stripe session is read with its payment intent; and the owner screen shows a settling payment
+  without a Pay button. Migration `0036` also adds the new job kind.
+- Sixth pass (Astra 6.2, three blockers and seven should-fix findings), fixed at their two causes. An
+  event binds only to the attempt that stored the checkout or payment id it names; every metadata and
+  reference fallback is removed. A checkout is live until its provider confirms it can take no
+  payment (new `checkout_final_at`, set only on a provider's word), whatever its attempt's status.
+  One routine settles a checkout (`settle_checkout`: read the provider, record any outcome, close if
+  not wanted) for replacement, expiry, order closure and its settle job; that job completes only when
+  the checkout is final, and the job loop re-arms one for any live checkout without it, old code's
+  included. The fifth pass's `checkout_close` job kind is gone. A Stripe card decline ends nothing;
+  Chargily states its 30-minute expiry, its string `livemode` reads as a boolean, and no hosted URL
+  is stored. The server tells each screen what its next tap meets (`checkout_state`), and the app's
+  payment section and guest screen follow it.
+- Seventh pass (Astra 6.2, one blocker and seven should-fix findings in scope). The app has never been
+  live, so the findings about rows, URLs and events left by code before G1 are declared not
+  applicable and nothing is built for them. A success whose amount or currency cannot be accepted
+  stays final for its checkout but is not accounted for (`UNVERIFIED_PAYMENT`): its settle job and the
+  staff reconciliation read the provider until a verified answer applies it or staff resolve it, and
+  whichever path records the refusal arms that job in the same transaction. A
+  close asked for while the settle job runs is never deferred past. A confirmed collecting checkout
+  is recorded as settling; Chargily's `processing` is settling and only its exact `livemode` literals
+  are read. The guest-link guard counts any payable checkout, a guest tap that finds the link paid
+  shows the paid page, and the owner's order names the rail Continue opens (`resume_provider`).
 
 ## Wassla: payout setup says what is open, and offers only what the server accepts (F1, 2026-11-26)
 

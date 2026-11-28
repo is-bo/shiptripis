@@ -1826,7 +1826,12 @@ CREATE TABLE public.finance_payment_attempt (
     mode_evidence character varying(64) NOT NULL,
     provider_charge_id character varying(255) NOT NULL,
     provider_mode character varying(16) NOT NULL,
+    checkout_request jsonb NOT NULL,
+    close_requested_at timestamp with time zone,
+    opening_until timestamp with time zone,
+    checkout_final_at timestamp with time zone,
     CONSTRAINT fin_attempt_amount_positive CHECK ((amount_eur_cents > 0)),
+    CONSTRAINT fin_attempt_final_is_terminal CHECK (((checkout_final_at IS NULL) OR ((status)::text = ANY ((ARRAY['succeeded'::character varying, 'failed'::character varying, 'expired'::character varying, 'cancelled'::character varying])::text[])))),
     CONSTRAINT fin_attempt_fx_required_for_conversion CHECK ((((fx_rate_micros IS NULL) AND ((payment_currency)::text = 'EUR'::text)) OR ((NOT ((payment_currency)::text = 'EUR'::text)) AND (fx_rate_micros IS NOT NULL)))),
     CONSTRAINT fin_attempt_resolution_complete CHECK (((((operational_resolution)::text = ''::text) AND ((operational_resolution_reason)::text = ''::text) AND (operational_resolved_at IS NULL) AND (operational_resolved_by_id IS NULL)) OR ((NOT ((operational_resolution)::text = ''::text)) AND (operational_resolved_at IS NOT NULL) AND (NOT ((operational_resolution_reason)::text = ''::text))))),
     CONSTRAINT finance_payment_attempt_amount_eur_cents_check CHECK ((amount_eur_cents >= 0)),
@@ -7390,6 +7395,13 @@ CREATE UNIQUE INDEX fin_attempt_one_open_per_order ON public.finance_payment_att
 --
 
 CREATE INDEX fin_attempt_order_idx ON public.finance_payment_attempt USING btree (order_id, created_at DESC);
+
+
+--
+-- Name: fin_attempt_outstanding_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fin_attempt_outstanding_idx ON public.finance_payment_attempt USING btree (id) WHERE (((checkout_final_at IS NULL) AND (NOT ((provider_session_id)::text = ''::text)) AND (NOT ((status)::text = 'succeeded'::text))) OR (((status)::text = 'failed'::text) AND ((failure_code)::text = ANY ((ARRAY['amount_mismatch'::character varying, 'amount_unverifiable'::character varying, 'currency_mismatch'::character varying, 'paid_after_disposition'::character varying])::text[])) AND ((operational_resolution)::text = ''::text)));
 
 
 --

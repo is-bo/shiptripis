@@ -25,12 +25,15 @@ import hashlib
 import hmac
 import logging
 import time
+from datetime import UTC, datetime
 from urllib.parse import urlencode
 
 import requests
 from django.conf import settings
 
 from .base import (
+    CHECKOUT_CLOSED,
+    CHECKOUT_COLLECTED,
     MODE_LIVE,
     MODE_NOT_CONFIGURED,
     MODE_TEST,
@@ -286,6 +289,19 @@ class StripeGateway:
                     "Stripe rate limited the request.", provider_code="429"
                 )
             error = body.get("error", {}) if isinstance(body, dict) else {}
+            if (
+                response.status_code == 409
+                or error.get("code") == "idempotency_key_in_use"
+            ):
+                # Another request with the same idempotency key is still being
+                # processed. Stripe saves no answer for this one, so the same
+                # request succeeds once that one finishes: retry, never a
+                # refusal (G1).
+                outcome = "conflict"
+                raise ProviderUnavailable(
+                    "Stripe is still processing a request with this key.",
+                    provider_code="idempotency_key_in_use",
+                )
             if response.status_code in (401, 403):
                 outcome = "auth_rejected"
                 logger.error(
@@ -366,11 +382,48 @@ class StripeGateway:
         checkout_url = body.get("url", "")
         if not session_id or not checkout_url:
             raise ProviderError("Stripe did not return a usable checkout session.")
+        expires_at = body.get("expires_at")
         return CheckoutResult(
             provider_session_id=session_id,
             checkout_url=checkout_url,
             provider_status=body.get("status", "open"),
+            # A session stops collecting at its own `expires_at` (a day by
+            # default), whatever our attempt's lifetime says (G1).
+            expires_at=(
+                datetime.fromtimestamp(expires_at, tz=UTC)
+                if isinstance(expires_at, int) and not isinstance(expires_at, bool)
+                else None
+            ),
             raw=_scrub(body),
+        )
+
+    def close_checkout(self, *, provider_session_id: str) -> str:
+        """Expire an open Checkout Session, or learn how it ended instead.
+
+        Stripe expires only an `open` session, and atomically: a payer cannot
+        complete it afterwards. Any other refusal is answered by reading the
+        session, so an already expired or completed one is reported as such.
+        """
+
+        if not provider_session_id:
+            raise ProviderError("No Stripe session to close.")
+        path = f"/v1/checkout/sessions/{provider_session_id}"
+        try:
+            body = self._request("POST", f"{path}/expire", operation="checkout_expire")
+        except ProviderUnavailable:
+            raise
+        except ProviderError:
+            body = self._request("GET", path, operation="checkout_fetch")
+            closed_here = False
+        else:
+            closed_here = True
+        status = body.get("status", "")
+        if status == "expired":
+            return CHECKOUT_CLOSED if closed_here else "expired"
+        if status == "complete":
+            return CHECKOUT_COLLECTED
+        raise ProviderError(
+            "Stripe did not confirm the session closed.", provider_code="session_open"
         )
 
     def fetch_attempt(
@@ -385,22 +438,34 @@ class StripeGateway:
 
         if not provider_session_id:
             raise ProviderError("No Stripe session to reconcile.")
+        # The payment intent comes inline: a completed session that is still
+        # unpaid is either a delayed payment settling or one that failed, and
+        # only the intent tells the two apart (G1).
         body = self._request(
             "GET",
-            f"/v1/checkout/sessions/{provider_session_id}",
+            f"/v1/checkout/sessions/{provider_session_id}?expand%5B%5D=payment_intent",
             operation="checkout_fetch",
         )
         payment_status = body.get("payment_status", "")
         session_status = body.get("status", "")
         payment_intent = body.get("payment_intent") or ""
+        intent_status = ""
         if isinstance(payment_intent, dict):
+            intent_status = str(payment_intent.get("status") or "")
             payment_intent = payment_intent.get("id", "")
         if payment_status == "paid":
             outcome = "succeeded"
         elif session_status == "expired":
             outcome = "expired"
         elif session_status == "complete" and payment_status == "unpaid":
-            outcome = "processing"
+            # A failed delayed payment sends its intent back to
+            # `requires_payment_method`, and a completed session offers no
+            # second try, so that payment is over.
+            outcome = (
+                "failed"
+                if intent_status in _FAILED_INTENT_STATUSES
+                else "processing"
+            )
         elif session_status == "complete":
             outcome = "failed"
         else:
@@ -491,8 +556,9 @@ class StripeGateway:
             outcome = "expired"
         elif event_type == "checkout.session.async_payment_failed":
             outcome = "failed"
-        elif event_type == "payment_intent.payment_failed":
-            outcome = "failed"
+        # A declined card (`payment_intent.payment_failed`) ends nothing: the
+        # payer may try again in the same session, which only its own
+        # session's events end (G1).
 
         payment_intent = obj.get("payment_intent") or obj.get("id") or ""
         if isinstance(payment_intent, dict):
@@ -562,6 +628,11 @@ class StripeGateway:
 
 
 #: Keys that must never be persisted from a provider payload.
+#: A payment intent in one of these states will not settle the session it
+#: belongs to.
+_FAILED_INTENT_STATUSES = frozenset({"requires_payment_method", "canceled"})
+
+
 _SENSITIVE_KEYS = frozenset(
     {
         "client_secret",
@@ -573,10 +644,14 @@ _SENSITIVE_KEYS = frozenset(
         "billing_details",
         "shipping_details",
         "receipt_email",
+        "customer_email",
         "email",
         "phone",
         "address",
         "name",
+        # A session's hosted URL lets whoever holds it pay: it is handed to
+        # its payer and never kept anywhere else (G1).
+        "url",
     }
 )
 

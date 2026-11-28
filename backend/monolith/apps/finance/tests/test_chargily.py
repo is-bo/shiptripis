@@ -15,12 +15,15 @@ import hashlib
 import hmac
 import json
 from copy import deepcopy
+from datetime import UTC, datetime, timedelta
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.core.business_settings import get_active_business_settings
 from apps.core.models import BusinessSettingsVersion
+from apps.finance.mode_safety import event_mode_allowed
 from apps.finance.models import PaymentAttempt, PaymentOrder
 from apps.finance.money import convert_eur_cents, format_rate
 from apps.finance.policy import Phase3Policy
@@ -30,13 +33,17 @@ from apps.finance.providers import (
     resolve_gateway_for_checkout,
 )
 from apps.finance.providers.base import (
+    CHECKOUT_CLOSED,
+    CHECKOUT_COLLECTED,
     CheckoutRequest,
     ProviderError,
+    ProviderUnavailable,
     ProviderNotConfigured,
     ProviderSignatureError,
     RefundRequest,
 )
 from apps.finance.providers.chargily import (
+    CHECKOUT_LIFETIME,
     ChargilyGateway,
     verify_chargily_signature,
 )
@@ -161,6 +168,53 @@ class ChargilyCheckoutTests(TestCase):
         assert payload["metadata"] == [{"reference": "ref-9"}]
         assert result.provider_session_id == "01checkout"
 
+    def test_a_checkout_states_when_chargily_stops_it_collecting(self):
+        """Chargily expires a checkout 30 minutes after it created it, and
+        says so only in its documentation: the adapter states it, so nothing
+        offers a checkout its provider has already ended (G1, sixth pass)."""
+
+        created = 1_800_000_000
+        gateway = _gateway(
+            [
+                _FakeResponse(
+                    200,
+                    {
+                        "id": "01checkout",
+                        "checkout_url": "https://pay.chargily.test/01checkout",
+                        "status": "pending",
+                        "created_at": created,
+                    },
+                )
+            ]
+        )
+
+        result = gateway.create_checkout(self._request())
+
+        assert CHECKOUT_LIFETIME == timedelta(minutes=30)
+        assert result.expires_at == datetime.fromtimestamp(created, UTC) + timedelta(
+            minutes=30
+        )
+
+    def test_a_checkout_without_its_creation_time_ends_no_later_than_stated(self):
+        gateway = _gateway(
+            [
+                _FakeResponse(
+                    200,
+                    {
+                        "id": "01checkout",
+                        "checkout_url": "https://pay.chargily.test/01checkout",
+                        "status": "pending",
+                    },
+                )
+            ]
+        )
+        before = timezone.now()
+
+        result = gateway.create_checkout(self._request())
+
+        assert before + CHECKOUT_LIFETIME <= result.expires_at
+        assert result.expires_at <= timezone.now() + CHECKOUT_LIFETIME
+
     def test_a_eur_checkout_is_refused_rather_than_converted_by_the_adapter(self):
         with self.assertRaises(ProviderError):
             _gateway().create_checkout(self._request(currency="EUR"))
@@ -211,6 +265,124 @@ class ChargilyCheckoutTests(TestCase):
         assert event.currency == "DZD"
         assert event.reference == "ref-9"
 
+    @override_settings(SHIPTRIP_ENVIRONMENT="production", PAYMENTS_ENVIRONMENT="test")
+    def test_the_published_webhook_shape_passes_the_mode_check_and_keeps_no_url(self):
+        """Chargily writes `livemode` as the string "false" at the top of an
+        event and as a boolean on its checkout, and puts the checkout's
+        hosted URL in it (G1, sixth pass). Once its signature is verified the
+        mode reads as a boolean, so enforced mode checks pass a test event and
+        refuse a live one, and the URL, which lets whoever holds it pay, is
+        not kept."""
+
+        def published(livemode: str) -> bytes:
+            return json.dumps(
+                {
+                    "id": "01event",
+                    "entity": "event",
+                    "livemode": livemode,
+                    "type": "checkout.paid",
+                    "data": {
+                        "id": "01checkout",
+                        "entity": "checkout",
+                        "livemode": livemode == "true",
+                        "status": "paid",
+                        "amount": 9_375,
+                        "currency": "dzd",
+                        "metadata": [{"reference": "ref-9"}],
+                        "url": "https://pay.chargily.test/checkouts/01checkout/pay",
+                        "checkout_url": "https://pay.chargily.test/01checkout",
+                    },
+                },
+                separators=(",", ":"),
+            ).encode("utf-8")
+
+        test_event = _gateway().parse_webhook(
+            raw_body=published("false"),
+            headers={"signature": chargily_signature(published("false"))},
+        )
+        live_event = _gateway().parse_webhook(
+            raw_body=published("true"),
+            headers={"signature": chargily_signature(published("true"))},
+        )
+
+        assert test_event.payload["livemode"] is False
+        assert test_event.payload["data"]["livemode"] is False
+        assert event_mode_allowed(test_event.payload) is True
+        assert event_mode_allowed(live_event.payload) is False
+        stored = json.dumps(test_event.payload)
+        assert "pay.chargily.test" not in stored
+        assert test_event.outcome == "succeeded"
+
+    def test_a_livemode_that_is_neither_true_nor_false_is_left_to_be_refused(self):
+        body = json.dumps(
+            {
+                "id": "01event",
+                "livemode": "maybe",
+                "type": "checkout.paid",
+                "data": {"id": "01checkout", "status": "paid"},
+            },
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+        event = _gateway().parse_webhook(
+            raw_body=body, headers={"signature": chargily_signature(body)}
+        )
+
+        assert event.payload["livemode"] == "maybe"
+        with override_settings(SHIPTRIP_ENVIRONMENT="production"):
+            assert event_mode_allowed(event.payload) is False
+
+    def test_only_the_exact_mode_literals_are_read(self):
+        """Chargily writes "true" or "false". Another case or padding is not
+        one of them, so it is left for the strict mode check to refuse (G1,
+        seventh pass)."""
+
+        for written in (" FALSE ", "False", "TRUE", "true "):
+            with self.subTest(written=written):
+                body = json.dumps(
+                    {
+                        "id": "01event",
+                        "livemode": written,
+                        "type": "checkout.paid",
+                        "data": {"id": "01checkout", "status": "paid"},
+                    },
+                    separators=(",", ":"),
+                ).encode("utf-8")
+
+                event = _gateway().parse_webhook(
+                    raw_body=body, headers={"signature": chargily_signature(body)}
+                )
+
+                assert event.payload["livemode"] == written
+                with override_settings(SHIPTRIP_ENVIRONMENT="production"):
+                    assert event_mode_allowed(event.payload) is False
+
+    def test_a_checkout_chargily_is_settling_is_reported_as_settling(self):
+        """`processing`: the payer submitted and Chargily is settling it, so a
+        payment is being made through the checkout (G1, seventh pass)."""
+
+        gateway = _gateway(
+            [
+                _FakeResponse(
+                    200,
+                    {
+                        "id": "01checkout",
+                        "status": "processing",
+                        "amount": 6_250,
+                        "currency": "dzd",
+                        "livemode": False,
+                    },
+                )
+            ]
+        )
+
+        snapshot = gateway.fetch_attempt(
+            provider_session_id="01checkout", provider_payment_id=""
+        )
+
+        assert snapshot.outcome == "processing"
+        assert snapshot.raw["livemode"] is False
+
     def test_a_paid_label_over_an_unpaid_object_is_not_trusted(self):
         body = json.dumps(
             {
@@ -243,6 +415,66 @@ class ChargilyCheckoutTests(TestCase):
             )
 
             assert event.outcome == expected, event_type
+
+
+class ChargilyCloseCheckoutTests(TestCase):
+    """G1: a checkout is reported closed only once Chargily says it is."""
+
+    URL = "https://pay.chargily.test/test/api/v2/checkouts/01checkout"
+
+    def test_a_pending_checkout_is_expired(self):
+        # Chargily answers success only once it expired the checkout.
+        gateway = _gateway([_FakeResponse(200, {"id": "01checkout", "status": "pending"})])
+
+        assert gateway.close_checkout(provider_session_id="01checkout") == CHECKOUT_CLOSED
+
+        [call] = gateway._session.calls
+        assert (call["method"], call["url"]) == ("POST", f"{self.URL}/expire")
+        assert call["headers"]["Authorization"] == f"Bearer {SECRET}"
+
+    def test_a_refused_expiry_is_answered_by_reading_the_checkout(self):
+        cases = (
+            # Ended before this call: the provider's own outcome, not "closed here".
+            (400, "expired", "expired"),
+            (403, "failed", "failed"),
+            (403, "canceled", "cancelled"),
+            (403, "paid", CHECKOUT_COLLECTED),
+            (403, "processing", CHECKOUT_COLLECTED),
+        )
+        for refusal, status, outcome in cases:
+            with self.subTest(status):
+                gateway = _gateway(
+                    [
+                        _FakeResponse(refusal, {"message": "refused"}),
+                        _FakeResponse(200, {"id": "01checkout", "status": status}),
+                    ]
+                )
+
+                assert gateway.close_checkout(provider_session_id="01checkout") == outcome
+
+                read = gateway._session.calls[1]
+                assert (read["method"], read["url"]) == ("GET", self.URL)
+
+    def test_a_checkout_still_pending_is_not_reported_closed(self):
+        gateway = _gateway(
+            [
+                _FakeResponse(403, {"message": "refused"}),
+                _FakeResponse(200, {"id": "01checkout", "status": "pending"}),
+            ]
+        )
+
+        with self.assertRaises(ProviderError) as caught:
+            gateway.close_checkout(provider_session_id="01checkout")
+
+        assert not isinstance(caught.exception, ProviderUnavailable)
+
+    def test_an_outage_is_retryable_and_reads_nothing(self):
+        gateway = _gateway([_FakeResponse(503, {"message": "down"})])
+
+        with self.assertRaises(ProviderUnavailable):
+            gateway.close_checkout(provider_session_id="01checkout")
+
+        assert len(gateway._session.calls) == 1
 
 
 class ChargilyFxSnapshotTests(TestCase):

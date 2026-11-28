@@ -10,7 +10,9 @@ forwards this link forwards the ability to pay, not a receipt and not a record.
 
 The token is in the URL because it *is* the credential. The page never puts it
 in a query string, never logs it, and the server stores only its hash. The
-referrer is suppressed so the path never travels onward to anyone.
+referrer is suppressed so the path never travels onward to anyone. The form
+carries no CSRF token: its authority is the path, not a cookie (G1, see
+`guest_payment_page`).
 
 An unknown, expired, revoked or closed link is answered the same way, in the
 same words: the link is no longer active. Distinguishing them would let someone
@@ -19,6 +21,9 @@ real link whose payment is complete: its holder -- the person who just paid,
 opening the link again -- is told so instead of being sent back to ask for a
 new link. Only a token that hashes to a stored link reaches that branch, and
 a token cannot be guessed, so it tells a prober nothing.
+
+A payer whose checkout is still being opened, a tap ago, is told to wait and
+offered the same choices again (G1); a retry is handed that one checkout.
 
 Its look -- tokens, faces, header and language switch -- is the shared
 `payments/_shell.html`, which the provider-return page uses too (J7D).
@@ -34,7 +39,6 @@ Its look -- tokens, faces, header and language switch -- is the shared
     <div class="perf" aria-hidden="true"></div>
 
     <form method="post" action="{{ checkout_action }}">
-      {% csrf_token %}
       <input type="hidden" name="lang" value="{{ lang }}">
       {% if providers|length == 1 %}
         {% with option=providers.0 %}
@@ -92,6 +96,27 @@ Its look -- tokens, faces, header and language switch -- is the shared
     <h1 class="title">{{ t.unavailable_title }}</h1>
     <p class="lead">{{ t.unavailable_body }}</p>
     <a class="secondary" href="?lang={{ lang }}">{{ t.try_again }}</a>
+  {% elif in_progress %}
+    <div class="state-mark" aria-hidden="true">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5h11"/><path d="M6.5 20.5h11"/><path d="M8 3.5c0 4.5 8 4.5 8 8.5s-8 4-8 8.5"/><path d="M16 3.5c0 4.5-8 4.5-8 8.5s8 4 8 8.5"/></svg>
+    </div>
+    <div role="status">
+      <h1 class="title">{{ t.in_progress_title }}</h1>
+      <p class="lead">{{ t.in_progress_body }}</p>
+    </div>
+    {% if reload %}
+    <form method="get" action="{{ checkout_action }}">
+      <input type="hidden" name="lang" value="{{ lang }}">
+      <button type="submit" class="secondary">{{ t.try_again }}</button>
+    </form>
+    {% else %}
+    <form method="post" action="{{ checkout_action }}">
+      <input type="hidden" name="lang" value="{{ lang }}">
+      <input type="hidden" name="provider" value="{{ chosen }}">
+      {% if email %}<input type="hidden" name="email" value="{{ email }}">{% endif %}
+      <button type="submit" class="secondary">{{ t.try_again }}</button>
+    </form>
+    {% endif %}
   {% elif already_paid %}
     <div class="mark seal-mark" aria-hidden="true">
       <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>

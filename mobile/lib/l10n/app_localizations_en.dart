@@ -4145,6 +4145,20 @@ class LEn extends L {
       'They opened your payment link. This updates as soon as their payment goes through.';
 
   @override
+  String get paymentInProgressTitle => 'A payment is already under way';
+
+  @override
+  String get paymentInProgressBody =>
+      'Someone, perhaps you, is already paying this. Try again in a few minutes.';
+
+  @override
+  String get paymentUnderReviewTitle => 'A payment is being checked';
+
+  @override
+  String get paymentUnderReviewBody =>
+      'A payment for this order is being checked, so don’t pay again. This updates once the check is done.';
+
+  @override
   String get guestPayPurposeDeposit => 'Deposit for a delivery request';
 
   @override

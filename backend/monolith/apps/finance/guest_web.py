@@ -23,6 +23,9 @@ complete says so instead (J7D; see `_completed_link`).
 browser language when it is one of ours, falls back to the language the owner's
 link was issued in, and always offers a one-tap switch. The switch is a query
 parameter on the same path; the token never moves into a query string.
+
+**The token is the only authority (G1).** The page takes no CSRF token and
+never reads the session; see `guest_payment_page`.
 """
 
 from __future__ import annotations
@@ -36,6 +39,8 @@ from django.core.validators import validate_email
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import render
 from django.utils import timezone
+from django.utils.cache import patch_cache_control
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from apps.core.business_settings import NoActiveBusinessSettings
@@ -44,6 +49,7 @@ from .models import GuestPaymentLink, PaymentOrder
 from .policy import InvalidPaymentPolicy, phase3_policy
 from .providers import ProviderError
 from .services import (
+    CheckoutInProgress,
     FinanceError,
     guest_payment_view,
     hash_guest_token,
@@ -97,6 +103,11 @@ COPY: dict[str, dict[str, str]] = {
             "Your link is fine — we just can't take a payment right now. Please "
             "try again shortly; there's no need to ask for a new link."
         ),
+        "in_progress_title": "A payment is already under way",
+        "in_progress_body": (
+            "Someone, perhaps you, is already paying this. Try again in a few "
+            "minutes."
+        ),
         "try_again": "Try again",
         "purpose_posting_deposit": "Deposit for a delivery request",
         "purpose_deal_balance": "Payment for a delivery",
@@ -149,6 +160,11 @@ COPY: dict[str, dict[str, str]] = {
             "pour l’instant. Réessayez dans un moment ; inutile de demander un "
             "nouveau lien."
         ),
+        "in_progress_title": "Un paiement est déjà en cours",
+        "in_progress_body": (
+            "Quelqu’un, peut-être vous, est déjà en train de payer. Réessayez "
+            "dans quelques minutes."
+        ),
         "try_again": "Réessayer",
         "purpose_posting_deposit": "Acompte pour une demande de livraison",
         "purpose_deal_balance": "Paiement d’une livraison",
@@ -198,6 +214,10 @@ COPY: dict[str, dict[str, str]] = {
         "unavailable_body": (
             "رابطك صالح، لكن لا يمكننا استلام الدفع حاليًا. أعد المحاولة بعد "
             "قليل، ولا حاجة لطلب رابط جديد."
+        ),
+        "in_progress_title": "هناك دفعة جارية بالفعل",
+        "in_progress_body": (
+            "يقوم أحدهم بالدفع الآن، وربما كنت أنت. أعد المحاولة بعد بضع دقائق."
         ),
         "try_again": "أعد المحاولة",
         "purpose_posting_deposit": "عربون لطلب توصيل",
@@ -348,6 +368,38 @@ def _no_rail(request: HttpRequest, lang: str) -> HttpResponse:
     )
 
 
+def _in_progress(
+    request: HttpRequest,
+    lang: str,
+    *,
+    provider: str,
+    email: str,
+    reload: bool = False,
+) -> HttpResponse:
+    """A payment for this is already under way, perhaps a tap ago (G1).
+
+    Neither a dead link nor an outage, and the same for every holder of the
+    link, whatever they sent. The page offers to send the same choices again.
+    Shown on opening the page as well while the server would answer a tap so
+    (`next_checkout`), so no payer is offered a button it would refuse; that
+    page offers to look again (`reload`), as nothing was chosen yet.
+    """
+
+    return _page(
+        request,
+        lang,
+        {
+            "payable": False,
+            "in_progress": True,
+            "chosen": provider,
+            "email": email,
+            "checkout_action": request.path,
+            "reload": reload,
+        },
+        status=200 if reload else 409,
+    )
+
+
 def _completed_link(token: str):
     """The stored link behind `token` when its payment is complete (J7D).
 
@@ -370,6 +422,38 @@ def _completed_link(token: str):
     return link
 
 
+#: Where `guest_payment_page` is routed (`config/urls.py`).
+GUEST_PAGE_PREFIX = "/pay/guest/"
+
+
+class GuestPagePrivacyMiddleware:
+    """No referrer and no cache on every response under the guest page's path.
+
+    The path is the capability. `Referrer-Policy` keeps it out of whatever the
+    browser requests next, the provider's page after the redirect included,
+    and `private, no-store` keeps every cache from holding a page or a
+    redirect to a checkout under it. The shell's meta tag covers the rendered
+    document; a redirect has no document, so the header says it for both.
+
+    A middleware, first in `MIDDLEWARE`, rather than a view decorator (G1): an
+    exception in the view or in a later middleware becomes Django's 500 only
+    after a decorator has unwound, and this sees that response as well. Its
+    header replaces the `SECURE_REFERRER_POLICY` value `SecurityMiddleware`
+    has already set.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request: HttpRequest) -> HttpResponse:
+        response = self.get_response(request)
+        if request.path_info.startswith(GUEST_PAGE_PREFIX):
+            response.headers["Referrer-Policy"] = "no-referrer"
+            patch_cache_control(response, private=True, no_store=True)
+        return response
+
+
+@csrf_exempt
 @require_http_methods(["GET", "POST"])
 def guest_payment_page(request: HttpRequest, token: str) -> HttpResponse:
     """Show what is owed, or start a hosted checkout for it.
@@ -377,6 +461,16 @@ def guest_payment_page(request: HttpRequest, token: str) -> HttpResponse:
     The POST branch redirects the browser to the provider rather than returning
     JSON, and returning from that provider proves nothing: only the
     signature-verified webhook moves money, exactly as for a signed-in payer.
+
+    **Exempt from Django's CSRF check (G1).** That check binds a form to the
+    browser's cookie and to its Origin or Referer, and neither is the authority
+    here: the token in the path is. The shell's no-referrer policy makes
+    Chromium submit with `Origin: null` and no Referer, which the check refuses,
+    so under it no one could pay. A forged submission would need the token, and
+    whoever holds the token can already do all the form does: start a checkout
+    the provider still asks them to complete. Nothing here reads the session,
+    so a signed-in member who opens someone else's link pays as a guest, as a
+    stranger would. The exemption is this view's alone.
     """
 
     if _throttled(request):
@@ -412,7 +506,10 @@ def guest_payment_page(request: HttpRequest, token: str) -> HttpResponse:
     email_required = payload["receipt_email_required"]
     email = ""
     email_error = ""
+    status = 200
     chosen = providers[0]["provider"]
+    if request.method == "GET" and payload["checkout_state"] == "in_progress":
+        return _in_progress(request, lang, provider=chosen, email="", reload=True)
 
     if request.method == "POST":
         chosen = request.POST.get("provider", "")
@@ -424,6 +521,7 @@ def guest_payment_page(request: HttpRequest, token: str) -> HttpResponse:
                 validate_email(email)
             except ValidationError:
                 email_error = t["email_error"]
+                status = 400
         else:
             # Never collected when nothing would be sent to it.
             email = ""
@@ -443,7 +541,17 @@ def guest_payment_page(request: HttpRequest, token: str) -> HttpResponse:
                     "finance.guest_page_checkout_unavailable order=%s", link.order_id
                 )
                 return _no_rail(request, lang)
+            except CheckoutInProgress:
+                return _in_progress(request, lang, provider=chosen, email=email)
             except FinanceError:
+                # Includes a link revoked, replaced or expired since it was read
+                # above: checkout reads it again under the order lock. That
+                # includes a link this very tap found paid, by recording a
+                # payment its checkout had already taken: then the page says
+                # so, as it does when the link is opened again (G1).
+                completed = _completed_link(token)
+                if completed is not None:
+                    return _page(request, lang, {"payable": False, "already_paid": True})
                 # The token is never echoed into a log line; the order is named
                 # by its own id, which is not derivable from anything the payer
                 # holds.
@@ -451,9 +559,9 @@ def guest_payment_page(request: HttpRequest, token: str) -> HttpResponse:
                     "finance.guest_page_checkout_failed order=%s", link.order_id
                 )
                 return _unavailable(request, lang, status=409)
-            if not session.attempt.checkout_url:
-                return _no_rail(request, lang)
-            return HttpResponseRedirect(session.attempt.checkout_url)
+            else:
+                # `start_checkout` returns a session only with a URL to visit.
+                return HttpResponseRedirect(session.attempt.checkout_url)
 
     amount = _amount(payload["amount_eur_cents"], lang)
     # The button states an amount only when every rail on offer charges that
@@ -485,5 +593,5 @@ def guest_payment_page(request: HttpRequest, token: str) -> HttpResponse:
             ),
             "checkout_action": request.path,
         },
-        status=400 if email_error else 200,
+        status=status,
     )

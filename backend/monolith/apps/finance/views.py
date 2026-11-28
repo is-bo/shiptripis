@@ -53,12 +53,12 @@ from .models import (
 from .policy import InvalidPaymentPolicy, phase3_policy
 from .providers import ProviderError, available_providers
 from .serializers import (
+    CheckoutAttemptSerializer,
     CheckoutCreateSerializer,
     GuestCheckoutCreateSerializer,
     GuestLinkCreateSerializer,
     ManualPayoutCompleteSerializer,
     ManualRefundSettleSerializer,
-    PaymentAttemptSerializer,
     PaymentOrderSerializer,
     PaymentOrderSummarySerializer,
     PostingDepositCreateSerializer,
@@ -76,6 +76,7 @@ from .services import (
     deposit_quote_payload,
     guest_link_status,
     guest_payment_view,
+    next_checkout,
     provider_options,
     request_refund,
     resolve_guest_link,
@@ -89,9 +90,22 @@ logger = logging.getLogger(__name__)
 
 
 class GuestPaymentThrottle(AnonRateThrottle):
-    """Bound token-guessing attempts against the unauthenticated surface."""
+    """Bound token-guessing attempts against the unauthenticated surface.
+
+    One bucket per client address, signed in or not (G1). `AnonRateThrottle`
+    lets an authenticated request through unthrottled, and the guest page sits
+    behind the session middleware, so a member's cookie would otherwise lift
+    the bound. The guest surfaces take no authority from a session, so they
+    take no exemption from one either.
+    """
 
     scope = "guest_payment"
+
+    def get_cache_key(self, request, view):
+        return self.cache_format % {
+            "scope": self.scope,
+            "ident": self.get_ident(request),
+        }
 
 
 def _finance_error_response(exc: Exception) -> Response:
@@ -147,6 +161,16 @@ def _with_payment_options(payload: dict, order: PaymentOrder) -> dict:
     payload["providers"] = provider_options(
         policy, amount_eur_cents=order.outstanding_eur_cents
     )
+    # What the owner's next tap meets, so the section never offers a rail or
+    # a "continue" the server would refuse, and the rail a "continue" opens
+    # again, which a summary without attempt history could not tell (G1).
+    upcoming = next_checkout(
+        order,
+        available={row["provider"] for row in payload["providers"] if row["available"]},
+        guest=False,
+    )
+    payload["checkout_state"] = upcoming.state
+    payload["resume_provider"] = upcoming.provider or None
     if policy.providers.chargily_enabled:
         payload["chargily_quote"] = chargily_display(
             amount_eur_cents=order.outstanding_eur_cents, policy=policy
@@ -269,7 +293,7 @@ class PaymentCheckoutView(APIView):
         ) as exc:
             return _finance_error_response(exc)
         return Response(
-            PaymentAttemptSerializer(session.attempt).data,
+            CheckoutAttemptSerializer(session.attempt).data,
             status=http.HTTP_201_CREATED if session.created else http.HTTP_200_OK,
         )
 

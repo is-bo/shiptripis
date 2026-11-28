@@ -14,7 +14,8 @@ Contract used (https://dev.chargily.com/pay-v2):
 * checkout  ``POST /checkouts`` with ``amount`` + ``currency`` (``dzd``),
   ``success_url`` (required), ``failure_url``, ``webhook_endpoint``,
   ``description``, ``metadata``; the response carries ``id`` and
-  ``checkout_url``
+  ``checkout_url``, and ``created_at`` as a Unix time; a checkout expires 30
+  minutes after it was created
 * webhook   header ``signature`` = HMAC-SHA256 hex digest of the **raw body**
   keyed with the API secret key; events are ``checkout.paid``,
   ``checkout.failed``, ``checkout.canceled``, ``checkout.expired``
@@ -30,11 +31,15 @@ import hmac
 import json
 import logging
 import time
+from datetime import UTC, datetime, timedelta
 
 import requests
 from django.conf import settings
+from django.utils import timezone
 
 from .base import (
+    CHECKOUT_CLOSED,
+    CHECKOUT_COLLECTED,
     MODE_LIVE,
     MODE_NOT_CONFIGURED,
     MODE_TEST,
@@ -61,6 +66,11 @@ TEST_API_BASE = "https://pay.chargily.net/test/api/v2"
 
 MAX_WEBHOOK_BYTES = 512 * 1024
 
+#: How long a checkout can be paid. Chargily expires a checkout 30 minutes
+#: after it was created unless it is told otherwise, and no request here tells
+#: it otherwise (G1).
+CHECKOUT_LIFETIME = timedelta(minutes=30)
+
 #: Chargily maps its checkout lifecycle onto these event types.
 _EVENT_OUTCOMES = {
     "checkout.paid": "succeeded",
@@ -77,7 +87,9 @@ _STATUS_OUTCOMES = {
     "cancelled": "cancelled",
     "expired": "expired",
     "pending": "ignored",
-    "processing": "ignored",
+    # The payer has submitted and Chargily is settling it: a payment is being
+    # made through this checkout, which only its own outcome ends (G1).
+    "processing": "processing",
 }
 
 
@@ -330,10 +342,9 @@ class ChargilyGateway:
             "failure_url": request.failure_url,
             "webhook_endpoint": request.webhook_url,
             "description": request.description[:255],
-            # Chargily echoes metadata back on the webhook, which is how an
-            # event finds its attempt even if the session id is missing.
             "metadata": [{"reference": request.reference}],
         }
+        requested_at = timezone.now()
         body = self._request(
             "POST", "/checkouts", operation="checkout_create", payload=payload
         )
@@ -341,11 +352,50 @@ class ChargilyGateway:
         checkout_url = str(body.get("checkout_url") or "")
         if not checkout_id or not checkout_url:
             raise ProviderError("Chargily did not return a usable checkout.")
+        created_at = body.get("created_at")
+        if type(created_at) is int and created_at > 0:
+            created = datetime.fromtimestamp(created_at, UTC)
+        else:
+            # It was created no earlier than it was asked for.
+            created = requested_at
         return CheckoutResult(
             provider_session_id=checkout_id,
             checkout_url=checkout_url,
             provider_status=str(body.get("status") or "pending"),
+            expires_at=created + CHECKOUT_LIFETIME,
             raw=_scrub(body),
+        )
+
+    def close_checkout(self, *, provider_session_id: str) -> str:
+        """Expire a pending checkout, or learn how it ended instead.
+
+        Chargily expires only a `pending` checkout (`POST
+        /checkouts/{id}/expire`) and answers success only once it has. It
+        refuses an expired one with 400 and any other status with 403, which
+        `_request` cannot tell from a credential refusal, so every refusal is
+        answered by reading the checkout.
+        """
+
+        if not provider_session_id:
+            raise ProviderError("No Chargily checkout to close.")
+        path = f"/checkouts/{provider_session_id}"
+        try:
+            self._request("POST", f"{path}/expire", operation="checkout_expire")
+        except ProviderUnavailable:
+            raise
+        except ProviderError:
+            body = self._request("GET", path, operation="checkout_fetch")
+        else:
+            return CHECKOUT_CLOSED
+        # How Chargily says it ended, in the outcome words a read uses (G1).
+        ended = _STATUS_OUTCOMES.get(str(body.get("status") or "").lower(), "ignored")
+        if ended in {"succeeded", "processing"}:
+            return CHECKOUT_COLLECTED
+        if ended != "ignored":
+            return ended
+        raise ProviderError(
+            "Chargily did not confirm the checkout closed.",
+            provider_code="checkout_open",
         )
 
     def fetch_attempt(
@@ -362,7 +412,7 @@ class ChargilyGateway:
             provider_payment_id=str(body.get("id") or provider_payment_id),
             amount_minor=body.get("amount"),
             currency=str(body.get("currency") or "").upper(),
-            raw=_scrub(body),
+            raw=_with_boolean_livemode(_scrub(body)),
         )
 
     def refund(self, request: RefundRequest) -> RefundResult:
@@ -419,8 +469,6 @@ class ChargilyGateway:
                 if isinstance(entry, dict) and entry.get("reference"):
                     reference = str(entry["reference"])
                     break
-        elif isinstance(metadata, dict):
-            reference = str(metadata.get("reference") or "")
 
         return ProviderEvent(
             provider=self.name,
@@ -433,7 +481,7 @@ class ChargilyGateway:
             amount_minor=data.get("amount"),
             currency=str(data.get("currency") or "").upper(),
             failure_code=str(data.get("failure_reason") or ""),
-            payload=_scrub(event),
+            payload=_with_boolean_livemode(_scrub(event)),
         )
 
 
@@ -446,8 +494,34 @@ _SENSITIVE_KEYS = frozenset(
         "name",
         "address",
         "secret",
+        # A checkout's hosted URL lets whoever holds it pay: it is handed to
+        # its payer and never kept anywhere else (G1).
+        "url",
+        "checkout_url",
     }
 )
+
+#: How Chargily writes `livemode` at the top of a webhook event, exactly: a
+#: checkout carries a boolean.
+_LIVEMODE_LITERALS = {"true": True, "false": False}
+
+
+def _with_boolean_livemode(payload: dict) -> dict:
+    """`payload` with each `livemode` Chargily wrote as a string made a boolean.
+
+    Applied to a body only once it is authenticated (a verified signature, or
+    Chargily's own API), so the mode checks read one type from every provider
+    (G1). Only the exact literals "true" and "false" are read: any other value,
+    another case or padding included, stays as it is, and those checks refuse
+    it.
+    """
+
+    for target in (payload, payload.get("data")):
+        if isinstance(target, dict) and "livemode" in target:
+            value = target["livemode"]
+            if isinstance(value, str) and value in _LIVEMODE_LITERALS:
+                target["livemode"] = _LIVEMODE_LITERALS[value]
+    return payload
 
 
 def _scrub(value: object, *, depth: int = 0) -> dict:

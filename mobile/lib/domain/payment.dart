@@ -308,8 +308,10 @@ class PaymentAttempt {
   /// Pre-formatted `150.000000`.
   final String? eurDzdRate;
 
-  /// Hosted checkout page. There is no client secret and no embedded form;
-  /// this URL is the whole redirect contract.
+  /// Hosted checkout page, present only on the attempt the checkout endpoint
+  /// just answered with. An order's history never carries one: the server
+  /// hands a checkout out only from that endpoint (G1). There is no client
+  /// secret and no embedded form; this URL is the whole redirect contract.
   final String? checkoutUrl;
 
   final String failureCode;
@@ -317,13 +319,35 @@ class PaymentAttempt {
   final DateTime? expiresAt;
   final DateTime? succeededAt;
   final DateTime? createdAt;
+}
 
-  bool get isExpired {
-    final at = expiresAt;
-    return at != null && at.isBefore(DateTime.now());
-  }
+/// What the owner's next tap on an order's payment meets, as the server
+/// decides it (G1). The payment section offers only what the server would
+/// accept; the tap itself is decided again on the server.
+enum CheckoutState {
+  /// Choose a rail and pay.
+  ready,
 
-  bool get canResume => status.isInFlight && checkoutUrl != null && !isExpired;
+  /// The owner's own checkout is open, and continuing hands it back.
+  resumable,
+
+  /// Someone the owner sent the link to is paying: their checkout can still
+  /// be paid, or their payment is settling.
+  guestPaying,
+
+  /// A payment is being made or a checkout opened: try again shortly.
+  inProgress,
+
+  /// A payment was made and its money is settling.
+  settling;
+
+  static CheckoutState parse(Object? raw) => switch (raw) {
+    'resumable' => resumable,
+    'guest_paying' => guestPaying,
+    'in_progress' => inProgress,
+    'settling' => settling,
+    _ => ready,
+  };
 }
 
 class PaymentRefund {
@@ -495,6 +519,8 @@ class PaymentOrder {
     this.createdAt,
     this.chargilyQuote,
     this.settlement,
+    this.checkoutState = CheckoutState.ready,
+    this.resumeProvider,
     this.isReducedProjection = false,
   });
 
@@ -540,6 +566,14 @@ class PaymentOrder {
     settlement: readObject(json['settlement']) == null
         ? null
         : PaymentSettlement.fromJson(readObject(json['settlement'])!),
+    checkoutState: CheckoutState.parse(json['checkout_state']),
+    resumeProvider: json['resume_provider'] == null
+        ? null
+        : readEnum(
+            json['resume_provider'],
+            PaymentProviderId.values,
+            fallback: PaymentProviderId.unknown,
+          ),
     isReducedProjection: isReducedProjection,
   );
 
@@ -579,6 +613,15 @@ class PaymentOrder {
 
   final ChargilyQuote? chargilyQuote;
   final PaymentSettlement? settlement;
+
+  /// What the next tap on this order's payment meets. Present while something
+  /// is still owed; [CheckoutState.ready] otherwise.
+  final CheckoutState checkoutState;
+
+  /// The rail "continue" opens again, while [checkoutState] is
+  /// [CheckoutState.resumable]. The server names it, so a summary that carries
+  /// no attempt history continues on the right rail (G1).
+  final PaymentProviderId? resumeProvider;
 
   /// True for the traveller's cut-down view of a Deal's balance order: status
   /// and outstanding only, no attempts and no payer detail.
@@ -791,6 +834,7 @@ class GuestPaymentView {
     this.expiresAt,
     this.purpose = PaymentPurpose.unknown,
     this.receiptEmailRequired = true,
+    this.checkoutInProgress = false,
   });
 
   factory GuestPaymentView.fromJson(Map<String, dynamic> json) =>
@@ -815,6 +859,7 @@ class GuestPaymentView {
             .map(ProviderOption.fromJson)
             .where((p) => p.provider != PaymentProviderId.mock)
             .toList(growable: false),
+        checkoutInProgress: json['checkout_state'] == 'in_progress',
       );
 
   final Money? amount;
@@ -832,6 +877,10 @@ class GuestPaymentView {
 
   /// Already filtered server-side to rails that are usable right now.
   final List<ProviderOption> providers;
+
+  /// A payment for this is being made or settling, so a tap now would be
+  /// told to try again: the screen offers to check again instead (G1).
+  final bool checkoutInProgress;
 }
 
 /// Where the sender's "someone else can pay" link stands. Derived by the

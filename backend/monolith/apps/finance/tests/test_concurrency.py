@@ -14,7 +14,7 @@ threads in one process.
 from __future__ import annotations
 
 import unittest
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from copy import deepcopy
 from datetime import timedelta
 from threading import Barrier, Event
@@ -42,10 +42,13 @@ from apps.finance.models import (
 )
 from apps.finance.providers.mock import MockGateway
 from apps.finance.services import (
+    CheckoutInProgress,
     RefundExceedsCapture,
     cancel_order,
+    create_guest_link,
     ensure_posting_deposit_order,
     request_refund,
+    revoke_guest_link,
 )
 
 from .factories import (
@@ -215,7 +218,9 @@ class CheckoutRaceTests(FinanceConcurrencyTestCase):
     prefix = "conc-checkout"
 
     def test_two_simultaneous_checkouts_leave_exactly_one_open_attempt(self):
-        """The partial unique index is the arbiter, not application timing."""
+        """The order lock and the partial unique index are the arbiters, not
+        application timing. The later request reuses the first checkout or is
+        told it is still opening; the provider opens one session (G1)."""
 
         barrier = Barrier(2)
 
@@ -226,18 +231,22 @@ class CheckoutRaceTests(FinanceConcurrencyTestCase):
                 return open_mock_checkout(self.order).pk
             except IntegrityError:
                 return "conflict"
+            except CheckoutInProgress:
+                return "opening"
             finally:
                 connections.close_all()
 
         with ThreadPoolExecutor(max_workers=2) as executor:
-            list(executor.map(start, range(2)))
+            results = list(executor.map(start, range(2)))
 
-        open_attempts = PaymentAttempt.objects.filter(
+        rows = list(PaymentAttempt.objects.values_list("pk", "status"))
+        live = PaymentAttempt.objects.get(
             order=self.order, status__in=PaymentAttempt.OPEN_STATUSES
         )
-        assert open_attempts.count() == 1, list(
-            PaymentAttempt.objects.values_list("pk", "status")
-        )
+        assert len(rows) == 1, rows
+        assert live.pk in results, results
+        assert set(results) <= {live.pk, "opening", "conflict"}, results
+        assert MockGateway.checkout_session_ids() == [live.provider_session_id]
 
     def test_two_attempts_that_both_succeed_fund_the_deal_once(self):
         """The residual double-pay race, run for real."""
@@ -295,6 +304,230 @@ class CheckoutRaceTests(FinanceConcurrencyTestCase):
         assert PaymentRefund.objects.filter(
             attempt=unapplied[0], reason=PaymentRefund.Reason.UNAPPLIED_PAYMENT
         ).exists()
+
+
+class GuestPageRaceTests(FinanceConcurrencyTestCase):
+    """G1: the guest page, submitted as the browser submits it, under contention."""
+
+    prefix = "conc-guest"
+
+    def setUp(self):
+        super().setUp()
+        self.issued = create_guest_link(
+            order_id=self.order.pk, actor_id=self.scenario.sender.pk
+        )
+        self.page = f"/pay/guest/{self.issued.token}"
+
+    def _tap(self):
+        connections.close_all()
+        try:
+            return Client(enforce_csrf_checks=True).post(
+                self.page,
+                {"provider": "mock", "lang": "en"},
+                secure=True,
+                HTTP_ORIGIN="null",
+            )
+        finally:
+            connections.close_all()
+
+    def test_a_revocation_committing_while_the_payer_taps_stops_the_payment(self):
+        """The page read the link before the revocation committed; checkout
+        waits on the order row the revocation holds, then reads it again."""
+
+        from apps.finance import guest_web
+
+        revoked = Event()
+        allow_commit = Event()
+        checkout_entered = Event()
+        real_start = guest_web.start_checkout
+
+        def entering_checkout(**kwargs):
+            checkout_entered.set()
+            return real_start(**kwargs)
+
+        def revoke():
+            connections.close_all()
+            try:
+                with transaction.atomic():
+                    count = revoke_guest_link(
+                        order_id=self.order.pk, actor_id=self.scenario.sender.pk
+                    )
+                    revoked.set()
+                    assert allow_commit.wait(timeout=10)
+                return count
+            finally:
+                connections.close_all()
+
+        with (
+            patch.object(guest_web, "start_checkout", side_effect=entering_checkout),
+            ThreadPoolExecutor(max_workers=2) as executor,
+        ):
+            revocation = executor.submit(revoke)
+            assert revoked.wait(timeout=10)
+            payment = executor.submit(self._tap)
+            try:
+                assert checkout_entered.wait(timeout=10)
+                done, _ = wait([payment], timeout=0.5)
+                assert not done, "Checkout did not wait for the revocation's lock."
+            finally:
+                allow_commit.set()
+            assert revocation.result(timeout=10) == 1
+            response = payment.result(timeout=10)
+
+        assert response.status_code == 409
+        assert "This link is no longer active" in response.content.decode()
+        assert not PaymentAttempt.objects.filter(order=self.order).exists()
+
+    def assert_only_payable(self, live):
+        """`live` is the order's one open attempt and the one checkout anyone can pay."""
+
+        assert list(
+            PaymentAttempt.objects.filter(
+                order=self.order, status__in=PaymentAttempt.OPEN_STATUSES
+            )
+        ) == [live]
+        payable = [
+            session
+            for session in MockGateway.checkout_session_ids()
+            if MockGateway.is_payable(session)
+        ]
+        assert payable == [live.provider_session_id]
+
+    def test_two_taps_at_once_leave_one_payable_checkout_and_fund_once(self):
+        due = self.order.outstanding_eur_cents
+        barrier = Barrier(2)
+
+        def tap(_index):
+            barrier.wait(timeout=10)
+            return self._tap()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            responses = list(executor.map(tap, range(2)))
+
+        # The later tap waited on the order lock, then either found the first
+        # checkout still opening and was asked to wait, or closed it at the
+        # provider before opening its own. Either way one checkout can collect.
+        live = PaymentAttempt.objects.get(
+            order=self.order, status__in=PaymentAttempt.OPEN_STATUSES
+        )
+        assert live.provider_session_id and live.checkout_url
+        self.assert_only_payable(live)
+        attempts = list(PaymentAttempt.objects.filter(order=self.order))
+        redirects = [res["Location"] for res in responses if res.status_code == 302]
+        # Each redirect is a checkout of its own, opened by one of these taps:
+        # no two taps are ever sent to the same one.
+        assert len(redirects) == len(set(redirects)) == len(attempts) >= 1
+        assert set(redirects) == {attempt.checkout_url for attempt in attempts}
+        assert live.checkout_url in redirects
+        # And each checkout the later tap replaced was closed at its provider.
+        for replaced in (attempt for attempt in attempts if attempt.pk != live.pk):
+            assert replaced.status == PaymentAttempt.Status.CANCELLED
+            assert replaced.failure_code == "superseded"
+            assert not MockGateway.is_payable(replaced.provider_session_id)
+        for waiting in (res for res in responses if res.status_code != 302):
+            assert waiting.status_code == 409
+            assert "A payment is already under way" in waiting.content.decode()
+
+        MockGateway.mark(live.provider_session_id, "succeeded")
+        assert deliver_mock_webhook(Client(), succeed_attempt(live)).status_code == 200
+        self.order.refresh_from_db()
+        assert self.order.paid_eur_cents == due > 0
+        assert LedgerTransaction.objects.filter(kind="deal_funding").count() == 1
+
+    def test_a_tap_while_the_first_is_at_the_provider_keeps_its_key(self):
+        """The first tap's provider call is held open. A second tap, on its own
+        connection, finds the attempt with no URL yet: it is asked to wait and
+        opens nothing. Released, the first tap stores its URL; a retry closes
+        that checkout before opening its own."""
+
+        at_provider = Event()
+        release = Event()
+        real_create = MockGateway.create_checkout
+
+        def held(gateway, request):
+            if not at_provider.is_set():
+                at_provider.set()
+                assert release.wait(timeout=10)
+            return real_create(gateway, request)
+
+        with (
+            patch.object(MockGateway, "create_checkout", new=held),
+            ThreadPoolExecutor(max_workers=2) as executor,
+        ):
+            first = executor.submit(self._tap)
+            try:
+                assert at_provider.wait(timeout=10)
+                second = executor.submit(self._tap).result(timeout=10)
+                opening = PaymentAttempt.objects.get(order=self.order)
+            finally:
+                release.set()
+            first = first.result(timeout=10)
+
+        assert second.status_code == 409
+        assert "A payment is already under way" in second.content.decode()
+        assert opening.status == PaymentAttempt.Status.CREATED
+        assert opening.checkout_url == ""
+
+        stored = PaymentAttempt.objects.get(order=self.order)
+        assert stored.pk == opening.pk
+        assert stored.idempotency_key == opening.idempotency_key
+        assert first.status_code == 302 and first["Location"] == stored.checkout_url
+        assert MockGateway.checkout_session_ids() == [stored.provider_session_id]
+        retry = self._tap()
+        assert retry.status_code == 302 and retry["Location"] != stored.checkout_url
+        live = PaymentAttempt.objects.get(
+            order=self.order, status__in=PaymentAttempt.OPEN_STATUSES
+        )
+        assert retry["Location"] == live.checkout_url
+        self.assert_only_payable(live)
+
+    def test_no_lock_is_held_while_a_provider_closes_a_checkout(self):
+        """A tap that must close the open checkout first holds that provider
+        call open. The order row stays free meanwhile, and the tap opens its
+        own checkout only after the close returned."""
+
+        first = self._tap()
+        assert first.status_code == 302
+        at_provider = Event()
+        release = Event()
+        real_close = MockGateway.close_checkout
+
+        def held(gateway, *, provider_session_id):
+            at_provider.set()
+            assert release.wait(timeout=10)
+            return real_close(gateway, provider_session_id=provider_session_id)
+
+        def order_row_is_free():
+            connections.close_all()
+            try:
+                with transaction.atomic():
+                    with connection.cursor() as cursor:
+                        cursor.execute("SET LOCAL lock_timeout = '2s'")
+                    PaymentOrder.objects.select_for_update().get(pk=self.order.pk)
+                return True
+            finally:
+                connections.close_all()
+
+        with (
+            patch.object(MockGateway, "close_checkout", new=held),
+            ThreadPoolExecutor(max_workers=2) as executor,
+        ):
+            second = executor.submit(self._tap)
+            try:
+                assert at_provider.wait(timeout=10)
+                assert executor.submit(order_row_is_free).result(timeout=10)
+                assert PaymentAttempt.objects.filter(order=self.order).count() == 1
+            finally:
+                release.set()
+            second = second.result(timeout=10)
+
+        assert second.status_code == 302
+        assert second["Location"] != first["Location"]
+        live = PaymentAttempt.objects.get(
+            order=self.order, status__in=PaymentAttempt.OPEN_STATUSES
+        )
+        assert second["Location"] == live.checkout_url
+        self.assert_only_payable(live)
 
 
 class RefundRaceTests(FinanceConcurrencyTestCase):

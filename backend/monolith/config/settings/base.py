@@ -112,6 +112,9 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # G1: first, so it sees the final response of the guest payment page,
+    # Django's 500 for an exception further in included.
+    "apps.finance.guest_web.GuestPagePrivacyMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "apps.core.middleware.RequestIDMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",

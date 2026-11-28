@@ -165,6 +165,47 @@ class PaymentAttemptAdmin(_ReadOnlyAdmin):
         }
         return super().get_form(request, obj, **kwargs)
 
+    # An explicit allowlist. The hosted checkout URL is never shown here: it
+    # leaves the server only in a checkout call's answer, to the payer it was
+    # opened for. Nor is the frozen provider request, which repeats the
+    # receipt address and the callback URLs (G1).
+    fields = (
+        "order",
+        "provider",
+        "provider_mode",
+        "mode_evidence",
+        "payer",
+        "guest_link",
+        "guest_email",
+        "status",
+        "failure_code",
+        "failure_message",
+        "amount_eur_cents",
+        "payment_currency",
+        "provider_amount_minor",
+        "provider_amount_exponent",
+        "fx_rate_micros",
+        "fx_source",
+        "fx_settings_version",
+        "fx_snapshot_at",
+        "provider_session_id",
+        "provider_payment_id",
+        "provider_charge_id",
+        "idempotency_key",
+        "opening_until",
+        "close_requested_at",
+        "expires_at",
+        "succeeded_at",
+        "is_unapplied",
+        "operational_resolution",
+        "operational_resolved_at",
+        "operational_resolved_by",
+        "operational_resolution_reason",
+        "created_at",
+        "updated_at",
+    )
+    readonly_fields = fields
+
     list_display = (
         "id",
         "order",

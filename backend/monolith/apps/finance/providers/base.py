@@ -13,6 +13,7 @@ them: unavailable means "try again", error means "this attempt failed".
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Protocol
 
 
@@ -107,6 +108,8 @@ class CheckoutResult:
     checkout_url: str
     #: Provider's own state right after creation. Never treated as success.
     provider_status: str = "pending"
+    #: When the provider stops the checkout collecting on its own, when it says.
+    expires_at: datetime | None = None
     raw: dict = field(default_factory=dict)
 
 
@@ -191,6 +194,14 @@ MODE_LIVE = "live"
 MODE_UNKNOWN = "unknown"
 MODE_NOT_CONFIGURED = "not_configured"
 
+#: What `close_checkout` confirmed (G1): this call closed the checkout unpaid,
+#: or a payment was taken or is under way through it. Otherwise it answers how
+#: the provider says the checkout ended ("failed", "expired", "cancelled"). A
+#: checkout that is none of these is still open as far as anyone can tell, and
+#: the call raises instead.
+CHECKOUT_CLOSED = "closed"
+CHECKOUT_COLLECTED = "collected"
+
 
 class PaymentGateway(Protocol):
     """The full rail interface. Not every rail supports every capability."""
@@ -214,6 +225,16 @@ class PaymentGateway(Protocol):
         ...
 
     def create_checkout(self, request: CheckoutRequest) -> CheckoutResult: ...
+
+    def close_checkout(self, *, provider_session_id: str) -> str:
+        """Stop a hosted checkout from collecting, and say how it ended.
+
+        `CHECKOUT_CLOSED` once this call closed it unpaid; "failed", "expired"
+        or "cancelled" when the provider says it had already ended so;
+        `CHECKOUT_COLLECTED` when it took a payment or one is under way.
+        Raises `ProviderError` when none of these can be confirmed.
+        """
+        ...
 
     def fetch_attempt(
         self, *, provider_session_id: str, provider_payment_id: str

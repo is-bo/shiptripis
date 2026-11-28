@@ -509,6 +509,35 @@ reason applied to every individually audited row. Finance can manage financial
 jobs, Ops can manage lifecycle/email jobs, Super Admin can manage both, and
 Support cannot perform recovery actions.
 
+### Held payments: "no money was taken" and "money returned"
+
+A provider sometimes reports a payment Wassla cannot verify: no amount, a
+fractional amount, a different amount, or a missing or different currency. That payment
+is **held**. It shows in **Payments needing attention** as "Needs finance
+review", the order takes no new payment (the payer is told a payment is being
+checked and must not pay again), and no "payment failed" email is sent. The
+settle job keeps reading the provider. A hold ends by itself when the provider
+confirms the payment (it is credited once, or refunded if the order no longer
+needs it) or confirms the checkout ended with no payment (it becomes an ordinary
+failed attempt). Otherwise Finance ends it from the payment page with **Close
+held payment**:
+
+- **No money was taken**: you checked at the provider (Stripe dashboard or
+  Chargily) that this checkout took no money. Write what you saw as the reason.
+- **Money returned**: the money was taken and has gone back to the payer, for
+  example a refund you made at the provider. Give the reason and the provider's
+  payment reference (Stripe: the PaymentIntent id `pi_…`; Chargily: the
+  checkout id). When the provider already reported one, the page refuses any
+  other.
+
+Both are audited with your name and reason, call no provider, and let the order
+take a payment again. The page refuses to act if the payment changed since you
+opened it; open it again. If the provider later reports a payment after you
+closed the item, it is held again as `paid_after_disposition`, never credited
+by itself: check the provider, return the money, and close it as **Money
+returned**, the only way such a hold ends. A report of the very payment you
+marked returned changes nothing.
+
 For a payment attention item, **Queue reconciliation** schedules the existing
 provider/refund reconciliation path. Chargily attempts without a provider
 checkout reference are refused because blindly creating another checkout could

@@ -31,7 +31,13 @@ from .money import format_minor, format_rate
 
 
 class PaymentAttemptSerializer(serializers.ModelSerializer):
-    """One attempt, as its own payer or the order owner may see it."""
+    """One attempt in an order's history, as the order owner may see it.
+
+    Never a checkout URL. A URL in the history would let the owner pay a
+    checkout that is being replaced, or open a guest's own checkout with the
+    receipt address it carries. A checkout is handed out only by the checkout
+    endpoint, which decides whether it may be (G1).
+    """
 
     payment_amount = serializers.SerializerMethodField()
     eur_dzd_rate = serializers.SerializerMethodField()
@@ -50,7 +56,6 @@ class PaymentAttemptSerializer(serializers.ModelSerializer):
             "payment_amount",
             "fx_rate_micros",
             "eur_dzd_rate",
-            "checkout_url",
             "failure_code",
             "is_guest_payment",
             "expires_at",
@@ -70,6 +75,13 @@ class PaymentAttemptSerializer(serializers.ModelSerializer):
     def get_is_guest_payment(self, obj: PaymentAttempt) -> bool:
         return obj.guest_link_id is not None
 
+
+class CheckoutAttemptSerializer(PaymentAttemptSerializer):
+    """The attempt the checkout endpoint just opened or handed back to its payer."""
+
+    class Meta(PaymentAttemptSerializer.Meta):
+        fields = (*PaymentAttemptSerializer.Meta.fields, "checkout_url")
+        read_only_fields = fields
 
 class PaymentRefundSerializer(serializers.ModelSerializer):
     class Meta:

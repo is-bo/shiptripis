@@ -17,16 +17,17 @@ import hashlib
 import hmac
 import json
 import time
-import uuid
+from datetime import UTC, datetime
 from urllib.parse import parse_qs
 
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from apps.finance.models import PaymentProviderEvent
-from apps.finance.services import _reference_uuid
 
 from apps.finance.providers.base import (
+    CHECKOUT_CLOSED,
+    CHECKOUT_COLLECTED,
     CheckoutRequest,
     ProviderError,
     ProviderNotConfigured,
@@ -258,6 +259,24 @@ class StripeCheckoutTests(TestCase):
         assert result.provider_session_id == "cs_test_1"
         assert result.checkout_url.startswith("https://checkout.stripe.test/")
 
+    def test_a_checkout_reports_when_stripe_stops_it_collecting(self):
+        gateway = _gateway(
+            [
+                _FakeResponse(
+                    200,
+                    {
+                        "id": "cs_test_1",
+                        "url": "https://checkout.stripe.test/cs_test_1",
+                        "expires_at": 1_800_000_000,
+                    },
+                )
+            ]
+        )
+
+        result = gateway.create_checkout(self._request())
+
+        assert result.expires_at == datetime(2027, 1, 15, 8, 0, tzinfo=UTC)
+
     def test_a_non_eur_checkout_is_refused_rather_than_converted(self):
         gateway = _gateway()
 
@@ -287,6 +306,19 @@ class StripeCheckoutTests(TestCase):
 
         assert caught.exception.provider_code == "card_declined"
         assert not isinstance(caught.exception, ProviderUnavailable)
+
+    def test_a_key_still_in_use_is_retryable_not_a_refusal(self):
+        """Stripe answers 409 while another request with the same key is
+        processed, and saves no answer for it: the same request can succeed
+        later, so a recovery waits instead of abandoning the attempt (G1)."""
+
+        in_use = {"error": {"code": "idempotency_key_in_use", "message": "busy"}}
+        for status in (409, 400):
+            with self.subTest(status):
+                gateway = _gateway([_FakeResponse(status, in_use)])
+
+                with self.assertRaises(ProviderUnavailable):
+                    gateway.create_checkout(self._request())
 
     def test_a_transport_timeout_is_retryable_not_a_failure(self):
         import requests as requests_module
@@ -332,6 +364,109 @@ class StripeCheckoutTests(TestCase):
         )
 
         assert result.succeeded is False
+
+
+class StripeCloseCheckoutTests(TestCase):
+    """G1: a session is reported closed only once Stripe says it is."""
+
+    URL = "https://api.stripe.test/v1/checkout/sessions/cs_test_1"
+
+    def test_an_open_session_is_expired(self):
+        gateway = _gateway([_FakeResponse(200, {"id": "cs_test_1", "status": "expired"})])
+
+        assert gateway.close_checkout(provider_session_id="cs_test_1") == CHECKOUT_CLOSED
+
+        [call] = gateway._session.calls
+        assert (call["method"], call["url"]) == ("POST", f"{self.URL}/expire")
+        assert call["headers"]["Authorization"] == "Bearer sk_test_key"
+
+    def test_a_refused_expiry_is_answered_by_reading_the_session(self):
+        refused = _FakeResponse(
+            400, {"error": {"message": "not open", "code": "checkout_session_not_open"}}
+        )
+        # Expired before this call: the provider's own outcome, not "closed here".
+        for status, outcome in (("expired", "expired"), ("complete", CHECKOUT_COLLECTED)):
+            with self.subTest(status):
+                gateway = _gateway(
+                    [refused, _FakeResponse(200, {"id": "cs_test_1", "status": status})]
+                )
+
+                assert gateway.close_checkout(provider_session_id="cs_test_1") == outcome
+
+                read = gateway._session.calls[1]
+                assert (read["method"], read["url"]) == ("GET", self.URL)
+
+    def test_a_session_still_open_is_not_reported_closed(self):
+        gateway = _gateway(
+            [
+                _FakeResponse(400, {"error": {"message": "busy"}}),
+                _FakeResponse(200, {"id": "cs_test_1", "status": "open"}),
+            ]
+        )
+
+        with self.assertRaises(ProviderError) as caught:
+            gateway.close_checkout(provider_session_id="cs_test_1")
+
+        assert not isinstance(caught.exception, ProviderUnavailable)
+
+    def test_an_outage_is_retryable_and_reads_nothing(self):
+        gateway = _gateway([_FakeResponse(503, {"error": {"message": "down"}})])
+
+        with self.assertRaises(ProviderUnavailable):
+            gateway.close_checkout(provider_session_id="cs_test_1")
+
+        assert len(gateway._session.calls) == 1
+
+    def test_no_session_calls_nothing(self):
+        gateway = _gateway()
+
+        with self.assertRaises(ProviderError):
+            gateway.close_checkout(provider_session_id="")
+
+        assert gateway._session.calls == []
+
+
+class StripeReconcileTests(TestCase):
+    """G1: a completed, unpaid session is settling or failed, as its intent says."""
+
+    def _snapshot(self, intent_status):
+        gateway = _gateway(
+            [
+                _FakeResponse(
+                    200,
+                    {
+                        "id": "cs_test_1",
+                        "status": "complete",
+                        "payment_status": "unpaid",
+                        "payment_intent": {"id": "pi_1", "status": intent_status},
+                        "amount_total": 6_250,
+                        "currency": "eur",
+                    },
+                )
+            ]
+        )
+        snapshot = gateway.fetch_attempt(
+            provider_session_id="cs_test_1", provider_payment_id=""
+        )
+        [call] = gateway._session.calls
+        assert call["method"] == "GET"
+        assert call["url"] == (
+            "https://api.stripe.test/v1/checkout/sessions/cs_test_1"
+            "?expand%5B%5D=payment_intent"
+        )
+        return snapshot
+
+    def test_a_delayed_payment_still_settling_is_processing(self):
+        for status in ("processing", "requires_action"):
+            with self.subTest(status):
+                assert self._snapshot(status).outcome == "processing"
+
+    def test_a_delayed_payment_that_failed_is_failed_without_its_webhook(self):
+        for status in ("requires_payment_method", "canceled"):
+            with self.subTest(status):
+                snapshot = self._snapshot(status)
+                assert snapshot.outcome == "failed"
+                assert snapshot.provider_payment_id == "pi_1"
 
 
 class StripeWebhookParsingTests(TestCase):
@@ -397,14 +532,18 @@ class StripeWebhookParsingTests(TestCase):
 
         assert self._parse(body).outcome == "expired"
 
-    def test_a_failed_payment_intent_is_reported_as_failed(self):
+    def test_a_declined_card_ends_nothing(self):
+        """The payer may try again in the same session, so only the session's
+        own events end it (G1)."""
+
         body = self._event(
             "payment_intent.payment_failed",
             {"object": "payment_intent", "id": "pi_9", "last_payment_error": {"code": "card_declined"}},
         )
         event = self._parse(body)
 
-        assert event.outcome == "failed"
+        assert event.outcome == "ignored"
+        # The decline's own code is still read, for the record of the event.
         assert event.failure_code == "card_declined"
 
     def test_a_delayed_payment_method_is_reported_as_processing(self):
@@ -454,7 +593,9 @@ class StripeWebhookParsingTests(TestCase):
                 "id": "cs_4",
                 "payment_status": "paid",
                 "customer_details": {"email": "guest@example.com", "name": "A Guest"},
+                "customer_email": "prefilled@example.com",
                 "billing_details": {"address": {"line1": "1 Secret Street"}},
+                "url": "https://checkout.stripe.test/c/pay/cs_4",
             },
         )
 
@@ -464,7 +605,10 @@ class StripeWebhookParsingTests(TestCase):
         # The email is used to label the attempt but is scrubbed from storage.
         assert event.guest_email == "guest@example.com"
         assert "guest@example.com" not in stored
+        assert "prefilled@example.com" not in stored
         assert "1 Secret Street" not in stored
+        # Nor the hosted URL, which lets whoever holds it pay (G1).
+        assert "checkout.stripe.test" not in stored
         assert "[redacted]" in stored
 
     def test_a_body_that_is_not_json_is_rejected(self):
@@ -550,9 +694,62 @@ class StripeWebhookEndpointTests(TestCase):
             provider_event_id="evt_bad_reference"
         ).exists()
 
-    def test_a_reference_that_is_not_a_uuid_matches_no_order(self):
-        assert _reference_uuid("not-a-uuid") is None
-        assert _reference_uuid("") is None
-        assert _reference_uuid(None) is None
-        reference = uuid.uuid4()
-        assert _reference_uuid(str(reference)) == reference
+    @override_settings(STRIPE_WEBHOOK_SECRET=SECRET)
+    def test_a_declined_card_and_a_session_never_stored_bind_to_nothing(self):
+        """A decline leaves its session open for another try, and an event
+        binds only by an id this server stored, never by metadata or a
+        reference anything on the account can write (G1, sixth pass). Both
+        finish as ignored, with no retry left to run out."""
+
+        from apps.finance.models import ScheduledJob
+
+        for event_id, event_type, obj in (
+            (
+                "evt_declined",
+                "payment_intent.payment_failed",
+                {
+                    "object": "payment_intent",
+                    "id": "pi_declined",
+                    "metadata": {"attempt_id": "1"},
+                    "last_payment_error": {"code": "card_declined"},
+                },
+            ),
+            (
+                "evt_unknown_session",
+                "checkout.session.expired",
+                {
+                    "object": "checkout.session",
+                    "id": "cs_never_stored",
+                    "metadata": {"attempt_id": "1"},
+                },
+            ),
+        ):
+            with self.subTest(event_type):
+                body = json.dumps(
+                    {
+                        "id": event_id,
+                        "type": event_type,
+                        "livemode": False,
+                        "data": {"object": obj},
+                    },
+                    separators=(",", ":"),
+                ).encode("utf-8")
+
+                response = self.client.post(
+                    reverse("finance-webhook-stripe"),
+                    data=body,
+                    content_type="application/json",
+                    HTTP_STRIPE_SIGNATURE=stripe_signature(body),
+                )
+
+                assert response.status_code == 200
+                record = PaymentProviderEvent.objects.get(provider_event_id=event_id)
+                assert record.attempt_id is None
+                assert (
+                    record.processing_result
+                    == PaymentProviderEvent.ProcessingResult.IGNORED
+                )
+                assert not ScheduledJob.objects.filter(
+                    key=f"provider_event_process:{record.pk}",
+                    status=ScheduledJob.Status.PENDING,
+                ).exists()

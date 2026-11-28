@@ -529,6 +529,7 @@ class ReminderHandlerTests(ProgressWorld, TestCase):
 
     def test_the_job_runner_executes_a_stored_reminder(self):
         from apps.finance.services import schedule_job
+        from apps.finance.tests.factories import claim
 
         job = schedule_job(
             kind=ScheduledJob.Kind.LEG_REMINDER,
@@ -536,7 +537,7 @@ class ReminderHandlerTests(ProgressWorld, TestCase):
             run_at=timezone.now(),
             payload=payload_for(self.first, DEPARTED),
         )
-        run_job(job)
+        run_job(claim(job))
         job.refresh_from_db()
         assert job.status == ScheduledJob.Status.SUCCEEDED
         assert job.last_result == "notified"

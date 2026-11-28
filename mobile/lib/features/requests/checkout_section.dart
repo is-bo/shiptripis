@@ -411,15 +411,9 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
     }
   }
 
-  Future<void> _resume(PaymentAttempt attempt) async {
-    if (_busyProvider != null) return;
-    setState(() {
-      _busyProvider = attempt.provider;
-      _notice = null;
-    });
-    await _open(attempt.checkoutUrl);
-    if (mounted) setState(() => _busyProvider = null);
-  }
+  /// The server, not the order's history, decides whether a checkout may be
+  /// handed out again, so continuing asks it on the rail it named (G1).
+  Future<void> _resume(PaymentProviderId provider) => _checkout(provider);
 
   Future<void> _open(String? checkoutUrl) async {
     final uri = checkoutUrl == null ? null : Uri.tryParse(checkoutUrl);
@@ -499,6 +493,13 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
         body: l.paymentNothingOutstandingBody,
         tone: StatusTone.good,
       ),
+      // Someone, perhaps this payer, is already paying. Waiting is the whole
+      // answer: the server never opens a second checkout beside theirs.
+      ApiErrorCode.checkoutInProgress => _CheckoutNotice(
+        title: l.paymentInProgressTitle,
+        body: l.paymentInProgressBody,
+        tone: StatusTone.waiting,
+      ),
       _ => null,
     };
 
@@ -513,11 +514,15 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
     // looking at an order that has moved. Re-read it so the surrounding screen
     // stops offering a payment that cannot happen.
     if (error.code == ApiErrorCode.nothingOutstanding ||
-        error.code == ApiErrorCode.orderNotCollectable) {
+        error.code == ApiErrorCode.orderNotCollectable ||
+        error.code == ApiErrorCode.checkoutInProgress) {
       unawaited(_readOrder());
     }
     if (error.code.isProviderUnavailable) {
       ref.invalidate(paymentProvidersProvider);
+      // The order's own word on what a tap meets may name that rail too
+      // ("continue"): read it again so the refused rail is not offered (G1).
+      unawaited(_readOrder());
     }
   }
 
@@ -628,15 +633,15 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
     final l = L.of(context);
     final providers = ref.watch(paymentProvidersProvider);
 
-    final resumable = order?.latestAttempt;
-    if (order != null &&
-        resumable != null &&
-        resumable.canResume &&
-        resumable.isGuestPayment) {
-      // Somebody the Sender sent the link to is on the provider's page now.
-      // That session is theirs: offering "continue your payment" would send
-      // the Sender into it, and starting a fresh checkout would supersede it
-      // and risk the obligation being paid twice. Say what is happening.
+    // What the next tap meets is the server's to say (G1): a rail or a
+    // "continue" it would refuse is never offered.
+    final state = order?.checkoutState ?? CheckoutState.ready;
+    final resumable = order?.resumeProvider;
+    if (order != null && state == CheckoutState.guestPaying) {
+      // Somebody the Sender sent the link to is paying: on the provider's
+      // page, or settling. That session is theirs: offering "continue your
+      // payment" would send the Sender into it, and starting a fresh checkout
+      // would replace it while they pay. Say what is happening.
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -671,7 +676,37 @@ class _CheckoutSectionState extends ConsumerState<CheckoutSection>
         ],
       );
     }
-    if (resumable != null && resumable.canResume) {
+    if (state == CheckoutState.settling || state == CheckoutState.inProgress) {
+      // The Sender's own payment was made and is settling, or a checkout is
+      // being opened this moment. The server answers every new checkout with
+      // "a payment is under way" until then, so offering a rail would only
+      // offer a refusal.
+      final settling = state == CheckoutState.settling;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InfoNotice(
+            title: settling
+                ? l.payResultStillCheckingTitle
+                : l.paymentInProgressTitle,
+            message: settling
+                ? l.payResultStillCheckingBody
+                : l.paymentInProgressBody,
+            tone: StatusTone.waiting,
+            icon: Icons.hourglass_top_rounded,
+          ),
+          const SizedBox(height: AppSpace.lg),
+          AppButton(
+            label: l.paymentCheckAgain,
+            icon: Icons.refresh_rounded,
+            variant: AppButtonVariant.secondary,
+            isLoading: _checkingManually,
+            onPressed: _checkNow,
+          ),
+        ],
+      );
+    }
+    if (resumable != null && state == CheckoutState.resumable) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

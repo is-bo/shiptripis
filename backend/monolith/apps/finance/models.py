@@ -321,6 +321,41 @@ class PaymentOrder(models.Model):
         )
 
 
+#: Can still collect: a checkout that was stored, so may have been handed out,
+#: and that its provider has not confirmed can take no further payment, on an
+#: attempt that has not succeeded. Whatever the attempt's status (G1).
+LIVE_CHECKOUT = (
+    Q(checkout_final_at__isnull=True)
+    & ~Q(provider_session_id="")
+    & ~Q(status="succeeded")
+)
+
+#: A success reported after staff recorded a disposition: only staff end it,
+#: and only as `returned` (G1).
+PAID_AFTER_DISPOSITION = "paid_after_disposition"
+#: Codes of a held payment: its provider reported it, but its amount or
+#: currency could not be verified, or it arrived after staff closed the item.
+#: A tuple, so the sweep's index built from it is the same SQL on every run.
+HELD_PAYMENT_CODES = (
+    "amount_mismatch",
+    "amount_unverifiable",
+    "currency_mismatch",
+    PAID_AFTER_DISPOSITION,
+)
+#: A reported payment that is neither applied nor refunded, with no staff
+#: disposition: money may have moved, so the order takes no new payment until
+#: the hold ends (G1).
+HELD_PAYMENT = (
+    Q(status="failed")
+    & Q(failure_code__in=HELD_PAYMENT_CODES)
+    & Q(operational_resolution="")
+)
+
+#: What the order must still account for before it collects again: a checkout
+#: that can still collect, or a held payment (G1).
+OUTSTANDING = LIVE_CHECKOUT | HELD_PAYMENT
+
+
 class PaymentAttempt(models.Model):
     """One provider attempt against a PaymentOrder.
 
@@ -347,6 +382,15 @@ class PaymentAttempt(models.Model):
         RESOLVED = "resolved", "Resolved"
         DISMISSED = "dismissed", "Dismissed"
         SUPERSEDED = "superseded", "Superseded"
+        # The two ways staff end a held payment (G1).
+        NO_DEBIT = "no_debit", "No money was taken"
+        RETURNED = "returned", "Money returned"
+
+    #: What staff may record for a held payment, and only for one.
+    HELD_DISPOSITIONS = (
+        OperationalResolution.NO_DEBIT,
+        OperationalResolution.RETURNED,
+    )
 
     #: Statuses in which the attempt may still become succeeded.
     OPEN_STATUSES = ("created", "checkout_pending", "processing")
@@ -423,6 +467,23 @@ class PaymentAttempt(models.Model):
         help_text="What we sent the provider. Stable across our own retries.",
     )
     checkout_url = models.URLField(max_length=1024, blank=True, default="")
+    #: The create request sent to the provider, frozen when the attempt is
+    #: written. A recovery repeats it exactly: a provider replays its first
+    #: answer for a key only when the parameters are the same (G1).
+    checkout_request = models.JSONField(default=dict, blank=True)
+    #: Until when the request that created this attempt, or the one that last
+    #: claimed it to recover it, may still store its checkout. Before then no
+    #: other request recovers or abandons it (G1).
+    opening_until = models.DateTimeField(null=True, blank=True)
+    #: Set, before the provider is asked, when this checkout is to be closed.
+    #: From then on it is never handed out again; any request may finish the
+    #: close (G1).
+    close_requested_at = models.DateTimeField(null=True, blank=True)
+    #: When the provider confirmed this checkout can take no further payment:
+    #: it closed or expired it, or reported its final outcome. Until then a
+    #: stored checkout that has not succeeded is live, whatever `status` says,
+    #: and the order hands out or opens no other (G1).
+    checkout_final_at = models.DateTimeField(null=True, blank=True)
 
     status = models.CharField(
         max_length=20,
@@ -446,8 +507,8 @@ class PaymentAttempt(models.Model):
         default="",
         db_index=True,
         help_text=(
-            "Operator attention state only. It never changes the provider or "
-            "financial outcome recorded above."
+            "Staff's decision on an attention item. For a held payment, what "
+            "became of the money; it never changes the provider's outcome."
         ),
     )
     operational_resolved_at = models.DateTimeField(null=True, blank=True)
@@ -478,6 +539,12 @@ class PaymentAttempt(models.Model):
             models.Index(
                 fields=["status", "expires_at"], name="fin_attempt_expiry_idx"
             ),
+            # The job loop's sweep reads every outstanding attempt (G1).
+            models.Index(
+                fields=["id"],
+                condition=OUTSTANDING,
+                name="fin_attempt_outstanding_idx",
+            ),
         ]
         constraints = [
             models.UniqueConstraint(
@@ -505,6 +572,13 @@ class PaymentAttempt(models.Model):
             models.CheckConstraint(
                 condition=Q(amount_eur_cents__gt=0),
                 name="fin_attempt_amount_positive",
+            ),
+            # Final means terminal: only a provider's word recorded with a
+            # terminal status makes a checkout final (G1).
+            models.CheckConstraint(
+                condition=Q(checkout_final_at__isnull=True)
+                | Q(status__in=["succeeded", "failed", "expired", "cancelled"]),
+                name="fin_attempt_final_is_terminal",
             ),
             models.CheckConstraint(
                 condition=(
