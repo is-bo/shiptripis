@@ -74,8 +74,8 @@ func (s *postgresReceiptStore) Deliver(ctx context.Context, p EmailPayload, send
 	 FROM notification_outbound_message WHERE transport_event_id=$1 FOR UPDATE`, p.EventID).Scan(
 		&id, &status, &recipient, &kind, &created, &reviewed, &next, &lastError, &attempts, &maxAttempts, &rawContext)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return true, nil
-	} // orphan legacy stream work is never sent
+		return true, nil // no obligation row authorizes this stream entry: never send it
+	}
 	if err != nil {
 		return false, errors.New("email: obligation unavailable")
 	}

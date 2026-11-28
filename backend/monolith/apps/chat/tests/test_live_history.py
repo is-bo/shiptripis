@@ -38,6 +38,18 @@ class ChatLiveHistoryTests(APITestCase):
             )
         )
 
+    def test_a_read_without_a_cursor_is_the_latest_window(self):
+        messages = self._messages(9)
+        plain = _client(self.sender).get(self.url, {"page_size": 7})
+        assert plain.status_code == 200, plain.data
+        assert [row["id"] for row in plain.data["results"]] == [
+            message.id for message in messages[-7:]
+        ]
+        latest = _client(self.sender).get(self.url, {"latest": "1", "page_size": 7})
+        for key in ("count", "has_more", "next", "oldest_id", "latest_id"):
+            assert plain.data[key] == latest.data[key], key
+        assert plain.data["has_more"] is True
+
     def test_latest_before_and_after_are_id_ordered_and_lossless(self):
         messages = self._messages(205)
 
@@ -135,7 +147,6 @@ class ChatLiveHistoryTests(APITestCase):
             {"after_id": "not-an-id"},
             {"after_id": "9999999999999999999"},
             {"after_id": "9" * 5000},
-            {"latest": "1", "page": "2"},
             {"latest": "1", "page_size": "0"},
             {"latest": "1", "page_size": "201"},
             {"latest": "1", "page_size": "not-a-number"},

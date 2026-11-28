@@ -3,23 +3,17 @@
 `GET /api/admin/disputes` is served by the admin panel's paginated envelope
 (its route is registered first). It ordered by `-opened_at` alone, so disputes
 opened in the same instant could swap between pages and one could be skipped;
-it now breaks ties on id. The disputes app declares the same path with
-its own view, which used to hard-slice `[:100]`: shadowed today, but one URL
-reordering away from silently hiding every older dispute. Both are pinned here.
+it now breaks ties on id.
 """
 
 from __future__ import annotations
 
 from django.test import TestCase
-from django.urls import resolve, reverse
-from rest_framework.test import APIRequestFactory, force_authenticate
+from django.urls import reverse
 
-from apps.admin_panel.tests.two_step_helpers import verified_session_value
-from apps.admin_panel.two_step import SESSION_KEY
 from apps.deals.tests.phase4_factories import fund_scenario
 from apps.disputes.models import Dispute
 from apps.disputes.tests.test_disputes import grant, staff_client_for
-from apps.disputes.views import AdminDisputeListView
 
 CLOSED = 104
 
@@ -61,42 +55,3 @@ class AdminDisputeListReachabilityTests(TestCase):
         assert response.data["count"] == self.total
         assert sorted(seen) == sorted(Dispute.objects.values_list("pk", flat=True))
         assert len(seen) == len(set(seen)) == self.total
-
-    def test_the_disputes_app_view_keeps_its_array_and_pages_past_100(self):
-        # Pinned directly: the route resolves to the admin panel view first.
-        assert resolve("/api/admin/disputes").url_name == "admin-dispute-list"
-        view = AdminDisputeListView.as_view()
-        factory = APIRequestFactory()
-
-        def get(query=""):
-            request = factory.get(f"/api/admin/disputes{query}")
-            force_authenticate(request, user=self.support)
-            # A staff route answers a session past the second step (L14).
-            request.session = {SESSION_KEY: verified_session_value(self.support)}
-            response = view(request)
-            response.render()
-            return response
-
-        first = get()
-        assert first.status_code == 200
-        # Existing callers: the same bare array of the newest 100.
-        assert isinstance(first.data, list)
-        assert len(first.data) == 100
-        assert first["X-Total-Count"] == str(self.total)
-        assert first["X-Next-Page"] == "2"
-        newest = list(Dispute.objects.order_by("-opened_at", "-id").values_list("pk", flat=True))
-        assert [row["id"] for row in first.data] == newest[:100]
-
-        second = get("?page=2")
-        assert second.status_code == 200
-        assert [row["id"] for row in second.data] == newest[100:]
-        assert "X-Next-Page" not in second
-
-        only_open = get("?status=open")
-        assert [row["status"] for row in only_open.data] == ["open"]
-        assert only_open["X-Total-Count"] == "1"
-
-    def test_the_disputes_app_view_still_requires_the_permission(self):
-        request = APIRequestFactory().get("/api/admin/disputes")
-        force_authenticate(request, user=self.scenario.sender)
-        assert AdminDisputeListView.as_view()(request).status_code == 403

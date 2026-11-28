@@ -5,14 +5,13 @@
     GET  /api/disputes/<id>                           one dispute (party or staff)
     POST /api/disputes/<id>/evidence                  add text, a photo or a video
     GET  /api/disputes/<id>/evidence/<id>/url         signed download, 5 minutes
-    GET  /api/admin/disputes                          the review queue
     POST /api/admin/disputes/<id>/status              move between review states
     POST /api/admin/disputes/<id>/resolve             decide it and settle the money
     POST /api/admin/deals/<id>/no-show                record a reviewed no-show
 
 Object-level authorization is Deal membership: a caller who is not a party to
 the Deal receives a 404 rather than a 403, so dispute and Deal ids cannot be
-probed for existence. The four operations surfaces are gated on named Django
+probed for existence. The three operations surfaces are gated on named Django
 permissions rather than on `is_staff`, because reading a party's evidence and
 moving their money are different capabilities and are granted separately.
 
@@ -41,9 +40,7 @@ from apps.core.business_settings import NoActiveBusinessSettings
 from apps.core.permissions import (
     CanRecordNoShow,
     CanResolveDisputes,
-    CanViewDisputes,
 )
-from apps.core.pagination import paginated_array_response
 from apps.core.phase4_policy import InvalidPhase4Policy
 from apps.admin_panel.permissions import CanManageDisputes
 from apps.admin_panel.services import record_admin_action
@@ -302,26 +299,6 @@ class DisputeEvidenceUrlView(APIView):
 
 
 # --- operations surface ------------------------------------------------------
-
-
-class AdminDisputeListView(StaffAPIView):
-    """The review queue, newest first, optionally narrowed to one status."""
-
-    permission_classes = (CanViewDisputes,)
-
-    def get(self, request: Request) -> Response:
-        queryset = _all_disputes()
-        if dispute_status := request.query_params.get("status"):
-            queryset = queryset.filter(status=dispute_status)
-        # Still a bare array of the newest 100 by default; `page` reaches the
-        # rest instead of the old `[:100]` hiding them (K7 D).
-        return paginated_array_response(
-            request,
-            queryset,
-            serialize=lambda page: AdminDisputeSerializer(
-                page, many=True, context={"is_staff": True}
-            ).data,
-        )
 
 
 class AdminDisputeStatusView(StaffAPIView):

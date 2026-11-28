@@ -78,13 +78,10 @@ class Command(BaseCommand):
         missing = 0
         for ev in qs.iterator(chunk_size=min(batch_size, 500)):
             total += 1
-            legacy_key = f"delivered:{ev.event_id}"
-            has_receipt = bool(client.exists(legacy_key))
-            if not has_receipt:
-                has_receipt = next(
-                    client.scan_iter(match=f"{legacy_key}:*", count=10),
-                    None,
-                ) is not None
+            has_receipt = next(
+                client.scan_iter(match=f"delivered:{ev.event_id}:*", count=10),
+                None,
+            ) is not None
             if has_receipt:
                 redis_bus.mark_delivered(ev.event_id)
                 recovered += 1

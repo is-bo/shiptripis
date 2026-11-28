@@ -15,13 +15,8 @@
 // fails the service start — half-built deploys should never reach prod
 // (CLAUDE.md §9).
 //
-// The gRPC dial supports both bearer (dev) and mTLS (prod) auth. The Go
-// client side of mTLS is wired (kyc.tlsCredentials); enabling it in prod
-// also needs the Django server branch in runkycgrpc.py + the cert pipeline
-// (CLAUDE.md §G5), which are still TODO on the shared side.
-//
-// Deferred:
-//   - GET /kyc/me (status lookup) — needs sqlc-generated repo.
+// The gRPC dial supports both bearer (dev) and mTLS (prod) auth
+// (kyc.tlsCredentials; Django's side is runkycgrpc.py, CLAUDE.md §G5).
 //
 // Listens on KYC_HTTP_ADDR (default :8083, matches Caddy's
 // kyc-service:8083 upstream in backend/gateway/Caddyfile); Caddy routes

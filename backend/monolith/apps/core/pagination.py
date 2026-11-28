@@ -1,4 +1,4 @@
-"""Backward-compatible pagination for legacy bare-array API collections."""
+"""Page-number paging for the collections the app reads as a bare JSON array."""
 
 from __future__ import annotations
 
@@ -15,11 +15,10 @@ def paginated_array_response(
     default_page_size: int = 100,
     max_page_size: int = 100,
 ) -> Response:
-    """Page a queryset while preserving its historic JSON array body.
+    """Page a queryset as a JSON array; the paging travels in the headers.
 
-    New clients can use ``page`` plus the additive response headers. Existing
-    clients still receive the same first 100 rows, avoiding an array-to-envelope
-    contract break while making later rows reachable.
+    The app reads the array and follows ``X-Next-Page`` (``ApiClient.getListPage``
+    and ``getAllPages``).
     """
 
     params = request.query_params

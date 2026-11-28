@@ -53,7 +53,6 @@ const (
 	// metadata header. Dev-only per CLAUDE.md §G5.
 	GRPCAuthBearer GRPCAuthMode = "bearer"
 	// GRPCAuthMTLS is the production mode: peer-verified self-signed CA.
-	// Not yet wired — see TODO below.
 	GRPCAuthMTLS GRPCAuthMode = "mtls"
 )
 
@@ -121,9 +120,7 @@ func NewGRPCClient(ctx context.Context, cfg GRPCClientConfig, log *slog.Logger) 
 		// Production mode. Present the client cert/key, verify the Django
 		// server's cert against the shared CA. Cert loading fails loud here
 		// so a bad/missing cert surfaces at boot, not on the first upload
-		// (§9). The matching Django server branch (runkycgrpc.py) + the
-		// cert-issuing pipeline are still TODO — until both land, this path
-		// builds valid credentials but has nothing to dial against.
+		// (§9). Django's runkycgrpc.py serves the matching mTLS branch.
 		creds, err := tlsCredentials(cfg)
 		if err != nil {
 			return nil, err
