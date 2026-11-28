@@ -93,6 +93,10 @@ class SignInSession(models.Model):
     )
     created_at = models.DateTimeField(default=timezone.now)
     ended_at = models.DateTimeField(null=True, blank=True)
+    #: The ``jti`` of the refresh token presented at this sign-in's last
+    #: rotation: a phone whose answer was lost presents it again, and gets a
+    #: fresh pair (`apps.accounts.sessions.SessionTokenRefreshSerializer`).
+    previous_refresh_jti = models.CharField(max_length=255, blank=True, default="")
 
     class Meta:
         db_table = "accounts_sign_in_session"
@@ -101,20 +105,20 @@ class SignInSession(models.Model):
         return f"SignInSession({self.user_id}, {self.pk})"
 
     @classmethod
-    def live(cls, *, user_id, session_id) -> "SignInSession | None":
+    def live(cls, *, user_id, session_id, lock=False) -> "SignInSession | None":
         """The live sign-in ``session_id`` (a token's ``sid``) of ``user_id``.
 
         None when the claim is missing or malformed, names another account's
-        sign-in, or names one that has ended.
+        sign-in, or names one that has ended. ``lock`` holds the row until the
+        caller's transaction ends.
         """
 
         try:
             pk = uuid.UUID(str(session_id))
         except (TypeError, ValueError, AttributeError):
             return None
-        return cls.objects.filter(
-            pk=pk, user_id=user_id, ended_at__isnull=True
-        ).first()
+        rows = cls.objects.select_for_update() if lock else cls.objects
+        return rows.filter(pk=pk, user_id=user_id, ended_at__isnull=True).first()
 
 
 class OAuthIdentity(models.Model):

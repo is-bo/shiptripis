@@ -361,7 +361,8 @@ CREATE TABLE public.accounts_sign_in_session (
     id uuid NOT NULL,
     created_at timestamp with time zone NOT NULL,
     ended_at timestamp with time zone,
-    user_id bigint NOT NULL
+    user_id bigint NOT NULL,
+    previous_refresh_jti character varying(255) NOT NULL
 );
 
 

@@ -1161,8 +1161,10 @@ dismissal or a denial, and Profile > Notifications stays the place to retry or t
 open system Settings, for a guest as well. Registering the phone to an account
 waits for sign-in, and the server applies a phone's registrations in the order
 the app numbered them. A registration needs the sign-in it comes from to be
-live; ending a sign-in (its sign-out, or a password change ending all of them)
-switches off every device it registered. A sign-out proved by a refresh token
+live; ending a sign-in (its sign-out, or a password change or a ban ending all
+of them) switches off every device it registered. A refresh whose answer was
+lost can be repeated: the server accepts the refresh token a rotation replaced
+until the phone first uses the new one, and an ended sign-in refuses both. A sign-out proved by a refresh token
 this server signed succeeds whatever the token's age or rotation and whether or
 not its sign-in already ended, and a proof the server cannot verify is refused
 with a stable code; the app sends one too when it lets a session go because

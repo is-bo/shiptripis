@@ -194,9 +194,9 @@ def in_own_connection(fn):
 class ConcurrentRefreshTests(TransactionTestCase):
     """Real threads, real connections, real locks.
 
-    The leading refresh is held while it blacklists the token, inside its
-    transaction; the test proves the trailing one's backend is blocked by the
-    leading one's, then lets both finish.
+    The leading refresh is held while it reads the blacklist, with the sign-in
+    row locked and nothing written yet; the test proves the trailing one's
+    backend is blocked by the leading one's, then lets both finish.
     """
 
     def wait_until_blocked(self, pids):
@@ -215,7 +215,7 @@ class ConcurrentRefreshTests(TransactionTestCase):
 
     def race(self, token: str):
         holding, release = Event(), Event()
-        original = SessionRefreshToken.blacklist
+        original = SessionRefreshToken.check_blacklist
         pids = {}
 
         def paused(self, *args, **kwargs):
@@ -234,11 +234,11 @@ class ConcurrentRefreshTests(TransactionTestCase):
             return run
 
         with ThreadPoolExecutor(max_workers=2) as pool, patch.object(
-            SessionRefreshToken, "blacklist", paused
+            SessionRefreshToken, "check_blacklist", paused
         ):
             leading = pool.submit(in_own_connection(tracked("leading")))
             try:
-                assert holding.wait(30), "The first refresh never blacklisted."
+                assert holding.wait(30), "The first refresh never read the blacklist."
                 trailing = pool.submit(in_own_connection(tracked("trailing")))
                 self.wait_until_blocked(pids)
             finally:

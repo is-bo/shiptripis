@@ -2,7 +2,7 @@
 
 Every sign-in is a `SignInSession` row, and every token it issues names that
 row in its ``sid`` claim, refresh rotation included. A refresh token of an
-ended sign-in is refused (`SessionRefreshToken`), and so is a push
+ended sign-in is refused (`SessionTokenRefreshSerializer`), and so is a push
 registration made with any token of it (`apps.notifications.push`). Ending a
 sign-in is therefore one write that no rotated or in-flight token can get
 around.
@@ -24,7 +24,7 @@ from django.utils import timezone
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.settings import api_settings
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.tokens import RefreshToken, Token
 
 from apps.notifications.push import (
     deactivate_all_push_devices,
@@ -122,27 +122,51 @@ def write_password(user, raw_password: str | None) -> None:
 
 
 class SessionRefreshToken(RefreshToken):
-    """A refresh token that is valid only while its sign-in is live.
+    """A refresh token whose blacklist entry is read under its sign-in's lock.
 
-    SimpleJWT checks the token's own blacklist entry only, and a token it
-    rotated is not on the account's outstanding list, so ending a sign-in by
-    blacklisting its tokens missed every rotated one. The sign-in row is the
-    one thing every rotation of it shares.
+    Reading it checks the signature, the expiry and the type only. Whether it
+    may still be used is decided by `SessionTokenRefreshSerializer`, with the
+    sign-in row locked: a blacklist read before that lock could miss a
+    rotation of the same token that commits just ahead of it.
     """
 
     def verify(self) -> None:
-        super().verify()
-        if (
-            SignInSession.live(
-                user_id=self.get(api_settings.USER_ID_CLAIM),
-                session_id=self.get("sid"),
-            )
-            is None
-        ):
-            raise TokenError("This sign-in has ended.")
+        Token.verify(self)
 
 
 class SessionTokenRefreshSerializer(TokenRefreshSerializer):
-    """The refresh, for a sign-in that is still live (`SessionRefreshToken`)."""
+    """The refresh of a live sign-in, which survives a lost answer.
+
+    Of one sign-in, two refresh tokens are accepted: the current one, and the
+    one it was rotated from (``SignInSession.previous_refresh_jti``). A phone
+    whose answer was lost still holds that older token and presents it again:
+    it gets a fresh pair, and the sign-in does not change. Once the phone uses
+    a token it was given, that token becomes the older one, and the one before
+    is refused like any other blacklisted token. Liveness comes first: an
+    ended sign-in refuses every token. The sign-in row stays locked until the
+    pair is issued, so two refreshes of one token take turns.
+    """
 
     token_class = SessionRefreshToken
+
+    def validate(self, attrs):
+        refresh = self.token_class(attrs["refresh"])
+        presented = refresh[api_settings.JTI_CLAIM]
+        with transaction.atomic():
+            session = SignInSession.live(
+                user_id=refresh.get(api_settings.USER_ID_CLAIM),
+                session_id=refresh.get("sid"),
+                lock=True,
+            )
+            if session is None:
+                raise TokenError("This sign-in has ended.")
+            try:
+                refresh.check_blacklist()
+            except TokenError:
+                if presented != session.previous_refresh_jti:
+                    raise
+            else:
+                session.previous_refresh_jti = presented
+                session.save(update_fields=("previous_refresh_jti",))
+            # SimpleJWT blacklists the token (a repeat's already is) and rotates it.
+            return super().validate(attrs)
