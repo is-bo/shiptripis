@@ -718,13 +718,56 @@ void main() {
       await _settle(tester);
 
       tokens.pendingFails = true;
-      messaging.refreshes.add('fcm-token-2');
+      messaging
+        ..currentToken = 'fcm-token-2'
+        ..refreshes.add('fcm-token-2');
       await _settle(tester);
 
       final sent = backend.to('POST', '/api/notifications/devices');
       expect(
         [for (final r in sent) r.body['token']],
         ['fcm-token', 'fcm-token-2'],
+      );
+      expect(
+        container.read(pushCoordinatorProvider).registration,
+        PushRegistrationState.registered,
+      );
+    });
+
+    // The final review of N1: the registration sent the token a refresh
+    // carried, so one late repeat of an older refresh put the replaced token
+    // back on the server above the current one.
+    testWidgets('a late repeat of a replaced token registers the current '
+        'one', (tester) async {
+      final backend = FakeBackend()
+        ..on(
+          'POST',
+          '/api/notifications/devices',
+          const FakeResponse(200, {'id': 3, 'active': true}),
+        );
+      final messaging = _Messaging(
+        currentPermission: PushPermission.authorized,
+      );
+      final container = await member(
+        tester,
+        backend,
+        _Store(),
+        messaging: messaging,
+      );
+      container.read(pushCoordinatorProvider);
+      await _settle(tester);
+      messaging
+        ..currentToken = 'fcm-token-2'
+        ..refreshes.add('fcm-token-2');
+      await _settle(tester);
+
+      messaging.refreshes.add('fcm-token');
+      await _settle(tester);
+
+      final sent = backend.to('POST', '/api/notifications/devices');
+      expect(
+        [for (final r in sent) r.body['token']],
+        ['fcm-token', 'fcm-token-2', 'fcm-token-2'],
       );
       expect(
         container.read(pushCoordinatorProvider).registration,

@@ -12,16 +12,20 @@ ending the sign-in switches off its own devices, and a repeat writes nothing.
 from __future__ import annotations
 
 from datetime import timedelta
+from unittest.mock import patch
 from uuid import uuid4
 
 import jwt
+from django.core.cache import cache
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
+from apps.accounts import sessions
 from apps.accounts.models import SignInSession, User
 from apps.accounts.sessions import end_all_sessions
 from apps.notifications.models import PushDevice, PushInstallationBinding
@@ -60,6 +64,15 @@ def _expired_refresh(refresh: str) -> str:
 
     token = RefreshToken(refresh)
     token.set_exp(from_time=timezone.now() - token.lifetime - timedelta(days=1))
+    return str(token)
+
+
+def _issued_ahead(refresh: str, seconds: int) -> str:
+    """``refresh`` re-signed as issued ``seconds`` from now: what a server whose
+    clock runs that far behind the issuer's reads."""
+
+    token = RefreshToken(refresh)
+    token["iat"] = int(timezone.now().timestamp()) + seconds
     return str(token)
 
 
@@ -190,6 +203,46 @@ class SignOutContractTests(_Phone):
             gone = self._sign_out(refresh=b["refresh"])
         assert gone.status_code == 205
         assert _writes(queries) == []
+
+    # The final review of N1: three ways a genuine proof got another answer
+    # than 205, which leaves the sign-in live and its phone on.
+    def test_a_fresh_proof_read_by_a_clock_a_few_seconds_behind_is_a_proof(self):
+        a = signed_in(self.user)
+        assert self._register(a, 1).status_code == 200
+
+        response = self._sign_out(refresh=_issued_ahead(a["refresh"], 10))
+
+        assert response.status_code == 205
+        assert not self._live(a)
+        assert self._device().active is False
+
+    def test_the_shared_guest_quota_does_not_stop_a_sign_out(self):
+        a = signed_in(self.user)
+        cache.clear()
+        self.addCleanup(cache.clear)
+        with patch.dict(AnonRateThrottle.THROTTLE_RATES, {"anon": "1/min"}):
+            # Another guest behind the same address spent the shared bucket.
+            assert _refresh("not-a-token").status_code == 401
+            assert _refresh("not-a-token").status_code == 429
+
+            response = self._sign_out(refresh=a["refresh"])
+
+        assert response.status_code == 205
+        assert not self._live(a)
+
+    def test_an_account_deleted_during_the_sign_out_answers_205(self):
+        a = signed_in(self.user)
+        lock = sessions.lock_account
+
+        def deleted_first(user):
+            User.objects.filter(pk=user.pk).delete()
+            return lock(user)
+
+        with patch.object(sessions, "lock_account", deleted_first):
+            response = self._sign_out(refresh=a["refresh"])
+
+        assert response.status_code == 205
+        assert not User.objects.filter(pk=self.user.pk).exists()
 
     def test_a_proof_that_cannot_be_verified_as_ours_is_400(self):
         a = signed_in(self.user)

@@ -27,6 +27,7 @@ from rest_framework.test import APIClient, APIRequestFactory
 
 from apps.accounts.admin import ShipTripUserAdmin
 from apps.accounts.models import PasswordResetCode
+from apps.accounts.sessions import SignInInterrupted, start_session
 from apps.accounts.social import sign_in_with_identity
 from apps.accounts.views import PasswordResetConfirmView
 from apps.admin_panel.permissions import AdminRole
@@ -123,6 +124,27 @@ def another_field_changes_meanwhile(user):
         pre_save.disconnect(change, sender=User)
     assert done, "the operation saved no user row"
     assert User.objects.get(pk=pk).is_kyc_verified is True, "the concurrent change was written over"
+
+
+@contextmanager
+def a_reset_meanwhile(user, password: str = "Reset-password-789!"):
+    """Complete a password reset of ``user`` just before the first save of its
+    row: the latest moment another request could change the account."""
+
+    pk = user.pk
+    done = []
+
+    def reset(sender, instance, **kwargs):
+        if instance.pk == pk and not done:
+            done.append(True)
+            _reset(User.objects.get(pk=pk), password)
+
+    pre_save.connect(reset, sender=User, weak=False)
+    try:
+        yield
+    finally:
+        pre_save.disconnect(reset, sender=User)
+    assert done, "the operation saved no user row"
 
 
 @UNHASHED_STATIC
@@ -222,6 +244,40 @@ class TechnicalAdminSaveTests(TestCase):
         assert response.status_code == 302
         assert _refresh(before["refresh"]).status_code == 401
         assert User.objects.get(pk=self.member.pk).has_usable_password() is False
+
+    # The final review of N1: the admin site's own form (`/admin/password_change/`,
+    # an operator changing their own password) saved the whole row through
+    # Django's form and ended no sign-in.
+    def _change_own_password(self):
+        return self.client.post(
+            "/admin/password_change/",
+            {"old_password": "Sup3rStrong!", "new_password1": NEW, "new_password2": NEW},
+        )
+
+    def test_the_site_password_form_ends_every_sign_in(self):
+        before = signed_in(self.operator)
+
+        response = self._change_own_password()
+
+        assert response.status_code == 302, response.content[:2000]
+        assert _refresh(before["refresh"]).status_code == 401
+        assert _sign_in(self.operator.email, NEW).status_code == 200
+        assert User.objects.get(pk=self.operator.pk).session_epoch == 1
+
+    def test_a_reset_during_the_site_password_form_keeps_the_epoch_moving(self):
+        # A sign-in checked the old password (it read epoch 0); a reset
+        # commits while the form saves. Writing the whole row put epoch 0
+        # back, so that sign-in was then issued.
+        checked_before = User.objects.get(pk=self.operator.pk)
+
+        with a_reset_meanwhile(self.operator):
+            response = self._change_own_password()
+
+        assert response.status_code == 302, response.content[:2000]
+        assert User.objects.get(pk=self.operator.pk).session_epoch == 2
+        with self.assertRaises(SignInInterrupted):
+            start_session(checked_before)
+        assert _sign_in(self.operator.email, NEW).status_code == 200
 
 
 class NamedFieldSaveTests(TestCase):
