@@ -22,6 +22,8 @@ import '../../app/app_settings.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/error_codes.dart';
 import '../../core/auth/social_sign_in.dart';
+import '../../core/session/session.dart';
+import '../../core/session/session_core.dart';
 import '../../design/components/feedback.dart';
 import '../../design/components/primitives.dart';
 import '../../design/components/status.dart';
@@ -48,15 +50,10 @@ class SocialSignInButtons extends ConsumerStatefulWidget {
 }
 
 class _SocialSignInButtonsState extends ConsumerState<SocialSignInButtons> {
-  SocialProvider? _busy;
   String? _error;
 
   Future<void> _continueWith(SocialProvider provider) async {
-    if (_busy != null) return;
-    setState(() {
-      _busy = provider;
-      _error = null;
-    });
+    setState(() => _error = null);
     // The account may be new: its first email goes out in the language the
     // person is reading, as sign-up does.
     final language = CommunicationLanguage.forLanguageCode(
@@ -78,12 +75,13 @@ class _SocialSignInButtonsState extends ConsumerState<SocialSignInButtons> {
       if (mounted) setState(() => _error = _failed(provider));
     } on ApiException catch (error) {
       if (mounted) setState(() => _error = _describe(provider, error));
+    } on SessionNotSaved catch (error) {
+      if (mounted) {
+        setState(() => _error = describeFailure(context, error).body);
+      }
     } on Object {
-      // The keystore, or a sign-in that another one overtook: nothing the
-      // person can act on but trying again.
+      // Nothing the person can act on but trying again.
       if (mounted) setState(() => _error = _failed(provider));
-    } finally {
-      if (mounted) setState(() => _busy = null);
     }
   }
 
@@ -123,27 +121,36 @@ class _SocialSignInButtonsState extends ConsumerState<SocialSignInButtons> {
       return const SizedBox.shrink();
     }
     final l = L.of(context);
-    final busy = _busy != null;
+    final core = ref.watch(sessionCoreProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (social.offersApple) ...[
-          _AppleButton(
-            label: l.socialContinueWithApple,
-            isLoading: _busy == SocialProvider.apple,
-            onPressed: busy ? null : () => _continueWith(SocialProvider.apple),
+        // The core's one busy state: no second attempt from any control.
+        ListenableBuilder(
+          listenable: core,
+          builder: (context, _) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (social.offersApple) ...[
+                _AppleButton(
+                  label: l.socialContinueWithApple,
+                  isLoading: core.busy,
+                  onPressed: () => _continueWith(SocialProvider.apple),
+                ),
+                const SizedBox(height: AppSpace.sm),
+              ],
+              if (social.offersGoogle) ...[
+                _GoogleButton(
+                  label: l.socialContinueWithGoogle,
+                  isLoading: core.busy,
+                  onPressed: () => _continueWith(SocialProvider.google),
+                ),
+                const SizedBox(height: AppSpace.sm),
+              ],
+            ],
           ),
-          const SizedBox(height: AppSpace.sm),
-        ],
-        if (social.offersGoogle) ...[
-          _GoogleButton(
-            label: l.socialContinueWithGoogle,
-            isLoading: _busy == SocialProvider.google,
-            onPressed: busy ? null : () => _continueWith(SocialProvider.google),
-          ),
-          const SizedBox(height: AppSpace.sm),
-        ],
+        ),
         if (_error != null) ...[
           InfoNotice(
             message: _error!,

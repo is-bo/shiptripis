@@ -41,7 +41,7 @@ ProviderContainer _dealContainer(FakeBackend backend, {int accountId = 42}) {
     overrides: [
       tokenStoreProvider.overrideWithValue(tokens),
       sessionCoreProvider.overrideWithValue(backend.session),
-      apiClientProvider.overrideWithValue(apiClientFor(backend)),
+      fakeApiClient(backend),
       sessionProvider.overrideWith(() => _FixedSession(account)),
     ],
   );

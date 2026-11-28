@@ -331,7 +331,7 @@ void main() {
         overrides: [
           tokenStoreProvider.overrideWithValue(FakeTokenStore()),
           sessionCoreProvider.overrideWithValue(backend.session),
-          apiClientProvider.overrideWithValue(apiClientFor(backend)),
+          fakeApiClient(backend),
         ],
       );
       addTearDown(container.dispose);

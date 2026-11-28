@@ -168,7 +168,7 @@ void main() {
           overrides: [
             tokenStoreProvider.overrideWithValue(tokens),
             sessionCoreProvider.overrideWithValue(backend.session),
-            apiClientProvider.overrideWithValue(apiClientFor(backend)),
+            fakeApiClient(backend),
             notificationSocketProvider.overrideWithValue(_NoopSocket()),
             pushMessagingProvider.overrideWithValue(push),
           ],
@@ -318,7 +318,7 @@ void main() {
         overrides: [
           tokenStoreProvider.overrideWithValue(tokens),
           sessionCoreProvider.overrideWithValue(backend.session),
-          apiClientProvider.overrideWithValue(apiClientFor(backend)),
+          fakeApiClient(backend),
           sessionProvider.overrideWith(_Member.new),
           routerProvider.overrideWithValue(router),
           notificationSocketProvider.overrideWithValue(_NoopSocket()),

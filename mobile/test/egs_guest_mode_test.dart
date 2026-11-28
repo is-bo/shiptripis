@@ -263,7 +263,7 @@ Future<ProviderContainer> _boot(
       overrides: [
         tokenStoreProvider.overrideWithValue(tokens),
         sessionCoreProvider.overrideWithValue(server.backend.session),
-        apiClientProvider.overrideWithValue(apiClientFor(server.backend)),
+        fakeApiClient(server.backend),
         notificationSocketProvider.overrideWithValue(
           NotificationSocket(connector: (_, _) async => _IdleConnection()),
         ),

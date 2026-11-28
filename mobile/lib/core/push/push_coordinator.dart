@@ -533,7 +533,8 @@ class PushCoordinator extends Notifier<PushRuntimeState>
     if (refresh && !await ref.read(sessionProvider.notifier).refreshAccount()) {
       return null;
     }
-    return ref.read(sessionCoreProvider).accessFor(session.sid);
+    // The bearer of this container's sign-in, and none once it has ended.
+    return ref.mounted ? ref.read(apiClientProvider).bearer : null;
   }
 
   void _reconcileCurrentScope() {

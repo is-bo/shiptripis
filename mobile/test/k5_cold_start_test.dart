@@ -201,7 +201,7 @@ Future<ProviderContainer> _boot(
       overrides: [
         tokenStoreProvider.overrideWithValue(tokens),
         sessionCoreProvider.overrideWithValue(backend.session),
-        apiClientProvider.overrideWithValue(apiClientFor(backend)),
+        fakeApiClient(backend),
         notificationSocketProvider.overrideWithValue(_NoopSocket()),
         pushMessagingProvider.overrideWithValue(push),
       ],
@@ -236,7 +236,7 @@ Future<ProviderContainer> _coordinatorContainer(
       routeTransitionTrackerProvider.overrideWithValue(transitions),
       tokenStoreProvider.overrideWithValue(tokens),
       sessionCoreProvider.overrideWithValue(backend.session),
-      apiClientProvider.overrideWithValue(apiClientFor(backend)),
+      fakeApiClient(backend),
       sessionProvider.overrideWith(session ?? _FixedSession.new),
       routerProvider.overrideWithValue(screens),
       notificationSocketProvider.overrideWithValue(_NoopSocket()),

@@ -9,6 +9,7 @@ library;
 
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -90,11 +91,39 @@ final sessionCoreProvider = Provider<SessionCore>(
   (ref) => throw UnimplementedError('SessionCore is created in main().'),
 );
 
-final apiClientProvider = Provider<ApiClient>((ref) {
-  final client = ApiClient(session: ref.watch(sessionCoreProvider));
+/// The sign-in this container belongs to: none while it is a guest's, then
+/// the first one the core holds, for good. When that sign-in ends the member
+/// boundary replaces the container (rule S-4).
+final memberSignInProvider = Provider<String?>((ref) {
+  final core = ref.watch(sessionCoreProvider);
+  final sid = core.current?.sid;
+  if (sid == null) {
+    void changed() {
+      if (core.current != null) ref.invalidateSelf();
+    }
+
+    core.addListener(changed);
+    ref.onDispose(() => core.removeListener(changed));
+  }
+  return sid;
+});
+
+/// The client of the sign-in this container belongs to, or a guest's (rule
+/// R7). A guest who signs in keeps the container and gets a new client; the
+/// guest's sends nothing more.
+final apiClientProvider = Provider<ApiClient>(signInClient);
+
+/// [apiClientProvider]'s client, talking through [dio]: tests answer it in
+/// memory.
+ApiClient signInClient(Ref ref, [Dio? dio]) {
+  final client = ApiClient(
+    session: ref.watch(sessionCoreProvider),
+    sid: ref.watch(memberSignInProvider),
+    dio: dio,
+  );
   ref.onDispose(() => client.raw.close(force: true));
   return client;
-});
+}
 
 final authRepositoryProvider = Provider<AuthRepository>(
   (ref) => AuthRepository(ref.watch(apiClientProvider)),
@@ -189,23 +218,31 @@ class SessionController extends Notifier<SessionState> {
   @override
   SessionState build() {
     final core = ref.watch(sessionCoreProvider);
+    final tokens = ref.read(tokenStoreProvider);
     var loaded = core.loaded;
-    var signedIn = core.current != null;
+    // Read now, so it holds this container's sign-in before any end.
+    ref.read(memberSignInProvider);
     void sync() {
+      // The end of this container's sign-in is not shown here: the member
+      // boundary replaces the whole container (rule S-4). It takes its side
+      // of the marketplace with it, so the next account starts from its own
+      // (or from the guest's).
+      final mine = ref.read(memberSignInProvider);
+      if (mine != null && core.current?.sid != mine) {
+        core.removeListener(sync);
+        tokens.writeRoleContext(null).ignore();
+        return;
+      }
+      final shown = _showing(core);
+      if (shown != _shown) {
+        _shown = shown;
+        state = _stateOf(core);
+      }
+      // After the state, so the client of this sign-in is the one that reads.
       if (!loaded && core.loaded) {
         loaded = true;
         _confirmStored(core);
       }
-      // A sign-in that ends takes its side of the marketplace with it, so the
-      // next account starts from its own (or from the guest's choice).
-      if (signedIn && core.current == null) {
-        ref.read(tokenStoreProvider).writeRoleContext(null).ignore();
-      }
-      signedIn = core.current != null;
-      final shown = _showing(core);
-      if (shown == _shown) return;
-      _shown = shown;
-      state = _stateOf(core);
     }
 
     core.addListener(sync);
@@ -214,11 +251,12 @@ class SessionController extends Notifier<SessionState> {
       _revalidation?.cancel();
     });
     // Deletes handover-code plaintext left by the retired build.
-    unawaited(ref.read(tokenStoreProvider).purgeLegacyArtifacts());
+    unawaited(tokens.purgeLegacyArtifacts());
     // Kicked off here rather than from a screen: the router's guard reads this
     // state before any screen is built.
     unawaited(core.load());
-    if (loaded) _confirmStored(core);
+    // Once built: the client reads this provider.
+    if (loaded) scheduleMicrotask(() => _confirmStored(core));
     _shown = _showing(core);
     return _stateOf(core);
   }
@@ -242,8 +280,8 @@ class SessionController extends Notifier<SessionState> {
   /// the server in the background (K5). The snapshot is display state only:
   /// every screen still reads the server and every action is decided there.
   void _confirmStored(SessionCore core) {
-    final signIn = core.current;
-    if (signIn != null) unawaited(_confirm(core, signIn.sid, 0));
+    final session = ref.mounted ? state : null;
+    if (session is SessionSignedIn) unawaited(_confirm(core, session.sid, 0));
   }
 
   /// No answer ends the sign-in here: only the refusal of its refresh token
@@ -268,19 +306,20 @@ class SessionController extends Notifier<SessionState> {
     });
   }
 
-  /// The one read of `/api/me` (rule S-6). Its answer is stored only if no
-  /// newer read started meanwhile and the sign-in it was read for is still
-  /// current. Returns the request's failure, if any.
+  /// The one read of `/api/me` (rule S-6), for the sign-in this container
+  /// shows. Its answer is stored only if no newer read started meanwhile;
+  /// the core stores it only while that sign-in is current. Returns the
+  /// request's failure, if any.
   Future<ApiException?> _read({bool fresh = false}) async {
+    final session = state;
+    if (session is! SessionSignedIn) return null;
     final core = _core;
     final auth = _auth;
-    final signIn = core.current;
-    if (signIn == null) return null;
     final read = ++_reads;
     _markAccountRead();
     try {
       final account = await auth.me(fresh: fresh);
-      if (read == _reads) await core.updateAccount(signIn.sid, account);
+      if (read == _reads) await core.updateAccount(session.sid, account);
       return null;
     } on ApiException catch (error) {
       return error;
@@ -400,18 +439,19 @@ class SessionController extends Notifier<SessionState> {
     }
   }
 
-  /// Signs the member out (rule S-3). The server hears of it from the core's
-  /// sender. If the phone cannot store the sign-out, the member stays signed
-  /// in and [SessionNotSaved] is thrown for the screen to say so.
-  Future<void> signOut() async {
-    final signIn = _core.current;
-    if (signIn != null) await _core.end(signIn.sid, EndReason.signedOut);
-  }
+  /// Signs out the member this container shows (rule S-3): a sign-out of
+  /// one that has already ended changes nothing. The server hears of it from
+  /// the core's sender. If the phone cannot store the sign-out, the member
+  /// stays signed in and [SessionNotSaved] is thrown for the screen to say so.
+  Future<void> signOut() => _end(EndReason.signedOut);
 
-  /// The server deleted the account and ended every session.
-  Future<void> accountDeleted() async {
-    final signIn = _core.current;
-    if (signIn != null) await _core.end(signIn.sid, EndReason.deleted);
+  /// The server deleted the account of the member this container shows and
+  /// ended every session.
+  Future<void> accountDeleted() => _end(EndReason.deleted);
+
+  Future<void> _end(EndReason reason) async {
+    final session = state;
+    if (session is SessionSignedIn) await _core.end(session.sid, reason);
   }
 
   /// The guest closed the "you were signed out" notice.

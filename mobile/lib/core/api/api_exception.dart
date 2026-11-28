@@ -69,6 +69,14 @@ enum ApiFailureKind {
   cancelled,
 }
 
+/// A request of a client whose sign-in is no longer current: refused before
+/// it was sent, or its answer dropped (rule R7). Nothing was done as anyone
+/// else, and there is nothing to show: the screen that asked has gone.
+class SessionEnded extends ApiException {
+  SessionEnded()
+    : super(kind: ApiFailureKind.cancelled, code: ApiErrorCode.unknown);
+}
+
 class ApiException implements Exception {
   ApiException({
     required this.kind,
@@ -178,6 +186,7 @@ class ApiException implements Exception {
 
     switch (error.type) {
       case DioExceptionType.cancel:
+        if (error.error case final SessionEnded ended) return ended;
         return ApiException(
           kind: ApiFailureKind.cancelled,
           code: ApiErrorCode.unknown,

@@ -28,30 +28,55 @@ const appLocalizationsDelegates = <LocalizationsDelegate<Object>>[
   GlobalCupertinoLocalizations.delegate,
 ];
 
+/// The phone's language and appearance. They belong to the device, not to a
+/// member: `main()` creates them once, outside every member's container, so
+/// the screens after a sign-out show the same language and theme.
+class DeviceSettings {
+  /// `null` means "follow the device".
+  Locale? locale;
+
+  /// Whether the stored language has been read into [locale], or a choice
+  /// made since has overtaken that read.
+  bool localeRead = false;
+
+  ThemeMode themeMode = ThemeMode.light;
+}
+
+/// The one [DeviceSettings]. `main()` passes its own into every member's
+/// container; a container built without it (a test) has its own.
+final deviceSettingsProvider = Provider<DeviceSettings>(
+  (ref) => DeviceSettings(),
+);
+
 /// `null` means "follow the device".
 final localeProvider = NotifierProvider<LocaleController, Locale?>(
   LocaleController.new,
 );
 
 class LocaleController extends Notifier<Locale?> {
+  DeviceSettings get _settings => ref.read(deviceSettingsProvider);
+
   @override
   Locale? build() {
-    unawaited(_hydrate());
-    return null;
+    if (!_settings.localeRead) unawaited(_hydrate());
+    return _settings.locale;
   }
 
   Future<void> _hydrate() async {
     final tag = await ref.read(tokenStoreProvider).readLocale();
+    if (!ref.mounted || _settings.localeRead) return;
+    _settings.localeRead = true;
     if (tag == null || tag.isEmpty) return;
     final match = supportedLocales
         .where((l) => l.languageCode == tag)
         .firstOrNull;
-    if (match != null) state = match;
+    if (match != null) state = _settings.locale = match;
   }
 
   /// Pass null to go back to following the device.
   void set(Locale? locale) {
-    state = locale;
+    _settings.localeRead = true;
+    state = _settings.locale = locale;
     unawaited(ref.read(tokenStoreProvider).writeLocale(locale?.languageCode));
   }
 }
@@ -61,7 +86,7 @@ final themeModeProvider = NotifierProvider<ThemeModeController, ThemeMode>(
 );
 
 class ThemeModeController extends Notifier<ThemeMode> {
-  /// Light, not `system`.
+  /// Light, not `system`, until the person chooses.
   ///
   /// ShipTrip is a parchment app. The whole identity — the paper ground, the
   /// grain, the stamps, the ink — is a light-mode design, and the original
@@ -73,9 +98,10 @@ class ThemeModeController extends Notifier<ThemeMode> {
   /// a user opts into from Profile → Appearance rather than something the
   /// operating system decides on their behalf.
   @override
-  ThemeMode build() => ThemeMode.light;
+  ThemeMode build() => ref.read(deviceSettingsProvider).themeMode;
 
-  void set(ThemeMode mode) => state = mode;
+  void set(ThemeMode mode) =>
+      state = ref.read(deviceSettingsProvider).themeMode = mode;
 }
 
 /// Resolves the locale actually in force, for the code that formats money and

@@ -18,8 +18,9 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:flutter_test/flutter_test.dart' show WidgetTester;
+import 'package:flutter_test/flutter_test.dart' show WidgetTester, addTearDown;
 import 'package:shiptrip/core/api/api_client.dart';
 import 'package:shiptrip/core/session/session.dart';
 import 'package:shiptrip/core/session/session_core.dart';
@@ -364,15 +365,42 @@ ProviderContainer containerFor(
 }) {
   final store = tokens ?? FakeTokenStore();
   final core = session ?? backend.session;
-  return ProviderContainer(
+  final container = ProviderContainer(
     overrides: [
       tokenStoreProvider.overrideWithValue(store),
       sessionCoreProvider.overrideWithValue(core),
-      apiClientProvider.overrideWithValue(apiClientFor(backend, core)),
+      fakeApiClient(backend),
       if (now != null) clockProvider.overrideWithValue(now),
     ],
   );
+  _next[container] = () =>
+      containerFor(backend, tokens: store, session: core, now: now);
+  return container;
 }
+
+/// How the member boundary builds the container after an end, for a
+/// container [containerFor] built: the same phone, a new container.
+final _next = Expando<ProviderContainer Function()>('next container');
+
+/// The container that follows [container] after an end, or null when
+/// [containerFor] did not build it.
+ProviderContainer Function()? nextContainerOf(ProviderContainer container) =>
+    _next[container];
+
+/// The container the member boundary builds once [container]'s sign-in has
+/// ended (rule S-4): the end is shown there, never in [container].
+ProviderContainer afterEnd(ProviderContainer container) {
+  final next = _next[container]!();
+  addTearDown(next.dispose);
+  next.read(sessionProvider);
+  return next;
+}
+
+/// The real client of each container's sign-in (`apiClientProvider`),
+/// talking to [backend].
+Override fakeApiClient(FakeBackend backend) => apiClientProvider.overrideWith(
+  (ref) => signInClient(ref, Dio()..httpClientAdapter = _FakeAdapter(backend)),
+);
 
 /// A launch, finished: the stored record read and the stored member's
 /// account confirmed by `/api/me`. For a plain test, on real time; a widget
@@ -400,19 +428,21 @@ Future<void> _pumped(WidgetTester tester, Future<void> work) async {
   await watched;
 }
 
-/// The real [ApiClient] of [session] (by default the backend's), talking to
-/// [backend].
-///
-/// Exposed for a test that needs to build its own container — one standing in
-/// for a camera, say. `Override` is not nameable from Riverpod 3's public API,
-/// so the override list has to be written as a literal at the call site rather
-/// than passed in here: `sessionCoreProvider` with `backend.session`, then
-/// `apiClientProvider` with this.
-ApiClient apiClientFor(FakeBackend backend, [SessionCore? session]) =>
-    ApiClient(
-      session: session ?? backend.session,
-      dio: Dio()..httpClientAdapter = _FakeAdapter(backend),
-    );
+/// The real [ApiClient] of sign-in [sid] of [session] (by default the
+/// backend's core and the sign-in current on it now), talking to [backend].
+/// For a test of the client itself; a container uses [fakeApiClient].
+ApiClient apiClientFor(
+  FakeBackend backend, [
+  SessionCore? session,
+  String? sid,
+]) {
+  final core = session ?? backend.session;
+  return ApiClient(
+    session: core,
+    sid: sid ?? core.current?.sid,
+    dio: Dio()..httpClientAdapter = _FakeAdapter(backend),
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Fixtures, shaped from the real Phase 6C responses

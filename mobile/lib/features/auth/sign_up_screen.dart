@@ -18,6 +18,7 @@ import '../../app/app_settings.dart';
 import '../../app/router.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/session/session.dart';
+import '../../core/session/session_core.dart';
 import '../../domain/communication_language.dart';
 import 'account_gate.dart';
 import 'auth_header.dart';
@@ -48,7 +49,6 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   final _password = TextEditingController();
   final _phone = TextEditingController();
 
-  bool _busy = false;
   bool _obscure = true;
   FieldErrorMap _errors = const FieldErrorMap.empty();
 
@@ -65,10 +65,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
     final formOk = _formKey.currentState?.validate() ?? false;
     if (!formOk) return;
 
-    setState(() {
-      _busy = true;
-      _errors = const FieldErrorMap.empty();
-    });
+    setState(() => _errors = const FieldErrorMap.empty());
 
     try {
       final signedIn = await ref
@@ -103,8 +100,8 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
       if (!mounted) return;
       setState(() => _errors = FieldErrorMap.from(error));
       if (_errors.isEmpty) AppSnack.failure(context, error);
-    } finally {
-      if (mounted) setState(() => _busy = false);
+    } on SessionNotSaved catch (error) {
+      if (mounted) AppSnack.failure(context, error);
     }
   }
 
@@ -198,10 +195,14 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
         footer: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AppButton(
-              label: l.authSignUp,
-              isLoading: _busy,
-              onPressed: _submit,
+            // The core's one busy state: no second attempt from any control.
+            ListenableBuilder(
+              listenable: ref.watch(sessionCoreProvider),
+              builder: (context, _) => AppButton(
+                label: l.authSignUp,
+                isLoading: ref.read(sessionCoreProvider).busy,
+                onPressed: _submit,
+              ),
             ),
             const SizedBox(height: AppSpace.sm),
             AppButton(

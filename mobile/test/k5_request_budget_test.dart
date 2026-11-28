@@ -222,7 +222,7 @@ Future<ProviderContainer> _boot(WidgetTester tester, _Server server) async {
       overrides: [
         tokenStoreProvider.overrideWithValue(store),
         sessionCoreProvider.overrideWithValue(server.backend.session),
-        apiClientProvider.overrideWithValue(apiClientFor(server.backend)),
+        fakeApiClient(server.backend),
         notificationSocketProvider.overrideWithValue(socket),
       ],
       child: const ShipTripApp(),

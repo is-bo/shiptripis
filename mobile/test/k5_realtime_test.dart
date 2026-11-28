@@ -196,7 +196,7 @@ Future<(ProviderContainer, _Session, int Function())> _mount(
     overrides: [
       tokenStoreProvider.overrideWithValue(tokens),
       sessionCoreProvider.overrideWithValue(backend.session),
-      apiClientProvider.overrideWithValue(apiClientFor(backend)),
+      fakeApiClient(backend),
       sessionProvider.overrideWith(() => session),
       routerProvider.overrideWithValue(router),
       notificationSocketProvider.overrideWithValue(

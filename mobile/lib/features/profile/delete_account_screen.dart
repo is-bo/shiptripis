@@ -92,11 +92,9 @@ class _DeleteAccountScreenState extends ConsumerState<DeleteAccountScreen> {
             appleAuthorizationCode: appleCode,
           );
       if (!mounted) return;
-      final session = ref.read(sessionProvider.notifier);
-      // Profile is open to guests, so the person lands there, not on the
-      // sign-in screen a member-only page would send a guest to.
-      context.goNamed(Routes.profile);
-      await session.accountDeleted();
+      // The member's screens end with the account: the next ones open on
+      // Home, which says the account was deleted.
+      await ref.read(sessionProvider.notifier).accountDeleted();
     } on SocialSignInFailure {
       if (mounted) AppSnack.info(context, l.socialAppleFailed);
     } on ApiException catch (error) {

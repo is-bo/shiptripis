@@ -361,7 +361,7 @@ void main() {
           overrides: [
             tokenStoreProvider.overrideWithValue(tokens),
             sessionCoreProvider.overrideWithValue(server.backend.session),
-            apiClientProvider.overrideWithValue(apiClientFor(server.backend)),
+            fakeApiClient(server.backend),
             sessionProvider.overrideWith(_TestSessionController.new),
             liveUpdatesProvider.overrideWithValue(live),
           ],

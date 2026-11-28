@@ -133,7 +133,7 @@ class _FormHarness {
       overrides: [
         tokenStoreProvider.overrideWithValue(tokens),
         sessionCoreProvider.overrideWithValue(backend.session),
-        apiClientProvider.overrideWithValue(apiClientFor(backend)),
+        fakeApiClient(backend),
         if (picker != null) itemPhotoPickerProvider.overrideWithValue(picker!),
       ],
     );

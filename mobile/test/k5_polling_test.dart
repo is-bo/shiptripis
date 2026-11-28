@@ -480,7 +480,7 @@ void main() {
         overrides: [
           tokenStoreProvider.overrideWithValue(tokens),
           sessionCoreProvider.overrideWithValue(server.backend.session),
-          apiClientProvider.overrideWithValue(apiClientFor(server.backend)),
+          fakeApiClient(server.backend),
           paymentRepositoryProvider.overrideWith(
             (ref) => orders = _UnreadableOrders(ref.watch(apiClientProvider)),
           ),

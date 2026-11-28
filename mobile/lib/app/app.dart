@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/api/api_exception.dart';
+import '../core/session/session_core.dart';
 import '../design/theme.dart';
 import '../core/push/push_coordinator.dart';
 import 'app_state.dart';
@@ -21,6 +22,75 @@ Duration? appRetry(int retryCount, Object error) {
     return null;
   }
   return ProviderContainer.defaultRetry(retryCount, error);
+}
+
+/// The member's screens, and the provider container they run in, end with
+/// the member's sign-in (rule S-4).
+///
+/// When the sign-in the boundary has seen ends, the boundary builds a new
+/// container from [container] and the app again under a new key: no route,
+/// dialog, sheet, draft or gesture of the old tree is in the new one. The old
+/// container is not told of the end (its session keeps showing the member
+/// who left, whose client sends nothing more) and is disposed once the frame
+/// that removed its screens is done. A guest who signs in keeps the tree.
+///
+/// What outlives a member is created outside and passed in through
+/// [container]: the session core, the push messaging handle and the device
+/// settings.
+class MemberBoundary extends StatefulWidget {
+  const MemberBoundary({
+    required this.session,
+    required this.container,
+    required this.child,
+    super.key,
+  });
+
+  final SessionCore session;
+
+  /// Builds a member's container: the first one, and one after every end.
+  final ProviderContainer Function() container;
+
+  final Widget child;
+
+  @override
+  State<MemberBoundary> createState() => _MemberBoundaryState();
+}
+
+class _MemberBoundaryState extends State<MemberBoundary> {
+  late ProviderContainer _container = widget.container();
+  String? _sid;
+
+  @override
+  void initState() {
+    super.initState();
+    _sid = widget.session.current?.sid;
+    widget.session.addListener(_changed);
+  }
+
+  void _changed() {
+    final sid = widget.session.current?.sid;
+    if (_sid != null && sid != _sid) {
+      final ended = _container;
+      _container = widget.container();
+      setState(() {});
+      WidgetsBinding.instance.addPostFrameCallback((_) => ended.dispose());
+    }
+    _sid = sid;
+  }
+
+  @override
+  void dispose() {
+    widget.session.removeListener(_changed);
+    _container.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => UncontrolledProviderScope(
+    key: ObjectKey(_container),
+    container: _container,
+    child: widget.child,
+  );
 }
 
 class ShipTripApp extends ConsumerWidget {

@@ -16,6 +16,7 @@ import 'package:go_router/go_router.dart';
 import '../../app/router.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/session/session.dart';
+import '../../core/session/session_core.dart';
 import 'account_gate.dart';
 import 'auth_header.dart';
 import 'social_sign_in_buttons.dart';
@@ -42,7 +43,6 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   final _password = TextEditingController();
   final _passwordFocus = FocusNode();
 
-  bool _busy = false;
   bool _obscure = true;
   String? _formError;
 
@@ -56,10 +56,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    setState(() {
-      _busy = true;
-      _formError = null;
-    });
+    setState(() => _formError = null);
 
     final l = L.of(context);
     try {
@@ -76,8 +73,10 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
           _ => describeFailure(context, error).body,
         };
       });
-    } finally {
-      if (mounted) setState(() => _busy = false);
+    } on SessionNotSaved catch (error) {
+      if (mounted) {
+        setState(() => _formError = describeFailure(context, error).body);
+      }
     }
   }
 
@@ -168,10 +167,14 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
         footer: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AppButton(
-              label: l.authSignIn,
-              isLoading: _busy,
-              onPressed: _submit,
+            // The core's one busy state: no second attempt from any control.
+            ListenableBuilder(
+              listenable: ref.watch(sessionCoreProvider),
+              builder: (context, _) => AppButton(
+                label: l.authSignIn,
+                isLoading: ref.read(sessionCoreProvider).busy,
+                onPressed: _submit,
+              ),
             ),
             const SizedBox(height: AppSpace.sm),
             AppButton(

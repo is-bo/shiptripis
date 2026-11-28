@@ -41,7 +41,7 @@ ProviderContainer discoveryContainer(
     overrides: [
       tokenStoreProvider.overrideWithValue(store),
       sessionCoreProvider.overrideWithValue(backend.session),
-      apiClientProvider.overrideWithValue(apiClientFor(backend)),
+      fakeApiClient(backend),
       if (now != null) clockProvider.overrideWithValue(now),
     ],
   );

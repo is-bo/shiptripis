@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
 import 'app/app.dart';
+import 'app/app_settings.dart';
 import 'core/format/locale_formats.dart';
 import 'core/env/app_config.dart';
 import 'core/push/push_messaging.dart';
@@ -47,14 +48,19 @@ Future<void> main() async {
     },
   );
   AppLifecycleListener(onResume: session.resumed);
+  final settings = DeviceSettings();
 
   runApp(
-    ProviderScope(
-      retry: appRetry,
-      overrides: [
-        pushMessagingProvider.overrideWithValue(pushMessaging),
-        sessionCoreProvider.overrideWithValue(session),
-      ],
+    MemberBoundary(
+      session: session,
+      container: () => ProviderContainer(
+        retry: appRetry,
+        overrides: [
+          pushMessagingProvider.overrideWithValue(pushMessaging),
+          sessionCoreProvider.overrideWithValue(session),
+          deviceSettingsProvider.overrideWithValue(settings),
+        ],
+      ),
       child: const ShipTripApp(),
     ),
   );

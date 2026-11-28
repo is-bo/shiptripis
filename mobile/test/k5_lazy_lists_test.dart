@@ -111,7 +111,7 @@ Future<ProviderContainer> _signedIn(
     overrides: [
       tokenStoreProvider.overrideWithValue(tokens),
       sessionCoreProvider.overrideWithValue(backend.session),
-      apiClientProvider.overrideWithValue(apiClientFor(backend)),
+      fakeApiClient(backend),
     ],
     retry: (_, _) => null,
   );

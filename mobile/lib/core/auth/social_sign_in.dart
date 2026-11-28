@@ -391,14 +391,15 @@ class SocialAuth {
     return fresh;
   }
 
-  /// The session moved on (signed out, or someone signed in): a kept Apple
-  /// credential and name belong to an attempt that is over.
+  /// The sign-in this container shows, if any.
+  String? _shown;
+
+  /// The session moved on (someone signed in): a kept Apple credential and
+  /// name belong to an attempt that is over.
   void _sessionChanged(SessionState? previous, SessionState next) {
     _keptApple = null;
     _keptAppleUsable = false;
-    if (previous is SessionSignedIn && next is SessionSignedOut) {
-      unawaited(_provider.signOut());
-    }
+    _shown = next is SessionSignedIn ? next.sid : null;
   }
 
   /// Whether a JWT's `exp` leaves at least [_tokenMargin]. Read only to
@@ -426,6 +427,15 @@ class SocialAuth {
 
 final socialAuthProvider = Provider<SocialAuth>((ref) {
   final auth = SocialAuth(ref);
-  ref.listen(sessionProvider, auth._sessionChanged);
+  ref.listen(sessionProvider, auth._sessionChanged, fireImmediately: true);
+  // The container ends with its sign-in (rule S-4), and the provider's own
+  // account goes with it: the next person on a shared phone is offered the
+  // account picker.
+  final core = ref.read(sessionCoreProvider);
+  final provider = ref.read(socialSignInProvider);
+  ref.onDispose(() {
+    final sid = auth._shown;
+    if (sid != null && core.current?.sid != sid) unawaited(provider.signOut());
+  });
   return auth;
 });

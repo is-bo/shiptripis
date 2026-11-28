@@ -463,8 +463,12 @@ void main() {
             meReads == 2 && backend.to('POST', '/api/auth/refresh').isNotEmpty,
       );
       await session.signOut();
+      // The same account signs in again in the container that follows.
+      final next = afterEnd(container);
       expect(
-        await session.signIn(email: 'sender@example.com', password: 's'),
+        await next
+            .read(sessionProvider.notifier)
+            .signIn(email: 'sender@example.com', password: 's'),
         isTrue,
       );
 
@@ -476,7 +480,7 @@ void main() {
       await expectLater(request, throwsA(isA<Object>()));
       await pumpEventQueue();
 
-      final state = container.read(sessionProvider) as SessionSignedIn;
+      final state = next.read(sessionProvider) as SessionSignedIn;
       expect(state.sid, 'sid-a2');
       expect(state.account.fullName, 'Amina Bouzid');
       expect(backend.session.notice, isNull);
@@ -586,7 +590,8 @@ void main() {
           await _settle(tester);
         }
 
-        final state = container.read(sessionProvider);
+        // The end shows in the container that follows (rule S-4).
+        final state = afterEnd(container).read(sessionProvider);
         expect(state, isA<SessionSignedOut>());
         expect((state as SessionSignedOut).becauseExpired, isTrue);
         expect(storage.record!.current, isNull);
@@ -845,7 +850,12 @@ void main() {
       final session = container.read(sessionProvider.notifier);
 
       await session.signOut();
-      expect(await session.signIn(email: 'b@x.com', password: 's'), isTrue);
+      expect(
+        await afterEnd(
+          container,
+        ).read(sessionProvider.notifier).signIn(email: 'b@x.com', password: 's'),
+        isTrue,
+      );
       firstSend.complete(const FakeResponse(205));
       await _waitFor(() => storage.record!.ended.isEmpty);
 
@@ -1018,11 +1028,9 @@ void main() {
         );
         if (source.contains('accessFor(')) readers.add(file.path);
       }
-      // The bearer of a request, and the socket's sign-in.
-      expect(readers, {
-        'lib/core/api/api_client.dart',
-        'lib/core/push/push_coordinator.dart',
-      });
+      // The bearer of a request, and of a socket through the client of its
+      // sign-in (S-4).
+      expect(readers, {'lib/core/api/api_client.dart'});
     });
   });
 }

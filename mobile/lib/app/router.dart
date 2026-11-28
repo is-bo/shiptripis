@@ -167,8 +167,6 @@ abstract final class Routes {
   static const payoutDetail = 'payout-detail';
 }
 
-final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
-
 /// The places a guest may be. An entry ending in `/` is that whole subtree;
 /// any other entry is that one location.
 ///
@@ -221,38 +219,6 @@ String _signInFor(String next) => Uri(
   queryParameters: {'continue': '1', 'next': next},
 ).toString();
 
-/// Every location on the stack, the bottom one first: the base and each
-/// pushed route.
-List<Uri> _stackLocations(RouteMatchList configuration) {
-  final locations = <Uri>[configuration.uri];
-  void walk(List<RouteMatchBase> matches) {
-    for (final match in matches) {
-      if (match is ImperativeRouteMatch) {
-        locations.add(match.matches.uri);
-      } else if (match is ShellRouteMatch) {
-        walk(match.matches);
-      }
-    }
-  }
-
-  walk(configuration.matches);
-  return locations;
-}
-
-/// A session that ends while a member-only screen is open puts the person on
-/// Home with sign-in above it, which brings them back to that screen. One
-/// that ends on screens a guest may see leaves them there, as a guest.
-void _leavePrivateScreens(GoRouter router) {
-  final configuration = router.routerDelegate.currentConfiguration;
-  if (configuration.matches.isEmpty) return;
-  final private = _stackLocations(
-    configuration,
-  ).where((location) => !isPublicLocation(location.path));
-  if (private.isEmpty) return;
-  router.go('/home');
-  router.push(_signInFor(private.last.toString()));
-}
-
 /// Where the router sends a person in [session] who asks for [uri], or null
 /// to let them stay.
 String? _redirectFor(SessionState session, Uri uri) {
@@ -295,18 +261,18 @@ String? _redirectFor(SessionState session, Uri uri) {
   return null;
 }
 
+/// One router per member's container, with its own navigator key: nothing
+/// of one tree's navigation is in the next (rule S-4).
 final routerProvider = Provider<GoRouter>((ref) {
+  final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
+  late final GoRouter router;
+  ref.onDispose(() => router.dispose());
   // go_router needs a Listenable, Riverpod speaks in providers. One notifier,
   // bumped when a session change moves the person, bridges them without the
   // router itself being rebuilt from scratch on every auth event.
   final refresh = ValueNotifier<int>(0);
   ref.onDispose(refresh.dispose);
-
-  late final GoRouter router;
   ref.listen(sessionProvider, (previous, next) {
-    if (previous is SessionSignedIn && next is SessionSignedOut) {
-      _leavePrivateScreens(router);
-    }
     // Only when the redirect now answers differently. A refresh rebuilds the
     // stack from what the router last reported, and every screen pushed on it
     // comes back as a new route whose result nobody awaits: the account
@@ -319,7 +285,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   });
 
   return router = GoRouter(
-    navigatorKey: _rootNavigatorKey,
+    navigatorKey: rootNavigatorKey,
     initialLocation: '/splash',
     refreshListenable: refresh,
     observers: [ref.read(routeTransitionTrackerProvider)],
@@ -337,7 +303,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/how-it-works',
         name: Routes.howItWorks,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const BenefitsScreen(),
       ),
 
@@ -465,7 +431,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/notifications',
         name: Routes.notifications,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const NotificationsScreen(),
       ),
 
@@ -473,7 +439,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/discover/trips',
         name: Routes.browseTrips,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => BrowseTripsScreen(
           corridor: _corridor(state),
           alertId: int.tryParse(state.uri.queryParameters['alert'] ?? ''),
@@ -485,7 +451,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/discover/requests',
         name: Routes.browseRequests,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => BrowseRequestsScreen(
           corridor: _corridor(state),
           alertId: int.tryParse(state.uri.queryParameters['alert'] ?? ''),
@@ -500,13 +466,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/discover/people',
         name: Routes.browsePeople,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const BrowsePeopleScreen(),
         routes: [
           GoRoute(
             path: ':id',
             name: Routes.person,
-            parentNavigatorKey: _rootNavigatorKey,
+            parentNavigatorKey: rootNavigatorKey,
             builder: (context, state) =>
                 PersonScreen(profileId: state.pathParameters['id'] ?? ''),
           ),
@@ -516,7 +482,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/reviews/person/:id',
         name: Routes.reviewsPerson,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => ReviewsScreen(
           subject: PersonReviews(state.pathParameters['id'] ?? ''),
         ),
@@ -524,7 +490,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/reviews/trip/:id',
         name: Routes.reviewsTrip,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => ReviewsScreen(
           subject: TripReviews(
             _id(state, 'id'),
@@ -537,7 +503,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/requests/new',
         name: Routes.requestCreate,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) {
           final prefill = state.extra;
           return RequestCreateScreen(
@@ -548,21 +514,21 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/requests/:id',
         name: Routes.requestDetail,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) =>
             RequestDetailScreen(requestId: _id(state, 'id')),
         routes: [
           GoRoute(
             path: 'deposit',
             name: Routes.requestDeposit,
-            parentNavigatorKey: _rootNavigatorKey,
+            parentNavigatorKey: rootNavigatorKey,
             builder: (context, state) =>
                 DepositScreen(requestId: _id(state, 'id')),
           ),
           GoRoute(
             path: 'discovery',
             name: Routes.requestDiscovery,
-            parentNavigatorKey: _rootNavigatorKey,
+            parentNavigatorKey: rootNavigatorKey,
             builder: (context, state) => DiscoveryScreen(
               requestId: _id(state, 'id'),
               // A trip chosen in Browse, or named by an "I can carry this"
@@ -575,7 +541,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: 'boost',
             name: Routes.requestBoost,
-            parentNavigatorKey: _rootNavigatorKey,
+            parentNavigatorKey: rootNavigatorKey,
             builder: (context, state) =>
                 BoostScreen(requestId: _id(state, 'id')),
           ),
@@ -585,13 +551,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/journeys/new',
         name: Routes.journeyCreate,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const JourneyCreateScreen(),
       ),
       GoRoute(
         path: '/journeys/:id',
         name: Routes.journeyDetail,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => JourneyDetailScreen(
           journeyId: _id(state, 'id'),
           // A reminder names the step it asks about.
@@ -602,14 +568,14 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: 'edit',
             name: Routes.journeyEdit,
-            parentNavigatorKey: _rootNavigatorKey,
+            parentNavigatorKey: rootNavigatorKey,
             builder: (context, state) =>
                 JourneyEditScreen(journeyId: _id(state, 'id')),
           ),
           GoRoute(
             path: 'legs/:legId/proof',
             name: Routes.legProof,
-            parentNavigatorKey: _rootNavigatorKey,
+            parentNavigatorKey: rootNavigatorKey,
             builder: (context, state) => LegProofScreen(
               journeyId: _id(state, 'id'),
               legId: _id(state, 'legId'),
@@ -618,7 +584,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: 'change-times',
             name: Routes.journeyChangeTimes,
-            parentNavigatorKey: _rootNavigatorKey,
+            parentNavigatorKey: rootNavigatorKey,
             builder: (context, state) =>
                 ChangeTimesScreen(journeyId: _id(state, 'id')),
           ),
@@ -628,7 +594,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/matches/:id',
         name: Routes.negotiation,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) =>
             NegotiationScreen(matchId: _id(state, 'id')),
       ),
@@ -636,59 +602,59 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/deals/:id',
         name: Routes.deal,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => DealScreen(dealId: _id(state, 'id')),
         routes: [
           GoRoute(
             path: 'payment',
             name: Routes.dealPayment,
-            parentNavigatorKey: _rootNavigatorKey,
+            parentNavigatorKey: rootNavigatorKey,
             builder: (context, state) =>
                 DealPaymentScreen(dealId: _id(state, 'id')),
           ),
           GoRoute(
             path: 'recipient',
             name: Routes.dealRecipient,
-            parentNavigatorKey: _rootNavigatorKey,
+            parentNavigatorKey: rootNavigatorKey,
             builder: (context, state) =>
                 RecipientScreen(dealId: _id(state, 'id')),
           ),
           GoRoute(
             path: 'pickup',
             name: Routes.dealPickup,
-            parentNavigatorKey: _rootNavigatorKey,
+            parentNavigatorKey: rootNavigatorKey,
             builder: (context, state) => PickupScreen(dealId: _id(state, 'id')),
           ),
           GoRoute(
             path: 'delivery',
             name: Routes.dealDelivery,
-            parentNavigatorKey: _rootNavigatorKey,
+            parentNavigatorKey: rootNavigatorKey,
             builder: (context, state) =>
                 DeliveryScreen(dealId: _id(state, 'id')),
           ),
           GoRoute(
             path: 'cancel',
             name: Routes.dealCancel,
-            parentNavigatorKey: _rootNavigatorKey,
+            parentNavigatorKey: rootNavigatorKey,
             builder: (context, state) => CancelScreen(dealId: _id(state, 'id')),
           ),
           GoRoute(
             path: 'schedule-change',
             name: Routes.dealScheduleChange,
-            parentNavigatorKey: _rootNavigatorKey,
+            parentNavigatorKey: rootNavigatorKey,
             builder: (context, state) =>
                 ScheduleChangeAnswerScreen(dealId: _id(state, 'id')),
           ),
           GoRoute(
             path: 'rate',
             name: Routes.dealRate,
-            parentNavigatorKey: _rootNavigatorKey,
+            parentNavigatorKey: rootNavigatorKey,
             builder: (context, state) => RateScreen(dealId: _id(state, 'id')),
           ),
           GoRoute(
             path: 'dispute',
             name: Routes.disputeOpen,
-            parentNavigatorKey: _rootNavigatorKey,
+            parentNavigatorKey: rootNavigatorKey,
             builder: (context, state) =>
                 DisputeOpenScreen(dealId: _id(state, 'id')),
           ),
@@ -698,7 +664,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/disputes/:id',
         name: Routes.disputeDetail,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) =>
             DisputeDetailScreen(disputeId: _id(state, 'id')),
       ),
@@ -710,7 +676,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/chat/thread/:matchId',
         name: Routes.chatThread,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => ChatThreadScreen(
           matchId: _id(state, 'matchId'),
           dealId: int.tryParse(state.uri.queryParameters['dealId'] ?? ''),
@@ -720,13 +686,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/kyc',
         name: Routes.kyc,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const KycScreen(),
       ),
       GoRoute(
         path: '/location/pick',
         name: Routes.locationPicker,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) {
           final current = state.extra;
           return CanonicalPlacePickerScreen(
@@ -739,7 +705,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/location/preferred',
         name: Routes.preferredLocationPicker,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) {
           final place = state.extra;
           if (place is! CanonicalPlace) return const RouteNotFoundScreen();
@@ -753,67 +719,67 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/profile/language',
         name: Routes.profileLanguage,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const LanguageScreen(),
       ),
       GoRoute(
         path: '/profile/notifications',
         name: Routes.profileNotifications,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const NotificationSettingsScreen(),
       ),
       GoRoute(
         path: '/profile/appearance',
         name: Routes.profileAppearance,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const AppearanceScreen(),
       ),
       GoRoute(
         path: '/profile/blocked',
         name: Routes.profileBlocked,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const BlockedPeopleScreen(),
       ),
       GoRoute(
         path: '/profile/delete-account',
         name: Routes.profileDeleteAccount,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const DeleteAccountScreen(),
       ),
       GoRoute(
         path: '/profile/public',
         name: Routes.profilePublic,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const PublicProfileScreen(),
       ),
       GoRoute(
         path: '/profile/alerts',
         name: Routes.profileAlerts,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const AlertsScreen(),
       ),
       GoRoute(
         path: '/profile/ratings',
         name: Routes.profileRatings,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const RatingsScreen(),
       ),
       GoRoute(
         path: '/profile/payouts',
         name: Routes.profilePayouts,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const PayoutsScreen(),
       ),
       GoRoute(
         path: '/profile/payout-methods',
         name: Routes.profilePayoutMethods,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const PayoutMethodsScreen(),
         routes: [
           GoRoute(
             path: 'dzd',
             name: Routes.dzdProfileSetup,
-            parentNavigatorKey: _rootNavigatorKey,
+            parentNavigatorKey: rootNavigatorKey,
             builder: (context, state) => const DzdSetupScreen(),
           ),
         ],
@@ -821,7 +787,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/payouts/:reference',
         name: Routes.payoutDetail,
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => PayoutDetailScreen(
           reference: state.pathParameters['reference'] ?? '',
         ),

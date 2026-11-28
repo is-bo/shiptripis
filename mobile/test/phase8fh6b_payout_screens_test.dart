@@ -39,7 +39,7 @@ ProviderContainer _payoutDetailContainer(FakeBackend backend) {
     overrides: [
       tokenStoreProvider.overrideWithValue(store),
       sessionCoreProvider.overrideWithValue(backend.session),
-      apiClientProvider.overrideWithValue(apiClientFor(backend)),
+      fakeApiClient(backend),
       sessionProvider.overrideWith(
         () => _FixedSession(Account.fromJson(meFixture())),
       ),
@@ -492,7 +492,7 @@ void main() {
         overrides: [
           tokenStoreProvider.overrideWithValue(store),
           sessionCoreProvider.overrideWithValue(backend.session),
-          apiClientProvider.overrideWithValue(apiClientFor(backend)),
+          fakeApiClient(backend),
           sessionProvider.overrideWith(() => _FixedSession(account)),
         ],
       );

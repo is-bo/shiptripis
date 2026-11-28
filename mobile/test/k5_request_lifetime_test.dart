@@ -515,7 +515,7 @@ void main() {
         overrides: [
           tokenStoreProvider.overrideWithValue(tokens),
           sessionCoreProvider.overrideWithValue(backend.session),
-          apiClientProvider.overrideWithValue(apiClientFor(backend)),
+          fakeApiClient(backend),
         ],
         observers: [mounts],
       );

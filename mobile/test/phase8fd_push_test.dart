@@ -118,7 +118,7 @@ Future<ProviderContainer> _mountedCoordinator(
     overrides: [
       tokenStoreProvider.overrideWithValue(tokens),
       sessionCoreProvider.overrideWithValue(backend.session),
-      apiClientProvider.overrideWithValue(apiClientFor(backend)),
+      fakeApiClient(backend),
       sessionProvider.overrideWith(_FixedSession.new),
       routerProvider.overrideWithValue(router),
       notificationSocketProvider.overrideWithValue(_NoopSocket()),

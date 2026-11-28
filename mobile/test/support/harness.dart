@@ -9,8 +9,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shiptrip/app/app.dart';
 import 'package:shiptrip/app/app_settings.dart';
+import 'package:shiptrip/core/session/session.dart';
+import 'package:shiptrip/core/session/session_core.dart';
 import 'package:shiptrip/design/theme.dart';
+
+import 'fake_api.dart';
 
 /// Device sizes the layout has to survive.
 ///
@@ -106,7 +111,10 @@ Future<void> pumpRouted(
   routed: true,
 );
 
-/// Pumps [child] inside the app's own theme, localisations and providers.
+/// Pumps [child] inside the app's own theme, localisations and providers,
+/// inside the member boundary as `main()` runs the app: an end of the
+/// container's sign-in builds a new container ([nextContainerOf], or one with
+/// only the same core) and pumps [child] again in it.
 Future<void> pumpApp(
   WidgetTester tester,
   Widget child, {
@@ -117,10 +125,31 @@ Future<void> pumpApp(
   bool routed = false,
   List<RouteBase> extraRoutes = const [],
 }) async {
-  // `Override` is not nameable from Riverpod 3's public API, so a test that
-  // needs stubbed providers builds its own container and hands it over.
-  final scope = container ?? ProviderContainer();
+  // A test that needs stubbed providers builds its own container and hands
+  // it over.
+  final scope =
+      container ??
+      ProviderContainer(
+        overrides: [
+          sessionCoreProvider.overrideWithValue(
+            coreFor(FakeBackend(), signedIn: false),
+          ),
+        ],
+      );
   addTearDown(scope.dispose);
+  final session = _coreOf(scope);
+  final next =
+      nextContainerOf(scope) ??
+      () => ProviderContainer(
+        overrides: [sessionCoreProvider.overrideWithValue(session)],
+      );
+  var first = true;
+  ProviderContainer build() {
+    if (!first) return next();
+    first = false;
+    return scope;
+  }
+
   // Order matters: the ratio has to be 1 before the physical size is set, or
   // the window ends up `size * originalRatio` logical pixels tall and every
   // geometric assertion below is measured against a viewport that does not
@@ -145,27 +174,21 @@ Future<void> pumpApp(
   final theme = buildAppTheme(brightness: Brightness.light, locale: locale);
 
   await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: scope,
+    MemberBoundary(
+      session: session,
+      container: build,
       child: routed
-          ? MaterialApp.router(
-              locale: locale,
-              supportedLocales: supportedLocales,
-              localizationsDelegates: appLocalizationsDelegates,
-              theme: theme,
-              builder: applyMedia,
-              routerConfig: GoRouter(
-                initialLocation: '/host/screen',
-                routes: [
-                  GoRoute(
-                    path: '/host',
-                    builder: (_, _) => const Scaffold(body: SizedBox.shrink()),
-                    routes: [GoRoute(path: 'screen', builder: (_, _) => child)],
-                  ),
-                  // Destinations a screen under test navigates to by name.
-                  ...extraRoutes,
-                ],
+          ? _HostRouter(
+              builder: (router) => MaterialApp.router(
+                locale: locale,
+                supportedLocales: supportedLocales,
+                localizationsDelegates: appLocalizationsDelegates,
+                theme: theme,
+                builder: applyMedia,
+                routerConfig: router,
               ),
+              extraRoutes: extraRoutes,
+              child: child,
             )
           : MaterialApp(
               locale: locale,
@@ -178,4 +201,55 @@ Future<void> pumpApp(
     ),
   );
   await tester.pump();
+}
+
+/// The session core [container] holds, or one of nobody for a container that
+/// has none: a test whose screen never reads the session.
+SessionCore _coreOf(ProviderContainer container) {
+  try {
+    return container.read(sessionCoreProvider);
+  } on Object {
+    return coreFor(FakeBackend(), signedIn: false);
+  }
+}
+
+/// A router of its own for each tree the boundary builds, as the app's
+/// router is one per container: no navigator is shared between two trees.
+class _HostRouter extends StatefulWidget {
+  const _HostRouter({
+    required this.builder,
+    required this.child,
+    required this.extraRoutes,
+  });
+
+  final Widget Function(GoRouter router) builder;
+  final Widget child;
+  final List<RouteBase> extraRoutes;
+
+  @override
+  State<_HostRouter> createState() => _HostRouterState();
+}
+
+class _HostRouterState extends State<_HostRouter> {
+  late final GoRouter _router = GoRouter(
+    initialLocation: '/host/screen',
+    routes: [
+      GoRoute(
+        path: '/host',
+        builder: (_, _) => const Scaffold(body: SizedBox.shrink()),
+        routes: [GoRoute(path: 'screen', builder: (_, _) => widget.child)],
+      ),
+      // Destinations a screen under test navigates to by name.
+      ...widget.extraRoutes,
+    ],
+  );
+
+  @override
+  void dispose() {
+    _router.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(_router);
 }
