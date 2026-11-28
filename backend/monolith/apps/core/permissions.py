@@ -42,10 +42,6 @@ class HasAnyPermission(BasePermission):
         return any(user.has_perm(perm) for perm in perms)
 
 
-class CanViewDisputes(HasAnyPermission):
-    required_perms = ("disputes.view_dispute",)
-
-
 class CanResolveDisputes(HasAnyPermission):
     required_perms = ("disputes.resolve_dispute",)
 

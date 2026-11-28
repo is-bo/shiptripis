@@ -576,10 +576,10 @@ class DisputeApiTests(TestCase):
 
     def test_the_admin_queue_requires_the_named_permission(self):
         plain = staff_client_for(self.scenario.outsider)
-        assert plain.get(reverse("disputes-admin-list")).status_code in (403, 401)
+        assert plain.get(reverse("admin-dispute-list")).status_code in (403, 401)
 
         support = grant(self.scenario.outsider, "Support")
-        allowed = staff_client_for(support).get(reverse("disputes-admin-list"))
+        allowed = staff_client_for(support).get(reverse("admin-dispute-list"))
         assert allowed.status_code == 200
 
     def test_resolving_requires_more_than_the_viewing_permission(self):

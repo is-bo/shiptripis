@@ -11,7 +11,6 @@ from django.urls import path
 
 from .views import (
     AdminDealNoShowView,
-    AdminDisputeListView,
     AdminDisputeResolveView,
     AdminDisputeStatusView,
     DealDisputesView,
@@ -45,11 +44,6 @@ urlpatterns = [
         "disputes/<int:pk>/evidence/<int:evidence_id>/url",
         DisputeEvidenceUrlView.as_view(),
         name="disputes-evidence-url",
-    ),
-    path(
-        "admin/disputes",
-        AdminDisputeListView.as_view(),
-        name="disputes-admin-list",
     ),
     path(
         "admin/disputes/<int:pk>/status",
