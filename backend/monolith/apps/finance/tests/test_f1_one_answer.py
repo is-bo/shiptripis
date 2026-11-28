@@ -48,25 +48,25 @@ def test_each_rail_is_computed_once_per_response(url):
     user = make_user(f"f1once-{url.rsplit('/', 1)[-1]}@f1.test", is_email_verified=True)
     client = client_for(user)
     assert preference(client, "both").status_code == 200
-    calls = {"eur_method": 0, "dzd_method": 0}
+    calls = {"_eur_rail": 0, "dzd_method": 0}
 
     def counted(name):
         real = getattr(payout_mobile, name)
 
-        def run(method, gate):
+        def run(*args):
             calls[name] += 1
-            answer = real(method, gate)
-            if name == "eur_method" and calls[name] == 1:
+            answer = real(*args)
+            if name == "_eur_rail" and calls[name] == 1:
                 standing_de_account(user)
             return answer
 
         return run
 
-    with patch.object(payout_mobile, "eur_method", counted("eur_method")), \
+    with patch.object(payout_mobile, "_eur_rail", counted("_eur_rail")), \
             patch.object(payout_mobile, "dzd_method", counted("dzd_method")):
         body = client.get(url).data
     if url.endswith("methods"):
-        assert calls == {"eur_method": 1, "dzd_method": 1}
+        assert calls == {"_eur_rail": 1, "dzd_method": 1}
         by_currency = {m["currency"]: m["mobile"] for m in body["methods"]}
         assert by_currency == {"EUR": body["eur"], "DZD": body["dzd"]}
     else:
