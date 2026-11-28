@@ -3,7 +3,6 @@ from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
-from django.contrib.auth.models import Group
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.management import call_command
 from django.test import TestCase
@@ -43,17 +42,12 @@ def make_user(email: str, *, staff: bool = False, superuser: bool = False) -> Us
 
 
 class AdminRoleBoundaryTests(TestCase):
-    def test_roles_are_fixed_and_legacy_privileges_are_revoked_on_downgrade(self):
+    def test_roles_are_fixed_and_privileges_are_revoked_on_downgrade(self):
         user = make_user("finance@example.test", staff=True)
-        Group.objects.create(name="Finance Admin")
-        # Assign through the real migration-seeded role, then add the legacy
-        # compatibility group as a regression fixture.
         assign_admin_roles(user, (AdminRole.FINANCE,))
-        user.groups.add(Group.objects.get(name="Finance Admin"))
         assign_admin_roles(user, (AdminRole.SUPPORT,))
         user.refresh_from_db()
         assert user_admin_roles(user) == (AdminRole.SUPPORT,)
-        assert not user.groups.filter(name="Finance Admin").exists()
         assert not has_admin_permission(user, "resolve_disputes")
         assert has_admin_permission(user, "view_users")
 

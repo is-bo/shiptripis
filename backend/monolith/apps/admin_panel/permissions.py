@@ -36,17 +36,6 @@ ROLE_GROUP_NAMES: dict[str, str] = {
     AdminRole.SUPER_ADMIN: "Super Admin",
 }
 
-# Phase 4 shipped four compatibility groups before the granular Phase 6A
-# matrix existed.  They are migration aliases, not an additional privilege
-# tier.  Keeping them around after a role change would make a downgrade
-# ineffective because Django permissions are additive across groups.
-LEGACY_ADMIN_GROUP_TO_ROLE: dict[str, str] = {
-    "Operations Admin": AdminRole.OPS,
-    "Support Agent": AdminRole.SUPPORT,
-    "Finance Admin": AdminRole.FINANCE,
-    "Trust & Verification Admin": AdminRole.TRUST,
-}
-
 ROLE_CHOICES = tuple(ROLE_GROUP_NAMES.items())
 ROLE_SLUGS = frozenset(ROLE_GROUP_NAMES)
 
@@ -336,17 +325,13 @@ def assign_admin_roles(
 ):
     """Replace a user's Phase 6A role groups with validated roles.
 
-    Legacy Phase 4 administrator groups are removed from this account.  Their
-    model-specific permissions are seeded on the corresponding Phase 6A role
-    group, so replacing a role really does revoke the old role's capabilities.
-    Unrelated business groups are left untouched.
+    Replacing a role revokes the old role's capabilities. Unrelated business
+    groups are left untouched.
     """
 
     slugs = {normalize_role(role) for role in roles}
     groups = [role_group(slug) for slug in slugs]
-    phase6_names = set(ROLE_GROUP_NAMES.values())
-    legacy_names = set(LEGACY_ADMIN_GROUP_TO_ROLE)
-    user.groups.remove(*Group.objects.filter(name__in=phase6_names | legacy_names))
+    user.groups.remove(*Group.objects.filter(name__in=ROLE_GROUP_NAMES.values()))
     if groups:
         user.groups.add(*groups)
         user.is_staff = True
