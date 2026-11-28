@@ -20,6 +20,7 @@ back over it (N1, N-D).
 """
 
 from django.contrib import admin
+from django.contrib.admin.forms import AdminPasswordChangeForm as SiteOwnPasswordForm
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.forms import AdminPasswordChangeForm
 
@@ -29,14 +30,24 @@ from .models import OAuthIdentity, PasswordResetCode, User
 from .sessions import write_password
 
 
-class _PasswordForm(AdminPasswordChangeForm):
-    """The admin's password form, saved by the one password writer: every
-    sign-in of the account ends with the change."""
+class _WritesPassword:
+    """Saves one of Django's password forms through the one password writer:
+    every sign-in of the account ends with the change, and no other field of
+    the row is written. Django's password forms all save through this hook."""
 
-    def save(self, commit=True):
-        usable = self.cleaned_data["set_usable_password"]
-        write_password(self.user, self.cleaned_data["password1"] if usable else None)
-        return self.user
+    def set_password_and_save(self, user, password_field_name="password1", commit=True):
+        usable = self.cleaned_data.get("set_usable_password", True)
+        write_password(user, self.cleaned_data[password_field_name] if usable else None)
+        return user
+
+
+class _PasswordForm(_WritesPassword, AdminPasswordChangeForm):
+    """A member's password, set by an operator."""
+
+
+class OwnPasswordForm(_WritesPassword, SiteOwnPasswordForm):
+    """An operator's own password, changed with the old one
+    (`apps.admin_panel.admin_site`)."""
 
 
 @admin.register(User)

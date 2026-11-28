@@ -146,11 +146,12 @@ class _AccessIfValid(JWTAuthentication):
 
 
 def _signed_claims(token: str) -> dict | None:
-    """The claims of ``token`` if this server signed it, expired or not.
+    """The claims of ``token`` if this server signed it, whatever its age.
 
     SimpleJWT's own decode refuses an expired token, rightly for everything a
     token grants. Proving which sign-in to end grants nothing, so only the
-    signature counts here (`_proven_sign_in`).
+    signature counts here (`_proven_sign_in`): neither the expiry nor an
+    issue time a few seconds ahead of this server's clock.
     """
 
     try:
@@ -163,6 +164,7 @@ def _signed_claims(token: str) -> dict | None:
             options={
                 "verify_aud": token_backend.audience is not None,
                 "verify_exp": False,
+                "verify_iat": False,
             },
         )
     except jwt.PyJWTError:
@@ -207,6 +209,8 @@ class SignOutView(APIView):
 
     authentication_classes = (_AccessIfValid,)
     permission_classes = (AllowAny,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "sign_out"
 
     def post(self, request: Request) -> Response:
         proven = _proven_sign_in(request)

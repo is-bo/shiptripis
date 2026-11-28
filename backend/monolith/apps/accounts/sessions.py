@@ -64,10 +64,15 @@ def end_session(user, session_id) -> None:
     sign-in still on its way is refused when it arrives, because it finds the
     sign-in ended. A sign-in that is not live (ended already, or never
     issued to ``user``) writes nothing: its devices went off when it ended.
+    So does an account deleted since ``user`` was read: its sign-ins ended
+    with it.
     """
 
     with transaction.atomic():
-        lock_account(user)
+        try:
+            lock_account(user)
+        except User.DoesNotExist:
+            return
         session = SignInSession.live(user_id=user.pk, session_id=session_id)
         if session is None:
             return

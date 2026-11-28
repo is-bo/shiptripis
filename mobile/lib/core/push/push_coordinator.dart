@@ -594,7 +594,9 @@ class PushCoordinator extends Notifier<PushRuntimeState>
         ref.read(sessionProvider) is! SessionSignedIn;
     final store = ref.read(tokenStoreProvider);
     try {
-      final current = refreshedToken ?? await _messaging.token();
+      // Firebase's current token wins over the one a refresh carried: a late
+      // repeat of an older refresh must not put a replaced token back.
+      final current = await _messaging.token() ?? refreshedToken;
       if (overtaken()) return;
       final token = current ?? await store.readPendingPushToken();
       if (overtaken()) return;
@@ -669,9 +671,10 @@ class PushCoordinator extends Notifier<PushRuntimeState>
   }
 
   /// Firebase replaced the token. The registration still on its way with the
-  /// old one is overtaken at once, and the new token is sent as it came: it is
-  /// also kept on disk for a registration that fails, but a keystore that
-  /// refuses the write must not leave the server holding the old token.
+  /// old one is overtaken at once, and Firebase's current token is sent, the
+  /// one this refresh carried only if Firebase has none to give. It is also
+  /// kept on disk for a registration that fails, but a keystore that refuses
+  /// the write must not leave the server holding the old token.
   Future<void> _tokenRefreshed(String token) async {
     _registrationAttempt++;
     final generation = _sessionGeneration;

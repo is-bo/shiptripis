@@ -53,6 +53,7 @@ before initial startup. Optional features remain disabled unless explicitly supp
 | `DRF_MATCHING_DISCOVERY_THROTTLE_RATE` | Discovery and Find Travelers reads per member; `60/min` (Home alone makes two to four). |
 | `DRF_REGISTRATION_THROTTLE_RATE` | Email sign-ups per address; `30/hour`. Each sign-up still needs a new email address and an unconfirmed account cannot post. |
 | `DRF_GOOGLE_SIGNIN_THROTTLE_RATE`, `DRF_APPLE_SIGNIN_THROTTLE_RATE` | Provider sign-ins per address; `30/min` each. Password sign-in (`DRF_LOGIN_THROTTLE_RATE`, `10/min`) stays tight: it is the only bound on password guessing. |
+| `DRF_SIGN_OUT_THROTTLE_RATE` | Sign-outs per address (per member with a valid access token); `300/min`, apart from the shared `anon` rate, so guests on the same carrier address never hold up a sign-out. |
 | `LOG_LEVEL` | Go structured log level; `info` initially. |
 | `PERFORMANCE_ACCESS_LOG_ENABLED` | `true` to retain safe route-template/status/timing logs. |
 | `PERFORMANCE_DB_METRICS_ENABLED` | Optional query timing, initially `false` to avoid overhead. |
