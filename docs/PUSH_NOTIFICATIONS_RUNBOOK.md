@@ -173,7 +173,7 @@ tokens, rotations included. A sign-out ends its sign-in and switches off every
 device that sign-in registered, so a late sign-out never touches what a later
 sign-in registered. Every password change (`write_password`: a reset, the
 technical admin's two password forms, an account closed or claimed) ends every sign-in of the
-account through `end_all_sessions`. A registration, and a refresh, from a
+account through `end_all_sessions`, and so does a ban (`set_account_ban`). A registration, and a refresh, from a
 sign-in that has ended is refused (`409 push_session_ended`, checked under the
 account row lock that ending a sign-in also takes). A slow registration can
 therefore never rebind the phone to an account that signed out, was replaced or

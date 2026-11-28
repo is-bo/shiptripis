@@ -21,6 +21,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 
+from apps.accounts.sessions import end_all_sessions
 from apps.deals.models import Deal
 from apps.disputes.models import Dispute
 from apps.finance.models import ScheduledJob
@@ -346,10 +347,11 @@ def ban_refusal(actor, person, *, banned: bool) -> StaffActionError | None:
 def set_account_ban(*, actor, user_id: int, banned: bool, reason: str):
     """Ban a member's account, or restore it, with a reason (audited).
 
-    It changes exactly what the technical admin's bulk action changed: a ban
-    sets ``is_banned`` and clears ``is_active``, which signs the person out; a
-    restore does the opposite. Nothing else moves: no delivery is cancelled,
-    no money is touched, no payout is released.
+    A ban sets ``is_banned``, clears ``is_active`` and ends every sign-in of
+    the person (`end_all_sessions`), so no refresh token of them works again
+    and their phones stop receiving pushes; a restore sets the two flags back
+    and the person signs in again. Nothing else moves: no delivery is
+    cancelled, no money is touched, no payout is released.
     """
 
     _require(actor, BAN_PERMISSION)
@@ -363,6 +365,8 @@ def set_account_ban(*, actor, user_id: int, banned: bool, reason: str):
         person.is_banned = banned
         person.is_active = not banned
         person.save(update_fields=["is_banned", "is_active"])
+        if banned:
+            end_all_sessions(person)
         record_admin_action(
             actor=actor,
             action="account.banned" if banned else "account.restored",
