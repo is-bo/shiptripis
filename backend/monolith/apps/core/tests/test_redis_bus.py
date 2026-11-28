@@ -218,7 +218,6 @@ class SweepDeliveredTests(TestCase):
             published_at=timezone.now() - timedelta(minutes=10)
         )
         client = MagicMock()
-        client.exists.return_value = 0
         client.scan_iter.return_value = iter(
             ["delivered:event-per-user-receipt:42"]
         )
@@ -246,7 +245,6 @@ class SweepDeliveredTests(TestCase):
             published_at=timezone.now() - timedelta(minutes=10)
         )
         client = MagicMock()
-        client.exists.return_value = 0
         client.scan_iter.return_value = iter(())
         get_client.return_value = client
 
@@ -254,8 +252,8 @@ class SweepDeliveredTests(TestCase):
         call_command("sweep_published_events", batch_size=1, stdout=output)
 
         assert "swept=1" in output.getvalue()
-        checked = client.exists.call_args.args[0]
-        assert checked == "delivered:older"
+        checked = client.scan_iter.call_args.kwargs["match"]
+        assert checked == "delivered:older:*"
 
     @patch.object(redis_bus, "get_client")
     def test_bounded_sweep_still_reaches_newer_events(self, get_client):
@@ -278,7 +276,6 @@ class SweepDeliveredTests(TestCase):
             published_at=timezone.now() - timedelta(minutes=10)
         )
         client = MagicMock()
-        client.exists.return_value = 0
         client.scan_iter.return_value = iter(())
         get_client.return_value = client
 
@@ -286,7 +283,7 @@ class SweepDeliveredTests(TestCase):
         call_command("sweep_published_events", batch_size=1, stdout=output)
 
         assert "swept=1" in output.getvalue()
-        assert client.exists.call_args.args[0] == "delivered:recent-miss"
+        assert client.scan_iter.call_args.kwargs["match"] == "delivered:recent-miss:*"
 
     @patch.object(redis_bus, "get_client")
     def test_sweep_window_must_be_wider_than_the_delivery_grace(self, get_client):
