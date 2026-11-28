@@ -31,6 +31,7 @@ from django.db.models import Count, Exists, OuterRef, Q, Subquery
 from apps.accounts.blocks import block, unblock
 from apps.accounts.models import UserBlock
 from apps.core import channels, redis_bus
+from apps.matching.find_travelers import first_name
 from apps.matching.models import Match
 from apps.matching.services import (
     REASON_BLOCKED,
@@ -480,7 +481,7 @@ class MyBlocksView(APIView):
                 "results": [
                     {
                         "user_id": row.blocked_id,
-                        "name": row.blocked.full_name,
+                        "name": first_name(row.blocked.full_name),
                         "deleted": row.blocked.deleted_at is not None,
                         "blocked_at": row.created_at.isoformat(),
                     }

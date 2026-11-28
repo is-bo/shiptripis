@@ -25,7 +25,7 @@ Every request needs all of these (the server refuses otherwise):
 - Declared value: 0 to 100,000,000 EUR cents.
 - Sender's proposed reward for the traveler: 1 to 100,000,000 EUR cents. It is only the sender's intent, not a price; the agreed price is on the offer.
 - Title (max 160 characters), description (max 2000), category (documents, small_box, electronics, clothing, other).
-- One photo of the item (required). It is uploaded first, then used by the create call. JPEG, PNG or WebP only, max 10 MiB.
+- One photo of the item (required). It is uploaded first, then used by the create call. JPEG, PNG or WebP only, max 10 MiB. The server never keeps the uploaded file: it stores a new JPEG made from the pixels, upright, at most 2560 px on the longer side, with no hidden data (no location, camera or date). An animated image is refused.
 - Five declarations, all must be ticked: description accurate, item legal, no prohibited goods, declared value accurate, customs responsibilities understood. Refusal: "This safety declaration must be confirmed."
 Optional:
 - Length, width, height: 0.01 to 500 cm each, all three or none. Refusal: "Enter length, width and height together, or leave all three empty."
