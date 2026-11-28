@@ -79,6 +79,10 @@ def methods_for(user):
 
 
 def eur_method(method, gate):
+    return _eur_rail(method, gate, current_creation(method))
+
+
+def _eur_rail(method, gate, creation):
     version = method.current_version if method else None
     bound = version.stripe_account if version else None
     # Setup is decided in the configured platform and mode only. A method still
@@ -96,7 +100,6 @@ def eur_method(method, gate):
     # The decision onboarding makes, from the same facts. A closed declared
     # country is no obstacle to a new setup: it starts with the preference
     # change, which names an open country.
-    creation = current_creation(method)
     # The freeze: the declaration stays as it is until onboarding settles it.
     frozen = creation_in_progress(creation)
     refusal = (
@@ -217,9 +220,10 @@ def payout_summary(user, methods=None, gate=None):
     by_currency = {m.currency: m for m in methods}
     enabled = {m.currency for m in methods if m.enabled}
     preference = "both" if len(enabled) == 2 else "eur_only" if "EUR" in enabled else "dzd_only" if enabled else None
-    eur, dzd = eur_method(by_currency.get("EUR"), gate), dzd_method(by_currency.get("DZD"), gate)
+    creation = current_creation(by_currency.get("EUR"))
+    eur, dzd = _eur_rail(by_currency.get("EUR"), gate, creation), dzd_method(by_currency.get("DZD"), gate)
     # While the freeze holds, EUR stays on: switching it off is refused.
-    frozen = creation_in_progress(current_creation(by_currency.get("EUR")))
+    frozen = creation_in_progress(creation)
     options = (("eur_only", eur["selectable"]), ("dzd_only", dzd["selectable"] and not frozen),
                ("both", eur["selectable"] and dzd["selectable"]))
     return {"contract_version": "f1.v1", "preference": preference,
