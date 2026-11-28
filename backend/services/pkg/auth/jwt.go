@@ -34,6 +34,13 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
+// ValidUntil is the last moment Validate accepts these claims: the expiry
+// plus the clock leeway (CLAUDE.md G2). A connection the token opened ends
+// then, so it lasts no longer than a request with the same token could.
+func (c *Claims) ValidUntil() time.Time {
+	return c.ExpiresAt.Add(clockSkewLeeway)
+}
+
 func NewValidator(secret string, logger *slog.Logger) (*Validator, error) {
 	if secret == "" {
 		return nil, errors.New("jwt secret is empty")
@@ -48,6 +55,9 @@ func (v *Validator) Validate(tokenString string) (*Claims, error) {
 	parser := jwt.NewParser(
 		jwt.WithLeeway(clockSkewLeeway),
 		jwt.WithValidMethods([]string{"HS256"}),
+		// Django always sets one; a token without it would never stop
+		// authenticating, and a socket it opened would never be bounded.
+		jwt.WithExpirationRequired(),
 	)
 
 	token, err := parser.ParseWithClaims(tokenString, &Claims{}, func(t *jwt.Token) (any, error) {

@@ -1,15 +1,17 @@
 """Test-session setup.
 
-Two things live here: the CI shard options (``--shard``, ``--shard-report``;
-the rules are in `config.test_shards`), and a forward-compatibility shim for
-the interpreter a developer happens to have, not for the one the product ships
-on. CI and the container image both pin Python 3.12 (`.github/workflows/ci.yml`,
+Three things live here: the CI shard options (``--shard``, ``--shard-report``;
+the rules are in `config.test_shards`), the scan that fails a test in which
+product code saves an existing user row whole, and a forward-compatibility
+shim for the interpreter a developer happens to have, not for the one the
+product ships on. CI and the container image both pin Python 3.12 (`.github/workflows/ci.yml`,
 `backend/monolith/Dockerfile`); the shim does nothing there.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -47,6 +49,52 @@ def _patch_template_context_copy() -> None:
 
 
 _patch_template_context_copy()
+
+
+# -- N1, N-D: an existing user row is saved only by name ----------------------------
+
+
+@pytest.fixture(autouse=True)
+def _a_loaded_user_is_saved_by_name():
+    """Fail the test if product code saved an existing user without ``update_fields``.
+
+    A whole-row save writes back every field as it was read, the password hash
+    and `session_epoch` included, over whatever changed since. The check runs
+    on every save the whole suite makes; a test's own setup may still save a
+    whole row. Django's code counts as product code: its admin and forms run
+    in production.
+    """
+
+    import django.db.models
+    import django.dispatch
+    from django.contrib.auth import base_user, get_user_model
+    from django.db.models.signals import pre_save
+
+    machinery = (
+        os.path.dirname(django.db.models.__file__),
+        os.path.dirname(django.dispatch.__file__),
+        base_user.__file__,
+    )
+    found: list[str] = []
+
+    def check(sender, instance, update_fields, **kwargs):
+        if instance._state.adding or update_fields is not None:
+            return
+        frame = sys._getframe(1)
+        while frame.f_code.co_filename.startswith(machinery):
+            frame = frame.f_back
+        path = frame.f_code.co_filename
+        if f"{os.sep}tests{os.sep}" not in path and not Path(path).name.startswith("test_"):
+            found.append(f"{path}:{frame.f_lineno}")
+
+    user_model = get_user_model()
+    pre_save.connect(check, sender=user_model, weak=False)
+    try:
+        yield
+    finally:
+        pre_save.disconnect(check, sender=user_model)
+    if found:
+        pytest.fail(f"an existing user was saved without update_fields at {found}")
 
 
 # -- CI shards ------------------------------------------------------------------

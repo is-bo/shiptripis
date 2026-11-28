@@ -92,6 +92,7 @@ import '../features/requests/request_create_screen.dart';
 import '../features/requests/request_detail_screen.dart';
 import '../features/shell/app_shell.dart';
 import '../features/splash/splash_screen.dart';
+import 'route_transition_tracker.dart';
 
 /// Route names. Screens navigate by name so a path change is a one-line edit
 /// here rather than a search across thirty files.
@@ -182,6 +183,7 @@ const _publicLocations = <String>[
   '/profile',
   '/profile/language',
   '/profile/appearance',
+  '/profile/notifications',
   '/how-it-works',
   '/location/pick',
   '/discover/',
@@ -321,6 +323,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/splash',
     refreshListenable: refresh,
+    observers: [ref.read(routeTransitionTrackerProvider)],
     debugLogDiagnostics: false,
     redirect: (context, state) =>
         _redirectFor(ref.read(sessionProvider), state.uri),

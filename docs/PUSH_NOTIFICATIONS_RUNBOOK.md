@@ -36,8 +36,9 @@ old token cannot disable a newly rotated token on the same row.
   installation. The client cannot provide a user ID and the response omits the
   token and fingerprint.
 - `POST /api/notifications/devices/unregister` disables only the caller's
-  installation. Logout attempts this before clearing credentials, but logout
-  succeeds offline; a later login safely rebinds the installation.
+  installation (the app does not call it). A sign-out switches off every device
+  its sign-in registered; on the phone it succeeds offline, and a later login
+  safely rebinds the installation.
 - `GET/PATCH /api/notifications/preferences` controls `messages` and
   `marketplace` across all devices. Essential payment, delivery, dispute,
   verification, and account-security pushes have no fake off switch.
@@ -121,13 +122,86 @@ including unread counts and eligibility, without navigating away and back.
 
 Android has four normal-importance channels: Messages, Delivery updates,
 Account and verification, and Payments and payouts. The operating-system
-permission is requested only from the explicit action in Profile >
-Notifications; startup, sign-in and preference changes never display the
-prompt. Android 13 and newer may offer the prompt again after a requestable
-denial. A permanent denial, an older Android version whose notifications are
-disabled, or an iOS denial instead links to the app's system notification
-settings. Returning from settings refreshes the displayed permission state.
-A denial does not disable the app or its in-app inbox.
+permission is requested on the app's own, once per installation, the first time
+the app is open on a usable screen (decision of Ismail after the 2026-11-26
+phone test): after the first frame and Firebase's start, with the app resumed
+and the session resolved, whether or not the person has signed in, and never
+over the splash, a sign-in or payment screen, or a notification still being
+opened (it waits for the next screen). Sign-in, resume and preference changes
+never display the prompt again. The installation keeps a count of the requests
+it made, which survives logout and account changes, because Android 13 and newer
+report a permission that was never asked for as a plain denial or as
+undetermined, and the pinned plugin writes its own history only after the dialog
+is answered; on Android the prompt goes ahead only while the status is
+undetermined and that count is zero. A requestable denial is never asked on its
+own: after an upgrade from a build that asked from Profile, Android reports that
+one denial as requestable with no count on this installation, and that person
+must not be asked again. The count is written to disk before the system is asked
+and the prompt is skipped if it cannot be written. An app killed between that
+write and the dialog counts a prompt that never appeared (Profile still asks).
+iOS asks when the status is undetermined (its status is exact, and a reinstall
+resets it) and respects authorized and provisional. Android below 13 has no
+runtime prompt. A missing Firebase configuration or a failed start asks nothing
+and spends nothing, so the next launch that can ask still does. A request the
+system never received (the person left the app, the call failed) is taken back.
+The prompt waits until the screen that was on top has finished leaving.
+
+Profile > Notifications is the recovery path and the only later request, for a
+guest as well (guest Profile has the row). On Android a requestable denial keeps
+Enable; Settings is offered when the system reports a permanent denial. One
+case is ambiguous: a first dialog swiped away denies nothing, so Android has no
+rationale to offer and the plugin reads it as permanent. One request on record
+with that reading therefore still offers Enable; a second swipe-away reads as
+permanent, because Android cannot tell it from two denials. A permanent denial,
+an older Android version whose notifications are disabled, or an iOS denial
+links to the app's system notification settings. Returning from settings
+refreshes the displayed permission state and registers the phone if it was
+granted there. The first-open prompt, a resume and the Profile button share one
+request, so the system is never asked twice at once; the Profile button asks
+only while the app is in the foreground. A denial does not disable the app or
+its in-app inbox.
+
+The phone registers to an account only after sign-in. The app numbers every
+registration of an installation from one counter (created once, so one phone
+has one installation ID), and the server applies them in that order
+(`PushInstallationBinding`, which records registrations and unregisters): a
+registration overtaken by a later one, or a number reused for a different
+request, is refused (`409 push_registration_superseded`). A sign-out records
+nothing there; the number the app still sends with it is not read. Every sign-in
+is a server row (`SignInSession`) named by the `sid` claim of each of its
+tokens, rotations included. A sign-out ends its sign-in and switches off every
+device that sign-in registered, so a late sign-out never touches what a later
+sign-in registered. Every password change (`write_password`: a reset, the
+technical admin's two password forms, an account closed or claimed) ends every sign-in of the
+account through `end_all_sessions`. A registration, and a refresh, from a
+sign-in that has ended is refused (`409 push_session_ended`, checked under the
+account row lock that ending a sign-in also takes). A slow registration can
+therefore never rebind the phone to an account that signed out, was replaced or
+was reset. A sign-in is itself issued under that lock, and only if no reset,
+claim or deletion ended the account's sign-ins after its credentials were
+checked (`User.session_epoch`).
+
+`POST /api/auth/sign-out` answers 205 when it is proved by a valid access token,
+or by a refresh token this server signed, whatever else is true of it: its
+sign-in live or already ended, the token rotated meanwhile or expired, the
+account deleted (ending the sign-in is all it can do). A repeat answers 205 and
+writes nothing. A proof this server cannot verify, or none, answers 400
+`sign_out_proof_invalid`. Only the signature counts, not the token's age, and the
+endpoint has its own per-address throttle (`DRF_SIGN_OUT_THROTTLE_RATE`), so the
+shared guest quota never holds a sign-out up. The app sends it from the Sign-out button and also
+when it lets a session go because renewing it failed, with that refresh token
+alone. A queued push carries, for each device, the sign-in that registered it,
+and is sent only to the devices still switched on for its recipient with the
+same token and the same sign-in, checked against the database right before each
+send or retry (`DeviceRegistry`); when the database cannot answer, the entry
+stays pending for the sweeper. A notification WebSocket closes when the access
+token that opened it stops being valid (its expiry plus the 30 s leeway), and
+the app reconnects with a fresh token.
+
+Sign-out cleanup stays best-effort: a sign-out made offline (from the button or
+after a session the app let go of) never reaches the server, so that phone keeps
+receiving the account's notifications until it signs in again (its registration
+replaces the binding) or the account's sessions are ended.
 
 The permission state and ShipTrip notification-type preferences are separate.
 Preferences control Messages and Marketplace delivery across the account;

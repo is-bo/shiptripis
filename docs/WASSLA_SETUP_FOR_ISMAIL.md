@@ -182,6 +182,7 @@ tight per-IP limit would block honest people. Set in `stack.env`:
 | `DRF_MATCHING_DISCOVERY_THROTTLE_RATE` | `60/min` | Each signed-in member's discovery reads |
 | `DRF_GOOGLE_SIGNIN_THROTTLE_RATE`, `DRF_APPLE_SIGNIN_THROTTLE_RATE` | `30/min` | Google and Apple sign-ins, per IP |
 | `DRF_REGISTRATION_THROTTLE_RATE` | `30/hour` | Email sign-ups, per IP |
+| `DRF_SIGN_OUT_THROTTLE_RATE` | `300/min` | Sign-outs, per IP |
 | `DRF_LOGIN_THROTTLE_RATE` | `10/min` | Password sign-ins, per IP |
 
 Login stays at 10 a minute per IP on purpose: there is no per-account lockout, so this limit is the only

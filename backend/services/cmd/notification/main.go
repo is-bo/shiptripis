@@ -205,6 +205,7 @@ func run() error {
 			FeedbackStream: fcmCfg.ResultsStream,
 			Sender:         sender,
 			Metrics:        m,
+			Devices:        notification.PostgresDevices{DB: pool},
 		}, log)
 		go func() { fcmErr <- fcm.Run(rootCtx) }()
 		go func() { fcmErr <- fcm.Sweep(rootCtx) }()

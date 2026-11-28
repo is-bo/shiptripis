@@ -28,7 +28,6 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
-from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.admin_panel.tests.two_step_helpers import staff_login
 from apps.admin_panel.permissions import assign_admin_roles
@@ -38,6 +37,7 @@ from apps.deals.tests.phase4_factories import enable_mock_rail
 from apps.disputes.models import Dispute
 from apps.finance.models import PaymentOrder, Payout
 from apps.finance.tests.factories import pay_order_with_mock
+from apps.notifications.tests.factories import signed_in
 from apps.finance.tests.test_phase8fh4_manual import (  # noqa: F401
     build_manual,
     configured_h4,
@@ -128,7 +128,7 @@ def _measure(client, path, *, method="get", body=None) -> dict:
     """K4's method: one warm read, then the median of six timed reads.
 
     ``body`` may be a callable so a single-use credential (a rotating refresh
-    token) is minted outside the timed region for each call.
+    token) is minted outside the timed and counted region for each call.
     """
 
     cache.clear()  # production throttle budgets must not leak between paths
@@ -139,8 +139,7 @@ def _measure(client, path, *, method="get", body=None) -> dict:
             return client.get(path)
         return client.post(path, payload, format="json")
 
-    def timed():
-        payload = body() if callable(body) else body
+    def timed(payload):
         started = perf_counter()
         if method == "get":
             response = client.get(path)
@@ -152,10 +151,11 @@ def _measure(client, path, *, method="get", body=None) -> dict:
     assert warm.status_code == 200, (path, warm.status_code)
     latencies = []
     for _ in range(5):
-        _response, elapsed = timed()
+        _response, elapsed = timed(body() if callable(body) else body)
         latencies.append(elapsed)
+    payload = body() if callable(body) else body
     with CaptureQueriesContext(connection) as captured:
-        response, elapsed = timed()
+        response, elapsed = timed(payload)
     latencies.append(elapsed)
     assert response.status_code == 200, (path, response.status_code)
     if hasattr(response, "render"):
@@ -197,7 +197,7 @@ def _profile(world: _Marketplace, finance) -> dict[str, dict]:
             anonymous,
             "/api/auth/refresh",
             method="post",
-            body=lambda: {"refresh": str(RefreshToken.for_user(world.sender))},
+            body=lambda: {"refresh": signed_in(world.sender)["refresh"]},
         ),
         "auth.profile": _measure(sender, "/api/me"),
         # Sender

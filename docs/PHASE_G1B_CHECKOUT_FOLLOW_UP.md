@@ -94,7 +94,7 @@ Rewritten to the new rule:
 
 ## Evidence
 
-Red at `1333f54`; green from GREEN_SHA.
+Red at `1333f54` (run locally: CI did not run on it, the branch then conflicted with `main`); green from `6566e07`. CI all 11 checks green on `c91e7b2`, Schema drift included.
 
 | Finding or rule | Test |
 |---|---|

@@ -148,7 +148,11 @@ class AuthRepository {
     },
   );
 
-  /// Blacklists the refresh token server-side, then clears local storage.
+  /// Ends this sign-in on the server, with every phone it registered, then
+  /// clears local storage. The access token is sent as it is, expired or not,
+  /// with the refresh token: the server takes whichever still proves the
+  /// sign-in, so neither an expired access token nor a refresh rotated
+  /// meanwhile leaves the phone receiving notifications.
   ///
   /// Local clearing happens regardless of the network result: a user who taps
   /// sign out on a train must actually be signed out on the device.
@@ -164,16 +168,32 @@ class AuthRepository {
     final refresh = await _tokens.readRefresh();
     if (_tokens.identityGeneration != signOutIdentity) return;
     if (refresh != null) {
+      // Which phone and which number are optional extras: without them the
+      // server still ends the sign-in, so a keystore that refuses a write
+      // never keeps the refresh token alive on the server.
+      String? installationId;
+      int? bindingSequence;
       try {
-        final installationId = await _tokens.readOrCreateInstallationId();
-        if (_tokens.identityGeneration != signOutIdentity) return;
+        installationId = await _tokens.readOrCreateInstallationId();
+        // Numbered after every registration already started, so the server
+        // ends the phone's binding in the order the app did.
+        bindingSequence = await _tokens.nextPushBindingSequence();
+      } on Object {
+        // Sent without what could not be prepared.
+      }
+      if (_tokens.identityGeneration != signOutIdentity) return;
+      try {
         await _api.postVoid(
           '/api/auth/sign-out',
-          body: {'refresh': refresh, 'installation_id': installationId},
+          body: {
+            'refresh': refresh,
+            'installation_id': ?installationId,
+            'binding_sequence': ?bindingSequence,
+          },
         );
       } on Object {
-        // Push cleanup is best-effort. An expired session, unreachable API,
-        // or unavailable keystore must not prevent local sign-out.
+        // Push cleanup is best-effort. An expired session or unreachable API
+        // must not prevent local sign-out.
       }
     }
     await _tokens.clearIfIdentityCurrent(signOutIdentity);
