@@ -124,10 +124,10 @@ def write_password(user, raw_password: str | None) -> None:
 class SessionRefreshToken(RefreshToken):
     """A refresh token whose blacklist entry is read under its sign-in's lock.
 
-    Reading it checks the signature, the expiry and the type only. Whether it
-    may still be used is decided by `SessionTokenRefreshSerializer`, with the
-    sign-in row locked: a blacklist read before that lock could miss a
-    rotation of the same token that commits just ahead of it.
+    Reading it checks the signature, the expiry, the type and the id only.
+    Whether it may still be used is decided by `SessionTokenRefreshSerializer`,
+    with the sign-in row locked: a blacklist read before that lock could miss
+    a rotation of the same token that commits just ahead of it.
     """
 
     def verify(self) -> None:

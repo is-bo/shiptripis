@@ -1,5 +1,17 @@
 # Waçla V1 Implementation Status
 
+## Wassla: a token refresh survives a lost answer (S2, 2026-11-28)
+
+- Follow-up of plan section 6. Server only; migration `accounts.0009` adds one column. Nothing
+  deployed. Design and evidence: `docs/PHASE_S2_REFRESH_LOST_ANSWER.md`.
+- Of one sign-in, two refresh tokens are accepted: the current one and the one it was rotated from
+  (`SignInSession.previous_refresh_jti`). A phone whose refresh answer was lost repeats it with the
+  older token and gets a fresh pair instead of being signed out; once it uses the new token, the
+  older one is refused. A refresh locks the live sign-in row and reads the blacklist under it.
+- A ban now ends every sign-in of the person (`set_account_ban` calls `end_all_sessions`): no
+  refresh works afterwards and their push devices go off. Before, a banned member's refresh still
+  answered 200.
+
 ## Wassla: notifications on first open, sign-in sessions and who a push belongs to (N1, 2026-11-27)
 
 - Ismail's decision of 2026-11-26: the app asks for notification permission on its own, once, the
