@@ -763,7 +763,9 @@ class StripeConnectGateway:
         for _ in range(MAX_LISTING_PAGES):
             response = self._request("GET", "/v1/accounts", data=query)
             entries = response.body.get("data")
-            if not isinstance(entries, list) or not all(isinstance(e, dict) for e in entries):
+            more = response.body.get("has_more")
+            if not isinstance(entries, list) or not all(isinstance(e, dict) for e in entries) \
+                    or not isinstance(more, bool):
                 raise ProviderUnavailable("Stripe Connect returned a malformed account list.")
             matches += [
                 self._snapshot(ProviderResponse(body=entry, request_id=response.request_id))
@@ -771,7 +773,7 @@ class StripeConnectGateway:
                 if isinstance(entry.get("metadata"), dict)
                 and str(entry["metadata"].get(key) or "") == value
             ]
-            if response.body.get("has_more") is not True:
+            if not more:
                 return matches
             if not entries or not entries[-1].get("id"):
                 raise ProviderUnavailable("Stripe Connect returned a page it cannot continue.")

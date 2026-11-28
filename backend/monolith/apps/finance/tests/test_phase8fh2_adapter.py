@@ -573,7 +573,8 @@ class TestRecoverySearch:
         {"object": "list", "data": None},
         {"object": "list", "data": ["acct_a"]},
         {"object": "list", "data": [], "has_more": True},
-    ], ids=["no_list", "not_objects", "more_without_cursor"])
+        {"object": "list", "data": []},
+    ], ids=["no_list", "not_objects", "more_without_cursor", "no_has_more"])
     def test_a_malformed_page_is_an_error_not_a_miss(self, body):
         with pytest.raises(ProviderUnavailable):
             self._search(gateway(FakeResponse(body=body)))
